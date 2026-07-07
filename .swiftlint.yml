@@ -1,0 +1,26 @@
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - unused_import
+  - duplicate_imports
+  - toggle_bool
+  - private_action
+  - private_outlet
+
+disabled_rules:
+  # 由 swift-format 处理的规则
+  - trailing_whitespace
+  - vertical_whitespace
+  - colon
+  - comma
+
+line_length: 120
+file_length:
+  warning: 500
+  error: 1200
+type_body_length:
+  warning: 400
+identifier_name:
+  min_length: 3
+  excluded: [id, URL, key, tag]

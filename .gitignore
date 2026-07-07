@@ -1,0 +1,50 @@
+# Xcode
+*.xcworkspace
+*.xcuserdata
+*.xcscmblueprint
+*.xccheckout
+DerivedData/
+build/
+*.xcodeproj
+!*.xcodeproj/project.xcworkspace/xcshareddata/
+
+# SPM
+.build/
+.swiftpm/
+Packages/*/.build/
+
+# macOS
+.DS_Store
+Thumbs.db
+*.dmg
+*.app
+
+# Swift
+*.swp
+*.o
+
+# Signing & Provisioning
+*.cer
+*.p12
+*.mobileprovision
+*.provisionprofile
+
+# Code Coverage
+*.xcresult
+*.gcda
+*.gcno
+
+# Archives
+*.zip
+*.tar.gz
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# Temporary
+*.tmp
+*.bak
+*.log

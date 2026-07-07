@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        SnapGlass Entitlements
+
+        屏幕录制权限通过 TCC（用户在系统设置中授权）管理，不在此文件声明。
+        详见设计文档 Section 7.2 权限状态机。
+
+        如果未来需要以下权限，请添加对应的 key：
+        - com.apple.security.app-sandbox (App Store 分发)
+        - com.apple.security.cs.disable-library-validation (加载插件)
+        - com.apple.security.device.camera (摄像头访问)
+        - com.apple.security.device.microphone (麦克风访问)
+    -->
+</dict>
+</plist>

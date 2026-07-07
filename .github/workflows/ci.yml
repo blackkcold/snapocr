@@ -1,0 +1,42 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install swiftlint
+      - run: swift-format lint --recursive .
+      - run: swiftlint lint --strict
+
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodegen generate
+      - run: xcodebuild -project SnapGlass.xcodeproj -scheme SnapGlass -configuration Debug build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+
+  unit-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodegen generate
+      - run: swift test --package-path Packages/OCRCore
+      - run: swift test --package-path Packages/CaptureCore
+      - run: swift test --package-path Packages/ScrollCore
+      - run: swift test --package-path Packages/HistoryCore
+
+  ui-smoke:
+    runs-on: self-hosted   # 需要屏幕录制权限
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodegen generate
+      - run: xcodebuild -project SnapGlass.xcodeproj -scheme SnapGlassUITests test
