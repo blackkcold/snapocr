@@ -5,152 +5,109 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 VERSION=""
+OUTPUT_DIR=""
+OPEN_FINDER=false
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --version)  VERSION="$2"; shift 2 ;;
+        --version)
+            VERSION="$2"
+            shift 2
+            ;;
+        --release-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --output-dir)
+            # 兼容旧参数名，但不推荐使用
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --open)
+            OPEN_FINDER=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--version X.Y.Z]"
+            echo "Usage: $0 [--version X.Y.Z] [--release-dir PATH] [--open]"
+            echo ""
+            echo "Options:"
+            echo "  --version X.Y.Z    指定版本号（默认读取 version.txt）"
+            echo "  --release-dir PATH  指定输出目录（默认 release/vX.Y.Z/）"
+            echo "  --open              构建后在 Finder 中显示产物"
+            echo ""
+            echo "产物统一输出到 release/vX.Y.Z/ 目录。详见 Docs/RELEASE.md。"
             exit 0
             ;;
-        *) echo "Unknown option: $1"; exit 1 ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
     esac
 done
 
-if [ -z "$VERSION" ]; then
-    VERSION=$(cat version.txt | tr -d '[:space:]')
+if [[ -z "$VERSION" ]]; then
+    VERSION="$(<version.txt)"
+    VERSION="${VERSION//[[:space:]]/}"
+fi
+
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Invalid version: $VERSION" >&2
+    exit 1
+fi
+
+if [[ -z "$OUTPUT_DIR" ]]; then
+    OUTPUT_DIR="release/v${VERSION}"
+fi
+
+if [[ -e "$OUTPUT_DIR" ]]; then
+    echo "Output already exists; refusing to overwrite: $OUTPUT_DIR" >&2
+    echo "Remove it first or use --release-dir to specify a different directory." >&2
+    exit 1
 fi
 
 APP_NAME="SnapGlass"
-BUNDLE_ID="com.snapglass.app"
-RELEASE_DIR="release/${VERSION}"
+DERIVED_DATA=".build/DerivedData-release"
+BUILT_APP="$DERIVED_DATA/Build/Products/Release/${APP_NAME}.app"
+OUTPUT_APP="$OUTPUT_DIR/${APP_NAME}.app"
 
-echo "╔══════════════════════════════════════════════════╗"
-echo "║  SnapGlass Build                                 ║"
-echo "╠══════════════════════════════════════════════════╣"
-echo "║  Version:  $VERSION"
-echo "║  Config:   Release"
-echo "║  Sign:     ${SNAPGLASS_SIGN_IDENTITY:-ad-hoc}"
-echo "╚══════════════════════════════════════════════════╝"
-echo ""
+echo "▸ Generating Xcode project"
+xcodegen generate
 
-echo "▸ Generating Xcode project..."
-if command -v xcodegen &>/dev/null; then
-    xcodegen generate
-elif [ ! -f "SnapGlass.xcodeproj/project.pbxproj" ]; then
-    echo "❌ xcodegen not found and no existing .xcodeproj"
-    echo "   Install: brew install xcodegen"
-    exit 1
-else
-    echo "  Using existing SnapGlass.xcodeproj"
-fi
-
-echo "▸ Building SnapGlass (Release)..."
-ARCHIVE_DIR=".build/archive"
-rm -rf "$ARCHIVE_DIR"
-mkdir -p "$ARCHIVE_DIR"
-
-xcodebuild -project SnapGlass.xcodeproj \
-    -scheme SnapGlass \
+echo "▸ Running Release build for v$VERSION"
+xcodebuild -project "SnapGlass.xcodeproj" \
+    -scheme "$APP_NAME" \
     -configuration Release \
-    -archivePath "$ARCHIVE_DIR/SnapGlass.xcarchive" \
-    archive \
-    CODE_SIGN_IDENTITY="-" \
-    CODE_SIGNING_REQUIRED=YES \
-    ENABLE_HARDENED_RUNTIME=YES \
-    2>&1 | tail -5
+    -derivedDataPath "$DERIVED_DATA" \
+    build \
+    MARKETING_VERSION="$VERSION" \
+    CODE_SIGN_IDENTITY="" \
+    CODE_SIGNING_REQUIRED=NO
 
-APP_PATH="$ARCHIVE_DIR/SnapGlass.xcarchive/Products/Applications/SnapGlass.app"
-
-if [ ! -d "$APP_PATH" ]; then
-    echo "❌ Build failed: SnapGlass.app not found"
+if [[ ! -d "$BUILT_APP" ]]; then
+    echo "Build failed: $BUILT_APP not found" >&2
     exit 1
 fi
 
-echo "  ✅ Build complete"
+mkdir -p "$OUTPUT_DIR"
+ditto "$BUILT_APP" "$OUTPUT_APP"
 
-echo "▸ Packaging..."
-mkdir -p "$RELEASE_DIR"
-rm -rf "$RELEASE_DIR/${APP_NAME}.app"
-cp -R "$APP_PATH" "$RELEASE_DIR/${APP_NAME}.app"
+echo "▸ Applying local ad-hoc signature"
+codesign --force --deep --sign - "$OUTPUT_APP"
+codesign --verify --deep --strict "$OUTPUT_APP"
 
-echo "▸ Signing..."
-if [ -n "${SNAPGLASS_SIGN_IDENTITY:-}" ]; then
-    echo "   Identity: ${SNAPGLASS_SIGN_IDENTITY}"
-    ENTITLEMENTS_PATH="App/SnapGlass/SnapGlass.entitlements"
-    if [ -f "$ENTITLEMENTS_PATH" ]; then
-        codesign --force --deep --options runtime --timestamp \
-            --entitlements "$ENTITLEMENTS_PATH" \
-            --sign "$SNAPGLASS_SIGN_IDENTITY" \
-            "$RELEASE_DIR/${APP_NAME}.app" 2>/dev/null || \
-        codesign --force --deep --options runtime \
-            --entitlements "$ENTITLEMENTS_PATH" \
-            --sign "$SNAPGLASS_SIGN_IDENTITY" \
-            "$RELEASE_DIR/${APP_NAME}.app"
-    else
-        codesign --force --deep --options runtime --timestamp \
-            --sign "$SNAPGLASS_SIGN_IDENTITY" \
-            "$RELEASE_DIR/${APP_NAME}.app" 2>/dev/null || \
-        codesign --force --deep --options runtime \
-            --sign "$SNAPGLASS_SIGN_IDENTITY" \
-            "$RELEASE_DIR/${APP_NAME}.app"
-    fi
-    echo "   Signed with runtime + timestamp"
-else
-    echo "   ⚠️  SNAPGLASS_SIGN_IDENTITY not set — using ad-hoc signing"
-    codesign --force --deep --sign - "$RELEASE_DIR/${APP_NAME}.app"
-fi
-
-echo "▸ Creating DMG..."
-DMG_PATH="${RELEASE_DIR}/${APP_NAME}-${VERSION}.dmg"
-hdiutil create -volname "$APP_NAME" \
-    -srcfolder "$RELEASE_DIR/${APP_NAME}.app" \
-    -ov -format UDZO \
-    "$DMG_PATH" 2>/dev/null
-
-echo "▸ Generating SHA256..."
-shasum -a 256 "$DMG_PATH" | awk '{print $1}' > "${DMG_PATH}.sha256"
-
-cat > "$RELEASE_DIR/BUILD_INFO.json" <<EOF
+cat > "$OUTPUT_DIR/BUILD_INFO.json" <<EOF
 {
   "version": "$VERSION",
-  "configuration": "Release",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "signed": $([ -n "${SNAPGLASS_SIGN_IDENTITY:-}" ] && echo true || echo false)
+  "buildDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "app": "${APP_NAME}.app",
+  "configuration": "Release"
 }
 EOF
 
-echo "▸ Updating latest symlink..."
-rm -f release/latest
-ln -sfn "$VERSION" release/latest
+echo ""
+echo "✅ App packaged: $OUTPUT_APP"
+echo "✅ Build info:  $OUTPUT_DIR/BUILD_INFO.json"
 
-echo "▸ Updating versions.json..."
-VERSIONS_FILE="release/versions.json"
-DATE=$(date +%Y-%m-%d)
-
-if [ -f "$VERSIONS_FILE" ]; then
-    python3 -c "
-import json, sys
-with open('$VERSIONS_FILE', 'r') as f:
-    versions = json.load(f)
-versions = [v for v in versions if v['version'] != '$VERSION']
-versions.insert(0, {'version': '$VERSION', 'date': '$DATE', 'file': '${APP_NAME}-${VERSION}.dmg'})
-with open('$VERSIONS_FILE', 'w') as f:
-    json.dump(versions, f, indent=4)
-" 2>/dev/null || echo '[{"version": "'$VERSION'", "date": "'$DATE'", "file": "'${APP_NAME}-${VERSION}.dmg'"}]' > "$VERSIONS_FILE"
-else
-    echo '[{"version": "'$VERSION'", "date": "'$DATE'", "file": "'${APP_NAME}-${VERSION}.dmg'"}]' > "$VERSIONS_FILE"
+if [[ "$OPEN_FINDER" == true ]]; then
+    open -R "$OUTPUT_APP"
 fi
-
-echo ""
-echo "╔══════════════════════════════════════════════════╗"
-echo "║  ✅ Build Complete                                ║"
-echo "╠══════════════════════════════════════════════════╣"
-echo "║                                                  ║"
-echo "║  App:      $RELEASE_DIR/${APP_NAME}.app"
-echo "║  DMG:      $DMG_PATH"
-echo "║  SHA256:   ${DMG_PATH}.sha256"
-echo "║  Latest:   release/latest → $VERSION"
-echo "║                                                  ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo ""
-ls -lh "$DMG_PATH"

@@ -19,8 +19,9 @@ public struct CLIHandlers: Sendable {
         let modeLabel = mode ?? "area"
         logger.info("截图请求 | 模式: \(modeLabel)")
         return AutomationResult(
-            success: true,
-            output: "截图功能尚未实现（模式: \(modeLabel)）"
+            success: false,
+            output: "截图功能尚未实现（模式: \(modeLabel)）",
+            exitCode: .general
         )
     }
 
@@ -121,8 +122,9 @@ public struct CLIHandlers: Sendable {
     public func handleHistory(subcommand: AutomationCommand.HistorySubcommand) async throws -> AutomationResult {
         logger.info("历史管理 | 子命令: \(subcommand.rawValue)")
         return AutomationResult(
-            success: true,
-            output: "历史管理功能尚未实现（子命令: \(subcommand.rawValue)）"
+            success: false,
+            output: "历史管理功能尚未实现（子命令: \(subcommand.rawValue)）",
+            exitCode: .general
         )
     }
 

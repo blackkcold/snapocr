@@ -45,8 +45,6 @@ public enum AppError: LocalizedError, Sendable {
     case encryptionFailed(reason: String)
     /// 数据解密失败
     case decryptionFailed(reason: String)
-    /// Keychain 访问失败
-    case keychainAccessFailed(status: OSStatus)
 
     // MARK: - 历史错误
 
@@ -101,8 +99,6 @@ public enum AppError: LocalizedError, Sendable {
             return "加密失败: \(reason)"
         case .decryptionFailed(let reason):
             return "解密失败: \(reason)"
-        case .keychainAccessFailed(let status):
-            return "Keychain 访问失败: \(status)"
         case .historyStorageFull:
             return "历史存储已满"
         case .historyEntryNotFound(let id):
@@ -148,8 +144,6 @@ public enum AppError: LocalizedError, Sendable {
             return "加密过程出现异常，请重试"
         case .decryptionFailed:
             return "解密失败，数据可能已损坏或密钥不匹配"
-        case .keychainAccessFailed:
-            return "请检查系统钥匙串访问权限"
         case .historyStorageFull:
             return "请清理部分历史记录后重试"
         case .historyEntryNotFound:

@@ -19,6 +19,10 @@ Thumbs.db
 *.dmg
 *.app
 
+# Release 归档例外：允许提交 release/ 下的 .dmg 产物
+!release/**/*.dmg
+!release/**/*.dmg.sha256
+
 # Swift
 *.swp
 *.o
@@ -48,3 +52,15 @@ Thumbs.db
 *.tmp
 *.bak
 *.log
+
+# Build output (临时构建产物，统一使用 release/vX.Y.Z/)
+output/
+
+# Release 归档清理规则
+# 保留 release/vX.Y.Z/*.dmg + *.sha256 + BUILD_INFO.json + versions.json
+# 忽略解压产物、软链、系统文件
+release/latest/
+release/*/*.app/
+release/*/.DS_Store
+release/.DS_Store
+release/manual-*/

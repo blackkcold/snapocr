@@ -3,39 +3,98 @@ import AppKit
 import AnnotationCore
 
 struct EditorView: View {
-    private let sourceImage: CGImage
     @StateObject private var editorVM: EditorViewModel
 
     init(image: CGImage) {
-        self.sourceImage = image
-        let vm = EditorViewModel()
-        vm.loadImage(image)
-        self._editorVM = StateObject(wrappedValue: vm)
+        self._editorVM = StateObject(wrappedValue: EditorViewModel(image: image))
     }
 
     var body: some View {
         VStack(spacing: 0) {
             ToolPickerView(
-                selectedTool: $editorVM.selectedTool,
-                selectedColor: $editorVM.selectedColor,
-                strokeWidth: $editorVM.strokeWidth
+                selectedTool: Binding(
+                    get: { editorVM.selectedTool },
+                    set: { tool in
+                        editorVM.selectedTool = tool
+                        if tool == .ocr {
+                            editorVM.showsOCROverlay = true
+                        }
+                        if tool != .select {
+                            editorVM.selectNode(nil)
+                        }
+                    }
+                ),
+                selectedPreset: $editorVM.selectedPreset,
+                selectedColor: Binding(
+                    get: { editorVM.selectedColor },
+                    set: { color in
+                        editorVM.selectedColor = color
+                        editorVM.selectedPreset = .custom
+                        if editorVM.selectedNode != nil {
+                            editorVM.updateSelectedStyle()
+                        }
+                    }
+                ),
+                strokeWidth: Binding(
+                    get: { editorVM.strokeWidth },
+                    set: { width in
+                        editorVM.strokeWidth = width
+                        editorVM.selectedPreset = .custom
+                        if editorVM.selectedNode != nil {
+                            editorVM.updateSelectedStyle()
+                        }
+                    }
+                ),
+                isOCRRunning: editorVM.isOCRRunning,
+                ocrLineCount: editorVM.ocrLines.count,
+                onPresetSelected: editorVM.applyPreset,
+                onRunOCR: editorVM.startOCR,
+                onCopyAllOCR: editorVM.copyAllOCRText
             )
 
-            ZStack {
+            HSplitView {
                 if let doc = editorVM.document {
-                    AnnotationCanvasView(
+                    EditableAnnotationCanvasView(
                         image: doc.baseImage,
                         nodes: doc.nodes,
                         tool: editorVM.selectedTool,
                         color: editorVM.cgColor,
                         lineWidth: editorVM.strokeWidth,
+                        opacity: editorVM.annotationOpacity,
+                        fillColor: editorVM.fillEnabled ? NSColor(editorVM.fillColor).cgColor : nil,
+                        strokeStyle: editorVM.strokeStyle,
+                        cornerRadius: editorVM.cornerRadius,
+                        arrowStyle: editorVM.arrowStyle,
+                        fontName: editorVM.fontName,
+                        fontSize: editorVM.fontSize,
+                        textAlignment: editorVM.textAlignment,
+                        blurMode: editorVM.blurMode,
+                        blurIntensity: editorVM.blurIntensity,
+                        selectedNodeID: editorVM.selectedNodeID,
+                        ocrLines: editorVM.ocrLines,
+                        showsOCROverlay: editorVM.showsOCROverlay,
                         onNodeCreated: { node in
                             editorVM.addNode(node)
-                        }
+                        },
+                        onNodeUpdated: editorVM.updateNode,
+                        onSelectionChanged: editorVM.selectNode,
+                        onDeleteSelection: editorVM.removeSelectedNode,
+                        onTextRequested: { point in
+                            editorVM.beginTextEntry(at: point)
+                        },
+                        onTextEditRequested: editorVM.beginTextEditing,
+                        onOCRLinesCopied: editorVM.copyOCRLines,
+                        onOCRTextCopied: editorVM.copyOCRSelection,
+                        onOCRLineAsAnnotation: editorVM.addOCRLineAsAnnotation
                     )
+                    .frame(minWidth: 500, minHeight: 400)
                 } else {
                     ProgressView("Loading image…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                if editorVM.selectedNode != nil || editorVM.selectedTool.annotationTool != nil {
+                    AnnotationInspectorView(viewModel: editorVM)
                 }
             }
 
@@ -46,6 +105,15 @@ struct EditorView: View {
         .onAppear {
             editorVM.onClose = {
                 NSApplication.shared.keyWindow?.close()
+            }
+        }
+        .alert(editorVM.selectedNode?.tool == .text ? "Edit Text" : "Add Text", isPresented: $editorVM.isEnteringText) {
+            TextField("Text", text: $editorVM.textDraft)
+            Button("Cancel", role: .cancel) {
+                editorVM.cancelTextEntry()
+            }
+            Button("Add") {
+                editorVM.commitTextEntry()
             }
         }
     }
@@ -79,6 +147,12 @@ struct EditorView: View {
 
             Divider()
                 .frame(height: 18)
+
+            Toggle(isOn: $editorVM.showsOCROverlay) {
+                Image(systemName: "text.viewfinder")
+            }
+            .toggleStyle(.button)
+            .help("Show or hide recognized text regions")
 
             Button("Copy") {
                 editorVM.copyToClipboard()

@@ -1,6 +1,30 @@
 import CoreGraphics
 import Foundation
 
+public enum AnnotationStrokeStyle: String, Sendable, CaseIterable, Hashable {
+    case solid
+    case dashed
+    case dotted
+}
+
+public enum AnnotationArrowStyle: String, Sendable, CaseIterable, Hashable {
+    case filled
+    case open
+    case line
+}
+
+public enum AnnotationTextAlignment: String, Sendable, CaseIterable, Hashable {
+    case leading
+    case center
+    case trailing
+}
+
+public enum AnnotationBlurMode: String, Sendable, CaseIterable, Hashable {
+    case gaussian
+    case pixelate
+    case mosaic
+}
+
 /// 标注节点，使用归一化坐标 (0-1) 实现分辨率无关。
 ///
 /// 所有坐标值均为相对于图片宽高的比例，确保标注在不同分辨率下保持一致。
@@ -24,11 +48,35 @@ public struct AnnotationNode: Sendable, Identifiable {
     /// 不透明度 (0.0 - 1.0)，默认 1.0
     public var opacity: CGFloat
 
+    /// Optional fill/background color for rectangles and text.
+    public var fillColor: CGColor?
+
+    /// Stroke pattern for line-based annotations.
+    public var strokeStyle: AnnotationStrokeStyle
+
+    /// Corner radius in image pixels for rectangle annotations.
+    public var cornerRadius: CGFloat
+
+    /// Arrowhead style for arrow annotations.
+    public var arrowStyle: AnnotationArrowStyle
+
     /// 控制点数组，使用归一化坐标
     public var points: [CGPoint]
 
     /// 文本内容（仅 text 工具有效）
     public var text: String?
+
+    /// Text font family name and size in image pixels.
+    public var fontName: String
+    public var fontSize: CGFloat
+    public var textHorizontalScale: CGFloat
+
+    /// Text alignment inside `normalizedRect`.
+    public var textAlignment: AnnotationTextAlignment
+
+    /// Blur algorithm and normalized strength (0.0 - 1.0).
+    public var blurMode: AnnotationBlurMode
+    public var blurIntensity: CGFloat
 
     /// 标注区域，使用归一化坐标
     public var normalizedRect: CGRect
@@ -53,8 +101,18 @@ public struct AnnotationNode: Sendable, Identifiable {
         color: CGColor? = nil,
         lineWidth: CGFloat = 2.0,
         opacity: CGFloat = 1.0,
+        fillColor: CGColor? = nil,
+        strokeStyle: AnnotationStrokeStyle = .solid,
+        cornerRadius: CGFloat = 0,
+        arrowStyle: AnnotationArrowStyle = .filled,
         points: [CGPoint] = [],
         text: String? = nil,
+        fontName: String = "Helvetica",
+        fontSize: CGFloat = 24,
+        textHorizontalScale: CGFloat = 1,
+        textAlignment: AnnotationTextAlignment = .leading,
+        blurMode: AnnotationBlurMode = .gaussian,
+        blurIntensity: CGFloat = 0.5,
         normalizedRect: CGRect = .zero
     ) {
         self.id = id
@@ -62,8 +120,18 @@ public struct AnnotationNode: Sendable, Identifiable {
         self.color = color
         self.lineWidth = lineWidth
         self.opacity = max(0.0, min(1.0, opacity))
+        self.fillColor = fillColor
+        self.strokeStyle = strokeStyle
+        self.cornerRadius = max(0, cornerRadius)
+        self.arrowStyle = arrowStyle
         self.points = points
         self.text = text
+        self.fontName = fontName
+        self.fontSize = max(1, fontSize)
+        self.textHorizontalScale = max(0.1, min(10, textHorizontalScale))
+        self.textAlignment = textAlignment
+        self.blurMode = blurMode
+        self.blurIntensity = max(0, min(1, blurIntensity))
         self.normalizedRect = normalizedRect
         self.timestamp = Date()
     }

@@ -54,26 +54,20 @@ final class CGCompatAdapter: @unchecked Sendable {
     ///   - highResolution: 是否使用高分辨率（Retina 数据）。
     /// - Returns: 全屏截图 `CGImage`，失败时返回 `nil`。
     func captureDisplay(_ displayID: CGDirectDisplayID, highResolution: Bool) -> CGImage? {
-        guard highResolution else {
-            return captureDisplay(displayID)
-        }
-
-        // Retina 感知：获取显示器实际像素尺寸
-        let bounds = CGDisplayBounds(displayID)
-        let scaleFactor = backingScaleFactor(for: displayID)
-
-        logger.debug("Capturing display \(displayID) at scale \(scaleFactor) (bounds: \(bounds))")
-
         guard let baseImage = CGDisplayCreateImage(displayID) else {
             return nil
         }
 
-        // 如果系统缩放因子为 1.0，直接用原始图像
-        guard scaleFactor > 1.0 else {
+        guard !highResolution else {
             return baseImage
         }
 
-        return baseImage
+        let bounds = CGDisplayBounds(displayID)
+        return Self.resize(
+            baseImage,
+            width: max(1, Int(bounds.width.rounded(.up))),
+            height: max(1, Int(bounds.height.rounded(.up)))
+        )
     }
 
     // MARK: - Window Capture
@@ -85,7 +79,7 @@ final class CGCompatAdapter: @unchecked Sendable {
     ///
     /// - Parameter windowID: 目标窗口的 `CGWindowID`。
     /// - Returns: 窗口截图 `CGImage`，失败时返回 `nil`。
-    func captureWindow(_ windowID: CGWindowID) -> CGImage? {
+    func captureWindow(_ windowID: CGWindowID, highResolution: Bool = true) -> CGImage? {
         logger.debug("Capturing window \(windowID) via CGWindowListCreateImage")
 
         guard let windowInfo = windowInfo(for: windowID) else {
@@ -98,7 +92,7 @@ final class CGCompatAdapter: @unchecked Sendable {
             bounds,
             .optionIncludingWindow,
             windowID,
-            [.bestResolution, .nominalResolution]
+            highResolution ? [.bestResolution] : [.nominalResolution]
         )
 
         guard let result = image else {
@@ -115,39 +109,42 @@ final class CGCompatAdapter: @unchecked Sendable {
     ///   - rect: 截图区域（屏幕坐标）。
     ///   - displayID: 区域所在显示器的标识符。
     /// - Returns: 区域截图 `CGImage`，失败时返回 `nil`。
-    func captureRect(_ rect: CGRect, displayID: CGDirectDisplayID) -> CGImage? {
+    func captureRect(
+        _ rect: CGRect,
+        displayID: CGDirectDisplayID,
+        highResolution: Bool = true
+    ) -> CGImage? {
         logger.debug("Capturing rect \(rect) on display \(displayID)")
 
-        let scaleFactor = backingScaleFactor(for: displayID)
-
-        // 将区域坐标转换为显示器局部坐标
-        let displayBounds = CGDisplayBounds(displayID)
-        let localRect = CGRect(
-            x: rect.origin.x - displayBounds.origin.x,
-            y: displayBounds.height - rect.origin.y - rect.height + displayBounds.origin.y,
-            width: rect.width,
-            height: rect.height
-        )
-
-        // 缩放到物理像素（Retina 感知）
-        let pixelRect = CGRect(
-            x: localRect.origin.x * scaleFactor,
-            y: localRect.origin.y * scaleFactor,
-            width: localRect.width * scaleFactor,
-            height: localRect.height * scaleFactor
-        )
-
         guard let image = CGWindowListCreateImage(
-            pixelRect,
+            rect,
             .optionOnScreenOnly,
             kCGNullWindowID,
-            [.nominalResolution]
+            highResolution ? [.bestResolution] : [.nominalResolution]
         ) else {
             logger.error("CGWindowListCreateImage (rect) returned nil")
             return nil
         }
 
         return image
+    }
+
+    private static func resize(_ image: CGImage, width: Int, height: Int) -> CGImage? {
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+        ) else {
+            return nil
+        }
+
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
     }
 
     // MARK: - Window Enumeration

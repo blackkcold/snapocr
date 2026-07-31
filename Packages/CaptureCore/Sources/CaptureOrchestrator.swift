@@ -195,7 +195,7 @@ extension CaptureOrchestrator {
                 throw CaptureError.windowNotFound
             }
 
-            guard let image = cgAdapter.captureWindow(winID) else {
+            guard let image = cgAdapter.captureWindow(winID, highResolution: options.highResolution) else {
                 throw CaptureError.captureFailed(reason: "CG fallback: failed to capture window \(winID)")
             }
 
@@ -207,7 +207,7 @@ extension CaptureOrchestrator {
             )
         }
 
-        guard let image = cgAdapter.captureWindow(targetID) else {
+        guard let image = cgAdapter.captureWindow(targetID, highResolution: options.highResolution) else {
             throw CaptureError.captureFailed(reason: "CG fallback: failed to capture window \(targetID)")
         }
 
@@ -234,7 +234,11 @@ extension CaptureOrchestrator {
             y: areaRect.midY
         ))
 
-        guard let image = cgAdapter.captureRect(areaRect, displayID: displayID) else {
+        guard let image = cgAdapter.captureRect(
+            areaRect,
+            displayID: displayID,
+            highResolution: options.highResolution
+        ) else {
             throw CaptureError.captureFailed(reason: "CG fallback: failed to capture rect \(areaRect)")
         }
 

@@ -78,12 +78,8 @@ private enum SensitiveDataType: Sendable, CaseIterable {
     public init() {
         var compiled: [(NSRegularExpression, SensitiveDataType)] = []
 
-        if let regex = try? NSRegularExpression(
-            pattern: Self.phonePattern, options: []
-        ) {
-            compiled.append((regex, .phone))
-        }
-
+        // Match longer, more specific numeric identifiers before phone numbers to
+        // avoid masking an embedded phone-like substring inside an ID/card number.
         if let regex = try? NSRegularExpression(
             pattern: Self.idCardPattern, options: []
         ) {
@@ -106,6 +102,12 @@ private enum SensitiveDataType: Sendable, CaseIterable {
             pattern: Self.landlinePattern, options: []
         ) {
             compiled.append((regex, .landline))
+        }
+
+        if let regex = try? NSRegularExpression(
+            pattern: Self.phonePattern, options: []
+        ) {
+            compiled.append((regex, .phone))
         }
 
         self.patterns = compiled
@@ -156,7 +158,7 @@ private enum SensitiveDataType: Sendable, CaseIterable {
 
     /// 对多条历史条目的文本进行批量脱敏
     ///
-    /// 返回新的条目数组，每条的 `textContent` 已被脱敏处理。
+    /// 返回新的条目数组。文本、窗口元数据和标签会被脱敏，本地文件路径不会导出。
     ///
     /// - Parameters:
     ///   - entries: 原始历史条目数组
@@ -169,17 +171,19 @@ private enum SensitiveDataType: Sendable, CaseIterable {
         guard level != .none else { return entries }
 
         return entries.map { entry in
-            let anonymizedText = anonymize(entry.textContent, level: level)
             return HistoryEntry(
                 id: entry.id,
-                textContent: anonymizedText,
+                timestamp: entry.timestamp,
+                textContent: anonymize(entry.textContent, level: level),
                 ocrConfidence: entry.ocrConfidence,
                 captureMode: entry.captureMode,
                 sourceType: entry.sourceType,
-                sourceAppName: entry.sourceAppName,
-                sourceWindowTitle: entry.sourceWindowTitle,
-                imagePath: entry.imagePath,
-                thumbnailPath: entry.thumbnailPath
+                sourceAppName: entry.sourceAppName.map { anonymize($0, level: level) },
+                sourceWindowTitle: entry.sourceWindowTitle.map { anonymize($0, level: level) },
+                imagePath: nil,
+                thumbnailPath: nil,
+                isFavourite: entry.isFavourite,
+                tags: entry.tags.map { anonymize($0, level: level) }
             )
         }
     }
@@ -244,22 +248,14 @@ private enum SensitiveDataType: Sendable, CaseIterable {
             let domainPart = String(parts[1])
 
             let maskedUser: String
-            if username.count <= 2 {
-                maskedUser = String(username.prefix(1)) + "***"
-            } else {
-                maskedUser = String(username.prefix(1)) + "***" + String(username.suffix(1))
-            }
+            maskedUser = String(username.prefix(1)) + "***"
 
             let domainComponents = domainPart.split(separator: ".", omittingEmptySubsequences: false)
             var maskedDomains: [String] = []
             for (i, comp) in domainComponents.enumerated() {
                 let compStr = String(comp)
                 if i == 0 {
-                    if compStr.count <= 2 {
-                        maskedDomains.append(String(compStr.prefix(1)) + "***")
-                    } else {
-                        maskedDomains.append(String(compStr.prefix(1)) + "***" + String(compStr.suffix(1)))
-                    }
+                    maskedDomains.append(String(compStr.prefix(1)) + "***")
                 } else {
                     maskedDomains.append(compStr)
                 }

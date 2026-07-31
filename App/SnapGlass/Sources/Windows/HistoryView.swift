@@ -1,12 +1,15 @@
 import SwiftUI
 import AppKit
 import HistoryCore
+import ImageIO
 
 struct HistoryView: View {
+    @EnvironmentObject private var captureViewModel: CaptureViewModel
     @State private var entries: [HistoryEntry] = []
     @State private var searchQuery = ""
     @State private var isClearing = false
     @State private var selectedEntryID: HistoryEntry.ID?
+    @State private var errorMessage: String?
 
     private let history = HistoryActor.shared
 
@@ -23,6 +26,11 @@ struct HistoryView: View {
         .toolbar { toolbarContent }
         .task { await loadEntries() }
         .background(.ultraThinMaterial)
+        .alert("History Error", isPresented: errorAlertBinding) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "Unknown error")
+        }
     }
 
     // MARK: - Search Bar
@@ -59,11 +67,15 @@ struct HistoryView: View {
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
 
-            Text(searchQuery.isEmpty ? "No captures yet" : "No results found")
+            Text(history == nil ? "History unavailable" : (searchQuery.isEmpty ? "No captures yet" : "No results found"))
                 .font(.title3)
                 .foregroundColor(.secondary)
 
-            if !searchQuery.isEmpty {
+            if history == nil {
+                Text("Check the application support folder permissions")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else if !searchQuery.isEmpty {
                 Text("Try a different search term")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -77,6 +89,9 @@ struct HistoryView: View {
     private var entryList: some View {
         List(entries, selection: $selectedEntryID) { entry in
             HistoryRow(entry: entry)
+                .onTapGesture(count: 2) {
+                    Task { await openInEditor(entry) }
+                }
                 .contextMenu { contextMenu(for: entry) }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) {
@@ -93,6 +108,14 @@ struct HistoryView: View {
 
     @ViewBuilder
     private func contextMenu(for entry: HistoryEntry) -> some View {
+        Button {
+            Task { await openInEditor(entry) }
+        } label: {
+            Label("Open in Editor", systemImage: "pencil.and.outline")
+        }
+
+        Divider()
+
         Button {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(entry.textContent, forType: .string)
@@ -151,29 +174,63 @@ struct HistoryView: View {
     // MARK: - Data Loading
 
     private func loadEntries() async {
+        guard let history else {
+            entries = []
+            return
+        }
+
         do {
             if searchQuery.isEmpty {
-                entries = try await history.recent(limit: 200)
+                let count = await history.count()
+                entries = try await history.recent(limit: max(count, 1))
             } else {
                 entries = try await history.search(query: searchQuery)
             }
         } catch {
             entries = []
+            errorMessage = error.localizedDescription
         }
     }
 
     private func deleteEntry(_ entry: HistoryEntry) async {
+        guard let history else { return }
+
         do {
             try await history.delete(id: entry.id)
             await loadEntries()
-        } catch { }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func openInEditor(_ entry: HistoryEntry) async {
+        guard let history else { return }
+        do {
+            guard let data = try await history.imageData(for: entry.id) else {
+                errorMessage = "The original screenshot is no longer available. It may have been removed by the retention policy."
+                return
+            }
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else {
+                errorMessage = "The stored screenshot could not be decoded."
+                return
+            }
+            captureViewModel.openEditor(with: image)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func clearAll() async {
+        guard let history else { return }
+
         do {
             try await history.clear()
             entries = []
-        } catch { }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
     
     private enum ExportFormat {
@@ -181,6 +238,8 @@ struct HistoryView: View {
     }
     
     private func exportHistory(format: ExportFormat) async {
+        guard let history else { return }
+
         let panel = NSSavePanel()
         
         switch format {
@@ -198,47 +257,32 @@ struct HistoryView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         
         do {
-            let allEntries = try await history.recent(limit: 5000)
-            var exportData: Data?
-            
+            let historyFormat: HistoryExportFormat
             switch format {
             case .json:
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = .prettyPrinted
-                encoder.dateEncodingStrategy = .iso8601
-                exportData = try encoder.encode(allEntries)
-                
+                historyFormat = .json
             case .csv:
-                var csvString = "ID,Timestamp,Mode,Text\n"
-                for entry in allEntries {
-                    let id = entry.id.uuidString
-                    let timestamp = ISO8601DateFormatter().string(from: entry.timestamp)
-                    let mode = entry.captureMode
-                    let text = "\"" + entry.textContent.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-                    csvString += "\(id),\(timestamp),\(mode),\(text)\n"
-                }
-                exportData = csvString.data(using: .utf8)
-                
+                historyFormat = .csv
             case .plaintext:
-                var textString = ""
-                for entry in allEntries {
-                    let timestamp = entry.timestamp.formatted(
-                        date: .abbreviated,
-                        time: .shortened
-                    )
-                    textString += "[\(timestamp)] (\(entry.captureMode))\n"
-                    textString += "\(entry.textContent)\n"
-                    textString += "----------------------------------------\n\n"
-                }
-                exportData = textString.data(using: .utf8)
+                historyFormat = .plainText
             }
-            
-            if let data = exportData {
-                try data.write(to: url)
-            }
+
+            let data = try await history.export(ids: [], format: historyFormat)
+            try data.write(to: url, options: .atomic)
         } catch {
-            print("Failed to export history: \(error)")
+            errorMessage = error.localizedDescription
         }
+    }
+
+    private var errorAlertBinding: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    errorMessage = nil
+                }
+            }
+        )
     }
 }
 
@@ -330,6 +374,8 @@ private struct HistoryRow: View {
     // MARK: - Load Thumbnail
 
     private func loadThumbnail() async {
+        guard let history else { return }
+
         guard let data = try? await history.thumbnailData(for: entry.id),
               let image = NSImage(data: data)
         else { return }

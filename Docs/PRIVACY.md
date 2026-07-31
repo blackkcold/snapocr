@@ -35,10 +35,10 @@ SnapGlass 是一款**离线优先**的开源截图与 OCR 工具，遵循以下�
 
 | 数据 | 存储位置 | 加密 | 生命周期 | 用户控制 |
 |------|----------|------|----------|----------|
-| 截图原图 | `~/Library/Application Support/SnapGlass/History/images/` | AES-256-GCM (可配置) | 7天 / 100条 | 可在偏好设置中修改策略 |
-| OCR 文本 | `~/Library/Application Support/SnapGlass/History/entries/` | AES-256-GCM | 30天 / 500条 | 可在偏好设置中开启或禁用全文保存 |
-| 缩略图 | `~/Library/Application Support/SnapGlass/History/thumbs/` | 无加密 | 90天 / 1000条 | 可在偏好设置中修改 |
-| 敏感密钥 | Keychain (`com.snapglass.secrets`) | Keychain + Secure Enclave | 持久 | 系统级管理 |
+| 截图原图 | `~/Library/Application Support/SnapGlass/History/v2/images/` | AES-256-GCM | 7天 / 100条 | 可在偏好设置中修改策略 |
+| OCR 文本 | `~/Library/Application Support/SnapGlass/History/v2/entries/` | AES-256-GCM | 30天 / 500条 | 可在偏好设置中开启或禁用全文保存 |
+| 缩略图 | `~/Library/Application Support/SnapGlass/History/v2/thumbs/` | 无加密 | 90天 / 1000条 | 可在偏好设置中修改 |
+| 历史密钥 | `~/Library/Application Support/SnapGlass/Security/history-v2.key` | 本地 0600 权限文件 | 持久 | 随应用支持目录管理 |
 | 崩溃日志 | `~/Library/Logs/SnapGlass/` | 无加密 | 30天 | 手动删除 |
 | 应用偏好 | `UserDefaults` | 无加密 | 持久 | 偏好设置界面 |
 | 临时文件 | `NSTemporaryDirectory()` | 无加密 | 会话结束 | 系统自动清理 |
@@ -59,12 +59,12 @@ SnapGlass 的网络请求受到严格限制：
 
 | 场景 | 请求内容 | 域名 | 触发条件 |
 |------|----------|------|----------|
-| Tesseract 语言包下载 | 语言训练数据 | `github.com/tesseract-ocr/tessdata` | 用户显式触发 |
+| Tesseract 语言包下载 | 语言训练数据 | `raw.githubusercontent.com/tesseract-ocr/tessdata_best` | 用户显式触发 |
 | 版本更新检查 | 版本信息 (未来实现) | GitHub API | 用户显式触发 |
 
 - 所有网络请求必须由用户显式触发
 - 应用不会在后台静默发起任何网络请求
-- 严格的速率限制：最多 10 次请求/分钟
+- 应用不访问系统钥匙链；旧版钥匙链加密历史会原样保留，但当前版本不读取或迁移
 
 ---
 
@@ -73,8 +73,6 @@ SnapGlass 的网络请求受到严格限制：
 | 权限 | 用途 | 能否关闭？ | 关闭后果 |
 |------|------|-----------|----------|
 | 屏幕录制 | 捕获屏幕截图 | 可拒绝 | 截图功能不可用，其他功能正常 |
-| 辅助功能 | 双击 Command 触发截图 (高级选项) | 可关闭 | 默认关闭，不影响基本使用 |
-
 - 权限被拒绝后进入降级模式，仅禁用对应功能，不影响其他能力
 - 提供明确的权限用途说明弹窗
 - 用户可随时在系统偏好设置中修改权限
@@ -111,7 +109,7 @@ SnapGlass 不集成任何第三方分析、跟踪或广告服务。应用不包�
 
 - **GDPR** — 由于所有数据本地处理，用户对个人数据拥有完全控制权
 - **CCPA** — 不收集或出售任何个人信息
-- **Apple 隐私要求** — 通过 `PrivacyInfo.xcprivacy` 声明 API 使用
+- **Apple 隐私要求** — 通过 `PrivacyInfo.xcprivacy` 声明 API 使用（文件待创建）
 
 ---
 

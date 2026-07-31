@@ -22,6 +22,25 @@ struct MenuBarView: View {
         }
         .globalKeyboardShortcut(.captureFullscreen)
 
+        if viewModel.isScrollCaptureActive {
+            Button("Capture Next Scroll Frame (\(viewModel.scrollCapturedFrameCount))") {
+                viewModel.captureNextScrollFrame()
+            }
+
+            Button("Finish Scrolling Capture") {
+                viewModel.finishScrollCapture()
+            }
+            .disabled(viewModel.scrollCapturedFrameCount < 2)
+
+            Button("Cancel Scrolling Capture", role: .destructive) {
+                viewModel.cancelScrollCapture()
+            }
+        } else {
+            Button("Scrolling Capture...") {
+                viewModel.startScrollCapture()
+            }
+        }
+
         Divider()
 
         Button("OCR from Clipboard") {
@@ -35,20 +54,17 @@ struct MenuBarView: View {
 
         Divider()
         
-        Menu("Recent Captures") {
-            Text("No recent captures")
-                .foregroundColor(.secondary)
-        }
-        
-        Divider()
-        
         Button("History") {
-            openWindow(id: "history")
+            AppWindowPresenter.present(id: "history") {
+                openWindow(id: "history")
+            }
         }
         .keyboardShortcut("h", modifiers: [.command, .shift])
         
         Button("Preferences...") {
-            openWindow(id: "preferences")
+            AppWindowPresenter.present(id: "preferences") {
+                openWindow(id: "preferences")
+            }
         }
         .keyboardShortcut(",", modifiers: .command)
 
@@ -58,11 +74,5 @@ struct MenuBarView: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
-        .onAppear {
-            viewModel.openWindow = { id in
-                openWindow(id: id)
-            }
-            viewModel.checkPermissionsOnLaunch()
-        }
     }
 }

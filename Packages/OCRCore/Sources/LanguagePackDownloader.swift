@@ -41,7 +41,7 @@ public actor LanguagePackDownloader {
     // MARK: - 常量
 
     /// GitHub 语言数据仓库 URL。
-    private let tessdataRepo = "https://github.com/tesseract-ocr/tessdata_best"
+    private let tessdataRepo = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main"
 
     /// 语言数据目录的子路径（相对于 Application Support 目录）。
     private static let tessdataSubpath = "SnapGlass/tessdata"
@@ -69,7 +69,7 @@ public actor LanguagePackDownloader {
     private var state: DownloadState = .idle
 
     /// 当前下载的 Task，用于支持取消操作。
-    private var currentDownloadTask: Task<Void, Never>?
+    private var currentDownloadTask: Task<URL, any Error>?
 
     /// 日志记录器。
     private let logger = Logger(category: "language-pack-downloader")
@@ -164,7 +164,9 @@ public actor LanguagePackDownloader {
         try ensureTessdataDirectory()
 
         // 4. 开始下载
-        let url = URL(string: "\(tessdataRepo)/raw/main/\(lang).traineddata")!
+        guard let url = URL(string: "\(tessdataRepo)/\(lang).traineddata") else {
+            throw LanguagePackError.downloadFailed(lang)
+        }
         let destination = languagePackPath(for: lang)
 
         logger.info("开始下载语言包 '\(lang)' 从 \(url.absoluteString)")
@@ -224,14 +226,17 @@ public actor LanguagePackDownloader {
                 }
             }
 
-            // 确保下载的数据不为空
-            guard !data.isEmpty else {
-                throw LanguagePackError.downloadFailed(lang)
+            // 拒绝空文件、异常短响应和被截断的响应，避免损坏现有语言包。
+            guard data.count >= 1024 else {
+                throw LanguagePackError.invalidDownloadedData(lang)
+            }
+            if totalBytes > 0, receivedBytes != totalBytes {
+                throw LanguagePackError.invalidDownloadedData(lang)
             }
 
             // 5. 写入本地文件
             do {
-                try data.write(to: destination)
+                try data.write(to: destination, options: .atomic)
                 logger.info("语言包 '\(lang)' 下载完成 (\(data.count) bytes): \(destination.path)")
             } catch {
                 logger.error("写入语言包文件失败: \(error.localizedDescription)")
@@ -245,9 +250,7 @@ public actor LanguagePackDownloader {
         }
 
         // 存储当前下载任务以便取消
-        self.currentDownloadTask = Task {
-            _ = try? await downloadTask.value
-        }
+        self.currentDownloadTask = downloadTask
 
         do {
             let result = try await downloadTask.value
@@ -382,10 +385,7 @@ public actor LanguagePackDownloader {
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory) {
             if !isDirectory.boolValue {
-                // 存在同名文件，需要先删除再创建目录
-                try fileManager.removeItem(at: tessdataDir)
-                try fileManager.createDirectory(at: tessdataDir, withIntermediateDirectories: true)
-                logger.info("已重新创建 tessdata 目录")
+                throw LanguagePackError.invalidStorageLocation(tessdataDir.path)
             }
         } else {
             try fileManager.createDirectory(at: tessdataDir, withIntermediateDirectories: true)
@@ -416,6 +416,10 @@ public enum LanguagePackError: LocalizedError, Sendable {
     case downloadFailed(String)
     /// 不支持的语言（含语言代码）。
     case unsupportedLanguage(String)
+    /// 下载内容为空、过短或长度不完整。
+    case invalidDownloadedData(String)
+    /// tessdata 目标路径被普通文件占用。
+    case invalidStorageLocation(String)
 
     public var errorDescription: String? {
         switch self {
@@ -423,6 +427,10 @@ public enum LanguagePackError: LocalizedError, Sendable {
             return String(localized: "语言包 '\(lang)' 下载失败，请检查网络连接后重试")
         case .unsupportedLanguage(let lang):
             return String(localized: "不支持的语言 '\(lang)'，支持的语言: \(LanguagePackDownloader.supportedLanguages.map(\.code).joined(separator: ", "))")
+        case .invalidDownloadedData(let lang):
+            return String(localized: "语言包 '\(lang)' 下载内容无效，未写入本地")
+        case .invalidStorageLocation(let path):
+            return String(localized: "语言包目录路径被文件占用: \(path)")
         }
     }
 
@@ -433,6 +441,10 @@ public enum LanguagePackError: LocalizedError, Sendable {
             return String(localized: "请检查网络连接，或尝试手动从 https://github.com/tesseract-ocr/tessdata_best 下载")
         case .unsupportedLanguage:
             return String(localized: "请使用 LanguagePackDownloader.availableLanguages 查看支持的语言列表")
+        case .invalidDownloadedData:
+            return String(localized: "请检查网络连接后重试，现有语言包不会被覆盖")
+        case .invalidStorageLocation:
+            return String(localized: "请先移走占用该路径的文件，再重试")
         }
     }
 }

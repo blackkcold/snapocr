@@ -1,108 +1,42 @@
 import CryptoKit
 import Foundation
-import Security
 
-/// Keychain 存取服务
+/// App-local AES key storage that never accesses the system Keychain.
 ///
-/// 负责加密密钥的安全存储与读取。
-/// 所有方法均为静态且同步，设计为无状态工具类型，避免 actor 嵌套死锁风险。
-///
-/// 密钥存储在系统钥匙串中，使用 `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`
-/// 确保设备锁定时无法读取，且不会随 iCloud 备份同步。
-public struct KeychainService: Sendable {
+/// The key file is protected with owner-only POSIX permissions. This protects
+/// encrypted history from casual file inspection but does not defend against an
+/// attacker who already controls the current macOS user account.
+public enum LocalKeyStore {
+  private static let lock = NSLock()
+  private static let keyByteCount = 32
 
-    /// Keychain 服务名称，用于隔离应用数据
-    private static let service = "com.snapglass"
+  /// Loads an existing 256-bit key or creates one at the specified URL.
+  public static func loadOrCreateKey(at keyURL: URL) throws -> SymmetricKey {
+    lock.lock()
+    defer { lock.unlock() }
 
-    // MARK: - 密钥管理
+    let fileManager = FileManager.default
+    let directory = keyURL.deletingLastPathComponent()
+    try fileManager.createDirectory(
+      at: directory,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
 
-    /// 从 Keychain 获取或创建加密密钥
-    ///
-    /// 优先尝试从 Keychain 读取已有密钥；若不存在则生成新密钥并持久化存储。
-    ///
-    /// - Parameter identifier: 密钥的唯一标识符，如 `"com.snapglass.history.encryption"`。
-    /// - Returns: 用于 AES-GCM 加密的 `SymmetricKey`。
-    /// - Throws: `AppError.keychainAccessFailed` 当 Keychain 访问失败时。
-    public static func getOrCreateKey(identifier: String) throws -> SymmetricKey {
-        if let existingData = try retrieve(identifier: identifier) {
-            return SymmetricKey(data: existingData)
-        }
-
-        let newKey = SymmetricKey(size: .bits256)
-        let keyData = newKey.withUnsafeBytes { Data($0) }
-        try store(keyData, identifier: identifier)
-        return newKey
+    if fileManager.fileExists(atPath: keyURL.path) {
+      let data = try Data(contentsOf: keyURL)
+      guard data.count == keyByteCount else {
+        throw AppError.decryptionFailed(reason: "本地历史密钥长度无效")
+      }
+      try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyURL.path)
+      return SymmetricKey(data: data)
     }
 
-    // MARK: - 基本操作
-
-    /// 存储数据到 Keychain
-    ///
-    /// 如果该标识符已存在数据，则先删除再写入（覆盖更新）。
-    ///
-    /// - Parameters:
-    ///   - data: 待存储的二进制数据。
-    ///   - identifier: 唯一标识符。
-    /// - Throws: `AppError.keychainAccessFailed` 当 Keychain 写入失败时。
-    public static func store(_ data: Data, identifier: String) throws {
-        // 如果已存在，先删除
-        try? delete(identifier: identifier)
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: identifier,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw AppError.keychainAccessFailed(status: status)
-        }
-    }
-
-    /// 从 Keychain 读取数据
-    ///
-    /// - Parameter identifier: 唯一标识符。
-    /// - Returns: 存储的数据，不存在时返回 `nil`。
-    /// - Throws: `AppError.keychainAccessFailed` 当 Keychain 读取失败时（条目不存在不视为错误）。
-    public static func retrieve(identifier: String) throws -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: identifier,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        switch status {
-        case errSecSuccess:
-            return result as? Data
-        case errSecItemNotFound:
-            return nil
-        default:
-            throw AppError.keychainAccessFailed(status: status)
-        }
-    }
-
-    /// 从 Keychain 删除数据
-    ///
-    /// - Parameter identifier: 唯一标识符。
-    /// - Throws: `AppError.keychainAccessFailed` 当 Keychain 删除失败时。
-    public static func delete(identifier: String) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: identifier,
-        ]
-
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw AppError.keychainAccessFailed(status: status)
-        }
-    }
+    let key = SymmetricKey(size: .bits256)
+    let data = key.withUnsafeBytes { Data($0) }
+    try data.write(to: keyURL, options: .atomic)
+    try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyURL.path)
+    return key
+  }
 }

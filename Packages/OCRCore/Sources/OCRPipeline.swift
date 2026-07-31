@@ -15,7 +15,7 @@ import SharedKit
 ///   │
 ///   ├─ 2. 内存压力检查 ── 超过 200MB 记录警告
 ///   │
-///   ├─ 3. 引擎识别 ── Vision（当前）/ Tesseract（预留）
+///   ├─ 3. 引擎识别 ── Vision / Tesseract（不可用时回退 Vision）
 ///   │      │
 ///   │      └─ 置信度检查 ── 低于阈值记录警告
 ///   │
@@ -70,11 +70,16 @@ public final class OCRPipeline: Sendable {
     /// 5. **后处理**: 布局整理、URL 检测等
     /// 6. **日志记录**: 记录性能指标和处理结果
     ///
-    /// - Parameter image: 输入图像
+    /// - Parameters:
+    ///   - image: 输入图像
+    ///   - overrideOptions: 单次识别覆盖选项；为 `nil` 时使用初始化选项
     /// - Returns: OCR 识别结果
     /// - Throws: `OCRError` 当识别失败或引擎不可用时
-    public func recognize(_ image: CGImage) async throws -> OCRResult {
-        let combinedOptions = options
+    public func recognize(
+        _ image: CGImage,
+        options overrideOptions: OCROptions? = nil
+    ) async throws -> OCRResult {
+        let combinedOptions = overrideOptions ?? options
         logger.info("开始 OCR 识别 | 语言: \(combinedOptions.languages.joined(separator: ", ")) | 引擎: \(engineLabel(combinedOptions.engineSelection))")
 
         // 步骤 1: 内存守卫 - 大图降采样
@@ -150,18 +155,30 @@ public final class OCRPipeline: Sendable {
             logger.info("Vision 引擎识别 | 耗时: \(String(format: "%.1f", elapsed))ms | 置信度: \(String(format: "%.2f", result.confidence))")
             return result
 
-        case .tesseract:
-            // Tesseract 引擎尚未实现，降级到 Vision
-            logger.warning("Tesseract 引擎尚未实现，自动降级到 Vision 引擎")
-            let startTime = CFAbsoluteTimeGetCurrent()
-            let result = try await visionEngine.recognize(
-                image: image,
-                languages: options.languages,
-                options: options
-            )
-            let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
-            logger.info("Vision 引擎识别（Tesseract 降级）| 耗时: \(String(format: "%.1f", elapsed))ms | 置信度: \(String(format: "%.2f", result.confidence))")
-            return result
+        case .tesseract(let languageDataPath):
+            let tesseractEngine = TesseractOCREngine(languageDataPath: languageDataPath)
+            do {
+                let startTime = CFAbsoluteTimeGetCurrent()
+                let result = try await tesseractEngine.recognize(
+                    image: image,
+                    languages: options.languages,
+                    options: options
+                )
+                let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                logger.info("Tesseract 引擎识别 | 耗时: \(String(format: "%.1f", elapsed))ms | 置信度: \(String(format: "%.2f", result.confidence))")
+                return result
+            } catch {
+                logger.warning("Tesseract 不可用，自动降级到 Vision: \(error.localizedDescription)")
+                let startTime = CFAbsoluteTimeGetCurrent()
+                let result = try await visionEngine.recognize(
+                    image: image,
+                    languages: options.languages,
+                    options: options
+                )
+                let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                logger.info("Vision 引擎识别（Tesseract 降级）| 耗时: \(String(format: "%.1f", elapsed))ms | 置信度: \(String(format: "%.2f", result.confidence))")
+                return result
+            }
 
         case .windowsMediaOcr:
             throw OCRError.engineUnavailable(.windowsMediaOcr)

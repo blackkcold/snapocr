@@ -4,7 +4,7 @@ import Foundation
 /// AES-GCM 加密服务
 ///
 /// 负责历史数据的加密存储与解密读取。使用 CryptoKit 提供的 AES-256-GCM 算法，
-/// 密钥通过 `KeychainService` 安全存储在系统钥匙串中。
+/// 密钥通过 `LocalKeyStore` 保存在应用支持目录的权限保护文件中。
 ///
 /// **设计为 struct（无状态工具）而非 actor**：避免多个 actor 互相调用时产生嵌套死锁风险（R14）。
 /// 所有加解密操作均为同步方法，由调用方（如 `HistoryCore`）在其 actor 边界内序列化调用。
@@ -21,14 +21,16 @@ public struct CryptoService: Sendable {
 
     /// 初始化加密服务
     ///
-    /// 从 Keychain 获取或创建加密密钥。首次运行时会在 Keychain 中生成新密钥。
+    /// 从应用本地密钥文件获取或创建加密密钥。
     ///
-    /// - Parameter keyIdentifier: Keychain 中存储密钥的标识符。
-    ///   默认使用 `"com.snapglass.history.encryption"`。
-    /// - Throws: `AppError.keychainAccessFailed` 当 Keychain 访问失败时；
-    ///           `AppError.encryptionFailed` 当密钥数据无效时。
-    public init(keyIdentifier: String = "com.snapglass.history.encryption") throws {
-        self.key = try KeychainService.getOrCreateKey(identifier: keyIdentifier)
+    /// - Parameter keyURL: 256-bit 密钥文件位置。
+    /// - Throws: 当目录或密钥文件不可读写，或密钥数据无效时抛出错误。
+    public init(
+        keyURL: URL = URL.appSupportDirectory
+            .appendingPathComponent("Security")
+            .appendingPathComponent("history-v2.key")
+    ) throws {
+        self.key = try LocalKeyStore.loadOrCreateKey(at: keyURL)
     }
 
     /// 加密数据

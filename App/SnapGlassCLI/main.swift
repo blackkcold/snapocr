@@ -131,7 +131,7 @@ func execute(_ command: AutomationCommand, handlers: CLIHandlers) async throws -
     case .dev(let subcommand):
         return try await handlers.handleDev(subcommand: subcommand)
     case .preferences:
-        return AutomationResult(success: true, output: "preferences 尚未实现")
+        return AutomationResult(success: false, output: "preferences 尚未实现", exitCode: .general)
     }
 }
 

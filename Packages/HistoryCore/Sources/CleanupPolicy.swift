@@ -186,39 +186,15 @@ public struct CleanupPolicy: Sendable {
         category: DataCategory
     ) -> [HistoryEntry] {
         let limit = maxCount(for: category)
-
-        // 将条目分为过期、旧（超过限制）和保留三类
-        var expired: [HistoryEntry] = []
-        var old: [HistoryEntry] = []
-        var keep: [HistoryEntry] = []
-
-        for (index, entry) in entries.enumerated() {
-            if shouldEvict(entry, category: category) {
-                expired.append(entry)
-            } else if index >= limit {
-                old.append(entry)
-            } else {
-                keep.append(entry)
-            }
+        let sorted = entries.sorted { $0.timestamp > $1.timestamp }
+        let expired = sorted.filter {
+            !$0.isFavourite && shouldEvict($0, category: category)
         }
-
-        // 已收藏的条目尽可能保留
-        let shouldEvict = expired.filter { !$0.isFavourite }
-        var remainingOverflow = old.filter { !$0.isFavourite }
-
-        // 如果清理过期条目后仍超限，再清理旧的
-        let afterExpired = entries.count - shouldEvict.count
-        if afterExpired > limit {
-            let overflow = afterExpired - limit
-            if overflow > 0 && remainingOverflow.count < overflow {
-                // 不够清理，需要额外清理非收藏的 keep 中的条目
-                let extra = keep.filter { !$0.isFavourite }
-                remainingOverflow += extra
-            }
-            return shouldEvict + Array(remainingOverflow.prefix(overflow))
-        }
-
-        return shouldEvict
+        let expiredIDs = Set(expired.map(\.id))
+        let survivors = sorted.filter { !expiredIDs.contains($0.id) }
+        let overflow = max(0, survivors.count - limit)
+        let oldestNonFavourites = survivors.reversed().filter { !$0.isFavourite }
+        return expired + Array(oldestNonFavourites.prefix(overflow))
     }
 
     // MARK: - 内存压力响应

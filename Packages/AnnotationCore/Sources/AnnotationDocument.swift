@@ -8,19 +8,24 @@ import Foundation
 public struct AnnotationDocument: Sendable {
 
     /// 背景底图
-    public let baseImage: CGImage
+    public private(set) var baseImage: CGImage
 
     /// 当前标注节点列表
     public var nodes: [AnnotationNode]
 
-    /// 撤销栈，每次记录完整的节点快照
-    private var undoStack: [[AnnotationNode]]
+    /// 撤销栈，每次记录底图和节点的完整快照
+    private var undoStack: [Snapshot]
 
-    /// 重做栈，每次记录完整的节点快照
-    private var redoStack: [[AnnotationNode]]
+    /// 重做栈，每次记录底图和节点的完整快照
+    private var redoStack: [Snapshot]
 
     /// 撤销栈最大深度
     public let maxUndoDepth: Int
+
+    private struct Snapshot: Sendable {
+        let baseImage: CGImage
+        let nodes: [AnnotationNode]
+    }
 
     /// 创建一个新的标注文档。
     ///
@@ -45,7 +50,7 @@ public struct AnnotationDocument: Sendable {
 
     /// 将当前节点状态压入撤销栈（在修改之前调用）。
     public mutating func pushUndoState() {
-        undoStack.append(nodes)
+        undoStack.append(snapshot)
         if undoStack.count > maxUndoDepth {
             undoStack.removeFirst(undoStack.count - maxUndoDepth)
         }
@@ -66,6 +71,7 @@ public struct AnnotationDocument: Sendable {
     /// 自动将当前状态保存到撤销栈。
     /// - Parameter id: 要移除的节点 ID
     public mutating func removeNode(by id: UUID) {
+        guard nodes.contains(where: { $0.id == id }) else { return }
         pushUndoState()
         nodes.removeAll { $0.id == id }
     }
@@ -75,17 +81,35 @@ public struct AnnotationDocument: Sendable {
     /// 自动将当前状态保存到撤销栈。
     /// - Parameter node: 更新后的节点
     public mutating func updateNode(_ node: AnnotationNode) {
-        pushUndoState()
         guard let index = nodes.firstIndex(where: { $0.id == node.id }) else { return }
+        pushUndoState()
         nodes[index] = node
+    }
+
+    /// Moves a node one step forward or backward in the drawing order.
+    public mutating func moveNode(by id: UUID, offset: Int) {
+        guard let index = nodes.firstIndex(where: { $0.id == id }) else { return }
+        let destination = min(max(index + offset, 0), nodes.count - 1)
+        guard destination != index else { return }
+        pushUndoState()
+        let node = nodes.remove(at: index)
+        nodes.insert(node, at: destination)
     }
 
     /// 清空所有标注节点。
     ///
     /// 自动将当前状态保存到撤销栈。
     public mutating func clearAllNodes() {
+        guard !nodes.isEmpty else { return }
         pushUndoState()
         nodes.removeAll()
+    }
+
+    /// Replaces the base image and node list as one undoable operation.
+    public mutating func replaceContent(baseImage: CGImage, nodes: [AnnotationNode]) {
+        pushUndoState()
+        self.baseImage = baseImage
+        self.nodes = nodes
     }
 
     // MARK: - Undo / Redo
@@ -97,8 +121,8 @@ public struct AnnotationDocument: Sendable {
         guard !undoStack.isEmpty else {
             throw AnnotationError.undoStackEmpty
         }
-        redoStack.append(nodes)
-        nodes = undoStack.removeLast()
+        redoStack.append(snapshot)
+        restore(undoStack.removeLast())
     }
 
     /// 重做被撤销的操作。
@@ -108,8 +132,20 @@ public struct AnnotationDocument: Sendable {
         guard !redoStack.isEmpty else {
             throw AnnotationError.redoStackEmpty
         }
-        undoStack.append(nodes)
-        nodes = redoStack.removeLast()
+        undoStack.append(snapshot)
+        if undoStack.count > maxUndoDepth {
+            undoStack.removeFirst(undoStack.count - maxUndoDepth)
+        }
+        restore(redoStack.removeLast())
+    }
+
+    private var snapshot: Snapshot {
+        Snapshot(baseImage: baseImage, nodes: nodes)
+    }
+
+    private mutating func restore(_ snapshot: Snapshot) {
+        baseImage = snapshot.baseImage
+        nodes = snapshot.nodes
     }
 
     // MARK: - Normalized Coordinate Helpers

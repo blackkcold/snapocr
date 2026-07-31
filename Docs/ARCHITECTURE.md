@@ -27,13 +27,13 @@
 │              Protocol Layer (跨平台接口)                  │
 │  ┌────────────────────────────────────────────────────┐ │
 │  │  CaptureProtocol | OCRProtocol | AnnotationProtocol │ │
-│  │  HistoryProtocol | AutomationProtocol               │ │
+│  │  HistoryProtocol | ScrollProtocol                   │ │
 │  └────────────────────────────────────────────────────┘ │
 ├─────────────────────────────────────────────────────────┤
 │              Core Logic (跨平台共享)                      │
 │  ┌────────────────────────────────────────────────────┐ │
 │  │  图像预处理 | OCR 后处理 | 标注数据模型              │ │
-│  │  拼接算法 | 历史管理策略 | 命令解析                  │ │
+│  │  拼接算法 | 历史管理策略                            │ │
 │  └────────────────────────────────────────────────────┘ │
 ├─────────────────────────────────────────────────────────┤
 │              Platform Adapter (平台适配)                  │
@@ -100,8 +100,7 @@ public struct OCRResult: Sendable {
 | `OCRProtocol` | OCRCore | macOS: Vision + Tesseract |
 | `BarcodeProtocol` | BarcodeCore | macOS: Vision barcode |
 | `AnnotationProtocol` | AnnotationCore | macOS: Core Image |
-| `HistoryProtocol` | HistoryCore | macOS: CryptoKit + Keychain |
-| `AutomationProtocol` | AutomationCore | macOS: CLI + Shortcuts |
+| `HistoryProtocol` | HistoryCore | macOS: CryptoKit + App Support 本地密钥 |
 
 ---
 
@@ -133,14 +132,14 @@ Struct (无状态工具)
 
 | 模块 | 职责 | 关键依赖 |
 |------|------|----------|
-| **SharedKit** | 日志系统、加密服务（CryptoKit AES-GCM）、Keychain 存取、统一错误类型 | CryptoKit |
+| **SharedKit** | 日志系统、图片编码、加密服务（CryptoKit AES-GCM）、本地密钥存取、统一错误类型 | CryptoKit, ImageIO |
 | **CaptureCore** | 区域/窗口/全屏截图；多显示器 DPI 适配；SCK 主 + CG 兼容 | ScreenCaptureKit |
 | **OCRCore** | Vision OCR 主引擎 + Tesseract 降级；开发者模式双引擎对比；内存管理 | Vision, libtesseract |
 | **BarcodeCore** | QR/Code128/EAN 等条码识别 | Vision |
 | **AnnotationCore** | 标注工具集（箭头/矩形/文本/画笔/高亮/模糊/裁剪）；撤销/重做 | Core Image |
 | **ScrollCore** | 半自动滚动截图拼接；SSIM 帧去重 | CaptureCore |
 | **HistoryCore** | 加密环形缓存；自动清理策略；数据迁移 | CryptoKit |
-| **AutomationCore** | CLI 命令解析、URL Scheme 路由、App Intents | — |
+| **AutomationCore** | 保留的 CLI / URL Scheme / App Intents 源码，不进入当前产品构建 | — |
 
 ---
 
@@ -212,5 +211,5 @@ Struct (无状态工具)
 | 条码 | Vision barcode request |
 | 热键 | KeyboardShortcuts |
 | 项目生成 | XcodeGen + SPM |
-| 加密 | CryptoKit AES-GCM + Keychain |
+| 加密 | CryptoKit AES-GCM + App Support 0600 密钥文件 |
 | 崩溃 | 本地 PLCrashReporter |

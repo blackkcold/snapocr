@@ -26,7 +26,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     /// 空字符串不一定表示 OCR 结果为空，也可能表示用户关闭了全文持久化。
     ///
     /// 内存中为明文，便于直接使用。持久化时整个条目以 AES-GCM 加密后写入磁盘。
-    public let textContent: String
+    public var textContent: String
 
     /// OCR 置信度 (0.0–1.0)
     ///
@@ -90,6 +90,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     ///   - thumbnailPath: 缩略图路径，可选
     public init(
         id: UUID = UUID(),
+        timestamp: Date = Date(),
         textContent: String,
         ocrConfidence: Float,
         captureMode: String,
@@ -97,10 +98,12 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         sourceAppName: String? = nil,
         sourceWindowTitle: String? = nil,
         imagePath: URL? = nil,
-        thumbnailPath: URL? = nil
+        thumbnailPath: URL? = nil,
+        isFavourite: Bool = false,
+        tags: [String] = []
     ) {
         self.id = id
-        self.timestamp = Date()
+        self.timestamp = timestamp
         self.textContent = textContent
         self.ocrConfidence = ocrConfidence
         self.captureMode = captureMode
@@ -109,8 +112,8 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         self.sourceWindowTitle = sourceWindowTitle
         self.imagePath = imagePath
         self.thumbnailPath = thumbnailPath
-        self.isFavourite = false
-        self.tags = []
+        self.isFavourite = isFavourite
+        self.tags = tags
     }
 
     // MARK: - Codable

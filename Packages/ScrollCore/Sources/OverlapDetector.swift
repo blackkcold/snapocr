@@ -17,7 +17,7 @@ import Foundation
 /// 默认权重 α=β=γ=1。
 ///
 /// ## 可配置参数
-/// - `similarityThreshold`: SSIM 阈值，高于此值认为匹配（默认 0.92）
+/// - `similarityThreshold`: SSIM 阈值，高于此值认为匹配（默认 0.95）
 /// - `searchWindowSize`: 搜索窗口大小（默认 16 像素步进）
 /// - `dpiScaleTolerance`: DPI 缩放容忍度（默认 1.05）
 public struct OverlapDetector: Sendable {
@@ -48,10 +48,10 @@ public struct OverlapDetector: Sendable {
         ssimWindowSize: Int = 8,
         dpiScaleTolerance: CGFloat = 1.05
     ) {
-        self.similarityThreshold = similarityThreshold
+        self.similarityThreshold = min(max(similarityThreshold, 0), 1)
         self.searchStep = max(1, searchStep)
         self.ssimWindowSize = max(4, ssimWindowSize)
-        self.dpiScaleTolerance = dpiScaleTolerance
+        self.dpiScaleTolerance = max(1, dpiScaleTolerance)
     }
 
     /// 检测帧序列中相邻帧之间的重叠比例。
@@ -72,15 +72,13 @@ public struct OverlapDetector: Sendable {
             let frameB = frames[i + 1]
 
             let heightA = CGFloat(frameA.image.height)
-            let heightB = CGFloat(frameB.image.height)
-
-            let overlapHeight = estimateOverlapHeight(
+            let stitchOffset = estimateStitchOffset(
                 frameA: frameA,
                 frameB: frameB,
-                heightA: heightA,
-                heightB: heightB
+                heightA: heightA
             )
 
+            let overlapHeight = min(heightA, max(0, heightA - stitchOffset))
             let ratio = overlapHeight / heightA
             overlaps.append(min(ratio, 1.0))
         }
@@ -92,29 +90,22 @@ public struct OverlapDetector: Sendable {
     ///
     /// 结合预估滚动偏移量和实际图像高度，
     /// 通过 SSIM 搜索验证来精确确定重叠范围。
-    private func estimateOverlapHeight(
+    private func estimateStitchOffset(
         frameA: ScrollFrame,
         frameB: ScrollFrame,
-        heightA: CGFloat,
-        heightB: CGFloat
+        heightA: CGFloat
     ) -> CGFloat {
-        let scrollOffset = frameA.predictedScrollOffset
-
-        if scrollOffset > 0 && scrollOffset < heightA {
-            let estimatedOverlap = heightA - scrollOffset
-            let verifiedOffset = findBestMatchOffset(frameA.image, frameB.image)
-            if verifiedOffset > 0 {
-                return verifiedOffset
-            }
-            return max(0, estimatedOverlap)
-        }
-
         let matchOffset = findBestMatchOffset(frameA.image, frameB.image)
         if matchOffset > 0 {
             return matchOffset
         }
 
-        return heightA * 0.15
+        let scrollOffset = frameA.predictedScrollOffset
+        if scrollOffset > 0 && scrollOffset < heightA {
+            return scrollOffset
+        }
+
+        return heightA * 0.85
     }
 
     /// 在相邻帧之间找到最佳拼接偏移量。
@@ -141,39 +132,65 @@ public struct OverlapDetector: Sendable {
         }
 
         let commonWidth = min(width1, width2)
-        let stripHeight = min(height1 / 3, height2 / 3, 400)
-        guard stripHeight > ssimWindowSize else { return 0 }
+        let comparisonWidth = max(1, Int(CGFloat(commonWidth) * 0.8))
+        let commonHeight = min(height1, height2)
+        let minimumOverlap = max(ssimWindowSize * 2, Int(CGFloat(commonHeight) * 0.1))
+        let maximumOverlap = min(Int(CGFloat(commonHeight) * 0.9), 800)
+        guard maximumOverlap >= minimumOverlap else { return 0 }
 
-        let searchRange = Int(stripHeight)
+        let sampleHeight = min(48, minimumOverlap)
+        let x1 = (width1 - comparisonWidth) / 2
+        let x2 = (width2 - comparisonWidth) / 2
 
         guard
             let pixels1 = grayscalePixels(
                 from: frame1,
-                region: CGRect(x: 0, y: height1 - searchRange, width: commonWidth, height: searchRange)
+                region: CGRect(
+                    x: x1,
+                    y: height1 - maximumOverlap,
+                    width: comparisonWidth,
+                    height: maximumOverlap
+                )
             ),
             let pixels2 = grayscalePixels(
                 from: frame2,
-                region: CGRect(x: 0, y: 0, width: commonWidth, height: searchRange)
+                region: CGRect(x: x2, y: 0, width: comparisonWidth, height: sampleHeight)
             )
         else {
             return 0
         }
 
-        var bestOffset = 0
+        var bestOverlap = minimumOverlap
         var bestSimilarity: Float = 0
 
-        for offset in Swift.stride(from: 0, through: searchRange - ssimWindowSize, by: searchStep) {
-            let similarity = computeSSIM(
+        func similarity(for overlap: Int) -> Float {
+            let pixelOffset = maximumOverlap - overlap
+            return computeSSIM(
                 pixels1: pixels1,
                 pixels2: pixels2,
-                offset: offset,
-                width: commonWidth,
-                height: ssimWindowSize
+                offset: pixelOffset,
+                width: comparisonWidth,
+                height: sampleHeight
             )
+        }
 
+        for overlap in Swift.stride(from: minimumOverlap, through: maximumOverlap, by: searchStep) {
+            let similarity = similarity(for: overlap)
             if similarity > bestSimilarity {
                 bestSimilarity = similarity
-                bestOffset = offset
+                bestOverlap = overlap
+            }
+        }
+
+        let refinementStart = max(minimumOverlap, bestOverlap - searchStep + 1)
+        let refinementEnd = min(maximumOverlap, bestOverlap + searchStep - 1)
+        if refinementStart <= refinementEnd {
+            for overlap in refinementStart...refinementEnd {
+                let similarity = similarity(for: overlap)
+                if similarity > bestSimilarity {
+                    bestSimilarity = similarity
+                    bestOverlap = overlap
+                }
             }
         }
 
@@ -181,7 +198,7 @@ public struct OverlapDetector: Sendable {
             return 0
         }
 
-        return CGFloat(height1 - searchRange + bestOffset + ssimWindowSize / 2)
+        return CGFloat(height1 - bestOverlap)
     }
 }
 
@@ -206,13 +223,20 @@ extension OverlapDetector {
     ) -> Float {
         let stride = width
         let windowSize = width * height
+        let base1 = offset * stride
+        guard offset >= 0,
+              windowSize > 0,
+              base1 + windowSize <= pixels1.count,
+              windowSize <= pixels2.count else {
+            return 0
+        }
+
         var sumX: Float = 0
         var sumY: Float = 0
         var sumXX: Float = 0
         var sumYY: Float = 0
         var sumXY: Float = 0
 
-        let base1 = offset * stride
         for row in 0..<height {
             let rowOffset = row * stride
             for col in 0..<width {
@@ -230,18 +254,18 @@ extension OverlapDetector {
         let n = Float(windowSize)
         let muX = sumX / n
         let muY = sumY / n
-        let sigmaX2 = (sumXX / n) - (muX * muX)
-        let sigmaY2 = (sumYY / n) - (muY * muY)
+        let sigmaX2 = max(0, (sumXX / n) - (muX * muX))
+        let sigmaY2 = max(0, (sumYY / n) - (muY * muY))
         let sigmaXY = (sumXY / n) - (muX * muY)
 
-        let c1: Float = (0.01 * 255) * (0.01 * 255)
-        let c2: Float = (0.03 * 255) * (0.03 * 255)
+        let c1: Float = 0.01 * 0.01
+        let c2: Float = 0.03 * 0.03
 
         let numerator = (2 * muX * muY + c1) * (2 * sigmaXY + c2)
         let denominator = (muX * muX + muY * muY + c1) * (sigmaX2 + sigmaY2 + c2)
 
         guard denominator > 0 else { return 0 }
-        return numerator / denominator
+        return min(max(numerator / denominator, 0), 1)
     }
 
     /// 从 CGImage 的指定区域提取灰度像素值。
@@ -274,14 +298,8 @@ extension OverlapDetector {
             return nil
         }
 
-        let flippedRegion = CGRect(
-            x: region.origin.x,
-            y: CGFloat(image.height) - region.origin.y - region.height,
-            width: region.width,
-            height: region.height
-        )
-
-        context.draw(image, in: flippedRegion)
+        guard let cropped = image.cropping(to: region.integral) else { return nil }
+        context.draw(cropped, in: CGRect(x: 0, y: 0, width: width, height: height))
 
         return pixelData.map { Float($0) / 255.0 }
     }
@@ -290,6 +308,6 @@ extension OverlapDetector {
 // MARK: - SSIM Constants
 
 extension OverlapDetector {
-    static let c1: Float = (0.01 * 255) * (0.01 * 255)
-    static let c2: Float = (0.03 * 255) * (0.03 * 255)
+    static let c1: Float = 0.01 * 0.01
+    static let c2: Float = 0.03 * 0.03
 }

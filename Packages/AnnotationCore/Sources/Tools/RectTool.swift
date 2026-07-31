@@ -38,13 +38,28 @@ public struct RectTool: Sendable {
         context.saveGState()
         defer { context.restoreGState() }
 
+        let path = CGPath(
+            roundedRect: rect,
+            cornerWidth: min(node.cornerRadius, rect.width / 2),
+            cornerHeight: min(node.cornerRadius, rect.height / 2),
+            transform: nil
+        )
+
+        if let fillColor = node.fillColor {
+            context.setFillColor(fillColor)
+            context.setAlpha(node.opacity)
+            context.addPath(path)
+            context.fillPath()
+        }
+
         if let color = node.color {
             context.setStrokeColor(color)
         }
         context.setLineWidth(node.lineWidth)
         context.setAlpha(node.opacity)
-
-        context.stroke(rect)
+        applyStrokeStyle(node.strokeStyle, lineWidth: node.lineWidth, to: context)
+        context.addPath(path)
+        context.strokePath()
     }
 
     private func denormalize(point: CGPoint, to size: CGSize) -> CGPoint {
@@ -58,5 +73,21 @@ public struct RectTool: Sendable {
             width: rect.size.width * size.width,
             height: rect.size.height * size.height
         )
+    }
+
+    private func applyStrokeStyle(
+        _ style: AnnotationStrokeStyle,
+        lineWidth: CGFloat,
+        to context: CGContext
+    ) {
+        switch style {
+        case .solid:
+            context.setLineDash(phase: 0, lengths: [])
+        case .dashed:
+            context.setLineDash(phase: 0, lengths: [lineWidth * 4, lineWidth * 2])
+        case .dotted:
+            context.setLineCap(.round)
+            context.setLineDash(phase: 0, lengths: [0, lineWidth * 2.5])
+        }
     }
 }

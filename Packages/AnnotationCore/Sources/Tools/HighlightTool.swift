@@ -44,9 +44,8 @@ public struct HighlightTool: Sendable {
         context.setBlendMode(.multiply)
 
         let highlightColor = node.color ?? CGColor(red: 1.0, green: 1.0, blue: 0.0, alpha: 1.0)
-        let alpha = node.opacity * 0.5 // 高亮默认半透明
-        context.setFillColor(highlightColor.copy(alpha: alpha) ?? highlightColor)
-        context.setAlpha(alpha)
+        context.setFillColor(highlightColor)
+        context.setAlpha(node.opacity)
 
         context.fill(rect)
     }

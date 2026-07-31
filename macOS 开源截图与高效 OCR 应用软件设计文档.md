@@ -96,7 +96,7 @@ SnapGlass 是一个面向高频知识工作流的本地截图 + OCR 基础设施
 | Apple Events 权限 (Finder 集成) | 🔄 延后 | P1 功能，首版不涉及 |
 | 沙盒限制 (App Store) | 🔄 暂不适用 | 首版只做 GitHub 直装版，不启用 sandbox |
 | 网络请求边界 | ✅ 已设计 | 仅允许 GitHub API 域名；速率限制 (max 10 req/min)；所有请求需用户显式触发 |
-| 数据加密 | ✅ 已设计 | CryptoKit AES-GCM at rest；密钥存储在 Keychain |
+| 数据加密 | ✅ 已设计 | CryptoKit AES-GCM at rest；密钥存储在 App Support 0600 本地文件 |
 | 敏感文本保护 | ✅ 已设计 | 默认不持久化完整 OCR 文本；导出支持脱敏 |
 | 崩溃日志安全 | ✅ 已设计 | 本地存储；用户手动导出；不自动上传 |
 | 代码签名 (macOS 15+) | ✅ 已设计 | Developer ID 签名 + Hardened Runtime + notarytool 公证 |
@@ -356,7 +356,7 @@ Phase 0: 脚手架初始化
 | 项目生成 | XcodeGen + SPM | 文本化、无冲突、agent 友好 |
 | 更新 | 首版不做自动更新 | Phase 4 再集成 Sparkle |
 | 崩溃 | 本地 PLCrashReporter | 用户手动导出 |
-| 加密 | CryptoKit AES-GCM + Keychain | 历史数据 at rest + 敏感密钥 |
+| 加密 | CryptoKit AES-GCM + App Support 本地密钥 | 历史数据 at rest + 0600 文件权限 |
 
 ---
 
@@ -391,7 +391,7 @@ snapocr/
 │   │   │   │   └── LogLevel.swift
 │   │   │   ├── Security/
 │   │   │   │   ├── CryptoService.swift     # AES-GCM 加密
-│   │   │   │   └── KeychainService.swift   # Keychain 存取
+│   │   │   │   └── KeychainService.swift   # LocalKeyStore 实现（不访问 Keychain）
 │   │   │   └── Errors/
 │   │   │       └── AppError.swift          # 统一错误类型
 │   │   └── Tests/
@@ -846,10 +846,10 @@ func openScreenCaptureSettings() {
 
 | 数据 | 存储位置 | 加密方式 | 生命周期 |
 |------|----------|----------|----------|
-| 截图原图 | `~/Library/Application Support/SnapGlass/History/images/` | CryptoKit AES-256-GCM (可配置关闭) | 7天 / 100条 |
-| OCR 文本 | `~/Library/Application Support/SnapGlass/History/texts/` | CryptoKit AES-256-GCM | 30天 / 500条 |
-| 缩略图 | `~/Library/Application Support/SnapGlass/History/thumbs/` | 无加密 | 90天 / 1000条 |
-| 敏感密钥 | Keychain (`com.snapglass.secrets`) | Keychain + Secure Enclave | 持久 |
+| 截图原图 | `~/Library/Application Support/SnapGlass/History/v2/images/` | CryptoKit AES-256-GCM | 7天 / 100条 |
+| OCR 文本 | `~/Library/Application Support/SnapGlass/History/v2/entries/` | CryptoKit AES-256-GCM | 30天 / 500条 |
+| 缩略图 | `~/Library/Application Support/SnapGlass/History/v2/thumbs/` | 无加密 | 90天 / 1000条 |
+| 历史密钥 | `~/Library/Application Support/SnapGlass/Security/history-v2.key` | 本地 0600 权限文件 | 持久 |
 | 崩溃日志 | `~/Library/Logs/SnapGlass/` | 无加密 | 30天 |
 | DevMode 日志 | `~/Library/Logs/SnapGlass/devmode/` | 无加密 (可选导出) | 手动管理 |
 | 临时文件 | `NSTemporaryDirectory()` | 无加密 | 会话结束 |
@@ -865,9 +865,7 @@ public actor CryptoService {
     private let key: SymmetricKey
 
     public init() throws {
-        self.key = try KeychainService.getOrCreateKey(
-            identifier: "com.snapglass.history.encryption"
-        )
+        self.key = try LocalKeyStore.loadOrCreateKey(at: keyURL)
     }
 
     public func encrypt(_ data: Data) throws -> Data {

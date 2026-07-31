@@ -11,6 +11,7 @@ struct AnnotationCanvasView: NSViewRepresentable {
     let color: CGColor
     let lineWidth: CGFloat
     var onNodeCreated: ((AnnotationNode) -> Void)?
+    var onTextRequested: ((CGPoint) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -29,6 +30,8 @@ struct AnnotationCanvasView: NSViewRepresentable {
         nsView.currentColor = color
         nsView.currentLineWidth = lineWidth
         nsView.onNodeCreated = onNodeCreated
+        nsView.onTextRequested = onTextRequested
+        nsView.invalidateRenderedPreview()
         nsView.needsDisplay = true
     }
 
@@ -44,6 +47,7 @@ final class AnnotationCanvasNSView: NSView {
     var currentColor: CGColor = CGColor(red: 1, green: 0, blue: 0, alpha: 1)
     var currentLineWidth: CGFloat = 3.0
     var onNodeCreated: ((AnnotationNode) -> Void)?
+    var onTextRequested: ((CGPoint) -> Void)?
     weak var coordinator: AnnotationCanvasView.Coordinator?
 
     // Drawing state
@@ -52,6 +56,7 @@ final class AnnotationCanvasNSView: NSView {
     private var dragStartPoint: CGPoint = .zero
     private var dragCurrentPoints: [CGPoint] = []
     private var dragCurrentRect: CGRect = .zero
+    private var renderedPreview: CGImage?
 
     // MARK: - Drawing
 
@@ -64,20 +69,16 @@ final class AnnotationCanvasNSView: NSView {
         context.setFillColor(CGColor(gray: 0.12, alpha: 1))
         context.fill(bounds)
 
-        // Draw image centered with aspect-fit
+        // Render existing nodes through AnnotationCore so preview and export match.
         if let image = image {
+            let displayImage = previewImage(for: image) ?? image
             imageDisplayRect = aspectFitRect(
-                imageSize: CGSize(width: image.width, height: image.height),
+                imageSize: CGSize(width: displayImage.width, height: displayImage.height),
                 in: bounds
             )
-            context.draw(image, in: imageDisplayRect)
+            context.draw(displayImage, in: imageDisplayRect)
         } else {
             imageDisplayRect = bounds
-        }
-
-        // Draw existing annotation nodes
-        for node in nodes {
-            drawNode(node, in: context)
         }
 
         // Draw in-progress annotation preview
@@ -90,6 +91,7 @@ final class AnnotationCanvasNSView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        guard imageDisplayRect.contains(point) else { return }
         isDrawing = true
         dragStartPoint = point
         dragCurrentPoints = [normalizedPoint(point)]
@@ -127,13 +129,16 @@ final class AnnotationCanvasNSView: NSView {
 
         let point = convert(event.locationInWindow, from: nil)
         let norm = normalizedPoint(point)
-        let node = createNode(at: norm)
-        onNodeCreated?(node)
+        if currentTool == .text {
+            onTextRequested?(norm)
+        } else if let node = createNode(at: norm) {
+            onNodeCreated?(node)
+        }
     }
 
     // MARK: - Node Creation
 
-    private func createNode(at endPoint: CGPoint) -> AnnotationNode {
+    private func createNode(at endPoint: CGPoint) -> AnnotationNode? {
         let startPoint = normalizedPoint(dragStartPoint)
 
         switch currentTool {
@@ -179,88 +184,16 @@ final class AnnotationCanvasNSView: NSView {
             )
 
         case .text:
-            return AnnotationNode(
-                tool: .text, color: currentColor,
-                lineWidth: currentLineWidth, points: [endPoint], text: "Text"
-            )
+            return nil
         }
     }
 
     // MARK: - Drawing Helpers
 
-    private func drawNode(_ node: AnnotationNode, in context: CGContext) {
-        context.saveGState()
-
-        let clr = node.color ?? CGColor(red: 1, green: 0, blue: 0, alpha: 1)
-        context.setStrokeColor(clr)
-        context.setLineWidth(node.lineWidth)
-        context.setAlpha(node.opacity)
-
-        switch node.tool {
-        case .arrow:
-            guard node.points.count >= 2 else { break }
-            let p0 = viewPoint(from: node.points[0])
-            let p1 = viewPoint(from: node.points[1])
-            context.move(to: p0)
-            context.addLine(to: p1)
-            context.strokePath()
-            drawArrowhead(at: p1, from: p0, in: context)
-
-        case .rect:
-            let r = viewRect(from: node.normalizedRect)
-            context.stroke(r)
-
-        case .pen:
-            guard node.points.count >= 2 else { break }
-            context.beginPath()
-            context.move(to: viewPoint(from: node.points[0]))
-            for i in 1..<node.points.count {
-                context.addLine(to: viewPoint(from: node.points[i]))
-            }
-            context.strokePath()
-
-        case .highlight:
-            let r = viewRect(from: node.normalizedRect)
-            context.setFillColor(clr.copy(alpha: 0.25)!)
-            context.fill(r)
-
-        case .blur:
-            let r = viewRect(from: node.normalizedRect)
-            context.setFillColor(CGColor(gray: 0.5, alpha: 0.3))
-            context.fill(r)
-            context.stroke(r)
-
-        case .crop:
-            let r = viewRect(from: node.normalizedRect)
-            let full = imageDisplayRect
-            // Dim areas outside crop region
-            context.setFillColor(CGColor(gray: 0, alpha: 0.55))
-            context.fill(CGRect(x: full.minX, y: r.maxY, width: full.width, height: full.maxY - r.maxY))
-            context.fill(CGRect(x: full.minX, y: full.minY, width: full.width, height: r.minY - full.minY))
-            context.fill(CGRect(x: full.minX, y: r.minY, width: r.minX - full.minX, height: r.height))
-            context.fill(CGRect(x: r.maxX, y: r.minY, width: full.maxX - r.maxX, height: r.height))
-            context.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-            context.setLineWidth(1)
-            context.stroke(r)
-
-        case .text:
-            guard let pt = node.points.first else { break }
-            let p = viewPoint(from: pt)
-            let nsColor = NSColor(cgColor: clr) ?? .red
-            let attrs: [NSAttributedString.Key: Any] = [
-                .foregroundColor: nsColor,
-                .font: NSFont.systemFont(ofSize: 14)
-            ]
-            (node.text ?? "Text").draw(at: p, withAttributes: attrs)
-        }
-
-        context.restoreGState()
-    }
-
     private func drawPreview(in context: CGContext) {
         context.saveGState()
         context.setStrokeColor(currentColor)
-        context.setLineWidth(currentLineWidth)
+        context.setLineWidth(previewLineWidth)
         context.setLineCap(.round)
         context.setLineJoin(.round)
 
@@ -287,7 +220,7 @@ final class AnnotationCanvasNSView: NSView {
             guard dragCurrentRect != .zero else { break }
             let r = viewRect(from: dragCurrentRect)
             if currentTool == .highlight {
-                context.setFillColor(currentColor.copy(alpha: 0.25)!)
+                context.setFillColor(currentColor.copy(alpha: 0.3) ?? currentColor)
                 context.fill(r)
             } else if currentTool == .blur {
                 context.setFillColor(CGColor(gray: 0.5, alpha: 0.2))
@@ -304,7 +237,7 @@ final class AnnotationCanvasNSView: NSView {
 
     private func drawArrowhead(at tip: CGPoint, from base: CGPoint, in context: CGContext) {
         let angle = atan2(tip.y - base.y, tip.x - base.x)
-        let len: CGFloat = 10
+        let len = previewLineWidth * 5
         let spread: CGFloat = .pi / 7
 
         let p1 = CGPoint(x: tip.x - len * cos(angle - spread), y: tip.y - len * sin(angle - spread))
@@ -322,8 +255,8 @@ final class AnnotationCanvasNSView: NSView {
     private func normalizedPoint(_ viewCoord: CGPoint) -> CGPoint {
         guard imageDisplayRect.width > 0, imageDisplayRect.height > 0 else { return .zero }
         return CGPoint(
-            x: (viewCoord.x - imageDisplayRect.origin.x) / imageDisplayRect.width,
-            y: (viewCoord.y - imageDisplayRect.origin.y) / imageDisplayRect.height
+            x: min(max((viewCoord.x - imageDisplayRect.origin.x) / imageDisplayRect.width, 0), 1),
+            y: min(max((viewCoord.y - imageDisplayRect.origin.y) / imageDisplayRect.height, 0), 1)
         )
     }
 
@@ -362,5 +295,37 @@ final class AnnotationCanvasNSView: NSView {
             y: bounds.midY - h / 2,
             width: w, height: h
         )
+    }
+
+    func invalidateRenderedPreview() {
+        renderedPreview = nil
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        if frame.size != newSize {
+            invalidateRenderedPreview()
+        }
+        super.setFrameSize(newSize)
+    }
+
+    private var previewLineWidth: CGFloat {
+        guard let image, image.width > 0 else { return currentLineWidth }
+        let scale = imageDisplayRect.width / CGFloat(image.width)
+        return max(currentLineWidth * scale, 0.5)
+    }
+
+    private func previewImage(for image: CGImage) -> CGImage? {
+        if nodes.isEmpty { return image }
+        if let renderedPreview { return renderedPreview }
+
+        var document = AnnotationDocument(baseImage: image)
+        document.nodes = nodes
+        let backingScale = window?.backingScaleFactor ?? 2
+        let maximumDimension = max(bounds.width, bounds.height) * backingScale
+        renderedPreview = try? Renderer().render(
+            document,
+            maximumDimension: maximumDimension
+        )
+        return renderedPreview
     }
 }

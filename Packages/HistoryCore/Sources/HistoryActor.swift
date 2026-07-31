@@ -42,7 +42,7 @@ public actor HistoryActor: HistoryProtocol {
     private let cryptoService: CryptoService
 
     /// 清理策略
-    private let cleanupPolicy: CleanupPolicy
+    private var cleanupPolicy: CleanupPolicy
 
     /// 日志记录器
     private let logger = Logger(category: "history")
@@ -51,7 +51,7 @@ public actor HistoryActor: HistoryProtocol {
     private let anonymizer = TextAnonymizer()
 
     /// 全局条目数量硬限制
-    private let maxEntries: Int
+    private var maxEntries: Int
 
     // MARK: - Initialization
 
@@ -60,16 +60,21 @@ public actor HistoryActor: HistoryProtocol {
     /// 创建必要的目录结构，初始化加密服务，并从磁盘加载已有条目到内存缓存。
     ///
     /// - Throws: 当 CryptoService 初始化失败或目录创建失败时
-    public init() throws {
-        let base = URL.appSupportDirectory
-        self.storageURL = base.appendingPathComponent("History")
+    public init(
+        cleanupPolicy: CleanupPolicy = CleanupPolicy(),
+        baseURL: URL = URL.appSupportDirectory
+    ) throws {
+        self.storageURL = baseURL.appendingPathComponent("History").appendingPathComponent("v2")
         self.entriesDir = storageURL.appendingPathComponent("entries")
         self.imagesDir = storageURL.appendingPathComponent("images")
         self.thumbsDir = storageURL.appendingPathComponent("thumbs")
         self.tempDir = storageURL.appendingPathComponent("tmp")
 
-        self.cryptoService = try CryptoService()
-        self.cleanupPolicy = CleanupPolicy()
+        let keyURL = baseURL
+            .appendingPathComponent("Security")
+            .appendingPathComponent("history-v2.key")
+        self.cryptoService = try CryptoService(keyURL: keyURL)
+        self.cleanupPolicy = cleanupPolicy
         self.maxEntries = cleanupPolicy.maxEntries
 
         try entriesDir.ensureDirectoryExists()
@@ -101,20 +106,43 @@ public actor HistoryActor: HistoryProtocol {
     // MARK: - HistoryProtocol: Save
 
     public func save(_ entry: HistoryEntry) async throws {
-        if entries.count >= maxEntries {
+        if allPersistedEntries().count >= maxEntries, entries[entry.id] == nil {
             try await evictOldest()
         }
 
         var mutableEntry = entry
+        var newlyCreatedFiles: [URL] = []
+        var committed = false
+
+        defer {
+            if !committed {
+                for file in newlyCreatedFiles {
+                    do {
+                        try removeIfExists(file)
+                    } catch {
+                        logger.error("回滚新建历史文件失败: \(file.lastPathComponent)", error: error)
+                    }
+                }
+            }
+        }
 
         // 处理截图原图：复制到加密存储
-        if let sourcePath = entry.imagePath,
-           FileManager.default.fileExists(atPath: sourcePath.path) {
+        if let sourcePath = entry.imagePath {
+            let destURL = imageFileURL(for: entry.id)
+            guard FileManager.default.fileExists(atPath: sourcePath.path) else {
+                throw HistoryError.fileIOError(path: sourcePath.path)
+            }
+
             do {
-                let imageData = try Data(contentsOf: sourcePath)
-                let encryptedImage = try cryptoService.encrypt(imageData)
-                let destURL = imageFileURL(for: entry.id)
-                try encryptedImage.write(to: destURL, options: .atomic)
+                if sourcePath.standardizedFileURL != destURL.standardizedFileURL {
+                    let destinationExisted = FileManager.default.fileExists(atPath: destURL.path)
+                    let imageData = try Data(contentsOf: sourcePath)
+                    let encryptedImage = try cryptoService.encrypt(imageData)
+                    try encryptedImage.write(to: destURL, options: .atomic)
+                    if !destinationExisted {
+                        newlyCreatedFiles.append(destURL)
+                    }
+                }
                 mutableEntry.imagePath = destURL
                 logger.debug("截图已加密存储: \(entry.id)")
             } catch {
@@ -124,12 +152,21 @@ public actor HistoryActor: HistoryProtocol {
         }
 
         // 处理缩略图：复制到非加密存储
-        if let sourcePath = entry.thumbnailPath,
-           FileManager.default.fileExists(atPath: sourcePath.path) {
+        if let sourcePath = entry.thumbnailPath {
+            let destURL = thumbnailFileURL(for: entry.id)
+            guard FileManager.default.fileExists(atPath: sourcePath.path) else {
+                throw HistoryError.fileIOError(path: sourcePath.path)
+            }
+
             do {
-                let thumbData = try Data(contentsOf: sourcePath)
-                let destURL = thumbnailFileURL(for: entry.id)
-                try thumbData.write(to: destURL, options: .atomic)
+                if sourcePath.standardizedFileURL != destURL.standardizedFileURL {
+                    let destinationExisted = FileManager.default.fileExists(atPath: destURL.path)
+                    let thumbData = try Data(contentsOf: sourcePath)
+                    try thumbData.write(to: destURL, options: .atomic)
+                    if !destinationExisted {
+                        newlyCreatedFiles.append(destURL)
+                    }
+                }
                 mutableEntry.thumbnailPath = destURL
                 logger.debug("缩略图已存储: \(entry.id)")
             } catch {
@@ -140,16 +177,19 @@ public actor HistoryActor: HistoryProtocol {
 
         // 加密持久化条目 JSON
         do {
-            let jsonData = try JSONEncoder().encode(mutableEntry)
-            let encryptedData = try cryptoService.encrypt(jsonData)
             let fileURL = entryFileURL(for: entry.id)
-            try encryptedData.write(to: fileURL, options: .atomic)
+            let destinationExisted = FileManager.default.fileExists(atPath: fileURL.path)
+            try persistEntry(mutableEntry)
+            if !destinationExisted {
+                newlyCreatedFiles.append(fileURL)
+            }
         } catch {
             logger.error("条目加密持久化失败", error: error)
             throw HistoryError.encryptionFailed(reason: error.localizedDescription)
         }
 
         entries[entry.id] = mutableEntry
+        committed = true
         logger.info("历史条目已保存: \(entry.id)")
 
         // 检查并执行清理
@@ -183,7 +223,16 @@ public actor HistoryActor: HistoryProtocol {
         try tempDir.ensureDirectoryExists()
 
         let tempID = UUID()
-        let imageURL = tempDir.appendingPathComponent("\(tempID)-capture.png")
+        let defaults = UserDefaults.standard
+        let configuredFormat = ImageFileFormat(
+            rawValue: defaults.string(forKey: PreferenceKeys.captureImageFormat)
+                ?? PreferenceDefaults.captureImageFormat
+        ) ?? .png
+        let format = ImageEncoder.containsTransparency(image) ? ImageFileFormat.png : configuredFormat
+        let jpegQuality = defaults.object(forKey: PreferenceKeys.captureJPEGQuality) == nil
+            ? PreferenceDefaults.captureJPEGQuality
+            : defaults.double(forKey: PreferenceKeys.captureJPEGQuality)
+        let imageURL = tempDir.appendingPathComponent("\(tempID)-capture.\(format.fileExtension)")
         let thumbnailURL = tempDir.appendingPathComponent("\(tempID)-thumb.png")
 
         defer {
@@ -191,7 +240,7 @@ public actor HistoryActor: HistoryProtocol {
             try? FileManager.default.removeItem(at: thumbnailURL)
         }
 
-        try Self.writePNG(image, to: imageURL)
+        try ImageEncoder.write(image, to: imageURL, format: format, jpegQuality: jpegQuality)
         try Self.writeThumbnail(from: imageURL, to: thumbnailURL, maxPixelSize: 200)
 
         let entry = HistoryEntry(
@@ -232,7 +281,16 @@ public actor HistoryActor: HistoryProtocol {
     // MARK: - HistoryProtocol: Search
 
     public func search(query: String) async throws -> [HistoryEntry] {
-        let results = entries.values.filter { entry in
+        // 合并内存缓存与磁盘条目，确保搜索覆盖所有已持久化的数据
+        var merged = entries
+        let diskEntries = loadAllEntriesSync()
+        for (id, entry) in diskEntries {
+            if merged[id] == nil {
+                merged[id] = entry
+            }
+        }
+
+        let results = merged.values.filter { entry in
             entry.textContent.localizedCaseInsensitiveContains(query)
                 || entry.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
                 || (entry.sourceAppName?.localizedCaseInsensitiveContains(query) ?? false)
@@ -244,12 +302,39 @@ public actor HistoryActor: HistoryProtocol {
     // MARK: - HistoryProtocol: Delete
 
     public func delete(id: UUID) async throws {
-        entries.removeValue(forKey: id)
+        let transactionDir = tempDir.appendingPathComponent("delete-\(UUID().uuidString)")
+        try transactionDir.ensureDirectoryExists()
+        let files = [
+            entryFileURL(for: id),
+            imageFileURL(for: id),
+            thumbnailFileURL(for: id),
+        ]
+        var staged: [(original: URL, staged: URL)] = []
 
-        // 删除磁盘文件
-        try? FileManager.default.removeItem(at: entryFileURL(for: id))
-        try? FileManager.default.removeItem(at: imageFileURL(for: id))
-        try? FileManager.default.removeItem(at: thumbnailFileURL(for: id))
+        do {
+            for file in files where FileManager.default.fileExists(atPath: file.path) {
+                let stagedName = "\(file.deletingLastPathComponent().lastPathComponent)-\(file.lastPathComponent)"
+                let stagedURL = transactionDir.appendingPathComponent(stagedName)
+                try FileManager.default.moveItem(at: file, to: stagedURL)
+                staged.append((file, stagedURL))
+            }
+        } catch {
+            for item in staged.reversed() {
+                do {
+                    try FileManager.default.moveItem(at: item.staged, to: item.original)
+                } catch {
+                    logger.error("恢复删除事务失败: \(item.original.lastPathComponent)", error: error)
+                }
+            }
+            throw HistoryError.fileIOError(path: transactionDir.path)
+        }
+
+        entries.removeValue(forKey: id)
+        do {
+            try FileManager.default.removeItem(at: transactionDir)
+        } catch {
+            logger.warning("删除事务已提交，但临时文件清理失败: \(transactionDir.lastPathComponent)")
+        }
 
         logger.info("历史条目已删除: \(id)")
     }
@@ -257,21 +342,36 @@ public actor HistoryActor: HistoryProtocol {
     // MARK: - HistoryProtocol: Clear
 
     public func clear() async throws {
-        entries.removeAll()
+        let transactionDir = tempDir.appendingPathComponent("clear-\(UUID().uuidString)")
+        try transactionDir.ensureDirectoryExists()
+        let directories = [entriesDir, imagesDir, thumbsDir]
+        var staged: [(original: URL, staged: URL)] = []
 
-        // 批量删除目录内容
-        let removeContents: (URL) -> Void = { dir in
-            guard let files = try? FileManager.default.contentsOfDirectory(
-                at: dir, includingPropertiesForKeys: nil
-            ) else { return }
-            for file in files {
-                try? FileManager.default.removeItem(at: file)
+        do {
+            for directory in directories {
+                let stagedURL = transactionDir.appendingPathComponent(directory.lastPathComponent)
+                try FileManager.default.moveItem(at: directory, to: stagedURL)
+                staged.append((directory, stagedURL))
+                try directory.ensureDirectoryExists()
             }
+        } catch {
+            for item in staged.reversed() {
+                do {
+                    try removeIfExists(item.original)
+                    try FileManager.default.moveItem(at: item.staged, to: item.original)
+                } catch {
+                    logger.error("恢复清空事务失败: \(item.original.lastPathComponent)", error: error)
+                }
+            }
+            throw HistoryError.fileIOError(path: transactionDir.path)
         }
 
-        removeContents(entriesDir)
-        removeContents(imagesDir)
-        removeContents(thumbsDir)
+        entries.removeAll()
+        do {
+            try FileManager.default.removeItem(at: transactionDir)
+        } catch {
+            logger.warning("清空事务已提交，但临时文件清理失败: \(transactionDir.lastPathComponent)")
+        }
 
         logger.warning("所有历史记录已清空")
     }
@@ -279,7 +379,8 @@ public actor HistoryActor: HistoryProtocol {
     // MARK: - HistoryProtocol: Recent
 
     public func recent(limit: Int) async throws -> [HistoryEntry] {
-        return entries.values
+        guard limit > 0 else { return [] }
+        return allPersistedEntries().values
             .sorted { $0.timestamp > $1.timestamp }
             .prefix(limit)
             .map { $0 }
@@ -289,10 +390,11 @@ public actor HistoryActor: HistoryProtocol {
 
     public func export(ids: [UUID], format: HistoryExportFormat) async throws -> Data {
         let exportEntries: [HistoryEntry]
+        let persistedEntries = allPersistedEntries()
         if ids.isEmpty {
-            exportEntries = entries.values.sorted { $0.timestamp > $1.timestamp }
+            exportEntries = persistedEntries.values.sorted { $0.timestamp > $1.timestamp }
         } else {
-            exportEntries = ids.compactMap { entries[$0] }
+            exportEntries = ids.compactMap { persistedEntries[$0] }
             if exportEntries.isEmpty && !ids.isEmpty {
                 throw HistoryError.entryNotFound(id: ids[0])
             }
@@ -325,21 +427,21 @@ public actor HistoryActor: HistoryProtocol {
     ///
     /// - Returns: 所有缓存条目数组
     public func allEntries() -> [HistoryEntry] {
-        Array(entries.values)
+        Array(allPersistedEntries().values)
     }
 
     /// 获取当前条目总数
     ///
     /// - Returns: 缓存中的条目数量
     public func count() -> Int {
-        entries.count
+        allPersistedEntries().count
     }
 
     /// 获取所有已收藏的条目
     ///
     /// - Returns: 已收藏条目数组，按时间戳降序
     public func favouriteEntries() -> [HistoryEntry] {
-        entries.values
+        allPersistedEntries().values
             .filter { $0.isFavourite }
             .sorted { $0.timestamp > $1.timestamp }
     }
@@ -408,7 +510,128 @@ public actor HistoryActor: HistoryProtocol {
         }
     }
 
+    /// Reloads user-configured history limits and immediately applies them.
+    /// Favourite entries remain protected from age/count cleanup.
+    public func reloadConfiguredPolicyAndCleanup() async throws {
+        let policy = Self.configuredCleanupPolicy()
+        cleanupPolicy = policy
+        maxEntries = policy.maxEntries
+        try await enforceCleanup()
+    }
+
     // MARK: - Private: Disk I/O
+
+    /// Merges the disk index with the in-memory cache. Cached entries win because
+    /// they may contain a more recent metadata update.
+    private func allPersistedEntries() -> [UUID: HistoryEntry] {
+        var merged = loadAllEntriesSync()
+        for (id, entry) in entries {
+            merged[id] = entry
+        }
+        return merged
+    }
+
+    /// Encrypts and atomically persists entry metadata.
+    private func persistEntry(_ entry: HistoryEntry) throws {
+        let jsonData = try JSONEncoder().encode(entry)
+        let encryptedData = try cryptoService.encrypt(jsonData)
+        try encryptedData.write(to: entryFileURL(for: entry.id), options: .atomic)
+    }
+
+    private func removeIfExists(_ url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    private func hasData(_ entry: HistoryEntry, category: DataCategory) -> Bool {
+        switch category {
+        case .image:
+            return entry.imagePath != nil
+        case .text:
+            return !entry.textContent.isEmpty
+        case .thumbnail:
+            return entry.thumbnailPath != nil
+        }
+    }
+
+    /// Removes only one storage layer while keeping the remaining history entry.
+    private func stripData(_ category: DataCategory, from id: UUID) throws {
+        guard var entry = entries[id] ?? loadEntryFromDiskSync(id: id) else { return }
+
+        if category == .text {
+            guard !entry.textContent.isEmpty else { return }
+            entry.textContent = ""
+            try persistEntry(entry)
+            if entries[id] != nil {
+                entries[id] = entry
+            }
+            return
+        }
+
+        let sourceURL: URL?
+        switch category {
+        case .image:
+            sourceURL = imageFileURL(for: id)
+        case .thumbnail:
+            sourceURL = thumbnailFileURL(for: id)
+        case .text:
+            sourceURL = nil
+        }
+
+        let transactionDir = tempDir.appendingPathComponent("strip-\(UUID().uuidString)")
+        var stagedURL: URL?
+
+        if let sourceURL, FileManager.default.fileExists(atPath: sourceURL.path) {
+            try transactionDir.ensureDirectoryExists()
+            let destination = transactionDir.appendingPathComponent(sourceURL.lastPathComponent)
+            try FileManager.default.moveItem(at: sourceURL, to: destination)
+            stagedURL = destination
+        }
+
+        switch category {
+        case .image:
+            entry.imagePath = nil
+        case .thumbnail:
+            entry.thumbnailPath = nil
+        case .text:
+            break
+        }
+
+        do {
+            try persistEntry(entry)
+            if entries[id] != nil {
+                entries[id] = entry
+            }
+        } catch {
+            if let sourceURL, let stagedURL {
+                do {
+                    try FileManager.default.moveItem(at: stagedURL, to: sourceURL)
+                } catch {
+                    logger.error("恢复分层清理事务失败: \(sourceURL.lastPathComponent)", error: error)
+                }
+            }
+            throw error
+        }
+
+        if stagedURL != nil {
+            do {
+                try FileManager.default.removeItem(at: transactionDir)
+            } catch {
+                logger.warning("分层清理已提交，但临时文件清理失败: \(transactionDir.lastPathComponent)")
+            }
+        }
+    }
+
+    private func storedSize(for id: UUID) -> UInt64 {
+        let files = [entryFileURL(for: id), imageFileURL(for: id), thumbnailFileURL(for: id)]
+        return files.reduce(into: 0) { total, file in
+            guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
+                  let size = values.fileSize,
+                  size > 0
+            else { return }
+            total += UInt64(size)
+        }
+    }
 
     /// 获取条目加密文件路径
     private func entryFileURL(for id: UUID) -> URL {
@@ -469,24 +692,6 @@ public actor HistoryActor: HistoryProtocol {
 
     // MARK: - Private: Image Encoding
 
-    /// Writes a `CGImage` to disk as PNG.
-    private static func writePNG(_ image: CGImage, to url: URL) throws {
-        guard let destination = CGImageDestinationCreateWithURL(
-            url as CFURL,
-            UTType.png.identifier as CFString,
-            1,
-            nil
-        ) else {
-            throw HistoryError.fileIOError(path: url.path)
-        }
-
-        CGImageDestinationAddImage(destination, image, nil)
-
-        guard CGImageDestinationFinalize(destination) else {
-            throw HistoryError.fileIOError(path: url.path)
-        }
-    }
-
     /// Generates a PNG thumbnail from an image file.
     private static func writeThumbnail(from imageURL: URL, to thumbnailURL: URL, maxPixelSize: Int) throws {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
@@ -505,14 +710,15 @@ public actor HistoryActor: HistoryProtocol {
             throw HistoryError.fileIOError(path: imageURL.path)
         }
 
-        try writePNG(thumbnail, to: thumbnailURL)
+        try ImageEncoder.write(thumbnail, to: thumbnailURL, format: .png)
     }
 
     // MARK: - Private: Cleanup
 
     /// 驱逐最旧的条目
     private func evictOldest() async throws {
-        let sorted = entries.values.sorted { $0.timestamp < $1.timestamp }
+        let persistedEntries = allPersistedEntries()
+        let sorted = persistedEntries.values.sorted { $0.timestamp < $1.timestamp }
         guard let oldest = sorted.first else { return }
 
         if oldest.isFavourite {
@@ -528,24 +734,28 @@ public actor HistoryActor: HistoryProtocol {
 
     /// 执行清理策略
     private func enforceCleanup() async throws {
-        let sortedEntries = entries.values.sorted { $0.timestamp > $1.timestamp }
+        try await enforceEntryLimits()
 
         // 按数据类别分别执行清理
         let categories: [DataCategory] = [.text, .image, .thumbnail]
 
         for category in categories {
-            let toEvict = cleanupPolicy.entriesToEvict(sortedEntries, category: category)
+            let categoryEntries = allPersistedEntries().values
+                .filter { hasData($0, category: category) }
+                .sorted { $0.timestamp > $1.timestamp }
+            let toEvict = cleanupPolicy.entriesToEvict(categoryEntries, category: category)
             for entry in toEvict {
-                try await delete(id: entry.id)
+                try stripData(category, from: entry.id)
             }
         }
 
         // 全局数量上限检查
-        if entries.count > maxEntries {
-            let excess = entries.values
+        let persistedEntries = allPersistedEntries()
+        if persistedEntries.count > maxEntries {
+            let excess = persistedEntries.values
                 .sorted { $0.timestamp < $1.timestamp }
                 .filter { !$0.isFavourite }
-                .prefix(entries.count - maxEntries)
+                .prefix(persistedEntries.count - maxEntries)
             for entry in excess {
                 try await delete(id: entry.id)
             }
@@ -556,6 +766,27 @@ public actor HistoryActor: HistoryProtocol {
 
         // 检查磁盘总大小
         try await enforceDiskQuota()
+    }
+
+    /// Enforces whole-entry age and count limits before layered cleanup so a
+    /// history row never survives without the image needed to reopen it.
+    private func enforceEntryLimits() async throws {
+        let retentionDays = cleanupPolicy.retentionDays(for: .image)
+        let sorted = allPersistedEntries().values.sorted { $0.timestamp > $1.timestamp }
+        let expired = sorted.filter { entry in
+            guard !entry.isFavourite, retentionDays != Int.max else { return false }
+            return Date().timeIntervalSince(entry.timestamp) / 86_400 > Double(retentionDays)
+        }
+        for entry in expired {
+            try await delete(id: entry.id)
+        }
+
+        let survivors = allPersistedEntries().values.sorted { $0.timestamp > $1.timestamp }
+        let overflow = max(0, survivors.count - maxEntries)
+        guard overflow > 0 else { return }
+        for entry in survivors.reversed().filter({ !$0.isFavourite }).prefix(overflow) {
+            try await delete(id: entry.id)
+        }
     }
 
     /// 检查并执行磁盘配额限制
@@ -579,11 +810,12 @@ public actor HistoryActor: HistoryProtocol {
         if totalSize > cleanupPolicy.maxTotalSizeBytes {
             logger.warning("磁盘用量超过限制: \(totalSize) > \(cleanupPolicy.maxTotalSizeBytes)")
             // 清理最旧的条目直到低于限制
-            let sorted = entries.values.sorted { $0.timestamp < $1.timestamp }
+            let sorted = allPersistedEntries().values.sorted { $0.timestamp < $1.timestamp }
             for entry in sorted where !entry.isFavourite {
                 guard totalSize > cleanupPolicy.maxTotalSizeBytes else { break }
+                let entrySize = storedSize(for: entry.id)
                 try await delete(id: entry.id)
-                totalSize = max(0, totalSize - 1024 * 100) // 估算每条约 100KB
+                totalSize = totalSize > entrySize ? totalSize - entrySize : 0
             }
         }
     }
@@ -633,11 +865,58 @@ public actor HistoryActor: HistoryProtocol {
 
 extension HistoryActor {
     /// 共享实例，供 UI 层使用
-    public static let shared: HistoryActor = {
-        do {
-            return try HistoryActor()
-        } catch {
-            fatalError("Failed to initialize HistoryActor: \(error)")
-        }
+    ///
+    /// 初始化失败时返回 `nil` 而非崩溃，调用方应优雅降级。
+    public static let shared: HistoryActor? = {
+        try? HistoryActor(cleanupPolicy: configuredCleanupPolicy())
     }()
+
+    /// 共享实例的显式 Result 版本，调用方可获取具体错误信息
+    public static func sharedResult() -> Result<HistoryActor, any Error> {
+        Result { try HistoryActor(cleanupPolicy: configuredCleanupPolicy()) }
+    }
+
+    private static func configuredCleanupPolicy() -> CleanupPolicy {
+        let defaults = UserDefaults.standard
+        let retentionDays: Int
+        if defaults.object(forKey: PreferenceKeys.historyRetentionDays) != nil {
+            let configured = defaults.integer(forKey: PreferenceKeys.historyRetentionDays)
+            retentionDays = configured == 0 ? Int.max : min(max(configured, 1), 3_650)
+        } else {
+            let legacyValue = defaults.string(forKey: PreferenceKeys.historyRetentionPolicy)
+                ?? PreferenceDefaults.historyRetentionPolicy
+            retentionDays = switch legacyValue {
+            case "7days": 7
+            case "90days": 90
+            case "forever": Int.max
+            default: 30
+            }
+        }
+
+        let configuredMaxItems = defaults.object(forKey: PreferenceKeys.historyMaxItems) == nil
+            ? PreferenceDefaults.historyMaxItems
+            : defaults.integer(forKey: PreferenceKeys.historyMaxItems)
+        let maxItems = min(max(configuredMaxItems, 10), 5_000)
+
+        let configuredStorageSize = defaults.object(forKey: PreferenceKeys.historyStorageSize) == nil
+            ? PreferenceDefaults.historyStorageSize
+            : defaults.double(forKey: PreferenceKeys.historyStorageSize)
+        let storageSizeGB = min(max(configuredStorageSize, 0.1), 10)
+        let maxTotalSizeBytes = UInt64(storageSizeGB * 1024 * 1024 * 1024)
+
+        return CleanupPolicy(
+            maxEntries: maxItems,
+            maxTotalSizeBytes: maxTotalSizeBytes,
+            retentionDays: [
+                .image: retentionDays,
+                .text: retentionDays,
+                .thumbnail: retentionDays,
+            ],
+            maxCount: [
+                .image: maxItems,
+                .text: maxItems,
+                .thumbnail: maxItems,
+            ]
+        )
+    }
 }

@@ -59,8 +59,8 @@ SnapGlass/
 │   │   ├── Overlays/         # 截图选区覆盖层
 │   │   ├── Editor/           # 标注编辑器
 │   │   ├── Permissions/      # 权限引导卡片
-│   │   └── Routing/          # URL Scheme / App Intents
-│   └── SnapGlassCLI/         # CLI 入口
+│   │   └── Routing/          # Automation 保留源码（不进入产品构建）
+│   └── SnapGlassCLI/         # CLI 保留源码（不进入产品构建）
 ├── Packages/
 │   ├── SharedKit/            # 共享工具（日志、加密、错误类型）
 │   ├── CaptureCore/          # 截图（ScreenCaptureKit 主 + CG 兼容）
@@ -69,7 +69,7 @@ SnapGlass/
 │   ├── AnnotationCore/       # 标注工具集
 │   ├── ScrollCore/           # 滚动截图拼接
 │   ├── HistoryCore/          # 本地历史加密存储
-│   └── AutomationCore/       # CLI / URL Scheme / Shortcuts
+│   └── AutomationCore/       # Automation 保留源码（不进入产品构建）
 ├── Docs/                     # 文档
 └── Tests/                    # 集成/UI 测试
 ```

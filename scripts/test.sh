@@ -5,12 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-PACKAGES=(SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore AutomationCore)
+PACKAGES=(SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore)
 ERRORS=0
 
 for pkg in "${PACKAGES[@]}"; do
     echo "=== Testing $pkg ==="
-    if swift test --package-path "Packages/$pkg" 2>&1 | tail -3; then
+    if swift test --package-path "Packages/$pkg"; then
         echo "  ✅ $pkg tests passed"
     else
         echo "  ❌ $pkg tests failed"

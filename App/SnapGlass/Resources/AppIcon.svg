@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="canvas" x1="108" y1="78" x2="904" y2="946" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101A3A"/>
+      <stop offset="0.48" stop-color="#172A60"/>
+      <stop offset="1" stop-color="#332174"/>
+    </linearGradient>
+    <linearGradient id="aurora" x1="266" y1="226" x2="746" y2="774" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7EE7FF"/>
+      <stop offset="0.44" stop-color="#5D89FF"/>
+      <stop offset="1" stop-color="#BB77FF"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="458" y1="298" x2="753" y2="758" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#D9E5FF" stop-opacity="0.83"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="26" stdDeviation="30" flood-color="#05091D" flood-opacity="0.4"/>
+    </filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+  </defs>
+
+  <rect x="48" y="48" width="928" height="928" rx="218" fill="url(#canvas)"/>
+  <circle cx="240" cy="190" r="226" fill="#63D8FF" fill-opacity="0.26" filter="url(#glow)"/>
+  <circle cx="819" cy="829" r="260" fill="#B76DFF" fill-opacity="0.24" filter="url(#glow)"/>
+  <rect x="72" y="72" width="880" height="880" rx="196" fill="none" stroke="#D8E9FF" stroke-opacity="0.18" stroke-width="4"/>
+
+  <g filter="url(#shadow)">
+    <rect x="169" y="215" width="686" height="594" rx="112" fill="#F7FAFF" fill-opacity="0.14" stroke="#EAF5FF" stroke-opacity="0.42" stroke-width="5"/>
+    <rect x="194" y="240" width="636" height="544" rx="91" fill="#081437" fill-opacity="0.30" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="3"/>
+  </g>
+
+  <!-- Capture pane: deliberate four-corner viewfinder, not a generic camera glyph. -->
+  <g fill="none" stroke="url(#aurora)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M313 436v-50c0-23 19-42 42-42h51" stroke-width="32"/>
+    <path d="M512 344h45c23 0 42 19 42 42v50" stroke-width="32"/>
+    <path d="M313 559v49c0 23 19 42 42 42h51" stroke-width="32"/>
+    <path d="M512 650h45c23 0 42-19 42-42v-49" stroke-width="32"/>
+    <circle cx="456" cy="497" r="62" stroke-width="21"/>
+    <path d="M456 406v30M456 558v30M365 497h30M517 497h30" stroke="#CFF7FF" stroke-width="16"/>
+  </g>
+
+  <!-- Recognition pane: a luminous document with three progressively longer OCR baselines. -->
+  <g filter="url(#shadow)">
+    <rect x="618" y="337" width="146" height="324" rx="36" fill="url(#paper)"/>
+    <path d="M657 414h69M657 471h69M657 528h47" stroke="#25448F" stroke-opacity="0.72" stroke-width="17" stroke-linecap="round"/>
+    <circle cx="698" cy="591" r="14" fill="#8B6DFF"/>
+  </g>
+
+  <path d="M236 754c121 45 428 59 553-26" fill="none" stroke="#A8E8FF" stroke-opacity="0.27" stroke-width="8" stroke-linecap="round"/>
+</svg>

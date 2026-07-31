@@ -126,13 +126,12 @@ public struct AnnotationInteractor: AnnotationProtocol {
         logger.debug("应用标注: \(tool.rawValue), id=\(node.id)")
 
         if tool == .crop {
-            // 裁剪操作：替换底图
+            // Flatten existing annotations before cropping. The document snapshot keeps
+            // both the original image and nodes so the operation remains undoable.
             let cropTool = CropTool()
-            let croppedImage = try cropTool.crop(node: node, from: document.baseImage)
-            var newDocument = AnnotationDocument(baseImage: croppedImage, maxUndoDepth: document.maxUndoDepth)
-            // 保留裁剪前的节点（防止数据丢失）
-            newDocument.nodes = document.nodes
-            document = newDocument
+            let flattenedImage = try renderer.render(document)
+            let croppedImage = try cropTool.crop(node: node, from: flattenedImage)
+            document.replaceContent(baseImage: croppedImage, nodes: [])
         } else {
             document.addNode(node)
         }

@@ -4,14 +4,10 @@ import SharedKit
 
 /// 标注渲染器——将标注文档合成到背景图片上。
 ///
-/// 使用 Core Graphics 进行矢量渲染，支持大图内存优化：
-/// - 渲染时使用 `autoreleasepool` 逐帧释放临时对象
-/// - 对于超大图片（> 4096px 任意边），先降采样再渲染
+/// 使用 Core Graphics 进行矢量渲染。导出默认保持原始分辨率；调用方可为预览
+/// 显式提供最大边长，以减少交互时的内存和 CPU 开销。
 public struct Renderer: Sendable {
     private let logger = Logger(category: "annotation.renderer")
-
-    /// 大图阈值：任意边超过此值即视为大图
-    private static let largeImageThreshold: CGFloat = 4096
 
     public init() {}
 
@@ -20,27 +16,33 @@ public struct Renderer: Sendable {
     /// 将 `document.nodes` 中的所有标注渲染到 `document.baseImage` 上，
     /// 返回合成后的 CGImage。
     ///
-    /// - Parameter document: 标注文档
+    /// - Parameters:
+    ///   - document: 标注文档
+    ///   - maximumDimension: 预览最大边长；为 `nil` 时保持原始分辨率
     /// - Returns: 带有标注的合成图片
     /// - Throws: `AnnotationError.renderFailed` 当渲染失败时
-    public func render(_ document: AnnotationDocument) throws -> CGImage {
+    public func render(
+        _ document: AnnotationDocument,
+        maximumDimension: CGFloat? = nil
+    ) throws -> CGImage {
         let baseImage = document.baseImage
         let imageSize = CGSize(width: baseImage.width, height: baseImage.height)
 
-        // 大图降采样检查
         let workingImage: CGImage
         let workingSize: CGSize
-        if baseImage.width > Int(Self.largeImageThreshold) || baseImage.height > Int(Self.largeImageThreshold) {
-            logger.info("检测到大图 (\(baseImage.width)x\(baseImage.height))，进行降采样处理")
-            guard let downsampled = downsample(baseImage, maxDimension: Self.largeImageThreshold) else {
-                throw AnnotationError.renderFailed(reason: "大图降采样失败")
+        if let maximumDimension,
+           maximumDimension > 0,
+           max(imageSize.width, imageSize.height) > maximumDimension {
+            guard let previewImage = downsample(baseImage, maxDimension: maximumDimension) else {
+                throw AnnotationError.renderFailed(reason: "预览图降采样失败")
             }
-            workingImage = downsampled
-            workingSize = CGSize(width: downsampled.width, height: downsampled.height)
+            workingImage = previewImage
+            workingSize = CGSize(width: previewImage.width, height: previewImage.height)
         } else {
             workingImage = baseImage
             workingSize = imageSize
         }
+        let styleScale = workingSize.width / max(imageSize.width, 1)
 
         // 创建位图上下文
         guard let context = CGContext(
@@ -66,13 +68,23 @@ public struct Renderer: Sendable {
         // 使用 autoreleasepool 管理内存
         for node in blurAndCropNodes {
             autoreleasepool {
-                renderNode(node, in: context, imageSize: workingSize, document: document)
+                renderNode(
+                    node,
+                    in: context,
+                    imageSize: workingSize,
+                    styleScale: styleScale
+                )
             }
         }
 
         for node in drawingNodes {
             autoreleasepool {
-                renderNode(node, in: context, imageSize: workingSize, document: document)
+                renderNode(
+                    node,
+                    in: context,
+                    imageSize: workingSize,
+                    styleScale: styleScale
+                )
             }
         }
 
@@ -85,23 +97,33 @@ public struct Renderer: Sendable {
     }
 
     /// 根据节点类型分派到对应工具进行渲染。
-    private func renderNode(_ node: AnnotationNode, in context: CGContext, imageSize: CGSize, document: AnnotationDocument) {
-        switch node.tool {
+    private func renderNode(
+        _ node: AnnotationNode,
+        in context: CGContext,
+        imageSize: CGSize,
+        styleScale: CGFloat
+    ) {
+        var scaledNode = node
+        scaledNode.lineWidth = max(node.lineWidth * styleScale, 0.5)
+        scaledNode.cornerRadius = node.cornerRadius * styleScale
+        scaledNode.fontSize = max(node.fontSize * styleScale, 1)
+
+        switch scaledNode.tool {
         case .arrow:
-            ArrowTool().render(node: node, in: context, imageSize: imageSize)
+            ArrowTool().render(node: scaledNode, in: context, imageSize: imageSize)
         case .rect:
-            RectTool().render(node: node, in: context, imageSize: imageSize)
+            RectTool().render(node: scaledNode, in: context, imageSize: imageSize)
         case .text:
-            TextTool().render(node: node, in: context, imageSize: imageSize)
+            TextTool().render(node: scaledNode, in: context, imageSize: imageSize)
         case .pen:
-            PenTool().render(node: node, in: context, imageSize: imageSize)
+            PenTool().render(node: scaledNode, in: context, imageSize: imageSize)
         case .highlight:
-            HighlightTool().render(node: node, in: context, imageSize: imageSize)
+            HighlightTool().render(node: scaledNode, in: context, imageSize: imageSize)
         case .blur:
-            BlurTool().render(node: node, in: context, imageSize: imageSize)
+            BlurTool().render(node: scaledNode, in: context, imageSize: imageSize, renderScale: styleScale)
         case .crop:
             // 裁剪操作在此不执行，由上层调用 CropTool.crop() 处理
-            logger.warning("裁剪节点应在文档级处理，而非渲染时处理: \(node.id)")
+            logger.warning("裁剪节点应在文档级处理，而非渲染时处理: \(scaledNode.id)")
         }
     }
 

@@ -36,7 +36,7 @@ public final class VisionBarcodeEngine: BarcodeProtocol, Sendable {
     ///   for results to be included. Defaults to `0.3`.
     public init(minimumConfidence: Float = 0.3) {
         self.logger = Logger(category: "barcode")
-        self.minimumConfidence = minimumConfidence
+        self.minimumConfidence = min(max(minimumConfidence, 0), 1)
     }
 
     // MARK: - BarcodeProtocol

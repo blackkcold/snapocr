@@ -1,20 +1,46 @@
 import AppKit
+import SharedKit
 import SwiftUI
 
 @preconcurrency import ScreenCaptureKit
 
 /// 全屏透明覆盖面板，用于区域截图的交互式选择。
-final class AreaSelectionPanel: NSPanel {
-    private let onComplete: (CGRect?) -> Void
-    private var trackingView: AreaTrackingView!
+struct AreaSelectionResult {
+    let screenRect: CGRect
+    let normalizedPath: [CGPoint]?
 
-    static func show(onComplete: @escaping (CGRect?) -> Void) {
-        let panel = AreaSelectionPanel(onComplete: onComplete)
+    var isFreeform: Bool { normalizedPath != nil }
+}
+
+final class AreaSelectionPanel: NSPanel {
+    private static var retainedPanels: [AreaSelectionPanel] = []
+
+    private let onComplete: (AreaSelectionResult?) -> Void
+    private var trackingView: AreaTrackingView!
+    private var didFinish = false
+
+    static func show(
+        style: CaptureSelectionStyle,
+        onComplete: @escaping (AreaSelectionResult?) -> Void
+    ) {
+        let panel = AreaSelectionPanel(style: style, onComplete: onComplete)
+        retain(panel)
         panel.orderFrontRegardless()
-        panel.trackingView.prepareBackgroundSnapshot()
+        panel.makeKey()
     }
 
-    private init(onComplete: @escaping (CGRect?) -> Void) {
+    private static func retain(_ panel: AreaSelectionPanel) {
+        retainedPanels.append(panel)
+    }
+
+    private static func release(_ panel: AreaSelectionPanel) {
+        retainedPanels.removeAll { $0 === panel }
+    }
+
+    private init(
+        style: CaptureSelectionStyle,
+        onComplete: @escaping (AreaSelectionResult?) -> Void
+    ) {
         self.onComplete = onComplete
         let allScreensFrame = NSScreen.screens.reduce(NSRect.zero) { $0.union($1.frame) }
 
@@ -33,15 +59,13 @@ final class AreaSelectionPanel: NSPanel {
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         ignoresMouseEvents = false
+        acceptsMouseMovedEvents = true
         isMovableByWindowBackground = false
         setFrame(allScreensFrame, display: true)
 
         guard let contentView else { return }
-        trackingView = AreaTrackingView(frame: contentView.bounds)
-        trackingView.onSelectionComplete = { [weak self] rect in
-            self?.close()
-            self?.onComplete(rect)
-        }
+        trackingView = AreaTrackingView(frame: contentView.bounds, style: style)
+        trackingView.onSelectionComplete = { [weak self] rect in self?.finish(with: rect) }
         trackingView.autoresizingMask = [.width, .height]
         contentView.addSubview(trackingView)
     }
@@ -50,8 +74,17 @@ final class AreaSelectionPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func close() {
-        trackingView.clearBackgroundSnapshot()
+        finish(with: nil)
+    }
+
+    private func finish(with result: AreaSelectionResult?) {
+        guard !didFinish else { return }
+        didFinish = true
+
+        let completion = onComplete
+        Self.release(self)
         super.close()
+        completion(result)
     }
 }
 
@@ -65,9 +98,12 @@ struct WindowSelectionResult {
 
 /// Floating window picker for interactive window capture.
 final class WindowSelectionPanel: NSPanel {
+    private static var retainedPanels: [WindowSelectionPanel] = []
+
     private let windows: [SelectableWindow]
     private let onComplete: (WindowSelectionResult?) -> Void
     private let coordinator: WindowSelectionCoordinator
+    private var didFinish = false
 
     static func show(onComplete: @escaping (WindowSelectionResult?) -> Void) {
         Task { @MainActor in
@@ -79,12 +115,21 @@ final class WindowSelectionPanel: NSPanel {
                 }
 
                 let panel = WindowSelectionPanel(windows: windows, onComplete: onComplete)
+                retain(panel)
                 panel.orderFrontRegardless()
                 panel.makeKey()
             } catch {
                 onComplete(nil)
             }
         }
+    }
+
+    private static func retain(_ panel: WindowSelectionPanel) {
+        retainedPanels.append(panel)
+    }
+
+    private static func release(_ panel: WindowSelectionPanel) {
+        retainedPanels.removeAll { $0 === panel }
     }
 
     private init(windows: [SelectableWindow], onComplete: @escaping (WindowSelectionResult?) -> Void) {
@@ -132,9 +177,18 @@ final class WindowSelectionPanel: NSPanel {
         }
     }
 
+    override func close() {
+        finish(with: nil)
+    }
+
     fileprivate func finish(with result: WindowSelectionResult?) {
-        close()
-        onComplete(result)
+        guard !didFinish else { return }
+        didFinish = true
+
+        let completion = onComplete
+        Self.release(self)
+        super.close()
+        completion(result)
     }
 
     private func makeContentView() -> NSView {
@@ -325,237 +379,306 @@ private final class HoverTableView: NSTableView {
 // MARK: - AreaTrackingView
 
 private final class AreaTrackingView: NSView {
-    var onSelectionComplete: ((CGRect?) -> Void)?
+    var onSelectionComplete: ((AreaSelectionResult?) -> Void)?
 
-    private var startPoint: NSPoint?
-    private var selectionRect: NSRect = .zero
-    private var isSelecting = false
-    private var backgroundSnapshot: CGImage?
-    private var backgroundSnapshotRect: CGRect = .zero
-    private var backgroundSnapshotScale: CGFloat = 1
+    private enum Phase { case idle, drawing, adjusting }
+    private enum ResizeHandle: CaseIterable { case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left }
+    private enum DragAction {
+        case resize(ResizeHandle, initial: CGRect, start: CGPoint)
+        case move(initial: CGRect, start: CGPoint)
+    }
+
+    private let style: CaptureSelectionStyle
+    private var phase: Phase = .idle
+    private var startPoint: CGPoint?
+    private var selectionRect: CGRect = .zero
+    private var freeformPoints: [CGPoint] = []
+    private var dragAction: DragAction?
+    private var hoverPoint: CGPoint = .zero
+    private var trackingAreaReference: NSTrackingArea?
+
+    init(frame frameRect: NSRect, style: CaptureSelectionStyle) {
+        self.style = style
+        super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
 
     override var acceptsFirstResponder: Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.makeFirstResponder(self)
+        hoverPoint = window?.mouseLocationOutsideOfEventStream ?? .zero
     }
 
-    func prepareBackgroundSnapshot() {
-        let screenRect = convertToScreenCoordinates(bounds)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let snapshot = autoreleasepool {
-                CGWindowListCreateImage(screenRect, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
-            }
-            let downsampled = snapshot.flatMap { Self.downsample($0, maxPixelSize: 1920) }
-            let scale = Self.scale(for: downsampled, originalRect: screenRect)
-
-            DispatchQueue.main.async { [weak self] in
-                self?.backgroundSnapshot = downsampled
-                self?.backgroundSnapshotRect = screenRect
-                self?.backgroundSnapshotScale = scale
-                self?.needsDisplay = true
-            }
-        }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaReference = area
     }
 
-    func clearBackgroundSnapshot() {
-        backgroundSnapshot = nil
-        backgroundSnapshotRect = .zero
-        backgroundSnapshotScale = 1
+    override func cursorUpdate(with event: NSEvent) { NSCursor.crosshair.set() }
+
+    override func mouseMoved(with event: NSEvent) {
+        hoverPoint = convert(event.locationInWindow, from: nil)
+        needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        context.setFillColor(NSColor.black.withAlphaComponent(0.3).cgColor)
+        context.setFillColor(NSColor.black.withAlphaComponent(0.32).cgColor)
         context.fill(bounds)
 
-        if isSelecting && !selectionRect.isEmpty {
-            context.clear(selectionRect)
-            drawScreenContent(in: selectionRect, context: context)
-
+        if style == .freeform, freeformPoints.count >= 2 {
+            let path = freeformPath()
+            context.saveGState()
+            context.addPath(path)
+            context.clip()
+            context.clear(bounds)
+            context.restoreGState()
             context.setStrokeColor(NSColor.white.cgColor)
-            context.setLineWidth(2.0)
+            context.setLineWidth(2)
+            context.addPath(path)
+            context.strokePath()
+        } else if !selectionRect.isEmpty {
+            context.clear(selectionRect)
+            context.setStrokeColor(NSColor.white.cgColor)
+            context.setLineWidth(2)
             context.stroke(selectionRect.insetBy(dx: -1, dy: -1))
-
-            drawSizeLabel(for: selectionRect)
-            drawCrosshair(at: NSPoint(x: selectionRect.midX, y: selectionRect.midY))
-        } else if let window {
-            drawCrosshair(at: window.mouseLocationOutsideOfEventStream)
+            if phase == .adjusting { drawHandles() }
         }
+
+        if !selectionRect.isEmpty {
+            drawSizeLabel(for: selectionRect)
+            if phase == .adjusting { drawConfirmationHint(for: selectionRect) }
+        }
+        drawCrosshair(at: hoverPoint)
     }
 
-    private func drawCrosshair(at point: NSPoint) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let length: CGFloat = 20
-        context.setStrokeColor(NSColor.white.withAlphaComponent(0.8).cgColor)
-        context.setLineWidth(1.0)
-
+    private func drawCrosshair(at point: CGPoint) {
+        guard bounds.contains(point), let context = NSGraphicsContext.current?.cgContext else { return }
+        let length: CGFloat = 18
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.85).cgColor)
+        context.setLineWidth(1)
         context.move(to: CGPoint(x: point.x - length, y: point.y))
         context.addLine(to: CGPoint(x: point.x + length, y: point.y))
-        context.strokePath()
-
         context.move(to: CGPoint(x: point.x, y: point.y - length))
         context.addLine(to: CGPoint(x: point.x, y: point.y + length))
         context.strokePath()
     }
 
-    private func drawSizeLabel(for rect: NSRect) {
-        let sizeText = "\(Int(rect.width)) × \(Int(rect.height))"
+    private func drawHandles() {
+        NSColor.white.setFill()
+        for point in handlePoints().values {
+            NSBezierPath(ovalIn: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)).fill()
+        }
+    }
+
+    private func drawSizeLabel(for rect: CGRect) {
+        drawLabel("\(Int(rect.width)) × \(Int(rect.height))", at: CGPoint(x: rect.midX, y: rect.maxY + 18))
+    }
+
+    private func drawConfirmationHint(for rect: CGRect) {
+        drawLabel("Return / double-click to capture", at: CGPoint(x: rect.midX, y: rect.minY - 18))
+    }
+
+    private func drawLabel(_ text: String, at point: CGPoint) {
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium),
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.white,
-            .backgroundColor: NSColor.black.withAlphaComponent(0.7)
         ]
-
-        let textSize = (sizeText as NSString).size(withAttributes: attributes)
-        let padding: CGFloat = 6
-        let labelRect = NSRect(
-            x: rect.midX - textSize.width / 2 - padding,
-            y: rect.maxY + 8,
-            width: textSize.width + padding * 2,
-            height: textSize.height + padding * 2
-        )
-
-        NSColor.black.withAlphaComponent(0.7).setFill()
-        NSBezierPath(roundedRect: labelRect, xRadius: 4, yRadius: 4).fill()
-        (sizeText as NSString).draw(
-            at: NSPoint(x: labelRect.origin.x + padding, y: labelRect.origin.y + padding),
-            withAttributes: attributes
-        )
+        let size = (text as NSString).size(withAttributes: attributes)
+        let rect = CGRect(x: point.x - size.width / 2 - 6, y: point.y - size.height / 2 - 4, width: size.width + 12, height: size.height + 8)
+        NSColor.black.withAlphaComponent(0.75).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+        (text as NSString).draw(at: CGPoint(x: rect.minX + 6, y: rect.minY + 4), withAttributes: attributes)
     }
-
-    /// 截取选区下方的屏幕内容并绘制
-    private func drawScreenContent(in viewRect: NSRect, context: CGContext) {
-        // 转换为屏幕坐标（Quartz，Y↓，原点在主显示器左上角）
-        let screenRect = convertToScreenCoordinates(viewRect)
-        let screenImage: CGImage?
-        if let cachedImage = cachedCrop(for: screenRect) {
-            screenImage = cachedImage
-        } else {
-            screenImage = CGWindowListCreateImage(screenRect, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
-        }
-
-        guard let screenImage else { return }
-
-        context.saveGState()
-        context.translateBy(x: 0, y: bounds.height)
-        context.scaleBy(x: 1, y: -1)
-        context.draw(screenImage, in: NSRect(x: viewRect.origin.x, y: bounds.height - viewRect.maxY, width: viewRect.width, height: viewRect.height))
-        context.restoreGState()
-    }
-
-    private func cachedCrop(for screenRect: CGRect) -> CGImage? {
-        guard let backgroundSnapshot,
-              !backgroundSnapshotRect.isEmpty,
-              backgroundSnapshotRect.contains(screenRect) else {
-            return nil
-        }
-
-        let cropRect = CGRect(
-            x: (screenRect.minX - backgroundSnapshotRect.minX) * backgroundSnapshotScale,
-            y: (screenRect.minY - backgroundSnapshotRect.minY) * backgroundSnapshotScale,
-            width: screenRect.width * backgroundSnapshotScale,
-            height: screenRect.height * backgroundSnapshotScale
-        ).integral
-
-        return backgroundSnapshot.cropping(to: cropRect)
-    }
-
-    nonisolated private static func scale(for image: CGImage?, originalRect: CGRect) -> CGFloat {
-        guard let image, originalRect.width > 0 else { return 1 }
-        return CGFloat(image.width) / originalRect.width
-    }
-
-    nonisolated private static func downsample(_ image: CGImage, maxPixelSize: CGFloat) -> CGImage? {
-        let maxDimension = CGFloat(max(image.width, image.height))
-        guard maxDimension > maxPixelSize else { return image }
-
-        let ratio = maxPixelSize / maxDimension
-        let targetWidth = max(1, Int(CGFloat(image.width) * ratio))
-        let targetHeight = max(1, Int(CGFloat(image.height) * ratio))
-
-        guard let context = CGContext(
-            data: nil,
-            width: targetWidth,
-            height: targetHeight,
-            bitsPerComponent: image.bitsPerComponent,
-            bytesPerRow: 0,
-            space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: image.bitmapInfo.rawValue
-        ) else {
-            return image
-        }
-
-        context.interpolationQuality = .medium
-        context.draw(image, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
-        return context.makeImage() ?? image
-    }
-
-    /// NSView 坐标（Y↑）→ 屏幕坐标（Quartz Y↓）
-    private func convertToScreenCoordinates(_ viewRect: NSRect) -> CGRect {
-        guard let window else {
-            return CGRect(x: viewRect.origin.x, y: bounds.height - viewRect.maxY, width: viewRect.width, height: viewRect.height)
-        }
-        let windowPoint = convert(viewRect.origin, to: nil)
-        let screenPoint = window.convertToScreen(NSRect(origin: windowPoint, size: .zero)).origin
-        return CGRect(x: screenPoint.x, y: screenPoint.y, width: viewRect.width, height: viewRect.height)
-    }
-
-    // MARK: - Mouse Events
 
     override func mouseDown(with event: NSEvent) {
-        startPoint = convert(event.locationInWindow, from: nil)
-        isSelecting = true
+        let point = convert(event.locationInWindow, from: nil)
+        hoverPoint = point
+        if event.clickCount == 2, phase == .adjusting {
+            confirmSelection()
+            return
+        }
+
+        if style == .rectangle, phase == .adjusting {
+            if let handle = hitHandle(at: point) {
+                dragAction = .resize(handle, initial: selectionRect, start: point)
+                return
+            }
+            if selectionRect.contains(point) {
+                dragAction = .move(initial: selectionRect, start: point)
+                return
+            }
+        }
+
+        phase = .drawing
+        startPoint = point
         selectionRect = .zero
+        freeformPoints = style == .freeform ? [point] : []
+        dragAction = nil
         needsDisplay = true
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let start = startPoint else { return }
-        let current = convert(event.locationInWindow, from: nil)
+        let point = convert(event.locationInWindow, from: nil)
+        hoverPoint = point
 
-        selectionRect = NSRect(
-            x: min(start.x, current.x),
-            y: min(start.y, current.y),
-            width: abs(current.x - start.x),
-            height: abs(current.y - start.y)
-        )
+        if let dragAction {
+            updateAdjustedSelection(action: dragAction, current: point)
+        } else if style == .freeform {
+            if let last = freeformPoints.last, hypot(point.x - last.x, point.y - last.y) >= 2 {
+                freeformPoints.append(clamped(point))
+                selectionRect = boundingRect(for: freeformPoints)
+            }
+        } else if let startPoint {
+            selectionRect = normalizedRect(from: startPoint, to: clamped(point))
+        }
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard isSelecting, let start = startPoint else { return }
-        let end = convert(event.locationInWindow, from: nil)
-
-        let finalRect = NSRect(
-            x: min(start.x, end.x),
-            y: min(start.y, end.y),
-            width: abs(end.x - start.x),
-            height: abs(end.y - start.y)
-        )
-
-        isSelecting = false
-        startPoint = nil
-
-        guard finalRect.width > 5, finalRect.height > 5 else {
+        defer {
+            dragAction = nil
+            startPoint = nil
             needsDisplay = true
+        }
+        guard dragAction == nil else { return }
+
+        if style == .freeform {
+            guard freeformPoints.count >= 3 else {
+                resetSelection()
+                return
+            }
+            selectionRect = boundingRect(for: freeformPoints)
+        }
+
+        guard selectionRect.width > 5, selectionRect.height > 5 else {
+            resetSelection()
             return
         }
-
-        let screenRect = convertToScreenCoordinates(finalRect)
-        onSelectionComplete?(screenRect)
+        phase = .adjusting
     }
 
-    // MARK: - Keyboard Events
-
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { // ESC
+        switch event.keyCode {
+        case 53:
             onSelectionComplete?(nil)
-        } else {
+        case 36, 76:
+            confirmSelection()
+        default:
             super.keyDown(with: event)
         }
+    }
+
+    private func confirmSelection() {
+        guard phase == .adjusting, selectionRect.width > 5, selectionRect.height > 5 else { return }
+        let normalizedPath: [CGPoint]?
+        if style == .freeform {
+            normalizedPath = freeformPoints.map {
+                CGPoint(
+                    x: ($0.x - selectionRect.minX) / selectionRect.width,
+                    y: ($0.y - selectionRect.minY) / selectionRect.height
+                )
+            }
+        } else {
+            normalizedPath = nil
+        }
+        onSelectionComplete?(AreaSelectionResult(
+            screenRect: quartzScreenRect(from: selectionRect),
+            normalizedPath: normalizedPath
+        ))
+    }
+
+    private func resetSelection() {
+        phase = .idle
+        selectionRect = .zero
+        freeformPoints = []
+    }
+
+    private func quartzScreenRect(from viewRect: CGRect) -> CGRect {
+        guard let window else { return viewRect }
+        let windowRect = convert(viewRect, to: nil)
+        let appKitRect = window.convertToScreen(windowRect)
+        let mainBounds = CGDisplayBounds(CGMainDisplayID())
+        return CGRect(
+            x: appKitRect.minX,
+            y: mainBounds.maxY - appKitRect.maxY,
+            width: appKitRect.width,
+            height: appKitRect.height
+        )
+    }
+
+    private func freeformPath() -> CGPath {
+        let path = CGMutablePath()
+        guard let first = freeformPoints.first else { return path }
+        path.move(to: first)
+        for point in freeformPoints.dropFirst() { path.addLine(to: point) }
+        if phase == .adjusting { path.closeSubpath() }
+        return path
+    }
+
+    private func handlePoints() -> [ResizeHandle: CGPoint] {
+        [
+            .topLeft: CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
+            .top: CGPoint(x: selectionRect.midX, y: selectionRect.maxY),
+            .topRight: CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
+            .right: CGPoint(x: selectionRect.maxX, y: selectionRect.midY),
+            .bottomRight: CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
+            .bottom: CGPoint(x: selectionRect.midX, y: selectionRect.minY),
+            .bottomLeft: CGPoint(x: selectionRect.minX, y: selectionRect.minY),
+            .left: CGPoint(x: selectionRect.minX, y: selectionRect.midY),
+        ]
+    }
+
+    private func hitHandle(at point: CGPoint) -> ResizeHandle? {
+        handlePoints().first { _, center in
+            CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14).contains(point)
+        }?.key
+    }
+
+    private func updateAdjustedSelection(action: DragAction, current: CGPoint) {
+        switch action {
+        case .move(let initial, let start):
+            let dx = min(max(current.x - start.x, bounds.minX - initial.minX), bounds.maxX - initial.maxX)
+            let dy = min(max(current.y - start.y, bounds.minY - initial.minY), bounds.maxY - initial.maxY)
+            selectionRect = initial.offsetBy(dx: dx, dy: dy)
+        case .resize(let handle, let initial, _):
+            var minX = initial.minX
+            var maxX = initial.maxX
+            var minY = initial.minY
+            var maxY = initial.maxY
+            let point = clamped(current)
+            if [.topLeft, .left, .bottomLeft].contains(handle) { minX = min(point.x, maxX - 5) }
+            if [.topRight, .right, .bottomRight].contains(handle) { maxX = max(point.x, minX + 5) }
+            if [.bottomLeft, .bottom, .bottomRight].contains(handle) { minY = min(point.y, maxY - 5) }
+            if [.topLeft, .top, .topRight].contains(handle) { maxY = max(point.y, minY + 5) }
+            selectionRect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
+    }
+
+    private func clamped(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: min(max(point.x, bounds.minX), bounds.maxX), y: min(max(point.y, bounds.minY), bounds.maxY))
+    }
+
+    private func normalizedRect(from start: CGPoint, to end: CGPoint) -> CGRect {
+        CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
+    }
+
+    private func boundingRect(for points: [CGPoint]) -> CGRect {
+        guard let first = points.first else { return .zero }
+        return points.dropFirst().reduce(CGRect(origin: first, size: .zero)) { rect, point in rect.union(CGRect(origin: point, size: .zero)) }
     }
 }

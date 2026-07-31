@@ -67,9 +67,19 @@ public struct ArrowTool: Sendable {
         context.beginPath()
         context.move(to: tip)
         context.addLine(to: left)
-        context.addLine(to: right)
-        context.closePath()
-        context.fillPath()
+        switch node.arrowStyle {
+        case .filled:
+            context.addLine(to: right)
+            context.closePath()
+            context.fillPath()
+        case .open:
+            context.move(to: tip)
+            context.addLine(to: right)
+            context.strokePath()
+        case .line:
+            context.addLine(to: right)
+            context.strokePath()
+        }
     }
 
     /// 应用颜色、线宽、透明度等样式到上下文。
@@ -82,6 +92,14 @@ public struct ArrowTool: Sendable {
         context.setAlpha(node.opacity)
         context.setLineCap(.round)
         context.setLineJoin(.round)
+        switch node.strokeStyle {
+        case .solid:
+            context.setLineDash(phase: 0, lengths: [])
+        case .dashed:
+            context.setLineDash(phase: 0, lengths: [node.lineWidth * 4, node.lineWidth * 2])
+        case .dotted:
+            context.setLineDash(phase: 0, lengths: [0, node.lineWidth * 2.5])
+        }
     }
 
     /// 将归一化坐标转换为图片像素坐标。

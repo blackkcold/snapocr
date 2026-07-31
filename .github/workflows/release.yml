@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted: tag=$TAG version=$VERSION"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build Release
+        run: |
+          xcodebuild \
+            -project SnapGlass.xcodeproj \
+            -scheme SnapGlass \
+            -configuration Release \
+            -derivedDataPath .build/DerivedData-release \
+            build \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Package .app into .dmg
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILT_APP=".build/DerivedData-release/Build/Products/Release/SnapGlass.app"
+          STAGE_DIR="release-stage"
+          DMG_NAME="SnapGlass-v${VERSION}.dmg"
+
+          mkdir -p "$STAGE_DIR"
+          ditto "$BUILT_APP" "$STAGE_DIR/SnapGlass.app"
+          codesign --force --deep --sign - "$STAGE_DIR/SnapGlass.app"
+
+          hdiutil create \
+            -volname "SnapGlass" \
+            -srcfolder "$STAGE_DIR" \
+            -ov \
+            -format UDZO \
+            "$DMG_NAME"
+
+          shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
+
+          echo "DMG_PATH=$DMG_NAME" >> "$GITHUB_ENV"
+          echo "SHA_PATH=$DMG_NAME.sha256" >> "$GITHUB_ENV"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          NOTES_FILE="release-notes.md"
+
+          # 从 CHANGELOG.md 提取对应版本条目
+          awk -v ver="## [${VERSION}]" '
+            $0 ~ "^## \\[Unreleased\\]" { next }
+            $0 ~ "^## \\[" { in_section = ($0 ~ ver) }
+            in_section { print }
+          ' CHANGELOG.md > "$NOTES_FILE"
+
+          # 追加 Full Changelog 链接
+          echo "" >> "$NOTES_FILE"
+          echo "---" >> "$NOTES_FILE"
+          echo "" >> "$NOTES_FILE"
+          echo "**Full Changelog**: https://github.com/blackkcold/snapocr/compare/v0.1.5...${TAG}" >> "$NOTES_FILE"
+
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            "$DMG_PATH" \
+            "$SHA_PATH"

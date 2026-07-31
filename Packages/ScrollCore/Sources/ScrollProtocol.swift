@@ -165,7 +165,7 @@ public struct ScrollFrame: Sendable {
 /// 涵盖滚动截图全生命周期中可能出现的各类错误，
 /// 包括窗口不可用、超时、拼接失败、应用不支持等场景。
 /// 遵循 `Sendable` 以支持并发安全传递。
-public enum ScrollError: Error, Sendable {
+public enum ScrollError: Error, Sendable, LocalizedError {
     /// 未找到指定窗口
     /// - Parameter CGWindowID: 无效的窗口标识符。
     case windowNotFound(CGWindowID)
@@ -190,6 +190,29 @@ public enum ScrollError: Error, Sendable {
     /// 帧尺寸不一致，无法拼接
     /// - Parameter details: 不一致的具体描述。
     case frameMismatch(details: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .windowNotFound:
+            return "未找到目标窗口"
+        case .captureTimeout:
+            return "滚动截图超时"
+        case .stitchFailed(let reason):
+            return "滚动截图拼接失败: \(reason)"
+        case .insufficientFrames(let count):
+            return "至少需要 2 帧才能拼接，当前为 \(count) 帧"
+        case .applicationNotSupported(let bundleID):
+            return "暂不支持该应用（\(bundleID)），当前支持 Safari 和 Google Chrome"
+        case .duplicateFrameDetected:
+            return "画面没有发生变化，请滚动后重试"
+        case .memoryPressureHigh:
+            return "内存压力过高，请结束其他高占用任务后重试"
+        case .invalidSession:
+            return "滚动截图会话已失效"
+        case .frameMismatch(let details):
+            return "截图帧尺寸不一致: \(details)"
+        }
+    }
 }
 
 // MARK: - ScrollProgress

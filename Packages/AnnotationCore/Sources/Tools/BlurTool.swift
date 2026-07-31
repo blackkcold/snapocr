@@ -3,7 +3,7 @@ import CoreImage
 import Foundation
 import SharedKit
 
-/// 模糊标注工具——对指定区域应用高斯模糊。
+/// 模糊标注工具——对指定区域应用高斯模糊、像素化或马赛克。
 ///
 /// 用于遮盖敏感信息。使用 `points` 的前两个点或 `normalizedRect` 定义区域。
 /// 模糊半径根据 `lineWidth` 缩放，默认 `lineWidth * 10`。
@@ -20,7 +20,7 @@ public struct BlurTool: Sendable {
     ///   - node: 标注节点
     ///   - context: 目标绘图上下文（应包含已绘制的底图）
     ///   - imageSize: 背景图片的像素尺寸
-    public func render(node: AnnotationNode, in context: CGContext, imageSize: CGSize) {
+    public func render(node: AnnotationNode, in context: CGContext, imageSize: CGSize, renderScale: CGFloat = 1) {
         let rect: CGRect
         if node.normalizedRect != .zero {
             rect = denormalize(rect: node.normalizedRect, to: imageSize)
@@ -46,16 +46,20 @@ public struct BlurTool: Sendable {
             return
         }
 
-        // 裁剪到模糊区域
-        guard let cropped = currentImage.cropping(to: rect) else {
+        // CGImage 裁剪坐标原点在左上角；标注和 CGContext 使用左下角。
+        let cropRect = CGRect(
+            x: rect.minX,
+            y: imageSize.height - rect.maxY,
+            width: rect.width,
+            height: rect.height
+        ).integral.intersection(CGRect(origin: .zero, size: imageSize))
+        guard !cropRect.isEmpty, let cropped = currentImage.cropping(to: cropRect) else {
             logger.error("无法裁剪到模糊区域: \(rect)")
             return
         }
 
-        // 对裁剪区域应用高斯模糊
-        let blurRadius = max(node.lineWidth * 10.0, 1.0)
-        guard let blurred = applyGaussianBlur(to: cropped, radius: Float(blurRadius)) else {
-            logger.error("高斯模糊失败")
+        guard let blurred = applyEffect(to: cropped, node: node, renderScale: renderScale) else {
+            logger.error("模糊效果失败: \(node.blurMode.rawValue)")
             return
         }
 
@@ -66,17 +70,40 @@ public struct BlurTool: Sendable {
         context.draw(blurred, in: rect)
     }
 
-    /// 对 CGImage 应用高斯模糊滤镜。
-    private func applyGaussianBlur(to image: CGImage, radius: Float) -> CGImage? {
+    private func applyEffect(to image: CGImage, node: AnnotationNode, renderScale: CGFloat) -> CGImage? {
         let ciImage = CIImage(cgImage: image)
-        guard let filter = CIFilter(name: "CIGaussianBlur") else { return nil }
-        filter.setValue(ciImage, forKey: kCIInputImageKey)
-        filter.setValue(radius, forKey: kCIInputRadiusKey)
+        let strength = max(0, min(1, node.blurIntensity))
+        let scale = max(renderScale, 0.01)
+        let output: CIImage?
 
-        guard let output = filter.outputImage else { return nil }
+        switch node.blurMode {
+        case .gaussian:
+            let radius = (2 + strength * 48) * scale
+            output = ciImage
+                .clampedToExtent()
+                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius])
+                .cropped(to: ciImage.extent)
+        case .pixelate:
+            let blockSize = (3 + strength * 45) * scale
+            output = ciImage
+                .applyingFilter("CIPixellate", parameters: [
+                    kCIInputScaleKey: max(blockSize, 1),
+                    kCIInputCenterKey: CIVector(x: ciImage.extent.midX, y: ciImage.extent.midY),
+                ])
+                .cropped(to: ciImage.extent)
+        case .mosaic:
+            let cellSize = (4 + strength * 42) * scale
+            output = ciImage
+                .applyingFilter("CICrystallize", parameters: [
+                    kCIInputRadiusKey: max(cellSize, 1),
+                    kCIInputCenterKey: CIVector(x: ciImage.extent.midX, y: ciImage.extent.midY),
+                ])
+                .cropped(to: ciImage.extent)
+        }
 
-        let context = CIContext(options: [.useSoftwareRenderer: false])
-        return context.createCGImage(output, from: output.extent)
+        guard let output else { return nil }
+        let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+        return ciContext.createCGImage(output, from: ciImage.extent)
     }
 
     private func denormalize(point: CGPoint, to size: CGSize) -> CGPoint {

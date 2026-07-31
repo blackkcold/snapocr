@@ -346,6 +346,7 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
 
     let engineType: OCREngineType
     var logHandler: ((OCRLogEntry) -> Void)?
+    private let languageDataPath: URL
 
     // MARK: - 常量
 
@@ -354,8 +355,9 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
 
     // MARK: - 初始化
 
-    init() {
-        let path = Self.tessdataDirectory()
+    init(languageDataPath: URL? = nil) {
+        let path = languageDataPath ?? Self.tessdataDirectory()
+        self.languageDataPath = path
         self.engineType = .tesseract(languageDataPath: path)
     }
 
@@ -390,7 +392,7 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         // 1. 检查 tessdata 目录是否存在
-        let tessdataDir = Self.tessdataDirectory()
+        let tessdataDir = languageDataPath
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
         let tessdataExists = fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory)
@@ -470,13 +472,13 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
     ///
     /// - Returns: Vision 框架语言代码数组（如 `["en", "zh-Hans", "ja"]`）。
     func supportedLanguages() -> [String] {
-        let tessdataDir = Self.tessdataDirectory()
+        let tessdataDir = languageDataPath
         let fileManager = FileManager.default
 
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
-            return ["en"] // 兜底返回英文
+            return []
         }
 
         do {
@@ -489,7 +491,7 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
             }
 
             if detected.isEmpty {
-                return ["en"]
+                return []
             }
 
             // 将 Tesseract 代码映射回 Vision 代码
@@ -497,7 +499,7 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
                 TesseractLanguageSupport.visionToTesseract.first { $0.value == code }?.key ?? code
             }.sorted()
         } catch {
-            return ["en"]
+            return []
         }
     }
 

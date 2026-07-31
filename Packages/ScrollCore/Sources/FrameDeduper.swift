@@ -39,7 +39,7 @@ public struct FrameDeduper: Sendable {
         threshold: Float = FrameDeduper.similarityThreshold,
         windowSize: Int = 8
     ) {
-        self.threshold = threshold
+        self.threshold = min(max(threshold, 0), 1)
         self.windowSize = max(4, windowSize)
     }
 
@@ -103,6 +103,10 @@ public struct FrameDeduper: Sendable {
         if widthRatio < 0.9 || widthRatio > 1.1 {
             return 0
         }
+        let heightRatio = h1 / h2
+        if heightRatio < 0.9 || heightRatio > 1.1 {
+            return 0
+        }
 
         let comparisonWidth = Int(min(w1, w2) * 0.6)
         let comparisonHeight = Int(min(h1, h2) * 0.6)
@@ -164,12 +168,12 @@ extension FrameDeduper {
         let n = Float(windowCount)
         let muX = sumX / n
         let muY = sumY / n
-        let sigmaX2 = (sumXX / n) - (muX * muX)
-        let sigmaY2 = (sumYY / n) - (muY * muY)
+        let sigmaX2 = max(0, (sumXX / n) - (muX * muX))
+        let sigmaY2 = max(0, (sumYY / n) - (muY * muY))
         let sigmaXY = (sumXY / n) - (muX * muY)
 
-        let c1: Float = (0.01 * 255) * (0.01 * 255)
-        let c2: Float = (0.03 * 255) * (0.03 * 255)
+        let c1: Float = 0.01 * 0.01
+        let c2: Float = 0.03 * 0.03
 
         let numerator = (2 * muX * muY + c1) * (2 * sigmaXY + c2)
         let denominator = (muX * muX + muY * muY + c1) * (sigmaX2 + sigmaY2 + c2)
@@ -201,14 +205,8 @@ extension FrameDeduper {
             return nil
         }
 
-        let flippedRegion = CGRect(
-            x: region.origin.x,
-            y: CGFloat(image.height) - region.origin.y - region.height,
-            width: region.width,
-            height: region.height
-        )
-
-        context.draw(image, in: flippedRegion)
+        guard let cropped = image.cropping(to: region.integral) else { return nil }
+        context.draw(cropped, in: CGRect(x: 0, y: 0, width: width, height: height))
 
         return pixelData.map { Float($0) / 255.0 }
     }

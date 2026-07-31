@@ -144,19 +144,20 @@ extension ScrollStitchActor {
             options: CaptureOptions()
         )
 
-        let previousOffset = capturedFrames.last?.predictedScrollOffset ?? 0
+        if let lastFrame = capturedFrames.last,
+           deduper.isDuplicate(lastFrame.image, result.image) {
+            throw ScrollError.duplicateFrameDetected(index: capturedFrames.count)
+        }
+
+        let predictedOffset = capturedFrames.last.map {
+            overlapDetector.findBestMatchOffset($0.image, result.image)
+        } ?? 0
         let frame = ScrollFrame(
             image: result.image,
             index: capturedFrames.count,
             timestamp: result.timestamp,
-            predictedScrollOffset: previousOffset
+            predictedScrollOffset: predictedOffset
         )
-
-        if let lastFrame = capturedFrames.last {
-            if deduper.isDuplicate(lastFrame.image, frame.image) {
-                return frame
-            }
-        }
 
         capturedFrames.append(frame)
 
@@ -266,7 +267,7 @@ extension ScrollStitchActor {
             if i % Self.maxFramesBeforePressureCheck == 0 {
                 updateMemoryPressure()
                 if memoryPressureLevel >= .critical {
-                    composite = try await downsampleForPressure(composite)
+                    throw ScrollError.memoryPressureHigh
                 }
             }
         }
@@ -296,18 +297,14 @@ extension ScrollStitchActor {
 
         let totalHeight = offset + heightB
 
-        let bytesPerComponent = imageA.bitsPerComponent
-        let colorSpace = imageA.colorSpace ?? CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = imageA.bitmapInfo
-
         guard let context = CGContext(
             data: nil,
             width: Int(width),
             height: Int(totalHeight),
-            bitsPerComponent: bytesPerComponent,
+            bitsPerComponent: 8,
             bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else {
             return nil
         }
@@ -318,7 +315,7 @@ extension ScrollStitchActor {
             height: offset
         )) {
             context.draw(croppedA, in: CGRect(
-                x: 0, y: 0,
+                x: 0, y: heightB,
                 width: CGFloat(croppedA.width),
                 height: CGFloat(croppedA.height)
             ))
@@ -333,7 +330,7 @@ extension ScrollStitchActor {
         )) {
             context.draw(croppedB, in: CGRect(
                 x: 0,
-                y: offset,
+                y: 0,
                 width: CGFloat(croppedB.width),
                 height: CGFloat(croppedB.height)
             ))
@@ -356,7 +353,8 @@ extension ScrollStitchActor {
         }
 
         if overlapRatio > 0 {
-            return heightA * (1.0 - overlapRatio * 0.5)
+            let overlapHeight = CGFloat(frameB.height) * overlapRatio
+            return max(1, heightA - overlapHeight)
         }
 
         return heightA * 0.85
@@ -444,41 +442,6 @@ extension ScrollStitchActor {
         }
     }
 
-    /// 内存压力过高时对当前合成图像强制降采样。
-    private func downsampleForPressure(_ image: CGImage) async throws -> CGImage {
-        let targetWidth = 1024
-        let aspectRatio = CGFloat(image.height) / CGFloat(image.width)
-        let targetHeight = Int(CGFloat(targetWidth) * aspectRatio)
-
-        let bytesPerComponent = image.bitsPerComponent
-        let colorSpace = image.colorSpace ?? CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = image.bitmapInfo
-
-        guard let context = CGContext(
-            data: nil,
-            width: targetWidth,
-            height: targetHeight,
-            bitsPerComponent: bytesPerComponent,
-            bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue
-        ) else {
-            throw ScrollError.stitchFailed(reason: "内存降采样失败")
-        }
-
-        context.interpolationQuality = .medium
-        context.draw(
-            image,
-            in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight)
-        )
-
-        guard let downsampled = context.makeImage() else {
-            throw ScrollError.stitchFailed(reason: "内存降采样后无法生成图像")
-        }
-
-        updateMemoryPressure()
-        return downsampled
-    }
 }
 
 // MARK: - Session Management

@@ -84,7 +84,7 @@ public protocol BarcodeProtocol: Sendable {
 }
 
 /// Errors that can occur during barcode detection.
-public enum BarcodeError: Error, Sendable {
+public enum BarcodeError: Error, Sendable, LocalizedError {
     /// No barcode was found in the image.
     ///
     /// This error is thrown when detection completed successfully but
@@ -100,4 +100,15 @@ public enum BarcodeError: Error, Sendable {
     ///
     /// - Parameter reason: A description of the failure.
     case detectionFailed(reason: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .noBarcodeFound:
+            return "未检测到条码"
+        case .unsupportedType(let type):
+            return "不支持的条码类型: \(type.rawValue)"
+        case .detectionFailed(let reason):
+            return "条码识别失败: \(reason)"
+        }
+    }
 }

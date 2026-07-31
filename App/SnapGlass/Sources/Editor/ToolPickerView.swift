@@ -2,15 +2,38 @@ import SwiftUI
 import AnnotationCore
 
 struct ToolPickerView: View {
-    @Binding var selectedTool: AnnotationToolType
+    @Binding var selectedTool: EditorTool
+    @Binding var selectedPreset: AnnotationStylePreset
     @Binding var selectedColor: Color
     @Binding var strokeWidth: CGFloat
+    let isOCRRunning: Bool
+    let ocrLineCount: Int
+    let onPresetSelected: (AnnotationStylePreset) -> Void
+    let onRunOCR: () -> Void
+    let onCopyAllOCR: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(AnnotationToolType.allCases, id: \.self) { tool in
+            ForEach(EditorTool.allCases) { tool in
                 toolButton(tool)
             }
+
+            Divider()
+                .frame(height: 22)
+
+            Picker("Preset", selection: Binding(
+                get: { selectedPreset },
+                set: { preset in
+                    selectedPreset = preset
+                    onPresetSelected(preset)
+                }
+            )) {
+                ForEach(AnnotationStylePreset.allCases) { preset in
+                    Text(preset.displayName).tag(preset)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 108)
 
             Divider()
                 .frame(height: 22)
@@ -31,6 +54,29 @@ struct ToolPickerView: View {
             .pickerStyle(.menu)
             .frame(width: 62)
             .help("Stroke width")
+
+            Divider()
+                .frame(height: 22)
+
+            if isOCRRunning {
+                ProgressView()
+                    .controlSize(.small)
+                    .help("Recognizing text")
+            } else {
+                Button(action: onRunOCR) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .help("Run OCR again")
+            }
+
+            Button(action: onCopyAllOCR) {
+                Label("\(ocrLineCount)", systemImage: "doc.on.doc")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.plain)
+            .disabled(ocrLineCount == 0)
+            .help("Copy all recognized text")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
@@ -38,11 +84,11 @@ struct ToolPickerView: View {
         .padding(10)
     }
 
-    private func toolButton(_ tool: AnnotationToolType) -> some View {
+    private func toolButton(_ tool: EditorTool) -> some View {
         Button {
             selectedTool = tool
         } label: {
-            Image(systemName: iconFor(tool))
+            Image(systemName: tool.iconName)
                 .font(.system(size: 14, weight: .medium))
                 .frame(width: 28, height: 28)
         }
@@ -58,30 +104,10 @@ struct ToolPickerView: View {
                     lineWidth: 1
                 )
         )
-        .help(toolName(tool))
-    }
-
-    private func iconFor(_ tool: AnnotationToolType) -> String {
-        switch tool {
-        case .arrow: return "arrow.up.right"
-        case .rect: return "rectangle"
-        case .text: return "textformat"
-        case .pen: return "pencil.tip"
-        case .highlight: return "highlighter"
-        case .blur: return "drop.halffull"
-        case .crop: return "crop"
-        }
-    }
-
-    private func toolName(_ tool: AnnotationToolType) -> String {
-        switch tool {
-        case .arrow: return "Arrow"
-        case .rect: return "Rectangle"
-        case .text: return "Text"
-        case .pen: return "Pen"
-        case .highlight: return "Highlight"
-        case .blur: return "Blur"
-        case .crop: return "Crop"
-        }
+        .help(
+            tool == .ocr
+                ? "Drag to select text. Double-click a word, triple-click a line, or hold Shift to extend."
+                : tool.displayName
+        )
     }
 }
