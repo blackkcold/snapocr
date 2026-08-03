@@ -47,7 +47,76 @@ struct CaptureProtocolTests {
             imageSize: CGSize(width: 2000, height: 1600)
         )
 
-        #expect(crop == CGRect(x: 200, y: 1000, width: 600, height: 400))
+        #expect(crop == CGRect(x: 200, y: 200, width: 600, height: 400))
+    }
+
+    @Test func pixelCropRect_handlesSecondaryDisplayAboveMain() {
+        let display = CGRect(x: 0, y: -900, width: 1440, height: 900)
+        let area = CGRect(x: 120, y: -700, width: 400, height: 250)
+
+        let crop = SCKAdapter.pixelCropRect(
+            areaRect: area,
+            displayFrame: display,
+            imageSize: CGSize(width: 2880, height: 1800)
+        )
+
+        #expect(crop == CGRect(x: 240, y: 400, width: 800, height: 500))
+    }
+
+    @Test func pixelCropRect_handlesSecondaryDisplayBelowMainAtOneX() {
+        let display = CGRect(x: 0, y: 1080, width: 1920, height: 1080)
+        let area = CGRect(x: 320, y: 1320, width: 640, height: 360)
+
+        let crop = SCKAdapter.pixelCropRect(
+            areaRect: area,
+            displayFrame: display,
+            imageSize: CGSize(width: 1920, height: 1080)
+        )
+
+        #expect(crop == CGRect(x: 320, y: 240, width: 640, height: 360))
+    }
+
+    @Test func pixelCropRect_usesIndependentMixedDisplayScale() {
+        let display = CGRect(x: -1280, y: 0, width: 1280, height: 1024)
+        let area = CGRect(x: -1180, y: 100, width: 500, height: 300)
+
+        let crop = SCKAdapter.pixelCropRect(
+            areaRect: area,
+            displayFrame: display,
+            imageSize: CGSize(width: 1280, height: 1024)
+        )
+
+        #expect(crop == CGRect(x: 100, y: 100, width: 500, height: 300))
+    }
+
+    @Test func quartzRect_convertsMainDisplayCoordinates() {
+        let rect = ScreenCoordinateGeometry.quartzRect(
+            from: CGRect(x: 100, y: 200, width: 300, height: 150),
+            appKitScreenFrame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+            quartzScreenFrame: CGRect(x: 0, y: 0, width: 1440, height: 900)
+        )
+
+        #expect(rect == CGRect(x: 100, y: 550, width: 300, height: 150))
+    }
+
+    @Test func quartzRect_convertsDisplayAboveMain() {
+        let rect = ScreenCoordinateGeometry.quartzRect(
+            from: CGRect(x: 80, y: 1020, width: 320, height: 180),
+            appKitScreenFrame: CGRect(x: 0, y: 900, width: 1280, height: 1024),
+            quartzScreenFrame: CGRect(x: 0, y: -1024, width: 1280, height: 1024)
+        )
+
+        #expect(rect == CGRect(x: 80, y: -300, width: 320, height: 180))
+    }
+
+    @Test func quartzRect_preservesDisplayLocalOffsetWhenOriginsDiffer() {
+        let rect = ScreenCoordinateGeometry.quartzRect(
+            from: CGRect(x: -1180, y: 100, width: 500, height: 300),
+            appKitScreenFrame: CGRect(x: -1280, y: 0, width: 1280, height: 1024),
+            quartzScreenFrame: CGRect(x: -1280, y: 0, width: 1280, height: 1024)
+        )
+
+        #expect(rect == CGRect(x: -1180, y: 624, width: 500, height: 300))
     }
 
     @Test func pixelCropRect_rejectsCrossDisplayArea() {

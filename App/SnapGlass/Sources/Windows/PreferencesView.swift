@@ -454,6 +454,8 @@ struct DeveloperPreferencesView: View {
     private var devMode = PreferenceDefaults.developerMode
     @AppStorage(PreferenceKeys.engineComparison)
     private var engineComparison = PreferenceDefaults.engineComparison
+    @AppStorage(PreferenceKeys.forceUpdateAvailable)
+    private var forceUpdateAvailable = PreferenceDefaults.forceUpdateAvailable
     
     var body: some View {
         Form {
@@ -461,6 +463,11 @@ struct DeveloperPreferencesView: View {
             
             if devMode {
                 Toggle("Enable Engine Comparison", isOn: $engineComparison)
+                Toggle("Force Latest Release as Update", isOn: $forceUpdateAvailable)
+
+                Text("When enabled, Check for Updates shows the latest GitHub Release even if its version is not newer.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding()

@@ -26,40 +26,28 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Build Release
+      - name: Install DMG tooling
         run: |
-          xcodebuild \
-            -project SnapGlass.xcodeproj \
-            -scheme SnapGlass \
-            -configuration Release \
-            -derivedDataPath .build/DerivedData-release \
-            build \
-            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO
+          python3 -m venv .build/dmg-tools
+          .build/dmg-tools/bin/python -m pip install dmgbuild
+
+      - name: Build Universal Release
+        run: |
+          bash scripts/build.sh \
+            --version "${{ steps.version.outputs.version }}" \
+            --release-dir .build/release-output
 
       - name: Package .app into .dmg
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          BUILT_APP=".build/DerivedData-release/Build/Products/Release/SnapGlass.app"
-          STAGE_DIR="release-stage"
+          BUILT_APP=".build/release-output/SnapGlass.app"
           DMG_NAME="SnapGlass-v${VERSION}.dmg"
 
-          mkdir -p "$STAGE_DIR"
-          ditto "$BUILT_APP" "$STAGE_DIR/SnapGlass.app"
-          codesign --force --deep --sign - "$STAGE_DIR/SnapGlass.app"
-
-          hdiutil create \
-            -volname "SnapGlass" \
-            -srcfolder "$STAGE_DIR" \
-            -ov \
-            -format UDZO \
-            "$DMG_NAME"
-
-          shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
+          DMGBUILD_PYTHON=".build/dmg-tools/bin/python" \
+            bash scripts/package-dmg.sh \
+              --app "$BUILT_APP" \
+              --version "$VERSION" \
+              --output-dir .
 
           echo "DMG_PATH=$DMG_NAME" >> "$GITHUB_ENV"
           echo "SHA_PATH=$DMG_NAME.sha256" >> "$GITHUB_ENV"

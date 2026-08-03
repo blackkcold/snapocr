@@ -11,7 +11,7 @@ import SharedKit
 /// ```
 /// 输入图像
 ///   │
-///   ├─ 1. 内存守卫 ── 超过 2048px 自动降采样
+///   ├─ 1. 尺寸路由 ── 中等图片全分辨率，超大图片二维分块
 ///   │
 ///   ├─ 2. 内存压力检查 ── 超过 200MB 记录警告
 ///   │
@@ -63,7 +63,7 @@ public final class OCRPipeline: Sendable {
     /// 执行完整的 OCR 识别流程
     ///
     /// 流程步骤:
-    /// 1. **内存守卫**: 检查图片尺寸，超过 2048px 自动降采样
+    /// 1. **尺寸路由**: 中等图片保持全分辨率，超大图片自动二维分块
     /// 2. **内存压力检查**: 检查进程常驻内存，超过 200MB 记录警告
     /// 3. **引擎识别**: 根据选项选择引擎执行识别
     /// 4. **置信度检查**: 检查结果置信度是否达到阈值
@@ -82,22 +82,26 @@ public final class OCRPipeline: Sendable {
         let combinedOptions = overrideOptions ?? options
         logger.info("开始 OCR 识别 | 语言: \(combinedOptions.languages.joined(separator: ", ")) | 引擎: \(engineLabel(combinedOptions.engineSelection))")
 
-        // 步骤 1: 内存守卫 - 大图降采样
-        let processedImage = try await performMemoryGuard(image)
+        try Task.checkCancellation()
 
-        // 步骤 2: 内存压力监控
+        // 步骤 1: 内存压力监控
         checkMemoryPressure()
 
-        // 步骤 3: 引擎识别
-        let result = try await performRecognition(image: processedImage, options: combinedOptions)
+        // 步骤 2: 尺寸路由与引擎识别
+        let result: OCRResult
+        if MemoryGuard.requiresTiling(image) {
+            result = try await performTiledRecognition(image: image, options: combinedOptions)
+        } else {
+            result = try await performRecognition(image: image, options: combinedOptions)
+        }
 
-        // 步骤 4: 置信度检查
+        // 步骤 3: 置信度检查
         evaluateConfidence(result, threshold: combinedOptions.minConfidence)
 
-        // 步骤 5: 后处理
+        // 步骤 4: 后处理
         let processedResult = postProcessor.process(result)
 
-        // 步骤 6: 记录性能指标
+        // 步骤 5: 记录性能指标
         logger.metric("ocr.processing_time", value: processedResult.processingTimeMs, unit: "ms")
         logger.metric("ocr.confidence", value: Double(processedResult.confidence), unit: "score")
         logger.metric("ocr.text_length", value: Double(processedResult.text.count), unit: "chars")
@@ -105,27 +109,6 @@ public final class OCRPipeline: Sendable {
         logger.info("OCR 识别完成 | 耗时: \(String(format: "%.1f", processedResult.processingTimeMs))ms | 置信度: \(String(format: "%.2f", processedResult.confidence)) | 文本长度: \(processedResult.text.count)")
 
         return processedResult
-    }
-
-    // MARK: - 内存守卫
-
-    /// 执行内存守卫检查，必要时降采样图片
-    /// - Parameter image: 输入图像
-    /// - Returns: 处理后的图像（可能已降采样）
-    private func performMemoryGuard(_ image: CGImage) async throws -> CGImage {
-        guard MemoryGuard.needsDownsample(image) else {
-            return image
-        }
-
-        let imageInfo = "\(image.width)x\(image.height)"
-        logger.info("图片尺寸过大 (\(imageInfo))，执行降采样至 \(Int(MemoryGuard.maxImageWidth))px")
-
-        guard let downsampled = MemoryGuard.downsample(image, targetWidth: MemoryGuard.maxImageWidth) else {
-            throw OCRError.imageTooLarge(width: image.width, height: image.height)
-        }
-
-        logger.info("降采样完成: \(imageInfo) → \(downsampled.width)x\(downsampled.height)")
-        return downsampled
     }
 
     /// 检查当前内存压力，超过阈值时记录警告
@@ -183,6 +166,59 @@ public final class OCRPipeline: Sendable {
         case .windowsMediaOcr:
             throw OCRError.engineUnavailable(.windowsMediaOcr)
         }
+    }
+
+    /// 将超大图片拆分为重叠 tile，逐块识别后映射回全图坐标。
+    private func performTiledRecognition(image: CGImage, options: OCROptions) async throws -> OCRResult {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let tiles = TiledOCRProcessor.tiles(imageWidth: image.width, imageHeight: image.height)
+        guard !tiles.isEmpty else {
+            throw OCRError.imageTooLarge(width: image.width, height: image.height)
+        }
+
+        logger.info("超大图片 \(image.width)x\(image.height)，拆分为 \(tiles.count) 个重叠分块")
+        let fullSize = CGSize(width: image.width, height: image.height)
+        var mappedLines: [OCRLine] = []
+        var resultEngine: OCREngineType?
+
+        for (index, tile) in tiles.enumerated() {
+            try Task.checkCancellation()
+            guard let tileImage = image.cropping(to: tile.pixelRect) else {
+                throw OCRError.recognitionFailed(reason: "无法裁剪 OCR 分块 \(index + 1)/\(tiles.count)")
+            }
+
+            do {
+                let tileResult = try await performRecognition(image: tileImage, options: options)
+                resultEngine = resultEngine ?? tileResult.engineType
+                mappedLines.append(contentsOf: tileResult.observations.map {
+                    TiledOCRProcessor.remap($0, from: tile, fullImageSize: fullSize)
+                })
+            } catch let error as OCRError where isNoTextError(error) {
+                logger.debug("OCR 分块 \(index + 1)/\(tiles.count) 未检测到文字")
+            }
+        }
+
+        try Task.checkCancellation()
+        let mergedLines = TiledOCRProcessor.merge(mappedLines)
+        guard !mergedLines.isEmpty, let resultEngine else {
+            throw OCRError.recognitionFailed(reason: "未识别到任何有效文本")
+        }
+
+        let confidence = mergedLines.reduce(Float(0)) { $0 + $1.confidence }
+            / Float(mergedLines.count)
+        return OCRResult(
+            text: mergedLines.map(\.text).joined(separator: "\n"),
+            confidence: confidence,
+            engineType: resultEngine,
+            layoutPreserved: options.preserveLayout,
+            observations: mergedLines,
+            processingTimeMs: (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        )
+    }
+
+    private func isNoTextError(_ error: OCRError) -> Bool {
+        guard case .recognitionFailed(let reason) = error else { return false }
+        return reason.contains("未识别到任何有效文本")
     }
 
     // MARK: - 置信度评估

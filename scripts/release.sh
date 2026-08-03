@@ -5,7 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 VERSION=$(cat version.txt | tr -d '[:space:]')
-DMG_FILE="release/${VERSION}/SnapGlass-${VERSION}.dmg"
+DMG_FILE="release/v${VERSION}/SnapGlass-v${VERSION}.dmg"
 
 if [ ! -f "$DMG_FILE" ]; then
     echo "❌ DMG not found: $DMG_FILE"

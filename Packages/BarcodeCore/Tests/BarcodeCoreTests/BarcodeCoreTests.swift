@@ -48,6 +48,32 @@ struct BarcodeCoreTests {
         #expect(decoded.confidence == original.confidence)
     }
 
+    @Test func singleCopyCandidateRequiresExactlyOneNonEmptyPayload() {
+        let first = BarcodeResult(
+            payload: "https://snapglass.example/copy",
+            type: .qr,
+            boundingBox: .zero,
+            confidence: 0.9
+        )
+        let second = BarcodeResult(
+            payload: "second",
+            type: .code128,
+            boundingBox: .zero,
+            confidence: 0.8
+        )
+        let empty = BarcodeResult(
+            payload: "  \n",
+            type: .qr,
+            boundingBox: .zero,
+            confidence: 0.9
+        )
+
+        #expect(BarcodeCopyCandidate.singlePayload(from: []) == nil)
+        #expect(BarcodeCopyCandidate.singlePayload(from: [first]) == first.payload)
+        #expect(BarcodeCopyCandidate.singlePayload(from: [first, second]) == nil)
+        #expect(BarcodeCopyCandidate.singlePayload(from: [empty]) == nil)
+    }
+
     private func makeQRCode(payload: String) throws -> CGImage {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(payload.utf8)

@@ -16,6 +16,14 @@ public struct ToastView: View {
             Text(message.message)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.primary)
+
+            if let actionLabel = message.actionLabel, let action = message.action {
+                Button(actionLabel) {
+                    action()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

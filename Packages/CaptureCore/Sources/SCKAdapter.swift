@@ -358,7 +358,7 @@ extension SCKAdapter {
         let scaleX = imageSize.width / displayFrame.width
         let scaleY = imageSize.height / displayFrame.height
         let localX = areaRect.minX - displayFrame.minX
-        let localY = displayFrame.maxY - areaRect.maxY
+        let localY = areaRect.minY - displayFrame.minY
         let cropRect = CGRect(
             x: localX * scaleX,
             y: localY * scaleY,

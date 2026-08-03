@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AnnotationCore
+import BarcodeCore
 import OCRCore
 import SharedKit
 import UniformTypeIdentifiers
@@ -50,6 +51,9 @@ public final class EditorViewModel: ObservableObject {
     @Published public private(set) var isOCRRunning = false
     @Published public var showsOCROverlay = true
 
+    /// Whether the editor is manually scanning the current image for barcodes.
+    @Published public private(set) var isBarcodeScanning = false
+
     /// Text currently being entered for a pending text annotation.
     @Published public var textDraft = ""
 
@@ -69,10 +73,14 @@ public final class EditorViewModel: ObservableObject {
     public var onClose: (() -> Void)?
 
     private let logger = Logger(category: "editor")
-    private let ocrPipeline: OCRPipeline
+    private let recognizeImage: @Sendable (CGImage, OCROptions) async throws -> OCRResult
+    private let detectBarcodes: @Sendable (CGImage, [BarcodeType]) async throws -> [BarcodeResult]
     private var pendingTextPoint: CGPoint?
     private var editingTextNodeID: UUID?
     private var ocrTask: Task<Void, Never>?
+    private var ocrGeneration = 0
+    private var barcodeTask: Task<Void, Never>?
+    private var barcodeGeneration = 0
 
     /// Creates a new editor view model.
     ///
@@ -80,10 +88,35 @@ public final class EditorViewModel: ObservableObject {
     public init(
         image: CGImage? = nil,
         interactor: AnnotationInteractor = AnnotationInteractor(),
-        ocrPipeline: OCRPipeline = OCRPipeline()
+        ocrPipeline: OCRPipeline = OCRPipeline(),
+        barcodeEngine: VisionBarcodeEngine = VisionBarcodeEngine()
     ) {
         self.interactor = interactor
-        self.ocrPipeline = ocrPipeline
+        self.recognizeImage = { image, options in
+            try await ocrPipeline.recognize(image, options: options)
+        }
+        self.detectBarcodes = { image, types in
+            try await barcodeEngine.detect(in: image, types: types)
+        }
+        if let image {
+            self.document = interactor.createDocument(from: image)
+            startOCR()
+        }
+    }
+
+    init(
+        image: CGImage? = nil,
+        interactor: AnnotationInteractor = AnnotationInteractor(),
+        recognizeImage: @escaping @Sendable (CGImage, OCROptions) async throws -> OCRResult,
+        detectBarcodes: @escaping @Sendable (CGImage, [BarcodeType]) async throws -> [BarcodeResult] = {
+            image,
+            types in
+            try await VisionBarcodeEngine().detect(in: image, types: types)
+        }
+    ) {
+        self.interactor = interactor
+        self.recognizeImage = recognizeImage
+        self.detectBarcodes = detectBarcodes
         if let image {
             self.document = interactor.createDocument(from: image)
             startOCR()
@@ -92,6 +125,7 @@ public final class EditorViewModel: ObservableObject {
 
     deinit {
         ocrTask?.cancel()
+        barcodeTask?.cancel()
     }
 
     /// Converts the SwiftUI `Color` to a `CGColor` for the `AnnotationNode`.
@@ -103,6 +137,7 @@ public final class EditorViewModel: ObservableObject {
     ///
     /// - Parameter image: The captured background image to annotate.
     public func loadImage(_ image: CGImage) {
+        cancelBarcodeScan()
         document = interactor.createDocument(from: image)
         selectedNodeID = nil
         ocrLines = []
@@ -111,6 +146,33 @@ public final class EditorViewModel: ObservableObject {
     }
 
     // MARK: - Annotation Operations
+
+    func activateTool(_ tool: EditorTool) {
+        selectedTool = tool
+        if tool == .ocr {
+            showsOCROverlay = true
+        }
+        if tool != .select {
+            selectNode(nil)
+        }
+        if tool == .rect {
+            fillEnabled = true
+            fillColor = selectedColor
+        } else if tool != .select {
+            fillEnabled = false
+        }
+    }
+
+    func setSelectedColor(_ color: Color) {
+        selectedColor = color
+        selectedPreset = .custom
+        if selectedNode != nil {
+            updateSelectedStyle()
+        } else if selectedTool == .rect {
+            fillEnabled = true
+            fillColor = color
+        }
+    }
 
     /// Adds a new annotation node to the document.
     ///
@@ -121,7 +183,9 @@ public final class EditorViewModel: ObservableObject {
             try interactor.apply(node.tool, to: &doc, node: node)
             document = doc
             selectedNodeID = node.tool == .crop ? nil : node.id
-            if node.tool != .crop {
+            if node.tool == .crop {
+                restartOCRForCurrentImage()
+            } else {
                 selectedTool = .select
             }
             logger.debug("Added node: \(node.tool.rawValue), id=\(node.id)")
@@ -270,9 +334,13 @@ public final class EditorViewModel: ObservableObject {
     /// Undoes the last annotation operation.
     public func undo() {
         guard var doc = document else { return }
+        let previousImage = doc.baseImage
         do {
             try interactor.undo(&doc)
             document = doc
+            if previousImage !== doc.baseImage {
+                restartOCRForCurrentImage()
+            }
         } catch {
             logger.warning("Undo failed: \(error.localizedDescription)")
         }
@@ -281,9 +349,13 @@ public final class EditorViewModel: ObservableObject {
     /// Redoes the last undone annotation operation.
     public func redo() {
         guard var doc = document else { return }
+        let previousImage = doc.baseImage
         do {
             try interactor.redo(&doc)
             document = doc
+            if previousImage !== doc.baseImage {
+                restartOCRForCurrentImage()
+            }
         } catch {
             logger.warning("Redo failed: \(error.localizedDescription)")
         }
@@ -351,7 +423,12 @@ public final class EditorViewModel: ObservableObject {
 
     public func startOCR() {
         ocrTask?.cancel()
-        guard let image = document?.baseImage else { return }
+        ocrGeneration &+= 1
+        let generation = ocrGeneration
+        guard let image = document?.baseImage else {
+            isOCRRunning = false
+            return
+        }
         isOCRRunning = true
         ocrTask = Task { [weak self] in
             guard let self else { return }
@@ -361,21 +438,28 @@ public final class EditorViewModel: ObservableObject {
                     minConfidence: 0.1,
                     preserveLayout: true
                 )
-                let result = try await ocrPipeline.recognize(image, options: options)
-                guard !Task.isCancelled else { return }
+                let result = try await recognizeImage(image, options)
+                guard !Task.isCancelled, generation == ocrGeneration else { return }
                 ocrLines = result.observations
                 showsOCROverlay = true
                 isOCRRunning = false
                 logger.info("Editor OCR completed with \(result.observations.count) lines")
             } catch is CancellationError {
+                guard generation == ocrGeneration else { return }
                 isOCRRunning = false
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, generation == ocrGeneration else { return }
                 ocrLines = []
                 isOCRRunning = false
                 showToast(message: "OCR failed: \(error.localizedDescription)", type: .error)
             }
         }
+    }
+
+    private func restartOCRForCurrentImage() {
+        cancelBarcodeScan()
+        ocrLines = []
+        startOCR()
     }
 
     public func copyOCRLine(_ line: OCRLine) {
@@ -441,6 +525,83 @@ public final class EditorViewModel: ObservableObject {
         showToast(message: "Copied OCR text", type: .success)
     }
 
+    // MARK: - Barcode Recognition
+
+    /// Manually scans the current editor image and copies decoded barcode content.
+    public func scanBarcodes() {
+        barcodeTask?.cancel()
+        barcodeGeneration &+= 1
+        let generation = barcodeGeneration
+        guard let image = document?.baseImage else {
+            isBarcodeScanning = false
+            return
+        }
+
+        isBarcodeScanning = true
+        barcodeTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let results = try await detectBarcodes(image, [])
+                guard !Task.isCancelled, generation == barcodeGeneration else { return }
+                isBarcodeScanning = false
+
+                let payloads = results.map(\.payload).filter {
+                    !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                guard !payloads.isEmpty else {
+                    showToast(
+                        message: NSLocalizedString("No barcode found", comment: "Editor barcode scan empty result"),
+                        type: .info
+                    )
+                    return
+                }
+
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(payloads.joined(separator: "\n"), forType: .string)
+                if payloads.count == 1 {
+                    showToast(
+                        message: NSLocalizedString("Barcode copied to clipboard", comment: "Editor barcode copy success"),
+                        type: .success
+                    )
+                } else {
+                    showToast(
+                        message: String(
+                            format: NSLocalizedString(
+                                "%d barcodes copied to clipboard",
+                                comment: "Editor multiple barcode copy success"
+                            ),
+                            payloads.count
+                        ),
+                        type: .success
+                    )
+                }
+                logger.info("Editor barcode scan copied \(payloads.count) result(s)")
+            } catch is CancellationError {
+                guard generation == barcodeGeneration else { return }
+                isBarcodeScanning = false
+            } catch {
+                guard !Task.isCancelled, generation == barcodeGeneration else { return }
+                isBarcodeScanning = false
+                showToast(
+                    message: String(
+                        format: NSLocalizedString(
+                            "Barcode scan failed: %@",
+                            comment: "Editor barcode scan failure"
+                        ),
+                        error.localizedDescription
+                    ),
+                    type: .error
+                )
+            }
+        }
+    }
+
+    private func cancelBarcodeScan() {
+        barcodeTask?.cancel()
+        barcodeGeneration &+= 1
+        isBarcodeScanning = false
+    }
+
     // MARK: - Save / Copy / Cancel
 
     /// Saves the annotated image to a user-chosen file location.
@@ -503,10 +664,11 @@ public final class EditorViewModel: ObservableObject {
     ///   - message: The message text.
     ///   - type: The type of toast.
     public func showToast(message: String, type: ToastType) {
-        toastMessage = ToastMessage(message: message, type: type)
+        let toast = ToastMessage(message: message, type: type)
+        toastMessage = toast
         Task {
             try? await Task.sleep(for: .seconds(3))
-            if toastMessage?.message == message {
+            if toastMessage?.id == toast.id {
                 toastMessage = nil
             }
         }

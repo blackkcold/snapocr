@@ -27,6 +27,7 @@ struct PreferenceKeysTests {
             PreferenceKeys.historySaveFullText,
             PreferenceKeys.developerMode,
             PreferenceKeys.engineComparison,
+            PreferenceKeys.forceUpdateAvailable,
         ]
 
         #expect(Set(keys).count == keys.count)
@@ -41,9 +42,111 @@ struct PreferenceKeysTests {
         #expect(PreferenceDefaults.captureSelectionStyle == CaptureSelectionStyle.rectangle.rawValue)
         #expect(PreferenceDefaults.captureHighResolution)
         #expect(!PreferenceDefaults.historySaveFullText)
+        #expect(!PreferenceDefaults.forceUpdateAvailable)
         #expect(PreferenceDefaults.historyRetentionDays > 0)
         #expect(PreferenceDefaults.historyMaxItems >= 10)
     }
+}
+
+struct UpdateServiceTests {
+    @Test func semanticVersionsCompareNumerically() {
+        guard let version010 = SemanticVersion("v0.10.0"),
+              let version099 = SemanticVersion("0.9.9"),
+              let version100 = SemanticVersion("1.0.0"),
+              let version09999 = SemanticVersion("0.99.99") else {
+            Issue.record("Valid semantic versions must parse")
+            return
+        }
+        #expect(version010 > version099)
+        #expect(version100 > version09999)
+        #expect(SemanticVersion("not-a-version") == nil)
+    }
+
+    @Test func latestReleaseRequiresNewerVersionUnlessForced() async throws {
+        let client = MockUpdateHTTPClient(releaseData: makeReleaseData(version: "0.2.0"))
+        let service = UpdateService(client: client)
+
+        let normal = try await service.check(currentVersion: "0.2.0")
+        let forced = try await service.check(currentVersion: "0.2.0", force: true)
+
+        guard let expectedVersion = SemanticVersion("0.2.0") else {
+            Issue.record("Valid semantic version must parse")
+            return
+        }
+        #expect(normal == .upToDate(latestVersion: expectedVersion))
+        guard case .updateAvailable(let release) = forced else {
+            Issue.record("Forced checks must return the latest release as available")
+            return
+        }
+        #expect(release.assetName == "SnapGlass-v0.2.0.dmg")
+    }
+
+    @Test func latestReleaseSelectsExactDMGAndChecksumAssets() async throws {
+        let client = MockUpdateHTTPClient(releaseData: makeReleaseData(version: "0.3.0"))
+        let result = try await UpdateService(client: client).check(currentVersion: "0.2.0")
+
+        guard case .updateAvailable(let release) = result else {
+            Issue.record("A newer semantic version must be available")
+            return
+        }
+        #expect(release.version == SemanticVersion("0.3.0"))
+        #expect(release.dmgURL.lastPathComponent == "SnapGlass-v0.3.0.dmg")
+        #expect(release.checksumURL.lastPathComponent == "SnapGlass-v0.3.0.dmg.sha256")
+    }
+
+    @Test func checksumParserRejectsMalformedValues() {
+        let valid = String(repeating: "a", count: 64)
+        #expect(UpdateService.parseChecksum(Data("\(valid)  SnapGlass.dmg\n".utf8)) == valid)
+        #expect(UpdateService.parseChecksum(Data("not-a-checksum".utf8)) == nil)
+    }
+}
+
+private struct MockUpdateHTTPClient: UpdateHTTPClient {
+    let releaseData: Data
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        ) else {
+            throw MockUpdateError.invalidRequest
+        }
+        return (releaseData, response)
+    }
+
+    func download(for request: URLRequest) async throws -> (URL, URLResponse) {
+        throw MockUpdateError.downloadNotExpected
+    }
+}
+
+private enum MockUpdateError: Error {
+    case downloadNotExpected
+    case invalidRequest
+}
+
+private func makeReleaseData(version: String) -> Data {
+    Data("""
+    {
+      "tag_name": "v\(version)",
+      "body": "Release notes",
+      "html_url": "https://github.com/blackkcold/snapocr/releases/tag/v\(version)",
+      "draft": false,
+      "prerelease": false,
+      "assets": [
+        {
+          "name": "SnapGlass-v\(version).dmg",
+          "browser_download_url": "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg"
+        },
+        {
+          "name": "SnapGlass-v\(version).dmg.sha256",
+          "browser_download_url": "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg.sha256"
+        }
+      ]
+    }
+    """.utf8)
 }
 
 struct ImageEncoderTests {

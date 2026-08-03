@@ -1,4 +1,5 @@
 import AppKit
+import CaptureCore
 import SharedKit
 import SwiftUI
 
@@ -12,9 +13,66 @@ struct AreaSelectionResult {
     var isFreeform: Bool { normalizedPath != nil }
 }
 
-final class AreaSelectionPanel: NSPanel {
-    private static var retainedPanels: [AreaSelectionPanel] = []
+/// Coordinates the per-display panels that make up one area-selection session.
+@MainActor
+private final class AreaSelectionSession {
+    private static var retainedSessions: [AreaSelectionSession] = []
 
+    private let onComplete: (AreaSelectionResult?) -> Void
+    private var panels: [AreaSelectionPanel] = []
+    private var didFinish = false
+
+    static func show(
+        style: CaptureSelectionStyle,
+        onComplete: @escaping (AreaSelectionResult?) -> Void
+    ) {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else {
+            onComplete(nil)
+            return
+        }
+
+        let session = AreaSelectionSession(onComplete: onComplete)
+        retainedSessions.append(session)
+        session.present(on: screens, style: style)
+    }
+
+    private init(onComplete: @escaping (AreaSelectionResult?) -> Void) {
+        self.onComplete = onComplete
+    }
+
+    private func present(on screens: [NSScreen], style: CaptureSelectionStyle) {
+        panels = screens.map { screen in
+            AreaSelectionPanel(screen: screen, style: style) { [weak self] result in
+                self?.finish(with: result)
+            }
+        }
+
+        for panel in panels {
+            panel.orderFrontRegardless()
+        }
+
+        let mouseLocation = NSEvent.mouseLocation
+        let initialPanel = panels.first { $0.frame.contains(mouseLocation) } ?? panels.first
+        initialPanel?.makeKey()
+    }
+
+    private func finish(with result: AreaSelectionResult?) {
+        guard !didFinish else { return }
+        didFinish = true
+
+        let completion = onComplete
+        let activePanels = panels
+        panels.removeAll()
+        for panel in activePanels {
+            panel.dismissWithoutCompleting()
+        }
+        Self.retainedSessions.removeAll { $0 === self }
+        completion(result)
+    }
+}
+
+final class AreaSelectionPanel: NSPanel {
     private let onComplete: (AreaSelectionResult?) -> Void
     private var trackingView: AreaTrackingView!
     private var didFinish = false
@@ -23,29 +81,18 @@ final class AreaSelectionPanel: NSPanel {
         style: CaptureSelectionStyle,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
-        let panel = AreaSelectionPanel(style: style, onComplete: onComplete)
-        retain(panel)
-        panel.orderFrontRegardless()
-        panel.makeKey()
+        AreaSelectionSession.show(style: style, onComplete: onComplete)
     }
 
-    private static func retain(_ panel: AreaSelectionPanel) {
-        retainedPanels.append(panel)
-    }
-
-    private static func release(_ panel: AreaSelectionPanel) {
-        retainedPanels.removeAll { $0 === panel }
-    }
-
-    private init(
+    fileprivate init(
+        screen: NSScreen,
         style: CaptureSelectionStyle,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         self.onComplete = onComplete
-        let allScreensFrame = NSScreen.screens.reduce(NSRect.zero) { $0.union($1.frame) }
 
         super.init(
-            contentRect: allScreensFrame,
+            contentRect: screen.frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -61,7 +108,7 @@ final class AreaSelectionPanel: NSPanel {
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
         isMovableByWindowBackground = false
-        setFrame(allScreensFrame, display: true)
+        setFrame(screen.frame, display: true)
 
         guard let contentView else { return }
         trackingView = AreaTrackingView(frame: contentView.bounds, style: style)
@@ -77,12 +124,17 @@ final class AreaSelectionPanel: NSPanel {
         finish(with: nil)
     }
 
+    fileprivate func dismissWithoutCompleting() {
+        guard !didFinish else { return }
+        didFinish = true
+        super.close()
+    }
+
     private func finish(with result: AreaSelectionResult?) {
         guard !didFinish else { return }
         didFinish = true
 
         let completion = onComplete
-        Self.release(self)
         super.close()
         completion(result)
     }
@@ -612,13 +664,19 @@ private final class AreaTrackingView: NSView {
         guard let window else { return viewRect }
         let windowRect = convert(viewRect, to: nil)
         let appKitRect = window.convertToScreen(windowRect)
-        let mainBounds = CGDisplayBounds(CGMainDisplayID())
-        return CGRect(
-            x: appKitRect.minX,
-            y: mainBounds.maxY - appKitRect.maxY,
-            width: appKitRect.width,
-            height: appKitRect.height
-        )
+        let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }),
+              let displayID = screen.deviceDescription[
+                  NSDeviceDescriptionKey("NSScreenNumber")
+              ] as? CGDirectDisplayID else {
+            return appKitRect
+        }
+
+        return ScreenCoordinateGeometry.quartzRect(
+            from: appKitRect,
+            appKitScreenFrame: screen.frame,
+            quartzScreenFrame: CGDisplayBounds(displayID)
+        ) ?? appKitRect
     }
 
     private func freeformPath() -> CGPath {

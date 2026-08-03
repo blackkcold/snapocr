@@ -5,25 +5,27 @@ import ImageIO
 /// OCR 内存守卫
 ///
 /// 防止大图片导致内存暴涨。提供图片尺寸预检、高效降采样和内存压力监控。
-/// 超过 2048px 宽度的图片自动降采样，超过 200MB 内存压力触发降级。
+/// 中等尺寸图片保持全分辨率，超大图片由 OCR 管道执行二维分块识别。
 ///
 /// 使用示例:
 /// ```swift
-/// if MemoryGuard.needsDownsample(image) {
-///     guard let downsampled = MemoryGuard.downsample(image, targetWidth: 2048) else {
-///         throw OCRError.imageTooLarge(width: image.width, height: image.height)
-///     }
-///     // 使用 downsampled 进行识别
+/// if MemoryGuard.requiresTiling(image) {
+///     // 由 OCRPipeline 使用重叠 tile 保留全分辨率小文字。
 /// }
 /// ```
 public struct MemoryGuard: Sendable {
     // MARK: - 常量
 
-    /// 最大允许处理的图片宽度（像素）
+    /// 单次全分辨率 OCR 的最大边长（像素）
     ///
-    /// 超过此宽度的图片会被自动降采样。
-    /// 来源: 设计文档 7.1+ 节，> 4K 分辨率自动降采样至 2048px 宽。
-    public static let maxImageWidth: CGFloat = 2048
+    /// 任一边超过此值时使用二维分块，避免压缩小文字。
+    public static let maxImageWidth: CGFloat = 4096
+
+    /// OCR 分块的最大边长（像素）。
+    public static let tileDimension = 2048
+
+    /// 相邻 OCR 分块的重叠宽度（像素）。
+    public static let tileOverlap = 256
 
     /// 内存压力阈值（字节）
     ///
@@ -33,14 +35,22 @@ public struct MemoryGuard: Sendable {
 
     // MARK: - 图片检查
 
-    /// 检查图片是否需要降采样
+    /// 检查图片是否需要进入大图预处理路径
     ///
-    /// 判断条件: 图片宽度超过 `maxImageWidth`（2048px）
+    /// 兼容旧调用：任一边超过 `maxImageWidth` 时返回 `true`。
     ///
     /// - Parameter image: 要检查的 CGImage
     /// - Returns: `true` 如果图片需要降采样
     public static func needsDownsample(_ image: CGImage) -> Bool {
-        return CGFloat(image.width) > maxImageWidth
+        return requiresTiling(image)
+    }
+
+    /// 检查图片是否需要分块识别。
+    ///
+    /// - Parameter image: 要检查的 CGImage。
+    /// - Returns: 任一边超过单次全分辨率 OCR 上限时返回 `true`。
+    public static func requiresTiling(_ image: CGImage) -> Bool {
+        return max(CGFloat(image.width), CGFloat(image.height)) > maxImageWidth
     }
 
     /// 降采样图片到目标宽度

@@ -34,6 +34,21 @@ struct AnnotationCoreTests {
         #expect(document.nodes.isEmpty)
     }
 
+    @Test func cropConvertsBottomOriginToImageScanlines() throws {
+        let image = try makeVerticalSplitImage(width: 200, height: 100)
+        let crop = AnnotationNode(
+            tool: .crop,
+            normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 0.5)
+        )
+
+        let result = try CropTool().crop(node: crop, from: image)
+        let pixel = try sampledPixel(from: result)
+
+        #expect(result.width == 200)
+        #expect(result.height == 50)
+        #expect(pixel.blue > pixel.red)
+    }
+
     @Test func exportPreservesOriginalResolution() throws {
         let image = try makeImage(width: 5_000, height: 20)
         let document = AnnotationDocument(baseImage: image)
@@ -314,5 +329,51 @@ struct AnnotationCoreTests {
             throw AnnotationError.renderFailed(reason: "Unable to create checkerboard image")
         }
         return image
+    }
+
+    private func makeVerticalSplitImage(width: Int, height: Int) throws -> CGImage {
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue
+                | CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw AnnotationError.renderFailed(reason: "Unable to create split image context")
+        }
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height / 2))
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: height / 2, width: width, height: height / 2))
+        guard let image = context.makeImage() else {
+            throw AnnotationError.renderFailed(reason: "Unable to create split image")
+        }
+        return image
+    }
+
+    private func sampledPixel(from image: CGImage) throws -> (red: UInt8, green: UInt8, blue: UInt8) {
+        var bytes = [UInt8](repeating: 0, count: 4)
+        return try bytes.withUnsafeMutableBytes { buffer in
+            guard let address = buffer.baseAddress,
+                  let context = CGContext(
+                      data: address,
+                      width: 1,
+                      height: 1,
+                      bitsPerComponent: 8,
+                      bytesPerRow: 4,
+                      space: CGColorSpaceCreateDeviceRGB(),
+                      bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue
+                          | CGImageAlphaInfo.premultipliedLast.rawValue
+                  ) else {
+                throw AnnotationError.renderFailed(reason: "Unable to create pixel sampling context")
+            }
+            context.interpolationQuality = .none
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let pixels = address.assumingMemoryBound(to: UInt8.self)
+            return (pixels[0], pixels[1], pixels[2])
+        }
     }
 }

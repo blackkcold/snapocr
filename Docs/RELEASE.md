@@ -75,6 +75,11 @@ release/.DS_Store
 
 # 构建后打开 Finder
 ./scripts/build.sh --open
+
+# 同时生成带背景和 Applications 拖放入口的 DMG
+python3 -m venv .build/dmg-tools
+.build/dmg-tools/bin/python -m pip install dmgbuild
+DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
 ```
 
 构建脚本行为：
@@ -82,10 +87,12 @@ release/.DS_Store
 1. 读取版本号（`--version` 或 `version.txt`）
 2. 校验版本号格式 `^[0-9]+\.[0-9]+\.[0-9]+$`
 3. 确定输出目录（默认 `release/vX.Y.Z/`），若已存在则拒绝覆盖
-4. `xcodegen generate` → `xcodebuild -configuration Release`
-5. `ditto` 拷贝 `.app` 到产物目录
-6. 本地 ad-hoc 签名 + 验证
-7. 输出 `✅ App packaged: release/vX.Y.Z/SnapGlass.app`
+4. `xcodegen generate` → 分别构建 arm64 与 x86_64 Release
+5. 使用 `lipo` 合并主程序并验证 Universal 架构
+6. `ditto` 拷贝 `.app` 到产物目录
+7. 本地 ad-hoc 签名 + 严格验证
+8. 使用 `--dmg` 时，通过 `dmgbuild` 生成品牌背景、Applications 拖放入口与 SHA-256
+9. 输出 `✅ App packaged: release/vX.Y.Z/SnapGlass.app`
 
 ---
 
@@ -106,8 +113,8 @@ release/.DS_Store
 ### 方式二：本地构建 + 手动上传
 
 1. 执行 `./scripts/build.sh --version X.Y.Z`
-2. 打包 `.dmg`：`hdiutil create -volname SnapGlass -srcfolder release/vX.Y.Z/SnapGlass.app -ov -format UDZO release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg`
-3. 生成校验：`shasum -a 256 release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg > release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg.sha256`
+2. 创建隔离工具环境：`python3 -m venv .build/dmg-tools && .build/dmg-tools/bin/python -m pip install dmgbuild`
+3. 打包 `.dmg`：`DMGBUILD_PYTHON=.build/dmg-tools/bin/python bash scripts/package-dmg.sh --app release/vX.Y.Z/SnapGlass.app --version X.Y.Z --output-dir release/vX.Y.Z`
 4. 打 tag 并推送
 5. `gh release create vX.Y.Z release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg.sha256 --title "vX.Y.Z" --notes-file <release-note.md>`
 

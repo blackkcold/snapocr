@@ -79,6 +79,9 @@ final class EditableAnnotationCanvasNSView: NSView {
             if currentTool != .ocr {
                 ocrTextSelection = nil
             }
+            if oldValue == .crop, currentTool != .crop {
+                cancelPendingCrop()
+            }
             window?.invalidateCursorRects(for: self)
         }
     }
@@ -115,25 +118,30 @@ final class EditableAnnotationCanvasNSView: NSView {
     var onOCRTextCopied: ((String) -> Void)?
     var onOCRLineAsAnnotation: ((OCRLine) -> Void)?
 
-    private enum Interaction {
+    enum Interaction {
         case none
         case drawing
         case moving
         case resizing(ResizeHandle)
         case selectingOCRText
+        case adjustingCrop
+        case movingCrop
+        case resizingCrop(ResizeHandle)
     }
 
-    private enum ResizeHandle: CaseIterable, Equatable {
+    enum ResizeHandle: CaseIterable, Equatable {
         case bottomLeft, bottom, bottomRight, right
         case topRight, top, topLeft, left
         case start, end
     }
 
-    private var imageDisplayRect: CGRect = .zero
-    private var interaction: Interaction = .none
-    private var dragStartPoint: CGPoint = .zero
-    private var dragCurrentPoints: [CGPoint] = []
-    private var dragCurrentRect: CGRect = .zero
+    var imageDisplayRect: CGRect = .zero
+    var interaction: Interaction = .none
+    var dragStartPoint: CGPoint = .zero
+    var dragCurrentPoints: [CGPoint] = []
+    var dragCurrentRect: CGRect = .zero
+    var pendingCropRect: CGRect = .zero
+    var cropInteractionStartRect: CGRect = .zero
     private var originalNode: AnnotationNode?
     private var interactiveNode: AnnotationNode?
     private var renderedPreview: CGImage?
@@ -190,6 +198,7 @@ final class EditableAnnotationCanvasNSView: NSView {
         if case .drawing = interaction {
             drawCreationPreview(in: context)
         }
+        drawPendingCrop(in: context)
         drawSelection(in: context)
     }
 
@@ -208,6 +217,8 @@ final class EditableAnnotationCanvasNSView: NSView {
                 clickCount: event.clickCount,
                 extendsSelection: event.modifierFlags.contains(.shift)
             )
+        case .crop:
+            beginCropInteraction(at: point, clickCount: event.clickCount)
         default:
             interaction = .drawing
             dragCurrentPoints = [normalizedPoint(point)]
@@ -235,6 +246,12 @@ final class EditableAnnotationCanvasNSView: NSView {
             )
         case .selectingOCRText:
             updateOCRTextSelection(to: point)
+        case .adjustingCrop:
+            break
+        case .movingCrop:
+            updateCropMove(to: point)
+        case .resizingCrop(let handle):
+            updateCropResize(handle: handle, to: point)
         case .none:
             break
         }
@@ -243,12 +260,14 @@ final class EditableAnnotationCanvasNSView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         let point = clampedViewPoint(convert(event.locationInWindow, from: nil))
+        var keepsPendingCrop = false
         defer {
-            interaction = .none
+            interaction = keepsPendingCrop ? .adjustingCrop : .none
             originalNode = nil
             interactiveNode = nil
             dragCurrentPoints = []
             dragCurrentRect = .zero
+            cropInteractionStartRect = .zero
             resizePointerOffset = .zero
             invalidateRenderedPreview()
             needsDisplay = true
@@ -256,7 +275,16 @@ final class EditableAnnotationCanvasNSView: NSView {
 
         switch interaction {
         case .drawing:
-            if currentTool == .text {
+            if currentTool == .crop {
+                updateCreationPreview(to: point)
+                let viewRect = viewRect(from: dragCurrentRect)
+                if viewRect.width > 5, viewRect.height > 5 {
+                    pendingCropRect = dragCurrentRect.standardized
+                    keepsPendingCrop = true
+                } else {
+                    pendingCropRect = .zero
+                }
+            } else if currentTool == .text {
                 onTextRequested?(normalizedPoint(point))
             } else if let node = createNode(at: normalizedPoint(point)) {
                 onNodeCreated?(node)
@@ -267,12 +295,27 @@ final class EditableAnnotationCanvasNSView: NSView {
             }
         case .selectingOCRText:
             updateOCRTextSelection(to: point)
+        case .adjustingCrop:
+            keepsPendingCrop = !pendingCropRect.isEmpty
+        case .movingCrop, .resizingCrop:
+            keepsPendingCrop = !pendingCropRect.isEmpty
         case .none:
             break
         }
     }
 
     override func keyDown(with event: NSEvent) {
+        if currentTool == .crop, !pendingCropRect.isEmpty {
+            switch event.keyCode {
+            case 36, 76:
+                confirmPendingCrop()
+            case 53:
+                cancelPendingCrop()
+            default:
+                super.keyDown(with: event)
+            }
+            return
+        }
         if currentTool == .ocr, handleOCRKeyDown(event) {
             return
         }
@@ -663,22 +706,11 @@ final class EditableAnnotationCanvasNSView: NSView {
         let startPoint = normalizedPoint(dragStartPoint)
         let rect = normalizedRect(from: dragStartPoint, to: viewPoint(from: endPoint))
         let common = { (points: [CGPoint], normalizedRect: CGRect, opacity: CGFloat) in
-            AnnotationNode(
+            self.makeNode(
                 tool: annotationTool,
-                color: self.currentColor,
-                lineWidth: self.currentLineWidth,
-                opacity: opacity,
-                fillColor: self.currentFillColor,
-                strokeStyle: self.currentStrokeStyle,
-                cornerRadius: self.currentCornerRadius,
-                arrowStyle: self.currentArrowStyle,
                 points: points,
-                fontName: self.currentFontName,
-                fontSize: self.currentFontSize,
-                textAlignment: self.currentTextAlignment,
-                blurMode: self.currentBlurMode,
-                blurIntensity: self.currentBlurIntensity,
-                normalizedRect: normalizedRect
+                normalizedRect: normalizedRect,
+                opacity: opacity
             )
         }
         switch annotationTool {
@@ -696,39 +728,6 @@ final class EditableAnnotationCanvasNSView: NSView {
         case .text:
             return nil
         }
-    }
-
-    private func drawCreationPreview(in context: CGContext) {
-        context.saveGState()
-        context.setStrokeColor(currentColor)
-        context.setLineWidth(previewLineWidth)
-        context.setLineCap(.round)
-        context.setLineJoin(.round)
-        context.setAlpha(currentOpacity)
-        switch currentTool.annotationTool {
-        case .pen:
-            guard dragCurrentPoints.count >= 2 else { break }
-            context.move(to: viewPoint(from: dragCurrentPoints[0]))
-            for point in dragCurrentPoints.dropFirst() {
-                context.addLine(to: viewPoint(from: point))
-            }
-            context.strokePath()
-        case .arrow:
-            guard dragCurrentPoints.count >= 2 else { break }
-            context.move(to: viewPoint(from: dragCurrentPoints[0]))
-            context.addLine(to: viewPoint(from: dragCurrentPoints[1]))
-            context.strokePath()
-        case .rect, .highlight, .blur, .crop:
-            let rect = viewRect(from: dragCurrentRect)
-            if currentTool == .highlight {
-                context.setFillColor(currentColor.copy(alpha: 0.3) ?? currentColor)
-                context.fill(rect)
-            }
-            context.stroke(rect)
-        case .text, .none:
-            break
-        }
-        context.restoreGState()
     }
 
     private func drawSelection(in context: CGContext) {
@@ -776,7 +775,8 @@ final class EditableAnnotationCanvasNSView: NSView {
                 for rect in ocrSelectionRects(for: selection) {
                     context.fill(rect)
                 }
-                drawSelectedOCRText(selection, in: context)
+                // 保留截图中的原始文字像素。重新绘制近似系统字体会因字形、基线和
+                // 水平缩放不同而让选中文字产生视觉位移。
             }
         }
         context.restoreGState()
@@ -814,45 +814,6 @@ final class EditableAnnotationCanvasNSView: NSView {
         }
     }
 
-    private func drawSelectedOCRText(_ selection: OCRTextSelection, in context: CGContext) {
-        let lines = orderedOCRLines
-        for slice in selection.slices(in: lines.map(\.text)) {
-            guard slice.length > 0, lines.indices.contains(slice.lineIndex) else { continue }
-            let source = lines[slice.lineIndex]
-            let layout = ocrLineLayout(for: source)
-            let start = CTLineGetOffsetForStringIndex(layout.line, slice.location, nil)
-            let end = CTLineGetOffsetForStringIndex(layout.line, NSMaxRange(slice.range), nil)
-            let selectionRect = CGRect(
-                x: layout.rect.minX + min(start, end) * layout.horizontalScale,
-                y: layout.rect.minY,
-                width: max(abs(end - start) * layout.horizontalScale, 1.5),
-                height: layout.rect.height
-            )
-            let selectedLine = CTLineCreateWithAttributedString(
-                NSAttributedString(
-                    string: source.text,
-                    attributes: [
-                        .font: layout.font,
-                        .foregroundColor: NSColor.selectedTextColor.cgColor,
-                    ]
-                )
-            )
-            let textHeight = layout.font.ascender - layout.font.descender
-            let baseline = layout.rect.minY
-                + max((layout.rect.height - textHeight) / 2, 0)
-                - layout.font.descender
-
-            context.saveGState()
-            context.clip(to: selectionRect)
-            context.translateBy(x: layout.rect.minX, y: 0)
-            context.scaleBy(x: layout.horizontalScale, y: 1)
-            context.textMatrix = .identity
-            context.textPosition = CGPoint(x: 0, y: baseline)
-            CTLineDraw(selectedLine, context)
-            context.restoreGState()
-        }
-    }
-
     private var selectedNode: AnnotationNode? {
         guard let selectedNodeID else { return nil }
         return nodes.first { $0.id == selectedNodeID }
@@ -882,7 +843,6 @@ final class EditableAnnotationCanvasNSView: NSView {
 
     private struct OCRLineLayout {
         let line: CTLine
-        let font: NSFont
         let rect: CGRect
         let horizontalScale: CGFloat
     }
@@ -953,7 +913,6 @@ final class EditableAnnotationCanvasNSView: NSView {
         let measuredWidth = CGFloat(CTLineGetTypographicBounds(textLine, nil, nil, nil))
         return OCRLineLayout(
             line: textLine,
-            font: font,
             rect: rect,
             horizontalScale: rect.width / max(measuredWidth, 1)
         )
@@ -1014,7 +973,7 @@ final class EditableAnnotationCanvasNSView: NSView {
         return handlePoint(handle, in: viewRect(from: normalizedBounds(for: node)))
     }
 
-    private func handlePoint(_ handle: ResizeHandle, in rect: CGRect) -> CGPoint {
+    func handlePoint(_ handle: ResizeHandle, in rect: CGRect) -> CGPoint {
         return switch handle {
         case .bottomLeft: CGPoint(x: rect.minX, y: rect.minY)
         case .bottom: CGPoint(x: rect.midX, y: rect.minY)
@@ -1142,12 +1101,7 @@ final class EditableAnnotationCanvasNSView: NSView {
         return renderedPreview
     }
 
-    private var previewLineWidth: CGFloat {
-        guard let image, image.width > 0 else { return currentLineWidth }
-        return max(currentLineWidth * imageDisplayRect.width / CGFloat(image.width), 0.5)
-    }
-
-    private func normalizedPoint(_ point: CGPoint) -> CGPoint {
+    func normalizedPoint(_ point: CGPoint) -> CGPoint {
         guard imageDisplayRect.width > 0, imageDisplayRect.height > 0 else { return .zero }
         return CGPoint(
             x: min(max((point.x - imageDisplayRect.minX) / imageDisplayRect.width, 0), 1),
@@ -1161,14 +1115,14 @@ final class EditableAnnotationCanvasNSView: NSView {
         return CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y))
     }
 
-    private func viewPoint(from normalized: CGPoint) -> CGPoint {
+    func viewPoint(from normalized: CGPoint) -> CGPoint {
         CGPoint(
             x: imageDisplayRect.minX + normalized.x * imageDisplayRect.width,
             y: imageDisplayRect.minY + normalized.y * imageDisplayRect.height
         )
     }
 
-    private func viewRect(from normalized: CGRect) -> CGRect {
+    func viewRect(from normalized: CGRect) -> CGRect {
         CGRect(
             x: imageDisplayRect.minX + normalized.minX * imageDisplayRect.width,
             y: imageDisplayRect.minY + normalized.minY * imageDisplayRect.height,

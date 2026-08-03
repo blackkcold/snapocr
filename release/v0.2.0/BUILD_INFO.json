@@ -1,0 +1,10 @@
+{
+  "version": "0.2.0",
+  "buildDate": "2026-08-03T07:21:46Z",
+  "app": "SnapGlass.app",
+  "configuration": "Release",
+  "architectures": ["arm64", "x86_64"],
+  "signature": "ad-hoc",
+  "testsPassed": 177,
+  "xcode": "26.6"
+}

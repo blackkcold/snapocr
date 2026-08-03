@@ -8,9 +8,11 @@ struct ToolPickerView: View {
     @Binding var strokeWidth: CGFloat
     let isOCRRunning: Bool
     let ocrLineCount: Int
+    let isBarcodeScanning: Bool
     let onPresetSelected: (AnnotationStylePreset) -> Void
     let onRunOCR: () -> Void
     let onCopyAllOCR: () -> Void
+    let onScanBarcodes: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
@@ -77,6 +79,22 @@ struct ToolPickerView: View {
             .buttonStyle(.plain)
             .disabled(ocrLineCount == 0)
             .help("Copy all recognized text")
+
+            Divider()
+                .frame(height: 22)
+
+            if isBarcodeScanning {
+                ProgressView()
+                    .controlSize(.small)
+                    .help("Scanning barcodes")
+            } else {
+                Button(action: onScanBarcodes) {
+                    Image(systemName: "qrcode.viewfinder")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Scan Barcode")
+                .help("Scan barcodes and copy decoded content")
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)

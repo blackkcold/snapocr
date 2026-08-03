@@ -106,7 +106,7 @@ extension OCRError: LocalizedError {
         case .languageNotSupported(let language):
             return "语言不受支持: \(language)"
         case .imageTooLarge(let width, let height):
-            return "图片尺寸过大 (\(width)x\(height))，超过 2048px 限制"
+            return "图片尺寸过大 (\(width)x\(height))，无法安全分块处理"
         }
     }
 }

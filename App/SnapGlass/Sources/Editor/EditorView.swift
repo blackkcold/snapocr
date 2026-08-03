@@ -15,24 +15,14 @@ struct EditorView: View {
                 selectedTool: Binding(
                     get: { editorVM.selectedTool },
                     set: { tool in
-                        editorVM.selectedTool = tool
-                        if tool == .ocr {
-                            editorVM.showsOCROverlay = true
-                        }
-                        if tool != .select {
-                            editorVM.selectNode(nil)
-                        }
+                        editorVM.activateTool(tool)
                     }
                 ),
                 selectedPreset: $editorVM.selectedPreset,
                 selectedColor: Binding(
                     get: { editorVM.selectedColor },
                     set: { color in
-                        editorVM.selectedColor = color
-                        editorVM.selectedPreset = .custom
-                        if editorVM.selectedNode != nil {
-                            editorVM.updateSelectedStyle()
-                        }
+                        editorVM.setSelectedColor(color)
                     }
                 ),
                 strokeWidth: Binding(
@@ -47,9 +37,11 @@ struct EditorView: View {
                 ),
                 isOCRRunning: editorVM.isOCRRunning,
                 ocrLineCount: editorVM.ocrLines.count,
+                isBarcodeScanning: editorVM.isBarcodeScanning,
                 onPresetSelected: editorVM.applyPreset,
                 onRunOCR: editorVM.startOCR,
-                onCopyAllOCR: editorVM.copyAllOCRText
+                onCopyAllOCR: editorVM.copyAllOCRText,
+                onScanBarcodes: editorVM.scanBarcodes
             )
 
             HSplitView {

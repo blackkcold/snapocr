@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+### Fixed
+
+### Changed
+
+## [0.2.1] - 2026-08-03
+
+### Fixed
+- 将条码扫描从菜单栏移至截图编辑器，并支持手动识别后复制内容
+- 截图仅检测到一个条码时，在编辑器提示中提供一键复制内容操作
+- 普通区域、窗口和全屏截图新增"不进入编辑器、直接复制到剪贴板"入口
+- 修复区域截图仅由单个跨屏面板承载，导致副显示器无法进入截图交互的问题
+- 修复多显示器与混合缩放环境下区域截图坐标被重复翻转而产生的偏移
+- 修复 OCR 文本选中时用近似系统字体重绘导致的字形和基线错位
+- 移除 OCR 的 2048px 强制降采样上限，超大图片改为二维重叠分块识别并合并坐标
+- 修复编辑器裁剪工具松开鼠标后立即执行，改为可移动、缩放并确认后裁剪
+- 修复编辑器裁剪选区上下方向定位错误
+- 矩形标注默认启用与描边同色的填充，并在修改描边颜色时保持同步
+- 修复编辑器裁剪、撤销或重做后沿用旧 OCR 坐标，并阻止已取消识别任务回写过期结果
+
+### Added
+- 添加用户主动触发的 GitHub Release 更新检查、SHA-256 校验下载与 Finder 定位
+- 添加开发者模式"强制将最新 Release 视为更新"选项，便于测试更新流程
+- 添加带品牌背景、Applications 拖放入口和固定 Finder 布局的 DMG 打包流程
+
+### Changed
+- 本地构建与 GitHub Actions 共用 `scripts/package-dmg.sh`，统一 `SnapGlass-vX.Y.Z.dmg` 命名
+
 ## [0.2.0] - 2026-07-31
 
 ### Added
@@ -86,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Liquid Glass UI support (macOS 26+) with material fallback
 - Memory pressure monitoring and automatic degradation
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/blackkcold/snapocr/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/blackkcold/snapocr/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/blackkcold/snapocr/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/blackkcold/snapocr/releases/tag/v0.1.0

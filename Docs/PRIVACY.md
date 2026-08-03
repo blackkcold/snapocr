@@ -60,7 +60,8 @@ SnapGlass 的网络请求受到严格限制：
 | 场景 | 请求内容 | 域名 | 触发条件 |
 |------|----------|------|----------|
 | Tesseract 语言包下载 | 语言训练数据 | `raw.githubusercontent.com/tesseract-ocr/tessdata_best` | 用户显式触发 |
-| 版本更新检查 | 版本信息 (未来实现) | GitHub API | 用户显式触发 |
+| 版本更新检查 | 版本号、Release Notes、下载地址 | `api.github.com` | 用户显式触发 |
+| 版本更新下载 | DMG 与 SHA-256 校验文件 | `github.com` / `objects.githubusercontent.com` | 用户确认下载 |
 
 - 所有网络请求必须由用户显式触发
 - 应用不会在后台静默发起任何网络请求
@@ -113,4 +114,4 @@ SnapGlass 不集成任何第三方分析、跟踪或广告服务。应用不包�
 
 ---
 
-*最后更新: 2026-06-09*
+*最后更新: 2026-08-03*

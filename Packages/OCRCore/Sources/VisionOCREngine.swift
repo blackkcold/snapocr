@@ -45,6 +45,7 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         languages: [String],
         options: OCROptions
     ) async throws -> OCRResult {
+        try Task.checkCancellation()
         let startTime = CFAbsoluteTimeGetCurrent()
 
         // 1. 创建并配置文本识别请求
@@ -67,6 +68,7 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
                 reason: "Vision 框架识别失败: \(error.localizedDescription)"
             )
         }
+        try Task.checkCancellation()
 
         guard let observations = request.results else {
             throw OCRError.recognitionFailed(reason: "Vision 未返回识别结果")

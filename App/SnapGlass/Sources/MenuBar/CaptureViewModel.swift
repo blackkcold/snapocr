@@ -11,7 +11,7 @@ import AppKit
 ///
 /// This view model handles:
 /// - Triggering captures (area, window, fullscreen)
-/// - Performing OCR and barcode scanning from clipboard
+/// - Performing OCR from the clipboard and suggesting detected barcode content
 /// - Managing toast notifications
 /// - Setting up global hotkeys
 @MainActor
@@ -45,6 +45,12 @@ public final class CaptureViewModel: ObservableObject {
 
     /// Number of unique frames currently collected for scrolling capture.
     @Published public private(set) var scrollCapturedFrameCount = 0
+
+    /// Whether a user-triggered update check is running.
+    @Published public private(set) var isCheckingForUpdates = false
+
+    /// Whether a verified update DMG is being downloaded.
+    @Published public private(set) var isDownloadingUpdate = false
     
     /// Closure to open a specific window by ID
     public var openWindow: ((String) -> Void)?
@@ -53,6 +59,13 @@ public final class CaptureViewModel: ObservableObject {
     private var scrollFrames: [ScrollFrame] = []
     private var scrollSourceAppName: String?
     private var scrollSourceWindowTitle: String?
+    private let updateService: UpdateService
+    private let logger = Logger(category: "capture")
+
+    private enum CaptureDestination {
+        case configured
+        case clipboardOnly
+    }
     
     /// Initializes a new CaptureViewModel.
     ///
@@ -64,12 +77,14 @@ public final class CaptureViewModel: ObservableObject {
         captureOrchestrator: CaptureOrchestrator = CaptureOrchestrator(),
         ocrPipeline: OCRPipeline = OCRPipeline(),
         barcodeEngine: VisionBarcodeEngine = VisionBarcodeEngine(),
-        scrollEngine: ScrollStitchActor = ScrollStitchActor()
+        scrollEngine: ScrollStitchActor = ScrollStitchActor(),
+        updateService: UpdateService = UpdateService()
     ) {
         self.captureOrchestrator = captureOrchestrator
         self.ocrPipeline = ocrPipeline
         self.barcodeEngine = barcodeEngine
         self.scrollEngine = scrollEngine
+        self.updateService = updateService
         
         setupHotKeys()
     }
@@ -102,9 +117,59 @@ public final class CaptureViewModel: ObservableObject {
             }
         }
     }
+
+    /// Checks GitHub Releases after an explicit user action and offers a verified DMG download.
+    public func checkForUpdates() {
+        guard !isCheckingForUpdates, !isDownloadingUpdate else { return }
+        isCheckingForUpdates = true
+
+        Task {
+            defer { isCheckingForUpdates = false }
+            do {
+                let forceUpdate = Self.boolPreference(
+                    forKey: PreferenceKeys.forceUpdateAvailable,
+                    defaultValue: PreferenceDefaults.forceUpdateAvailable
+                )
+                let result = try await updateService.check(
+                    currentVersion: Self.currentVersion,
+                    force: forceUpdate
+                )
+                switch result {
+                case .upToDate(let latestVersion):
+                    presentInformationAlert(
+                        title: NSLocalizedString("SnapGlass is Up to Date", comment: "Update status title"),
+                        message: String(
+                            format: NSLocalizedString(
+                                "You are running the latest version (%@).",
+                                comment: "Latest version message"
+                            ),
+                            latestVersion.description
+                        )
+                    )
+                case .updateAvailable(let release):
+                    await presentUpdate(release)
+                }
+            } catch {
+                presentInformationAlert(
+                    title: NSLocalizedString("Unable to Check for Updates", comment: "Update error title"),
+                    message: error.localizedDescription,
+                    style: .warning
+                )
+            }
+        }
+    }
     
     /// Triggers an area capture with interactive region selection overlay.
     public func captureArea() {
+        startAreaCapture(destination: .configured)
+    }
+
+    /// Captures an interactively selected area directly to the clipboard without opening the editor.
+    public func captureAreaToClipboard() {
+        startAreaCapture(destination: .clipboardOnly)
+    }
+
+    private func startAreaCapture(destination: CaptureDestination) {
         Task {
             guard !isCapturing else { return }
             isCapturing = true
@@ -132,6 +197,7 @@ public final class CaptureViewModel: ObservableObject {
                 mode: CaptureCore.CaptureMode.area(selection.screenRect),
                 normalizedMaskPath: selection.normalizedPath,
                 historyModeOverride: selection.isFreeform ? "freeform" : nil,
+                destination: destination,
                 managesCaptureState: false
             )
         }
@@ -139,6 +205,15 @@ public final class CaptureViewModel: ObservableObject {
     
     /// Triggers a window capture.
     public func captureWindow() {
+        startWindowCapture(destination: .configured)
+    }
+
+    /// Captures a selected window directly to the clipboard without opening the editor.
+    public func captureWindowToClipboard() {
+        startWindowCapture(destination: .clipboardOnly)
+    }
+
+    private func startWindowCapture(destination: CaptureDestination) {
         Task {
             guard !isCapturing else { return }
             isCapturing = true
@@ -155,6 +230,7 @@ public final class CaptureViewModel: ObservableObject {
                 mode: CaptureCore.CaptureMode.window(selectedWindow.windowID),
                 sourceAppName: selectedWindow.appName,
                 sourceWindowTitle: selectedWindow.windowTitle,
+                destination: destination,
                 managesCaptureState: false
             )
         }
@@ -163,7 +239,14 @@ public final class CaptureViewModel: ObservableObject {
     /// Triggers a fullscreen capture.
     public func captureFullscreen() {
         Task {
-            await performCapture(mode: CaptureCore.CaptureMode.fullscreen)
+            await performCapture(mode: CaptureCore.CaptureMode.fullscreen, destination: .configured)
+        }
+    }
+
+    /// Captures the fullscreen image directly to the clipboard without opening the editor.
+    public func captureFullscreenToClipboard() {
+        Task {
+            await performCapture(mode: CaptureCore.CaptureMode.fullscreen, destination: .clipboardOnly)
         }
     }
 
@@ -306,19 +389,6 @@ public final class CaptureViewModel: ObservableObject {
         openWindow?("editor")
     }
     
-    /// Scans for barcodes in the image currently in the clipboard.
-    public func scanBarcodeFromClipboard() {
-        Task {
-            guard let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage,
-                  let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-                showToast(message: "No image found in clipboard", type: .error)
-                return
-            }
-            
-            await performBarcodeScan(on: cgImage)
-        }
-    }
-    
     /// Performs a capture with the specified mode.
     ///
     /// - Parameter mode: The capture mode to use.
@@ -328,6 +398,7 @@ public final class CaptureViewModel: ObservableObject {
         sourceWindowTitle: String? = nil,
         normalizedMaskPath: [CGPoint]? = nil,
         historyModeOverride: String? = nil,
+        destination: CaptureDestination = .configured,
         managesCaptureState: Bool = true
     ) async {
         if managesCaptureState {
@@ -355,7 +426,8 @@ public final class CaptureViewModel: ObservableObject {
                 captureMode: result.captureMode,
                 sourceAppName: sourceAppName,
                 sourceWindowTitle: sourceWindowTitle,
-                historyModeOverride: historyModeOverride
+                historyModeOverride: historyModeOverride,
+                destination: destination
             )
         } catch CaptureError.permissionDenied {
             openWindow?("permission")
@@ -369,40 +441,51 @@ public final class CaptureViewModel: ObservableObject {
         captureMode: CaptureCore.CaptureMode,
         sourceAppName: String? = nil,
         sourceWindowTitle: String? = nil,
-        historyModeOverride: String? = nil
+        historyModeOverride: String? = nil,
+        destination: CaptureDestination = .configured
     ) async {
-        showToast(message: "Capture successful", type: .success)
-
-        if Self.boolPreference(
+        let shouldOpenEditor = destination == .configured && Self.boolPreference(
             forKey: PreferenceKeys.captureOpenEditor,
             defaultValue: PreferenceDefaults.captureOpenEditor
-        ) {
+        )
+        let shouldCopyImage = destination == .clipboardOnly || Self.boolPreference(
+            forKey: PreferenceKeys.captureCopyToClipboard,
+            defaultValue: PreferenceDefaults.captureCopyToClipboard
+        )
+
+        showToast(
+            message: NSLocalizedString(
+                destination == .clipboardOnly ? "Screenshot copied to clipboard" : "Capture successful",
+                comment: "Capture completion toast"
+            ),
+            type: .success
+        )
+
+        if shouldOpenEditor {
             openEditor(with: image)
         }
 
-        if Self.boolPreference(
-            forKey: PreferenceKeys.captureCopyToClipboard,
-            defaultValue: PreferenceDefaults.captureCopyToClipboard
-        ) {
-            let nsImage = NSImage(
-                cgImage: image,
-                size: NSSize(width: image.width, height: image.height)
-            )
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([nsImage])
+        if shouldCopyImage {
+            copyImageToClipboard(image)
         }
+
+        let barcodeResults = shouldOpenEditor ? await detectBarcodesForSuggestion(in: image) : []
 
         let shouldRunOCR = Self.boolPreference(
             forKey: PreferenceKeys.captureAutoOCR,
             defaultValue: PreferenceDefaults.captureAutoOCR
         )
-        let shouldCopyOCRText = Self.boolPreference(
+        let shouldCopyOCRText = destination == .configured && Self.boolPreference(
             forKey: PreferenceKeys.captureCopyOCRText,
             defaultValue: PreferenceDefaults.captureCopyOCRText
         )
         let ocrResult = shouldRunOCR
             ? await performOCR(on: image, copyToClipboard: shouldCopyOCRText)
             : nil
+
+        if let payload = BarcodeCopyCandidate.singlePayload(from: barcodeResults) {
+            showBarcodeCopySuggestion(payload: payload)
+        }
 
         let autoSave = Self.boolPreference(
             forKey: PreferenceKeys.historyAutoSave,
@@ -470,6 +553,71 @@ public final class CaptureViewModel: ObservableObject {
         scrollCapturedFrameCount = 0
         isScrollCaptureActive = false
     }
+
+    private func presentUpdate(_ release: UpdateRelease) async {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = String(
+            format: NSLocalizedString("SnapGlass %@ is Available", comment: "Available update title"),
+            release.tagName
+        )
+        let notes = release.releaseNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        alert.informativeText = notes.isEmpty
+            ? NSLocalizedString("A new version is ready to download.", comment: "Empty release notes")
+            : String(notes.prefix(1_500))
+        alert.addButton(withTitle: NSLocalizedString("Download Update", comment: "Download update button"))
+        alert.addButton(withTitle: NSLocalizedString("View on GitHub", comment: "Open release page button"))
+        alert.addButton(withTitle: NSLocalizedString("Later", comment: "Dismiss update button"))
+
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            await download(release)
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.open(release.releasePageURL)
+        default:
+            break
+        }
+    }
+
+    private func download(_ release: UpdateRelease) async {
+        isDownloadingUpdate = true
+        defer { isDownloadingUpdate = false }
+        do {
+            let fileURL = try await updateService.download(release)
+            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+            presentInformationAlert(
+                title: NSLocalizedString("Update Downloaded", comment: "Update download title"),
+                message: String(
+                    format: NSLocalizedString(
+                        "%@ passed SHA-256 verification and is ready in Downloads.",
+                        comment: "Verified update message"
+                    ),
+                    fileURL.lastPathComponent
+                )
+            )
+        } catch {
+            presentInformationAlert(
+                title: NSLocalizedString("Update Download Failed", comment: "Update download error title"),
+                message: error.localizedDescription,
+                style: .warning
+            )
+        }
+    }
+
+    private func presentInformationAlert(
+        title: String,
+        message: String,
+        style: NSAlert.Style = .informational
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = style
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: NSLocalizedString("OK", comment: "Alert confirmation"))
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
     
     /// Performs OCR on the specified image.
     ///
@@ -492,6 +640,43 @@ public final class CaptureViewModel: ObservableObject {
             showToast(message: "OCR failed: \(error.localizedDescription)", type: .error)
             return nil
         }
+    }
+
+    private func copyImageToClipboard(_ image: CGImage) {
+        let nsImage = NSImage(
+            cgImage: image,
+            size: NSSize(width: image.width, height: image.height)
+        )
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([nsImage])
+    }
+
+    private func detectBarcodesForSuggestion(in image: CGImage) async -> [BarcodeResult] {
+        do {
+            return try await barcodeEngine.detect(in: image, types: [])
+        } catch {
+            logger.warning("Automatic barcode hint failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func showBarcodeCopySuggestion(payload: String) {
+        showToast(
+            message: NSLocalizedString("One barcode detected", comment: "Single barcode hint"),
+            type: .info,
+            actionLabel: NSLocalizedString("Copy Content", comment: "Barcode copy action")
+        ) { [weak self] in
+            self?.copyBarcodePayload(payload)
+        }
+    }
+
+    private func copyBarcodePayload(_ payload: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(payload, forType: .string)
+        showToast(
+            message: NSLocalizedString("Barcode copied to clipboard", comment: "Barcode copy success"),
+            type: .success
+        )
     }
 
     private static func boolPreference(forKey key: String, defaultValue: Bool) -> Bool {
@@ -562,6 +747,10 @@ public final class CaptureViewModel: ObservableObject {
         return UserDefaults.standard.double(forKey: key)
     }
 
+    private static var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    }
+
     private static func historyModeDescription(for mode: CaptureCore.CaptureMode) -> String {
         switch mode {
         case .area:
@@ -575,36 +764,31 @@ public final class CaptureViewModel: ObservableObject {
         }
     }
     
-    /// Scans for barcodes in the specified image.
-    ///
-    /// - Parameter image: The image to scan for barcodes.
-    private func performBarcodeScan(on image: CGImage) async {
-        do {
-            let results = try await barcodeEngine.detect(in: image, types: [])
-            if let first = results.first {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(first.payload, forType: .string)
-                showToast(message: "Barcode copied to clipboard", type: .success)
-            } else {
-                showToast(message: "No barcode found", type: .info)
-            }
-        } catch {
-            showToast(message: "Barcode scan failed: \(error.localizedDescription)", type: .error)
-        }
-    }
-    
     /// Shows a toast notification.
     ///
     /// - Parameters:
     ///   - message: The message to display.
     ///   - type: The type of toast (success, error, info).
-    public func showToast(message: String, type: ToastType) {
-        toastMessage = ToastMessage(message: message, type: type)
+    ///   - actionLabel: Optional label for an action button.
+    ///   - action: Optional action invoked from the toast button.
+    public func showToast(
+        message: String,
+        type: ToastType,
+        actionLabel: String? = nil,
+        action: (@MainActor () -> Void)? = nil
+    ) {
+        let toast = ToastMessage(
+            message: message,
+            type: type,
+            actionLabel: actionLabel,
+            action: action
+        )
+        toastMessage = toast
         
         // Auto dismiss
         Task {
-            try? await Task.sleep(for: .seconds(3))
-            if toastMessage?.message == message {
+            try? await Task.sleep(for: .seconds(action == nil ? 3 : 6))
+            if toastMessage?.id == toast.id {
                 toastMessage = nil
             }
         }
@@ -613,11 +797,37 @@ public final class CaptureViewModel: ObservableObject {
 
 /// Represents a toast message.
 public struct ToastMessage: Equatable {
+    /// Stable identity for presentation and dismissal.
+    public let id: UUID
+
     /// The message text.
     public let message: String
     
     /// The type of toast.
     public let type: ToastType
+
+    /// Optional title for a user action.
+    public let actionLabel: String?
+
+    let action: (@MainActor () -> Void)?
+
+    init(
+        id: UUID = UUID(),
+        message: String,
+        type: ToastType,
+        actionLabel: String? = nil,
+        action: (@MainActor () -> Void)? = nil
+    ) {
+        self.id = id
+        self.message = message
+        self.type = type
+        self.actionLabel = actionLabel
+        self.action = action
+    }
+
+    public static func == (lhs: ToastMessage, rhs: ToastMessage) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 /// The type of toast notification.

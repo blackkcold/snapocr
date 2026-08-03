@@ -57,13 +57,18 @@ public struct CropTool: Sendable {
     }
 
     private func denormalize(point: CGPoint, to image: CGImage) -> CGPoint {
-        CGPoint(x: point.x * CGFloat(image.width), y: point.y * CGFloat(image.height))
+        CGPoint(
+            x: point.x * CGFloat(image.width),
+            y: (1 - point.y) * CGFloat(image.height)
+        )
     }
 
     private func denormalize(rect: CGRect, to image: CGImage) -> CGRect {
         CGRect(
             x: rect.origin.x * CGFloat(image.width),
-            y: rect.origin.y * CGFloat(image.height),
+            // Annotation coordinates use an AppKit-style bottom origin, while
+            // CGImage.cropping(to:) measures y from the top scanline.
+            y: (1 - rect.origin.y - rect.size.height) * CGFloat(image.height),
             width: rect.size.width * CGFloat(image.width),
             height: rect.size.height * CGFloat(image.height)
         )
