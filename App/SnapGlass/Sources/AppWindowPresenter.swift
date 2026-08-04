@@ -33,6 +33,7 @@ private final class AppWindowRegistry {
     }
 
     private var windows: [String: WeakWindow] = [:]
+    private var observedWindows: [ObjectIdentifier: Void] = [:]
 
     func register(_ window: NSWindow?, id: String) {
         if let window {
@@ -49,14 +50,37 @@ private final class AppWindowRegistry {
             return false
         }
 
-        NSApplication.shared.setActivationPolicy(.accessory)
+        NSApplication.shared.setActivationPolicy(.regular)
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApplication.shared.activate(ignoringOtherApps: true)
+        observeWindowClose(window)
         return true
+    }
+
+    /// Reverts to the accessory (menu-bar-only) activation policy once the
+    /// last app window closes, so SnapGlass leaves the Dock.
+    private func observeWindowClose(_ window: NSWindow) {
+        let token = ObjectIdentifier(window)
+        guard observedWindows[token] == nil else { return }
+        observedWindows[token] = ()
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak window] _ in
+            guard let window else { return }
+            let stillOpen = Self.shared.windows.values.contains {
+                $0.value != nil && $0.value !== window
+            }
+            if !stillOpen {
+                NSApplication.shared.setActivationPolicy(.accessory)
+            }
+        }
     }
 }
 

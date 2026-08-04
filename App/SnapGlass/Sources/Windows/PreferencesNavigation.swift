@@ -7,6 +7,8 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case ocr
     case shortcuts
     case history
+    case updates
+    case about
     case developer
 
     var id: String { rawValue }
@@ -19,6 +21,8 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .ocr: "OCR"
         case .shortcuts: "Shortcuts"
         case .history: "History"
+        case .updates: "Updates"
+        case .about: "About"
         case .developer: "Developer"
         }
     }
@@ -31,6 +35,8 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .ocr: "Tune recognition accuracy and language priority."
         case .shortcuts: "Customize global keyboard shortcuts."
         case .history: "Manage encrypted history, retention, and storage."
+        case .updates: "Check for new releases and download updates."
+        case .about: "Version, credits, and project links."
         case .developer: "Configure diagnostics and update testing."
         }
     }
@@ -43,6 +49,8 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .ocr: "text.viewfinder"
         case .shortcuts: "keyboard"
         case .history: "clock.arrow.circlepath"
+        case .updates: "arrow.down.circle"
+        case .about: "info.circle"
         case .developer: "hammer"
         }
     }

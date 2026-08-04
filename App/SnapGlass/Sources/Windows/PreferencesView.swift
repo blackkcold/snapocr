@@ -5,7 +5,7 @@ import HistoryCore
 import ServiceManagement
 
 struct PreferencesView: View {
-    @State private var selection: PreferencesSection = .general
+    @EnvironmentObject private var router: PreferencesRouter
     @State private var isSidebarCollapsed = false
     @State private var windowWidth = PreferencesSpacing.idealWindowWidth
 
@@ -73,10 +73,10 @@ struct PreferencesView: View {
                     ForEach(PreferencesSection.allCases) { section in
                         PreferencesSidebarRow(
                             section: section,
-                            isSelected: section == selection,
+                            isSelected: section == router.selectedSection,
                             collapsed: isSidebarCollapsed
                         ) {
-                            selection = section
+                            router.selectedSection = section
                         }
                     }
                 }
@@ -92,18 +92,20 @@ struct PreferencesView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PreferencesPageHeader(section: selection)
+            PreferencesPageHeader(section: router.selectedSection)
 
             Divider()
 
             Group {
-                switch selection {
+                switch router.selectedSection {
                 case .general: GeneralPreferencesView()
                 case .appearance: AppearancePreferencesView()
                 case .capture: CapturePreferencesView()
                 case .ocr: OCRPreferencesView()
                 case .shortcuts: ShortcutsPreferencesView()
                 case .history: HistoryPreferencesView()
+                case .updates: UpdatesPreferencesView()
+                case .about: AboutPreferencesView()
                 case .developer: DeveloperPreferencesView()
                 }
             }

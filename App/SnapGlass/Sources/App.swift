@@ -7,6 +7,8 @@ import AppKit
 struct SnapGlassApp: App {
     /// The view model managing capture state and coordination.
     @StateObject private var viewModel = CaptureViewModel()
+    /// Coordinates the selected Settings section and window opening.
+    @StateObject private var router = PreferencesRouter()
     @AppStorage(PreferenceKeys.appLanguage)
     private var appLanguage = PreferenceDefaults.appLanguage
     @AppStorage(PreferenceKeys.appearanceMode)
@@ -33,19 +35,35 @@ struct SnapGlassApp: App {
         } label: {
             Label("SnapGlass", systemImage: "camera.viewfinder")
                 .background {
-                    AppLifecycleBridge(viewModel: viewModel)
+                    AppLifecycleBridge(viewModel: viewModel, router: router)
                 }
         }
 
         Window("Preferences", id: "preferences") {
             PreferencesView()
+                .environmentObject(router)
                 .toast(message: $viewModel.toastMessage)
+                .environmentObject(viewModel)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "preferences"))
         }
         .defaultSize(width: PreferencesSpacing.idealWindowWidth, height: PreferencesSpacing.idealWindowHeight)
         .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About SnapGlass") {
+                    router.presentAbout()
+                }
+            }
+
+            CommandGroup(replacing: .appSettings) {
+                Button("Preferences...") {
+                    router.presentSettings()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
 
         Window("History", id: "history") {
             HistoryView()
@@ -84,6 +102,7 @@ struct SnapGlassApp: App {
 private struct AppLifecycleBridge: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var viewModel: CaptureViewModel
+    @ObservedObject var router: PreferencesRouter
     @State private var didInitialize = false
 
     var body: some View {
@@ -96,6 +115,7 @@ private struct AppLifecycleBridge: View {
                         openWindow(id: id)
                     }
                 }
+                router.openWindow = viewModel.openWindow
                 guard !didInitialize else { return }
                 didInitialize = true
                 viewModel.checkPermissionsOnLaunch()

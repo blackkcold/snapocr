@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-04
+
+### Added
+- 设置面板新增「关于」与「版本更新」标签页：显示版本、构建号、版权、GitHub 链接，并提供检查更新入口
+- 聚焦设置窗口时，macOS 菜单栏左上角显示 SnapGlass 应用菜单，含「关于 SnapGlass」与「设置…」入口
+- 窗口打开期间应用临时进入 Dock，关闭全部窗口后自动回到纯菜单栏模式
+
 ## [0.4.0] - 2026-08-04
 
 ### Added
@@ -143,7 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Liquid Glass UI support (macOS 26+) with material fallback
 - Memory pressure monitoring and automatic degradation
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/blackkcold/snapocr/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/blackkcold/snapocr/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/blackkcold/snapocr/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/blackkcold/snapocr/compare/v0.2.0...v0.2.1
