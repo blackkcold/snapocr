@@ -148,9 +148,14 @@ xcodegen generate
 # 构建 Release 产物
 ./scripts/build.sh --version 0.3.0
 
+# 构建后打开 Finder（产物统一输出到 release/vX.Y.Z/）
+./scripts/build.sh --open
+
 # 运行全量 Package 测试
 ./scripts/test.sh
 ```
+
+> 所有临时测试与正式构建产物统一归档到 `release/vX.Y.Z/`，不使用 `output/` 目录。详见 [`Docs/RELEASE.md`](Docs/RELEASE.md)。
 
 更多构建选项见 [`Docs/RELEASE.md`](Docs/RELEASE.md)。
 

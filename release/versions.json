@@ -1,14 +1,26 @@
 [
     {
+        "version": "0.3.0",
+        "date": "2026-08-04",
+        "file": "SnapGlass-0.3.0.dmg",
+        "notes": "https://github.com/blackkcold/snapocr/releases/tag/v0.3.0"
+    },
+    {
+        "version": "0.2.1",
+        "date": "2026-08-03",
+        "file": "SnapGlass-0.2.1.dmg",
+        "notes": "https://github.com/blackkcold/snapocr/releases/tag/v0.2.1"
+    },
+    {
         "version": "0.2.0",
         "date": "2026-07-31",
         "file": "SnapGlass-0.2.0.dmg",
-        "sha256": "release/0.2.0/SnapGlass-0.2.0.dmg.sha256",
         "notes": "https://github.com/blackkcold/snapocr/releases/tag/v0.2.0"
     },
     {
         "version": "0.1.5",
         "date": "2026-07-08",
-        "file": "SnapGlass-0.1.5.dmg"
+        "file": "SnapGlass-0.1.5.dmg",
+        "sha256": "release/v0.1.5/SnapGlass-0.1.5.dmg.sha256"
     }
 ]

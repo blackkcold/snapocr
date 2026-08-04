@@ -30,16 +30,18 @@
 
 ```
 release/
-├── 0.1.5/                    # 历史版本归档（保留）
+├── v0.1.5/                   # 历史版本归档（保留）
 │   ├── SnapGlass-0.1.5.dmg
 │   ├── SnapGlass-0.1.5.dmg.sha256
 │   └── BUILD_INFO.json
-├── 0.2.0/                    # 当前发版产物
+├── v0.2.0/                   # 当前发版产物
 │   ├── SnapGlass-0.2.0.dmg
 │   ├── SnapGlass-0.2.0.dmg.sha256
 │   └── BUILD_INFO.json
 └── versions.json             # 版本索引（发版后回填）
 ```
+
+> **目录命名规则**：版本子目录一律使用 `v` 前缀（`release/vX.Y.Z/`），与 `build.sh`、`release.sh` 的默认行为保持一致，避免新旧命名并存造成混淆。
 
 ### 可提交产物
 
@@ -155,7 +157,7 @@ emoji 分组按 Conventional Commits 前缀映射，详见 [CONTRIBUTING.md](./C
     "version": "0.2.0",
     "date": "2026-07-31",
     "file": "SnapGlass-0.2.0.dmg",
-    "sha256": "release/0.2.0/SnapGlass-0.2.0.dmg.sha256"
+    "sha256": "release/v0.2.0/SnapGlass-0.2.0.dmg.sha256"
   },
   {
     "version": "0.1.5",
@@ -167,4 +169,4 @@ emoji 分组按 Conventional Commits 前缀映射，详见 [CONTRIBUTING.md](./C
 
 ---
 
-*最后更新: 2026-07-31*
+*最后更新: 2026-08-04*

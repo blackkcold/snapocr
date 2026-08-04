@@ -71,6 +71,8 @@ SnapGlass/
 │   ├── HistoryCore/          # 本地历史加密存储
 │   └── AutomationCore/       # Automation 保留源码（不进入产品构建）
 ├── Docs/                     # 文档
+├── scripts/                  # 构建、测试、发版脚本
+├── release/                  # 发版产物归档（统一 release/vX.Y.Z/，禁止 output/）
 └── Tests/                    # 集成/UI 测试
 ```
 
@@ -112,6 +114,7 @@ Platform Adapter (macOS: Vision, SCK, NSPasteboard)
 - Force unwrap（`!`）
 - 直接 push 到 `main` 分支
 - 修改 `.xcodeproj`（由 XcodeGen 生成，禁止手动编辑）
+- 使用 `output/` 目录存放构建产物（统一归档到 `release/vX.Y.Z/`）
 
 ---
 
