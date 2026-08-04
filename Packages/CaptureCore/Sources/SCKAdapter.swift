@@ -146,6 +146,51 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
 
         return false
     }
+
+    /// Captures a scaled still image suitable for a window-picker preview.
+    func captureWindowThumbnail(
+        windowID: CGWindowID,
+        maximumSize: CGSize
+    ) async throws -> CGImage {
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            true,
+            onScreenWindowsOnly: true
+        )
+        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+            throw CaptureError.windowNotFound
+        }
+        guard let display = display(containing: window, from: content.displays) else {
+            throw CaptureError.displayUnavailable
+        }
+
+        let sourceSize = window.frame.size
+        guard sourceSize.width > 0, sourceSize.height > 0,
+              maximumSize.width > 0, maximumSize.height > 0 else {
+            throw CaptureError.captureFailed(reason: "Invalid window thumbnail size")
+        }
+        let scale = min(
+            maximumSize.width / sourceSize.width,
+            maximumSize.height / sourceSize.height,
+            1
+        )
+
+        let filter = SCContentFilter(display: display, including: [window])
+        let configuration = SCStreamConfiguration()
+        configuration.width = max(1, Int((sourceSize.width * scale).rounded(.up)))
+        configuration.height = max(1, Int((sourceSize.height * scale).rounded(.up)))
+        configuration.showsCursor = false
+        configuration.capturesAudio = false
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
+        configuration.queueDepth = 1
+
+        return try await withThrowingTimeout(ms: Self.captureTimeoutMs) {
+            try await SingleFrameCapture.capture(
+                with: filter,
+                configuration: configuration,
+                logger: self.logger
+            )
+        }
+    }
 }
 
 // MARK: - Capture Implementations
@@ -321,6 +366,11 @@ extension SCKAdapter {
         } catch {
             return nil
         }
+    }
+
+    private func display(containing window: SCWindow, from displays: [SCDisplay]) -> SCDisplay? {
+        let windowCenter = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        return displays.first { $0.frame.contains(windowCenter) } ?? displays.first
     }
 }
 

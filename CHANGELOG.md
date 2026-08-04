@@ -7,11 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-04
+
 ### Added
+- 区域截图在回车或双击确认选区后，直接在截图覆盖层内提供复制图片、进入编辑器和返回调整操作
+- 新增跟随系统、浅色和深色三种外观模式，并统一应用到菜单栏与所有应用窗口
+- 设置页面新增可视化外观模块、SF Symbols 侧栏与统一页面标题层级
+- 窗口选择器新增按需加载的窗口缩略图预览，并过滤 Dock、菜单栏等系统 UI 窗口
+- 滚动截图和竖向长图新增仅调整顶部、底部边界的快速裁切模式
 
 ### Fixed
+- 移除截图与编辑器之间多余的独立确认窗口，避免打断连续截图交互
+- 修复截图操作栏点击后选区状态被错误重置，导致复制和编辑操作无响应的问题
 
 ### Changed
+- 移除菜单栏中独立的“复制截图”入口，区域截图改由选区内操作条选择复制或编辑
+- 区域截图由选区操作条决定复制或编辑；窗口、全屏及滚动截图继续使用截图后偏好设置
+- 设置窗口调整为更宽松的原生 macOS 分区布局，并为各模块补充图标和说明
+- 区域截图选择复制或编辑时会触发后台历史保存，并立即退出截图模式
+- 窗口截图与滚动截图合并到同一窗口预览入口，选中目标后再选择单窗口或窗口内滚动截图
 
 ## [0.2.1] - 2026-08-03
 
@@ -115,7 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Liquid Glass UI support (macOS 26+) with material fallback
 - Memory pressure monitoring and automatic degradation
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/blackkcold/snapocr/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/blackkcold/snapocr/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/blackkcold/snapocr/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/blackkcold/snapocr/compare/v0.1.0...v0.1.5

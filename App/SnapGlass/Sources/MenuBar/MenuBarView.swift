@@ -22,20 +22,6 @@ struct MenuBarView: View {
         }
         .globalKeyboardShortcut(.captureFullscreen)
 
-        Menu("Copy Screenshot") {
-            Button("Area to Clipboard") {
-                viewModel.captureAreaToClipboard()
-            }
-
-            Button("Window to Clipboard") {
-                viewModel.captureWindowToClipboard()
-            }
-
-            Button("Fullscreen to Clipboard") {
-                viewModel.captureFullscreenToClipboard()
-            }
-        }
-
         if viewModel.isScrollCaptureActive {
             Button("Capture Next Scroll Frame (\(viewModel.scrollCapturedFrameCount))") {
                 viewModel.captureNextScrollFrame()
@@ -48,10 +34,6 @@ struct MenuBarView: View {
 
             Button("Cancel Scrolling Capture", role: .destructive) {
                 viewModel.cancelScrollCapture()
-            }
-        } else {
-            Button("Scrolling Capture...") {
-                viewModel.startScrollCapture()
             }
         }
 

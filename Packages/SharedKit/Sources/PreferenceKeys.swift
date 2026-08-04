@@ -4,6 +4,7 @@ import Foundation
 public enum PreferenceKeys {
     public static let launchAtLogin = "general_launchAtLogin"
     public static let appLanguage = "general_appLanguage"
+    public static let appearanceMode = "appearance_mode"
 
     public static let captureOpenEditor = "capture_openEditor"
     public static let captureCopyToClipboard = "capture_copyToClipboard"
@@ -35,6 +36,7 @@ public enum PreferenceKeys {
 public enum PreferenceDefaults {
     public static let launchAtLogin = false
     public static let appLanguage = "system"
+    public static let appearanceMode = "system"
 
     public static let captureOpenEditor = true
     public static let captureCopyToClipboard = true

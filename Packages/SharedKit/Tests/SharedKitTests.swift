@@ -7,6 +7,8 @@ struct PreferenceKeysTests {
     @Test func keysAreNamespacedAndUnique() {
         let keys = [
             PreferenceKeys.launchAtLogin,
+            PreferenceKeys.appLanguage,
+            PreferenceKeys.appearanceMode,
             PreferenceKeys.captureOpenEditor,
             PreferenceKeys.captureCopyToClipboard,
             PreferenceKeys.captureIncludeCursor,
@@ -36,6 +38,7 @@ struct PreferenceKeysTests {
 
     @Test func privacySafeDefaultsAreConservative() {
         #expect(!PreferenceDefaults.launchAtLogin)
+        #expect(PreferenceDefaults.appearanceMode == AppearanceMode.system.rawValue)
         #expect(!PreferenceDefaults.captureIncludeCursor)
         #expect(!PreferenceDefaults.captureAutoOCR)
         #expect(!PreferenceDefaults.captureCopyOCRText)
@@ -45,6 +48,13 @@ struct PreferenceKeysTests {
         #expect(!PreferenceDefaults.forceUpdateAvailable)
         #expect(PreferenceDefaults.historyRetentionDays > 0)
         #expect(PreferenceDefaults.historyMaxItems >= 10)
+    }
+
+    @Test func appearanceModesHaveStablePersistedValues() {
+        #expect(AppearanceMode.allCases.map(\.rawValue) == ["system", "light", "dark"])
+        for mode in AppearanceMode.allCases {
+            #expect(AppearanceMode(rawValue: mode.rawValue)?.rawValue == mode.rawValue)
+        }
     }
 }
 

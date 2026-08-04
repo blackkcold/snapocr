@@ -9,28 +9,30 @@ struct PreferencesView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            List(PreferencesSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
-                    .padding(.vertical, 3)
+            VStack(spacing: 0) {
+                PreferencesSidebarHeader()
+
+                Divider()
+
+                List(PreferencesSection.allCases, selection: $selection) { section in
+                    PreferencesSidebarLabel(section: section)
+                        .tag(section)
+                }
+                .listStyle(.sidebar)
             }
-            .listStyle(.sidebar)
-            .frame(width: 190)
+            .frame(width: 210)
 
             Divider()
 
             VStack(alignment: .leading, spacing: 0) {
-                Label(selection.title, systemImage: selection.systemImage)
-                    .font(.title2.weight(.semibold))
-                    .padding(.horizontal, 24)
-                    .padding(.top, 20)
-                    .padding(.bottom, 12)
+                PreferencesPageHeader(section: selection)
 
                 Divider()
 
                 Group {
                     switch selection {
                     case .general: GeneralPreferencesView()
+                    case .appearance: AppearancePreferencesView()
                     case .capture: CapturePreferencesView()
                     case .ocr: OCRPreferencesView()
                     case .shortcuts: ShortcutsPreferencesView()
@@ -40,37 +42,10 @@ struct PreferencesView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .background(Color(nsColor: .windowBackgroundColor))
         }
-        .frame(width: 760, height: 540)
+        .frame(width: 820, height: 580)
         .background(Color(nsColor: .windowBackgroundColor))
-    }
-}
-
-private enum PreferencesSection: String, CaseIterable, Identifiable {
-    case general, capture, ocr, shortcuts, history, developer
-
-    var id: String { rawValue }
-
-    var title: LocalizedStringKey {
-        switch self {
-        case .general: "General"
-        case .capture: "Capture"
-        case .ocr: "OCR"
-        case .shortcuts: "Shortcuts"
-        case .history: "History"
-        case .developer: "Developer"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .general: "gearshape"
-        case .capture: "camera.viewfinder"
-        case .ocr: "text.viewfinder"
-        case .shortcuts: "keyboard"
-        case .history: "clock.arrow.circlepath"
-        case .developer: "hammer"
-        }
     }
 }
 
@@ -160,13 +135,21 @@ struct CapturePreferencesView: View {
     var body: some View {
         Form {
             Section("After Capture") {
+                Text(
+                    """
+                    Area captures ask whether to copy or edit when you confirm the selection. \
+                    These settings apply to window, fullscreen, and scrolling captures.
+                    """
+                )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Open annotation editor", isOn: $openEditor)
                 Toggle("Copy image to clipboard", isOn: $copyToClipboard)
                 Toggle("Run OCR automatically", isOn: $autoOCR)
 
                 Toggle("Replace clipboard with recognized text", isOn: $copyOCRText)
                     .disabled(!autoOCR)
-                    .help("When disabled, the captured image remains on the clipboard.")
+                    .help("When enabled, recognized text is copied automatically after capture.")
             }
 
             Section("Image") {
@@ -267,69 +250,59 @@ struct HistoryPreferencesView: View {
     @AppStorage(PreferenceKeys.historySaveFullText)
     private var saveFullText = PreferenceDefaults.historySaveFullText
 
-    @State private var retentionDaysInput = String(PreferenceDefaults.historyRetentionDays)
-    @State private var maxItemsInput = String(PreferenceDefaults.historyMaxItems)
+    @State private var maxItems = PreferenceDefaults.historyMaxItems
+    @State private var retentionDays = PreferenceDefaults.historyRetentionDays
     @State private var keepIndefinitely = false
     @State private var lastFiniteRetentionDays = PreferenceDefaults.historyRetentionDays
     @State private var storageSize = PreferenceDefaults.historyStorageSize
-    @State private var confirmsPolicyChange = false
-    @State private var policyError: String?
-    
+
+    private let logger = Logger(category: "preferences")
+
     var body: some View {
         Form {
             Section("Screenshot Retention") {
-                LabeledContent("Maximum screenshots") {
-                    TextField("200", text: $maxItemsInput)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 90)
-                        .onSubmit(normalizeMaxItemsInput)
+                Stepper(value: $maxItems, in: 10...5_000, step: 1) {
+                    LabeledContent("Maximum screenshots") {
+                        Text(maxItems, format: .number)
+                            .monospacedDigit()
+                    }
                 }
-
-                if let maxItemsValidationMessage {
-                    Text(maxItemsValidationMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                .onChange(of: maxItems) { newValue in
+                    storedMaxItems = newValue
+                    applyPolicy()
                 }
 
                 Toggle("Keep indefinitely", isOn: $keepIndefinitely)
                     .onChange(of: keepIndefinitely) { forever in
                         if forever {
-                            if let value = validRetentionDays {
-                                lastFiniteRetentionDays = value
-                            }
+                            lastFiniteRetentionDays = retentionDays
+                            storedRetentionDays = 0
+                            applyPolicy()
                         } else {
-                            retentionDaysInput = String(max(lastFiniteRetentionDays, 1))
+                            retentionDays = max(lastFiniteRetentionDays, 1)
                         }
                     }
 
                 if !keepIndefinitely {
-                    LabeledContent("Retention period") {
-                        HStack(spacing: 6) {
-                            TextField("30", text: $retentionDaysInput)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 90)
-                                .onSubmit(normalizeRetentionDaysInput)
-                            Text("days")
-                                .foregroundStyle(.secondary)
+                    Stepper(value: $retentionDays, in: 1...3_650, step: 1) {
+                        LabeledContent("Retention period") {
+                            HStack(spacing: 4) {
+                                Text(retentionDays, format: .number)
+                                    .monospacedDigit()
+                                Text("days")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-
-                    if let retentionValidationMessage {
-                        Text(retentionValidationMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                    .onChange(of: retentionDays) { newValue in
+                        storedRetentionDays = newValue
+                        applyPolicy()
                     }
                 }
 
                 Text("Favourite screenshots are not removed by count or age limits.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                Button("Apply Retention Policy") {
-                    normalizeInputs()
-                    confirmsPolicyChange = true
-                }
-                .disabled(!hasPolicyChanges || !inputsAreValid)
             }
 
             Section("Storage") {
@@ -342,6 +315,10 @@ struct HistoryPreferencesView: View {
                         }
                     }
                     Slider(value: $storageSize, in: 0.1...10.0, step: 0.1)
+                }
+                .onChange(of: storageSize) { newValue in
+                    storedStorageSize = newValue
+                    applyPolicy()
                 }
             }
 
@@ -360,90 +337,18 @@ struct HistoryPreferencesView: View {
             lastFiniteRetentionDays = storedRetentionDays == 0
                 ? PreferenceDefaults.historyRetentionDays
                 : storedRetentionDays
-            retentionDaysInput = String(lastFiniteRetentionDays)
-            maxItemsInput = String(storedMaxItems)
+            retentionDays = lastFiniteRetentionDays
+            maxItems = storedMaxItems
             storageSize = storedStorageSize
         }
-        .alert("Apply History Limits?", isPresented: $confirmsPolicyChange) {
-            Button("Cancel", role: .cancel) {}
-            Button("Apply", role: .destructive) {
-                applyPolicy()
-            }
-        } message: {
-            Text("Older non-favourite screenshots exceeding the new count or age limits may be permanently removed.")
-        }
-        .alert("History Policy Error", isPresented: Binding(
-            get: { policyError != nil },
-            set: { if !$0 { policyError = nil } }
-        )) {
-            Button("OK") { policyError = nil }
-        } message: {
-            Text(policyError ?? "Unknown error")
-        }
-    }
-
-    private var hasPolicyChanges: Bool {
-        effectiveRetentionDays != storedRetentionDays
-            || validMaxItems != storedMaxItems
-            || storageSize != storedStorageSize
-    }
-
-    private var inputsAreValid: Bool {
-        validMaxItems != nil && (keepIndefinitely || validRetentionDays != nil)
-    }
-
-    private var validMaxItems: Int? {
-        guard let value = Int(maxItemsInput.trimmingCharacters(in: .whitespaces)),
-              (10...5_000).contains(value) else { return nil }
-        return value
-    }
-
-    private var validRetentionDays: Int? {
-        guard let value = Int(retentionDaysInput.trimmingCharacters(in: .whitespaces)),
-              (1...3_650).contains(value) else { return nil }
-        return value
-    }
-
-    private var effectiveRetentionDays: Int? {
-        keepIndefinitely ? 0 : validRetentionDays
-    }
-
-    private var maxItemsValidationMessage: LocalizedStringKey? {
-        validMaxItems == nil ? "Enter a whole number from 10 to 5,000." : nil
-    }
-
-    private var retentionValidationMessage: LocalizedStringKey? {
-        validRetentionDays == nil ? "Enter a whole number from 1 to 3,650 days." : nil
-    }
-
-    private func normalizeInputs() {
-        normalizeMaxItemsInput()
-        if !keepIndefinitely { normalizeRetentionDaysInput() }
-    }
-
-    private func normalizeMaxItemsInput() {
-        let parsed = Int(maxItemsInput.trimmingCharacters(in: .whitespaces)) ?? storedMaxItems
-        maxItemsInput = String(min(max(parsed, 10), 5_000))
-    }
-
-    private func normalizeRetentionDaysInput() {
-        let parsed = Int(retentionDaysInput.trimmingCharacters(in: .whitespaces)) ?? lastFiniteRetentionDays
-        let normalized = min(max(parsed, 1), 3_650)
-        lastFiniteRetentionDays = normalized
-        retentionDaysInput = String(normalized)
     }
 
     private func applyPolicy() {
-        guard let retentionDays = effectiveRetentionDays,
-              let maxItems = validMaxItems else { return }
-        storedRetentionDays = retentionDays
-        storedMaxItems = maxItems
-        storedStorageSize = storageSize
         Task {
             do {
                 try await HistoryActor.shared?.reloadConfiguredPolicyAndCleanup()
             } catch {
-                policyError = error.localizedDescription
+                logger.error("Failed to apply history retention policy: \(error.localizedDescription)")
             }
         }
     }

@@ -150,6 +150,84 @@ struct CaptureProtocolTests {
         #expect(alpha(atX: 10, y: 5, in: masked) > 0)
     }
 
+    @Test func windowCapturePolicyKeepsNormalApplicationWindows() {
+        let candidate = WindowCaptureCandidate(
+            bundleIdentifier: "com.example.browser",
+            layer: 0,
+            frame: CGRect(x: 20, y: 20, width: 1_200, height: 800),
+            isOnScreen: true
+        )
+
+        #expect(WindowCapturePolicy.isSelectable(
+            candidate,
+            currentBundleIdentifier: "com.snapglass.app",
+            systemWindowLevel: 20
+        ))
+    }
+
+    @Test func windowCapturePolicyRejectsSelfAndSystemUI() {
+        let selfWindow = WindowCaptureCandidate(
+            bundleIdentifier: "com.snapglass.app",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 700, height: 500),
+            isOnScreen: true
+        )
+        let dockWindow = WindowCaptureCandidate(
+            bundleIdentifier: "com.apple.dock",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 80),
+            isOnScreen: true
+        )
+        let menuBarWindow = WindowCaptureCandidate(
+            bundleIdentifier: "com.apple.WindowServer",
+            layer: 24,
+            frame: CGRect(x: 0, y: 0, width: 1_440, height: 28),
+            isOnScreen: true
+        )
+
+        #expect(!WindowCapturePolicy.isSelectable(
+            selfWindow,
+            currentBundleIdentifier: "com.snapglass.app",
+            systemWindowLevel: 20
+        ))
+        #expect(!WindowCapturePolicy.isSelectable(
+            dockWindow,
+            currentBundleIdentifier: "com.snapglass.app",
+            systemWindowLevel: 20
+        ))
+        #expect(!WindowCapturePolicy.isSelectable(
+            menuBarWindow,
+            currentBundleIdentifier: "com.snapglass.app",
+            systemWindowLevel: 20
+        ))
+    }
+
+    @Test func windowCapturePolicyRejectsTinyOrOffscreenWindows() {
+        let tinyWindow = WindowCaptureCandidate(
+            bundleIdentifier: "com.example.helper",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 20, height: 20),
+            isOnScreen: true
+        )
+        let offscreenWindow = WindowCaptureCandidate(
+            bundleIdentifier: "com.example.browser",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700),
+            isOnScreen: false
+        )
+
+        #expect(!WindowCapturePolicy.isSelectable(
+            tinyWindow,
+            currentBundleIdentifier: nil,
+            systemWindowLevel: 20
+        ))
+        #expect(!WindowCapturePolicy.isSelectable(
+            offscreenWindow,
+            currentBundleIdentifier: nil,
+            systemWindowLevel: 20
+        ))
+    }
+
     private func makeOpaqueImage(width: Int, height: Int) throws -> CGImage {
         guard let context = CGContext(
             data: nil,

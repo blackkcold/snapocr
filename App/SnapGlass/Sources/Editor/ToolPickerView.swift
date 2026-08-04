@@ -9,13 +9,41 @@ struct ToolPickerView: View {
     let isOCRRunning: Bool
     let ocrLineCount: Int
     let isBarcodeScanning: Bool
+    let isVerticalTrimAvailable: Bool
+    let isVerticalTrimActive: Bool
     let onPresetSelected: (AnnotationStylePreset) -> Void
+    let onVerticalTrim: () -> Void
     let onRunOCR: () -> Void
     let onCopyAllOCR: () -> Void
     let onScanBarcodes: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
+            if isVerticalTrimAvailable {
+                Button(action: onVerticalTrim) {
+                    Label("Trim Ends", systemImage: "arrow.up.and.line.horizontal.and.arrow.down")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 7)
+                .frame(height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isVerticalTrimActive ? Color.accentColor.opacity(0.18) : .clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(
+                            isVerticalTrimActive ? Color.accentColor.opacity(0.5) : .clear,
+                            lineWidth: 1
+                        )
+                )
+                .help("Adjust only the top and bottom edges of a long screenshot")
+
+                Divider()
+                    .frame(height: 22)
+            }
+
             ForEach(EditorTool.allCases) { tool in
                 toolButton(tool)
             }

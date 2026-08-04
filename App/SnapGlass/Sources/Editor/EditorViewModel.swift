@@ -22,6 +22,12 @@ public final class EditorViewModel: ObservableObject {
     /// The currently selected annotation tool.
     @Published var selectedTool: EditorTool = .select
 
+    /// Whether the current image supports the specialized long-image trim workflow.
+    let supportsVerticalTrim: Bool
+
+    /// Whether crop interaction is currently constrained to the top and bottom edges.
+    @Published private(set) var isVerticalTrimEnabled: Bool
+
     /// Current style preset. Direct control edits switch this to custom.
     @Published var selectedPreset: AnnotationStylePreset = .emphasis
 
@@ -87,11 +93,14 @@ public final class EditorViewModel: ObservableObject {
     /// - Parameter interactor: The annotation interactor to use.
     public init(
         image: CGImage? = nil,
+        context: EditorCaptureContext = .standard,
         interactor: AnnotationInteractor = AnnotationInteractor(),
         ocrPipeline: OCRPipeline = OCRPipeline(),
         barcodeEngine: VisionBarcodeEngine = VisionBarcodeEngine()
     ) {
         self.interactor = interactor
+        self.supportsVerticalTrim = context.supportsVerticalTrim
+        self.isVerticalTrimEnabled = context.startsInVerticalTrim
         self.recognizeImage = { image, options in
             try await ocrPipeline.recognize(image, options: options)
         }
@@ -100,12 +109,16 @@ public final class EditorViewModel: ObservableObject {
         }
         if let image {
             self.document = interactor.createDocument(from: image)
+            if context.startsInVerticalTrim {
+                self.selectedTool = .crop
+            }
             startOCR()
         }
     }
 
     init(
         image: CGImage? = nil,
+        context: EditorCaptureContext = .standard,
         interactor: AnnotationInteractor = AnnotationInteractor(),
         recognizeImage: @escaping @Sendable (CGImage, OCROptions) async throws -> OCRResult,
         detectBarcodes: @escaping @Sendable (CGImage, [BarcodeType]) async throws -> [BarcodeResult] = {
@@ -115,10 +128,15 @@ public final class EditorViewModel: ObservableObject {
         }
     ) {
         self.interactor = interactor
+        self.supportsVerticalTrim = context.supportsVerticalTrim
+        self.isVerticalTrimEnabled = context.startsInVerticalTrim
         self.recognizeImage = recognizeImage
         self.detectBarcodes = detectBarcodes
         if let image {
             self.document = interactor.createDocument(from: image)
+            if context.startsInVerticalTrim {
+                self.selectedTool = .crop
+            }
             startOCR()
         }
     }
@@ -148,6 +166,7 @@ public final class EditorViewModel: ObservableObject {
     // MARK: - Annotation Operations
 
     func activateTool(_ tool: EditorTool) {
+        isVerticalTrimEnabled = false
         selectedTool = tool
         if tool == .ocr {
             showsOCROverlay = true
@@ -161,6 +180,13 @@ public final class EditorViewModel: ObservableObject {
         } else if tool != .select {
             fillEnabled = false
         }
+    }
+
+    func activateVerticalTrim() {
+        guard supportsVerticalTrim else { return }
+        isVerticalTrimEnabled = true
+        selectedTool = .crop
+        selectNode(nil)
     }
 
     func setSelectedColor(_ color: Color) {
@@ -179,12 +205,17 @@ public final class EditorViewModel: ObservableObject {
     /// - Parameter node: The annotation node to add.
     public func addNode(_ node: AnnotationNode) {
         guard var doc = document else { return }
+        let completedVerticalTrim = node.tool == .crop && isVerticalTrimEnabled
         do {
             try interactor.apply(node.tool, to: &doc, node: node)
             document = doc
             selectedNodeID = node.tool == .crop ? nil : node.id
             if node.tool == .crop {
                 restartOCRForCurrentImage()
+                if completedVerticalTrim {
+                    isVerticalTrimEnabled = false
+                    selectedTool = .select
+                }
             } else {
                 selectedTool = .select
             }

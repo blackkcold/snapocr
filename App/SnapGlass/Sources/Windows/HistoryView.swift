@@ -216,7 +216,7 @@ struct HistoryView: View {
                 errorMessage = "The stored screenshot could not be decoded."
                 return
             }
-            captureViewModel.openEditor(with: image)
+            captureViewModel.openEditor(with: image, captureMode: entry.captureMode)
         } catch {
             errorMessage = error.localizedDescription
         }

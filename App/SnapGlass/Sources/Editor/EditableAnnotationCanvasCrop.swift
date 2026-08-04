@@ -2,7 +2,30 @@ import AnnotationCore
 import AppKit
 
 extension EditableAnnotationCanvasNSView {
+    func prepareVerticalCropIfNeeded() {
+        guard verticalCropOnly, currentTool == .crop, image != nil,
+              pendingCropRect.isEmpty else { return }
+        pendingCropRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+        interaction = .adjustingCrop
+        needsDisplay = true
+    }
+
     func beginCropInteraction(at point: CGPoint, clickCount: Int) {
+        if verticalCropOnly {
+            prepareVerticalCropIfNeeded()
+            if clickCount == 2, viewRect(from: pendingCropRect).contains(point) {
+                confirmPendingCrop()
+                return
+            }
+            cropInteractionStartRect = pendingCropRect
+            if let handle = cropResizeHandle(at: point) {
+                interaction = .resizingCrop(handle)
+            } else {
+                interaction = .adjustingCrop
+            }
+            return
+        }
+
         let cropViewRect = viewRect(from: pendingCropRect)
         if !pendingCropRect.isEmpty {
             if clickCount == 2, cropViewRect.contains(point) {
@@ -99,7 +122,15 @@ extension EditableAnnotationCanvasNSView {
     }
 
     private func drawCropConfirmationHint(for rect: CGRect) {
-        let hint = "Return / double-click to crop"
+        let hint = verticalCropOnly
+            ? NSLocalizedString(
+                "Drag the top or bottom edge, then press Return",
+                comment: "Long screenshot endpoint trim hint"
+            )
+            : NSLocalizedString(
+                "Return / double-click to crop",
+                comment: "Crop confirmation hint"
+            )
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.white,
@@ -127,7 +158,10 @@ extension EditableAnnotationCanvasNSView {
     }
 
     private var cropResizeHandles: [ResizeHandle] {
-        [
+        if verticalCropOnly {
+            return [.bottom, .top]
+        }
+        return [
             .bottomLeft, .bottom, .bottomRight, .right,
             .topRight, .top, .topLeft, .left,
         ]
@@ -135,6 +169,11 @@ extension EditableAnnotationCanvasNSView {
 
     private func cropResizeHandle(at point: CGPoint) -> ResizeHandle? {
         let rect = viewRect(from: pendingCropRect)
+        if verticalCropOnly {
+            if abs(point.y - rect.minY) <= 8 { return .bottom }
+            if abs(point.y - rect.maxY) <= 8 { return .top }
+            return nil
+        }
         return cropResizeHandles.first { handle in
             let center = handlePoint(handle, in: rect)
             return CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14)

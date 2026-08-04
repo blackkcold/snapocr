@@ -5,8 +5,8 @@ import AnnotationCore
 struct EditorView: View {
     @StateObject private var editorVM: EditorViewModel
 
-    init(image: CGImage) {
-        self._editorVM = StateObject(wrappedValue: EditorViewModel(image: image))
+    init(image: CGImage, context: EditorCaptureContext = .standard) {
+        self._editorVM = StateObject(wrappedValue: EditorViewModel(image: image, context: context))
     }
 
     var body: some View {
@@ -38,7 +38,10 @@ struct EditorView: View {
                 isOCRRunning: editorVM.isOCRRunning,
                 ocrLineCount: editorVM.ocrLines.count,
                 isBarcodeScanning: editorVM.isBarcodeScanning,
+                isVerticalTrimAvailable: editorVM.supportsVerticalTrim,
+                isVerticalTrimActive: editorVM.isVerticalTrimEnabled,
                 onPresetSelected: editorVM.applyPreset,
+                onVerticalTrim: editorVM.activateVerticalTrim,
                 onRunOCR: editorVM.startOCR,
                 onCopyAllOCR: editorVM.copyAllOCRText,
                 onScanBarcodes: editorVM.scanBarcodes
@@ -65,6 +68,7 @@ struct EditorView: View {
                         selectedNodeID: editorVM.selectedNodeID,
                         ocrLines: editorVM.ocrLines,
                         showsOCROverlay: editorVM.showsOCROverlay,
+                        verticalCropOnly: editorVM.isVerticalTrimEnabled,
                         onNodeCreated: { node in
                             editorVM.addNode(node)
                         },

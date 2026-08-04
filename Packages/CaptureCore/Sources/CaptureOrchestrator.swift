@@ -86,6 +86,20 @@ public final class CaptureOrchestrator: @unchecked Sendable {
         }
     }
 
+    /// Captures a lightweight still preview for a window picker.
+    ///
+    /// This path intentionally stays on ScreenCaptureKit and does not invoke the legacy
+    /// Core Graphics fallback, which would be too expensive when several previews load.
+    public func captureWindowThumbnail(
+        windowID: CGWindowID,
+        maximumSize: CGSize
+    ) async throws -> CGImage {
+        try await sckAdapter.captureWindowThumbnail(
+            windowID: windowID,
+            maximumSize: maximumSize
+        )
+    }
+
     /// 请求屏幕录制权限。
     ///
     /// macOS 15+ 弹出系统权限弹窗，旧版本跳转系统偏好设置。

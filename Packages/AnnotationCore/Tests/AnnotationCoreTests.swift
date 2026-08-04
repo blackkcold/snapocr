@@ -49,6 +49,40 @@ struct AnnotationCoreTests {
         #expect(pixel.blue > pixel.red)
     }
 
+    @Test func verticalEndpointCropKeepsFullWidth() throws {
+        let image = try makeImage(width: 300, height: 1_000)
+        let crop = AnnotationNode(
+            tool: .crop,
+            normalizedRect: CGRect(x: 0, y: 0.1, width: 1, height: 0.75)
+        )
+
+        let result = try CropTool().crop(node: crop, from: image)
+
+        #expect(result.width == 300)
+        #expect(result.height == 750)
+    }
+
+    @Test func longImagePolicyAlwaysEnablesScrollingCaptures() {
+        #expect(LongImageEditingPolicy.supportsVerticalTrim(
+            imageWidth: 1_920,
+            imageHeight: 1_080,
+            isScrollingCapture: true
+        ))
+    }
+
+    @Test func longImagePolicyUsesTwoToOneAspectRatioForOtherCaptures() {
+        #expect(LongImageEditingPolicy.supportsVerticalTrim(
+            imageWidth: 1_000,
+            imageHeight: 2_000,
+            isScrollingCapture: false
+        ))
+        #expect(!LongImageEditingPolicy.supportsVerticalTrim(
+            imageWidth: 1_920,
+            imageHeight: 1_080,
+            isScrollingCapture: false
+        ))
+    }
+
     @Test func exportPreservesOriginalResolution() throws {
         let image = try makeImage(width: 5_000, height: 20)
         let document = AnnotationDocument(baseImage: image)

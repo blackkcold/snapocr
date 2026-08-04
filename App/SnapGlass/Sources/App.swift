@@ -9,9 +9,19 @@ struct SnapGlassApp: App {
     @StateObject private var viewModel = CaptureViewModel()
     @AppStorage(PreferenceKeys.appLanguage)
     private var appLanguage = PreferenceDefaults.appLanguage
+    @AppStorage(PreferenceKeys.appearanceMode)
+    private var appearanceMode = PreferenceDefaults.appearanceMode
 
     private var locale: Locale {
         (AppLanguage(rawValue: appLanguage) ?? .system).locale
+    }
+
+    private var preferredColorScheme: ColorScheme? {
+        switch AppearanceMode(rawValue: appearanceMode) ?? .system {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
     }
     
     var body: some Scene {
@@ -19,6 +29,7 @@ struct SnapGlassApp: App {
             MenuBarView()
                 .environmentObject(viewModel)
                 .environment(\.locale, locale)
+                .preferredColorScheme(preferredColorScheme)
         } label: {
             Label("SnapGlass", systemImage: "camera.viewfinder")
                 .background {
@@ -30,6 +41,7 @@ struct SnapGlassApp: App {
             PreferencesView()
                 .toast(message: $viewModel.toastMessage)
                 .environment(\.locale, locale)
+                .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "preferences"))
         }
 
@@ -38,16 +50,18 @@ struct SnapGlassApp: App {
                 .environmentObject(viewModel)
                 .toast(message: $viewModel.toastMessage)
                 .environment(\.locale, locale)
+                .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "history"))
         }
         
         Window("Annotation Editor", id: "editor") {
             if let image = viewModel.editorImage {
-                EditorView(image: image)
+                EditorView(image: image, context: viewModel.editorContext)
                     .id(viewModel.editorSessionID)
                     .frame(minWidth: 800, minHeight: 600)
                     .toast(message: $viewModel.toastMessage)
                     .environment(\.locale, locale)
+                    .preferredColorScheme(preferredColorScheme)
                     .background(AppWindowRegistrationView(id: "editor"))
             }
         }
@@ -56,6 +70,7 @@ struct SnapGlassApp: App {
             PermissionGuideView()
                 .toast(message: $viewModel.toastMessage)
                 .environment(\.locale, locale)
+                .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "permission"))
         }
         .windowResizability(.contentSize)

@@ -36,7 +36,10 @@ public final class CaptureViewModel: ObservableObject {
 
     /// Changes whenever a different image should create a fresh editor document.
     @Published public private(set) var editorSessionID = UUID()
-    
+
+    /// Capture metadata used to configure image-specific editor affordances.
+    @Published private(set) var editorContext = EditorCaptureContext.standard
+
     /// The current toast message to display
     @Published public var toastMessage: ToastMessage?
 
@@ -65,8 +68,9 @@ public final class CaptureViewModel: ObservableObject {
     private enum CaptureDestination {
         case configured
         case clipboardOnly
+        case editorOnly
     }
-    
+
     /// Initializes a new CaptureViewModel.
     ///
     /// - Parameters:
@@ -161,15 +165,10 @@ public final class CaptureViewModel: ObservableObject {
     
     /// Triggers an area capture with interactive region selection overlay.
     public func captureArea() {
-        startAreaCapture(destination: .configured)
+        startAreaCapture()
     }
 
-    /// Captures an interactively selected area directly to the clipboard without opening the editor.
-    public func captureAreaToClipboard() {
-        startAreaCapture(destination: .clipboardOnly)
-    }
-
-    private func startAreaCapture(destination: CaptureDestination) {
+    private func startAreaCapture() {
         Task {
             guard !isCapturing else { return }
             isCapturing = true
@@ -193,6 +192,10 @@ public final class CaptureViewModel: ObservableObject {
             }
 
             guard let selection else { return }
+            let destination: CaptureDestination = switch selection.action {
+            case .copy: .clipboardOnly
+            case .edit: .editorOnly
+            }
             await performCapture(
                 mode: CaptureCore.CaptureMode.area(selection.screenRect),
                 normalizedMaskPath: selection.normalizedPath,
@@ -215,7 +218,7 @@ public final class CaptureViewModel: ObservableObject {
 
     private func startWindowCapture(destination: CaptureDestination) {
         Task {
-            guard !isCapturing else { return }
+            guard !isCapturing, !isScrollCaptureActive else { return }
             isCapturing = true
             defer { isCapturing = false }
 
@@ -226,13 +229,18 @@ public final class CaptureViewModel: ObservableObject {
 
             guard let selectedWindow = await selectWindow() else { return }
 
-            await performCapture(
-                mode: CaptureCore.CaptureMode.window(selectedWindow.windowID),
-                sourceAppName: selectedWindow.appName,
-                sourceWindowTitle: selectedWindow.windowTitle,
-                destination: destination,
-                managesCaptureState: false
-            )
+            switch selectedWindow.action {
+            case .still:
+                await performCapture(
+                    mode: CaptureCore.CaptureMode.window(selectedWindow.windowID),
+                    sourceAppName: selectedWindow.appName,
+                    sourceWindowTitle: selectedWindow.windowTitle,
+                    destination: destination,
+                    managesCaptureState: false
+                )
+            case .scrolling:
+                await beginScrollCapture(with: selectedWindow)
+            }
         }
     }
     
@@ -253,46 +261,37 @@ public final class CaptureViewModel: ObservableObject {
     /// Starts a permission-minimal scrolling capture session.
     /// The user scrolls the selected Safari or Chrome window manually between frames.
     public func startScrollCapture() {
-        Task {
-            guard !isCapturing, !isScrollCaptureActive else { return }
-            isCapturing = true
-            defer { isCapturing = false }
+        captureWindow()
+    }
 
-            guard await captureOrchestrator.checkPermissionStatus() else {
-                openWindow?("permission")
-                return
+    private func beginScrollCapture(with selectedWindow: WindowSelectionResult) async {
+        var startedSession: ScrollSession?
+        do {
+            let session = try await scrollEngine.startCapture(windowID: selectedWindow.windowID)
+            startedSession = session
+            let result = try await captureOrchestrator.capture(
+                mode: .window(selectedWindow.windowID),
+                options: Self.currentCaptureOptions()
+            )
+
+            scrollSession = session
+            scrollFrames = [ScrollFrame(image: result.image, index: 0, timestamp: result.timestamp)]
+            scrollSourceAppName = selectedWindow.appName
+            scrollSourceWindowTitle = selectedWindow.windowTitle
+            scrollCapturedFrameCount = 1
+            isScrollCaptureActive = true
+            showToast(message: "Scroll the window, then capture the next frame", type: .info)
+        } catch CaptureError.permissionDenied {
+            if let startedSession {
+                await scrollEngine.cancelCapture(session: startedSession)
             }
-
-            guard let selectedWindow = await selectWindow() else { return }
-
-            var startedSession: ScrollSession?
-            do {
-                let session = try await scrollEngine.startCapture(windowID: selectedWindow.windowID)
-                startedSession = session
-                let result = try await captureOrchestrator.capture(
-                    mode: .window(selectedWindow.windowID),
-                    options: Self.currentCaptureOptions()
-                )
-
-                scrollSession = session
-                scrollFrames = [ScrollFrame(image: result.image, index: 0, timestamp: result.timestamp)]
-                scrollSourceAppName = selectedWindow.appName
-                scrollSourceWindowTitle = selectedWindow.windowTitle
-                scrollCapturedFrameCount = 1
-                isScrollCaptureActive = true
-                showToast(message: "Scroll the window, then capture the next frame", type: .info)
-            } catch CaptureError.permissionDenied {
-                if let startedSession {
-                    await scrollEngine.cancelCapture(session: startedSession)
-                }
-                openWindow?("permission")
-            } catch {
-                if let startedSession {
-                    await scrollEngine.cancelCapture(session: startedSession)
-                }
-                resetScrollCaptureState()
-                showToast(message: error.localizedDescription, type: .error)
+            openWindow?("permission")
+        } catch {
+            if let startedSession {
+                await scrollEngine.cancelCapture(session: startedSession)
             }
+            resetScrollCaptureState()
+            showToast(message: error.localizedDescription, type: .error)
         }
     }
 
@@ -349,7 +348,8 @@ public final class CaptureViewModel: ObservableObject {
                     image,
                     captureMode: .scroll,
                     sourceAppName: sourceAppName,
-                    sourceWindowTitle: sourceWindowTitle
+                    sourceWindowTitle: sourceWindowTitle,
+                    destination: .editorOnly
                 )
             } catch {
                 showToast(message: error.localizedDescription, type: .error)
@@ -383,8 +383,9 @@ public final class CaptureViewModel: ObservableObject {
     }
 
     /// Opens a fresh annotation editor session for an image.
-    public func openEditor(with image: CGImage) {
+    public func openEditor(with image: CGImage, captureMode: String? = nil) {
         editorImage = image
+        editorContext = EditorCaptureContext(image: image, captureMode: captureMode)
         editorSessionID = UUID()
         openWindow?("editor")
     }
@@ -444,30 +445,47 @@ public final class CaptureViewModel: ObservableObject {
         historyModeOverride: String? = nil,
         destination: CaptureDestination = .configured
     ) async {
-        let shouldOpenEditor = destination == .configured && Self.boolPreference(
-            forKey: PreferenceKeys.captureOpenEditor,
-            defaultValue: PreferenceDefaults.captureOpenEditor
-        )
-        let shouldCopyImage = destination == .clipboardOnly || Self.boolPreference(
-            forKey: PreferenceKeys.captureCopyToClipboard,
-            defaultValue: PreferenceDefaults.captureCopyToClipboard
-        )
-
-        showToast(
-            message: NSLocalizedString(
-                destination == .clipboardOnly ? "Screenshot copied to clipboard" : "Capture successful",
-                comment: "Capture completion toast"
-            ),
-            type: .success
-        )
+        let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
+        let shouldOpenEditor: Bool
+        let shouldCopyImage: Bool
+        switch destination {
+        case .configured:
+            shouldOpenEditor = Self.boolPreference(
+                forKey: PreferenceKeys.captureOpenEditor,
+                defaultValue: PreferenceDefaults.captureOpenEditor
+            )
+            shouldCopyImage = Self.boolPreference(
+                forKey: PreferenceKeys.captureCopyToClipboard,
+                defaultValue: PreferenceDefaults.captureCopyToClipboard
+            )
+        case .clipboardOnly:
+            shouldOpenEditor = false
+            shouldCopyImage = true
+        case .editorOnly:
+            shouldOpenEditor = true
+            shouldCopyImage = false
+        }
 
         if shouldOpenEditor {
-            openEditor(with: image)
+            openEditor(with: image, captureMode: modeDescription)
         }
 
-        if shouldCopyImage {
-            copyImageToClipboard(image)
+        let imageCopySucceeded = !shouldCopyImage || writeImageToClipboard(image)
+        let completionMessage: String
+        if !imageCopySucceeded {
+            completionMessage = NSLocalizedString("Unable to copy image", comment: "Capture copy failure")
+        } else if destination == .clipboardOnly {
+            completionMessage = NSLocalizedString(
+                "Screenshot copied to clipboard",
+                comment: "Direct capture copy success"
+            )
+        } else {
+            completionMessage = NSLocalizedString("Capture successful", comment: "Capture completion")
         }
+        showToast(
+            message: completionMessage,
+            type: imageCopySucceeded ? .success : .error
+        )
 
         let barcodeResults = shouldOpenEditor ? await detectBarcodesForSuggestion(in: image) : []
 
@@ -475,7 +493,7 @@ public final class CaptureViewModel: ObservableObject {
             forKey: PreferenceKeys.captureAutoOCR,
             defaultValue: PreferenceDefaults.captureAutoOCR
         )
-        let shouldCopyOCRText = destination == .configured && Self.boolPreference(
+        let shouldCopyOCRText = destination != .clipboardOnly && Self.boolPreference(
             forKey: PreferenceKeys.captureCopyOCRText,
             defaultValue: PreferenceDefaults.captureCopyOCRText
         )
@@ -496,37 +514,56 @@ public final class CaptureViewModel: ObservableObject {
             defaultValue: PreferenceDefaults.historySaveFullText
         )
 
-        if autoSave {
+        let shouldSaveToHistory = switch destination {
+        case .configured: autoSave
+        case .clipboardOnly: imageCopySucceeded
+        case .editorOnly: true
+        }
+        if shouldSaveToHistory {
             let textToStore = saveFullText ? (ocrResult?.text ?? "") : ""
             let confidence = ocrResult?.confidence ?? 0
-            let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
-            let sourceAppName = sourceAppName
-            let sourceWindowTitle = sourceWindowTitle
+            scheduleHistorySave(
+                image: image,
+                textContent: textToStore,
+                confidence: confidence,
+                captureMode: modeDescription,
+                sourceAppName: sourceAppName,
+                sourceWindowTitle: sourceWindowTitle
+            )
+        }
+    }
 
-            Task(priority: .utility) { [weak self] in
-                let logger = Logger(category: "capture")
-                guard let history = HistoryActor.shared else {
-                    logger.error("HistoryActor unavailable, auto-save skipped")
-                    await MainActor.run {
-                        self?.showToast(message: "History unavailable; capture not saved", type: .error)
-                    }
-                    return
+    private func scheduleHistorySave(
+        image: CGImage,
+        textContent: String,
+        confidence: Float,
+        captureMode: String,
+        sourceAppName: String?,
+        sourceWindowTitle: String?
+    ) {
+        Task.detached(priority: .utility) { [weak self] in
+            let logger = Logger(category: "capture")
+            guard let history = HistoryActor.shared else {
+                logger.error("HistoryActor unavailable, save skipped")
+                await MainActor.run {
+                    self?.showToast(message: "History unavailable; capture not saved", type: .error)
                 }
-                do {
-                    try await history.saveCapture(
-                        image: image,
-                        textContent: textToStore,
-                        ocrConfidence: confidence,
-                        captureMode: modeDescription,
-                        sourceType: .screenshot,
-                        sourceAppName: sourceAppName,
-                        sourceWindowTitle: sourceWindowTitle
-                    )
-                } catch {
-                    logger.error("Auto-save failed: \(error.localizedDescription)")
-                    await MainActor.run {
-                        self?.showToast(message: "History save failed", type: .error)
-                    }
+                return
+            }
+            do {
+                try await history.saveCapture(
+                    image: image,
+                    textContent: textContent,
+                    ocrConfidence: confidence,
+                    captureMode: captureMode,
+                    sourceType: .screenshot,
+                    sourceAppName: sourceAppName,
+                    sourceWindowTitle: sourceWindowTitle
+                )
+            } catch {
+                logger.error("History save failed: \(error.localizedDescription)")
+                await MainActor.run {
+                    self?.showToast(message: "History save failed", type: .error)
                 }
             }
         }
@@ -642,13 +679,13 @@ public final class CaptureViewModel: ObservableObject {
         }
     }
 
-    private func copyImageToClipboard(_ image: CGImage) {
+    private func writeImageToClipboard(_ image: CGImage) -> Bool {
         let nsImage = NSImage(
             cgImage: image,
             size: NSSize(width: image.width, height: image.height)
         )
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([nsImage])
+        return NSPasteboard.general.writeObjects([nsImage])
     }
 
     private func detectBarcodesForSuggestion(in image: CGImage) async -> [BarcodeResult] {

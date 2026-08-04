@@ -23,6 +23,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     let selectedNodeID: UUID?
     let ocrLines: [OCRLine]
     let showsOCROverlay: Bool
+    let verticalCropOnly: Bool
     var onNodeCreated: (AnnotationNode) -> Void
     var onNodeUpdated: (AnnotationNode) -> Void
     var onSelectionChanged: (UUID?) -> Void
@@ -40,6 +41,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     func updateNSView(_ view: EditableAnnotationCanvasNSView, context: Context) {
         view.image = image
         view.nodes = nodes
+        view.verticalCropOnly = verticalCropOnly
         view.currentTool = tool
         view.currentColor = color
         view.currentLineWidth = lineWidth
@@ -72,7 +74,9 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
 }
 
 final class EditableAnnotationCanvasNSView: NSView {
-    var image: CGImage?
+    var image: CGImage? {
+        didSet { prepareVerticalCropIfNeeded() }
+    }
     var nodes: [AnnotationNode] = []
     var currentTool: EditorTool = .select {
         didSet {
@@ -82,7 +86,16 @@ final class EditableAnnotationCanvasNSView: NSView {
             if oldValue == .crop, currentTool != .crop {
                 cancelPendingCrop()
             }
+            prepareVerticalCropIfNeeded()
             window?.invalidateCursorRects(for: self)
+        }
+    }
+    var verticalCropOnly = false {
+        didSet {
+            if oldValue != verticalCropOnly {
+                cancelPendingCrop()
+            }
+            prepareVerticalCropIfNeeded()
         }
     }
     var currentColor = CGColor(red: 1, green: 0, blue: 0, alpha: 1)
