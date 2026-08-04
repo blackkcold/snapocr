@@ -44,6 +44,8 @@ struct SnapGlassApp: App {
                 .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "preferences"))
         }
+        .defaultSize(width: PreferencesSpacing.idealWindowWidth, height: PreferencesSpacing.idealWindowHeight)
+        .windowResizability(.contentMinSize)
 
         Window("History", id: "history") {
             HistoryView()

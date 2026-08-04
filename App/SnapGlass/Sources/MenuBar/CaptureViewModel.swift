@@ -743,16 +743,31 @@ public final class CaptureViewModel: ObservableObject {
             forKey: PreferenceKeys.ocrLanguagePriority,
             defaultValue: PreferenceDefaults.ocrLanguagePriority
         )
-        let languages: [String]
+
+        let enabledLanguages = UserDefaults.standard.stringArray(
+            forKey: PreferenceKeys.ocrEnabledLanguages
+        ) ?? PreferenceDefaults.ocrEnabledLanguages
+
+        // The priority language is hoisted to the front; remaining enabled
+        // languages follow in their stored order, deduplicated and filtered.
+        var priorityCode: String?
         switch languagePreference {
-        case "en":
-            languages = ["en-US", "zh-Hans"]
-        case "zh":
-            languages = ["zh-Hans", "en-US"]
-        default:
-            languages = ["zh-Hans", "en-US"]
+        case "en": priorityCode = "en"
+        case "zh": priorityCode = "zh-Hans"
+        case "ja": priorityCode = "ja"
+        case "ko": priorityCode = "ko"
+        default: priorityCode = nil
         }
 
+        var ordered: [String] = []
+        if let priorityCode, enabledLanguages.contains(priorityCode) {
+            ordered.append(priorityCode)
+        }
+        for code in enabledLanguages where !ordered.contains(code) {
+            ordered.append(code)
+        }
+
+        let languages: [String] = ordered.map(Self.visionLanguageCode)
         let enginePreference = stringPreference(
             forKey: PreferenceKeys.ocrEngine,
             defaultValue: PreferenceDefaults.ocrEngine
@@ -771,6 +786,16 @@ public final class CaptureViewModel: ObservableObject {
             minConfidence: Float(min(max(threshold, 0), 1)),
             engineSelection: engine
         )
+    }
+
+    /// Maps a compact language code to the Vision-framework identifier used for OCR.
+    private static func visionLanguageCode(_ code: String) -> String {
+        switch code {
+        case "en": return "en-US"
+        case "ja": return "ja-JP"
+        case "ko": return "ko-KR"
+        default: return code
+        }
     }
 
     private static func stringPreference(forKey key: String, defaultValue: String) -> String {

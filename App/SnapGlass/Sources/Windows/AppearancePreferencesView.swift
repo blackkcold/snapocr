@@ -6,27 +6,26 @@ struct AppearancePreferencesView: View {
     private var appearanceMode = PreferenceDefaults.appearanceMode
 
     var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 12) {
-                    ForEach(AppearanceMode.allCases) { mode in
-                        AppearanceOptionButton(
-                            mode: mode,
-                            isSelected: appearanceMode == mode.rawValue
-                        ) {
-                            appearanceMode = mode.rawValue
+        ScrollView {
+            PreferencesCardGrid {
+                PreferencesCard {
+                    PreferencesCardHeader(systemImage: "paintpalette", title: "Theme")
+
+                    HStack(spacing: 12) {
+                        ForEach(AppearanceMode.allCases) { mode in
+                            AppearanceOptionButton(
+                                mode: mode,
+                                isSelected: appearanceMode == mode.rawValue
+                            ) {
+                                appearanceMode = mode.rawValue
+                            }
                         }
                     }
-                }
 
-                Text("Changes apply immediately to every SnapGlass window.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Label("Theme", systemImage: "paintpalette")
+                    PreferencesCardCaption(text: "Changes apply immediately to every SnapGlass window.")
+                }
             }
         }
-        .padding()
     }
 }
 

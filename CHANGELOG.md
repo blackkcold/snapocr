@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-04
+
+### Added
+- 设置窗口支持自由调整大小，卡片网格随窗口宽度在单列与双列间自适应重排
+- 设置窗口外圈圆角遵循 macOS 26 同心圆设计，低版本按窗口宽度等比缩放圆角
+- 侧栏支持折叠与展开，窄窗口下让出更多内容空间
+- OCR 语言支持多选启用，可关闭近似语言（如日文汉字与中文汉字）以减少误识别
+- OCR 新增语言优先识别（Automatic / English / Chinese / Japanese / Korean First）
+- 界面语言新增 Japanese 与 Korean
+- 历史记录页面新增存储用量仪表盘：条目数、收藏数、平均置信度、磁盘占用与截图模式分布
+
+### Fixed
+- 修复设置窗口圆角与响应式布局在调整窗口大小后不生效的问题
+
 ## [0.3.0] - 2026-08-04
 
 ### Added
@@ -129,7 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Liquid Glass UI support (macOS 26+) with material fallback
 - Memory pressure monitoring and automatic degradation
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/blackkcold/snapocr/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/blackkcold/snapocr/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/blackkcold/snapocr/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/blackkcold/snapocr/compare/v0.1.5...v0.2.0

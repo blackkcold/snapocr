@@ -4,6 +4,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case system
     case english
     case simplifiedChinese
+    case japanese
+    case korean
 
     var id: String { rawValue }
 
@@ -15,6 +17,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             Locale(identifier: "en")
         case .simplifiedChinese:
             Locale(identifier: "zh-Hans")
+        case .japanese:
+            Locale(identifier: "ja")
+        case .korean:
+            Locale(identifier: "ko")
         }
     }
 }

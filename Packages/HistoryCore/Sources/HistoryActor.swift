@@ -512,7 +512,43 @@ public actor HistoryActor: HistoryProtocol {
 
     /// Reloads user-configured history limits and immediately applies them.
     /// Favourite entries remain protected from age/count cleanup.
-    public func reloadConfiguredPolicyAndCleanup() async throws {
+    public func stats() async throws -> HistoryStats {
+    let persisted = allPersistedEntries().values
+    let totalCount = persisted.count
+
+    var modeDistribution: [String: Int] = [:]
+    for entry in persisted {
+      let mode = entry.captureMode.isEmpty ? "unknown" : entry.captureMode
+      modeDistribution[mode, default: 0] += 1
+    }
+
+    let favouriteCount = persisted.filter(\.isFavourite).count
+
+    let totalConfidence = persisted.reduce(Float(0)) { $0 + $1.ocrConfidence }
+    let averageConfidence = totalCount > 0 ? totalConfidence / Float(totalCount) : 0
+
+    var totalSize: UInt64 = 0
+    for directory in [entriesDir, imagesDir, thumbsDir] {
+      if let files = try? FileManager.default.contentsOfDirectory(
+        at: directory, includingPropertiesForKeys: [.fileSizeKey]
+      ) {
+        for file in files {
+          let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+          totalSize += UInt64(size)
+        }
+      }
+    }
+
+    return HistoryStats(
+      totalCount: totalCount,
+      favouriteCount: favouriteCount,
+      captureModeDistribution: modeDistribution,
+      totalSizeBytes: totalSize,
+      averageConfidence: averageConfidence
+    )
+  }
+
+  public func reloadConfiguredPolicyAndCleanup() async throws {
         let policy = Self.configuredCleanupPolicy()
         cleanupPolicy = policy
         maxEntries = policy.maxEntries

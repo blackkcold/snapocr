@@ -17,6 +17,7 @@ public enum PreferenceKeys {
     public static let captureJPEGQuality = "capture_jpegQuality"
 
     public static let ocrLanguagePriority = "ocr_languagePriority"
+    public static let ocrEnabledLanguages = "ocr_enabledLanguages"
     public static let ocrConfidenceThreshold = "ocr_confidenceThreshold"
     public static let ocrEngine = "ocr_engine"
 
@@ -49,6 +50,7 @@ public enum PreferenceDefaults {
     public static let captureJPEGQuality = 0.9
 
     public static let ocrLanguagePriority = "auto"
+    public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]
     public static let ocrConfidenceThreshold = 0.8
     public static let ocrEngine = "vision"
 

@@ -65,6 +65,49 @@ struct HistoryStorageV2Tests {
     #expect(count == 2)
   }
 
+  @Test func statsAggregatesEntries() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("snapglass-history-stats-test-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let policy = CleanupPolicy(
+      maxEntries: 100,
+      retentionDays: [.image: 30, .text: 30, .thumbnail: 30],
+      maxCount: [.image: 100, .text: 100, .thumbnail: 100]
+    )
+    let history = try HistoryActor(cleanupPolicy: policy, baseURL: root)
+
+    try await history.save(HistoryEntry(
+      textContent: "a", ocrConfidence: 0.5, captureMode: "area"
+    ))
+    try await history.save(HistoryEntry(
+      textContent: "b", ocrConfidence: 1.0, captureMode: "window", isFavourite: true
+    ))
+    try await history.save(HistoryEntry(
+      textContent: "c", ocrConfidence: 0.75, captureMode: "area"
+    ))
+
+    let stats = try await history.stats()
+    #expect(stats.totalCount == 3)
+    #expect(stats.favouriteCount == 1)
+    #expect(stats.captureModeDistribution["area"] == 2)
+    #expect(stats.captureModeDistribution["window"] == 1)
+    #expect(stats.averageConfidence == 0.75)
+  }
+
+  @Test func statsEmptyHistory() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("snapglass-history-stats-empty-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let history = try HistoryActor(cleanupPolicy: CleanupPolicy(), baseURL: root)
+
+    let stats = try await history.stats()
+    #expect(stats.totalCount == 0)
+    #expect(stats.favouriteCount == 0)
+    #expect(stats.captureModeDistribution.isEmpty)
+    #expect(stats.totalSizeBytes == 0)
+    #expect(stats.averageConfidence == 0)
+  }
+
   @Test func removesEntireExpiredNonFavouriteEntry() async throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("snapglass-history-age-test-\(UUID().uuidString)")

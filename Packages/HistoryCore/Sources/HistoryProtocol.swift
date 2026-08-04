@@ -74,6 +74,44 @@ public protocol HistoryProtocol: Sendable {
     ///   - format: 导出格式
     /// - Returns: 导出数据
     func export(ids: [UUID], format: HistoryExportFormat) async throws -> Data
+
+    /// 获取历史记录统计快照
+    ///
+    /// 返回条目总数、收藏数、截图模式分布、磁盘占用与平均置信度，
+    /// 供设置界面绘制存储用量图表。
+    ///
+    /// - Returns: 当前历史记录的统计快照
+    func stats() async throws -> HistoryStats
+}
+
+/// 历史记录统计快照
+///
+/// 用于设置界面展示存储用量与条目分布的可视化信息。
+public struct HistoryStats: Sendable, Equatable {
+    /// 条目总数
+    public let totalCount: Int
+    /// 收藏条目数
+    public let favouriteCount: Int
+    /// 各截图模式的条目数
+    public let captureModeDistribution: [String: Int]
+    /// 磁盘占用总字节数（entries + images + thumbs）
+    public let totalSizeBytes: UInt64
+    /// 平均 OCR 置信度（0–1），无条目时为 0
+    public let averageConfidence: Float
+
+    public init(
+        totalCount: Int,
+        favouriteCount: Int,
+        captureModeDistribution: [String: Int],
+        totalSizeBytes: UInt64,
+        averageConfidence: Float
+    ) {
+        self.totalCount = totalCount
+        self.favouriteCount = favouriteCount
+        self.captureModeDistribution = captureModeDistribution
+        self.totalSizeBytes = totalSizeBytes
+        self.averageConfidence = averageConfidence
+    }
 }
 
 /// 历史导出格式
