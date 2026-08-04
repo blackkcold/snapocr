@@ -59,18 +59,25 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           NOTES_FILE="release-notes.md"
 
-          # 从 CHANGELOG.md 提取对应版本条目
-          awk -v ver="## [${VERSION}]" '
-            $0 ~ "^## \\[Unreleased\\]" { next }
-            $0 ~ "^## \\[" { in_section = ($0 ~ ver) }
+          # 从 CHANGELOG.md 提取对应版本条目（精确匹配 ## [VERSION] - YYYY-MM-DD）
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\] " { in_section = 1; print; next }
+            in_section && $0 ~ "^## \\[" { exit }
             in_section { print }
           ' CHANGELOG.md > "$NOTES_FILE"
+
+          # 动态解析上一个 tag（当前 tag 的父提交上的最近 tag）
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")"
 
           # 追加 Full Changelog 链接
           echo "" >> "$NOTES_FILE"
           echo "---" >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
-          echo "**Full Changelog**: https://github.com/blackkcold/snapocr/compare/v0.1.5...${TAG}" >> "$NOTES_FILE"
+          if [ -n "$PREV_TAG" ]; then
+            echo "**Full Changelog**: https://github.com/blackkcold/snapocr/compare/${PREV_TAG}...${TAG}" >> "$NOTES_FILE"
+          else
+            echo "**Release**: https://github.com/blackkcold/snapocr/releases/tag/${TAG}" >> "$NOTES_FILE"
+          fi
 
           echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
