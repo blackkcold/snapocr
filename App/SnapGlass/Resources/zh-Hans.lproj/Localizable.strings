@@ -162,3 +162,171 @@
 "Adjust only the top and bottom edges of a long screenshot" = "仅调整长截图的顶部和底部边界";
 "Drag the top or bottom edge, then press Return" = "拖动顶部或底部边界，然后按回车确认";
 "Return / double-click to crop" = "按回车或双击确认裁剪";
+
+// MARK: - Menu Bar
+
+"Capture Next Scroll Frame (%d)" = "截图下一滚动帧（%d）";
+
+// MARK: - Permission Guide
+
+"Permission granted" = "已授予权限";
+"Screen Capture Required" = "需要屏幕录制权限";
+"SnapGlass needs screen recording permission to capture screenshots and perform OCR." = "SnapGlass 需要屏幕录制权限才能进行截图和文字识别。";
+"Open System Settings" = "打开系统设置";
+"Remind Later" = "稍后再说";
+"Requesting permission..." = "正在请求权限…";
+"Please manually enable screen recording permission in System Settings." = "请在系统设置中手动开启屏幕录制权限。";
+"Permission Denied" = "权限被拒绝";
+"Permission granted. You can now use screen capture." = "权限已授予，现在可以进行截图。";
+
+// MARK: - Annotation Editor
+
+"Add" = "添加";
+"Copy" = "复制";
+"Save" = "保存";
+"Add Text" = "添加文字";
+"Text" = "文字";
+"Loading image…" = "正在加载图片…";
+"Undo (⌘Z)" = "撤销（⌘Z）";
+"Redo (⇧⌘Z)" = "重做（⇧⌘Z）";
+"Show or hide recognized text regions" = "显示或隐藏识别出的文字区域";
+"Copy annotated image to clipboard" = "将标注后的图片复制到剪贴板";
+"Appearance" = "外观";
+"Stroke" = "描边";
+"Width" = "宽度";
+"Opacity" = "不透明度";
+"Stroke style" = "描边样式";
+"Fill / text background" = "填充 / 文字背景";
+"Fill color" = "填充颜色";
+"Rectangle" = "矩形";
+"Corner radius" = "圆角半径";
+"Arrowhead" = "箭头样式";
+"Font" = "字体";
+"Size" = "大小";
+"Alignment" = "对齐";
+"Left" = "左对齐";
+"Center" = "居中";
+"Right" = "右对齐";
+"Edit Text" = "编辑文字";
+"Blur" = "模糊";
+"Mode" = "模式";
+"Gaussian" = "高斯";
+"Pixelate" = "像素化";
+"Mosaic" = "马赛克";
+"Intensity" = "强度";
+"Edit %@" = "编辑%@";
+"New %@" = "新建%@";
+"Annotation" = "标注";
+"Changes apply immediately" = "更改会立即生效";
+"Used for the next annotation" = "用于下一个标注";
+"Duplicate" = "复制";
+"Delete selected annotation" = "删除所选标注";
+"Send backward" = "下移一层";
+"Bring forward" = "上移一层";
+"Select" = "选择";
+"Arrow" = "箭头";
+"Pen" = "画笔";
+"Highlight" = "高亮";
+"Crop" = "裁剪";
+"OCR Text" = "OCR 文字";
+"Emphasis" = "强调";
+"Note" = "批注";
+"Subtle" = "柔和";
+"Monochrome" = "单色";
+"Custom" = "自定义";
+"Preset" = "预设";
+"Annotation color" = "标注颜色";
+"Stroke width" = "描边宽度";
+"Recognizing text" = "正在识别文字";
+"Run OCR again" = "重新进行文字识别";
+"Copy all recognized text" = "复制全部识别文字";
+
+// MARK: - History
+
+"History Error" = "历史记录错误";
+"Unknown error" = "未知错误";
+"Search history…" = "搜索历史记录…";
+"No results found" = "未找到结果";
+"Try a different search term" = "尝试换一个搜索词";
+"Check the application support folder permissions" = "请检查应用程序支持文件夹的权限";
+"Delete" = "删除";
+"Open in Editor" = "在编辑器中打开";
+"Copy Text" = "复制文字";
+"Export" = "导出";
+"Clear All" = "清空全部";
+"Export as JSON" = "导出为 JSON";
+"Export as CSV" = "导出为 CSV";
+"Export as Plaintext" = "导出为纯文本";
+"Clear All History?" = "清空全部历史记录？";
+"Clear" = "清空";
+"This will permanently delete all %d history entries." = "这将永久删除全部 %d 条历史记录。";
+"No text detected" = "未检测到文字";
+"The original screenshot is no longer available. It may have been removed by the retention policy." = "原始截图已不可用，可能已被保留策略删除。";
+"The stored screenshot could not be decoded." = "无法解码存储的截图。";
+
+// MARK: - Storage Dashboard
+
+"Storage Overview" = "存储概览";
+"Refresh" = "刷新";
+"Loading history statistics…" = "正在加载历史统计…";
+"History statistics unavailable." = "历史统计不可用。";
+"Entries" = "条目数";
+"Favourites" = "收藏数";
+"Avg. confidence" = "平均置信度";
+"Storage used" = "已用存储";
+"No captures yet." = "暂无截图。";
+"Capture modes" = "截图模式";
+"of %@ GB limit" = "（上限 %@ GB）";
+
+// MARK: - Preferences
+
+"Version" = "版本";
+"items" = "条";
+"Global Shortcuts" = "全局快捷键";
+"Reset All" = "全部重置";
+"Enabled Languages" = "已启用的语言";
+"Japanese" = "日语";
+"Korean" = "韩语";
+"Japanese First" = "日语优先";
+"Korean First" = "韩语优先";
+"On" = "开启";
+"Off" = "关闭";
+"Capacity" = "容量";
+
+// MARK: - Sidebar & Window
+
+"Expand sidebar" = "展开侧边栏";
+"Collapse sidebar" = "收起侧边栏";
+
+// MARK: - Window Picker
+
+"Select Window" = "选择窗口";
+"Unknown App" = "未知应用";
+"Untitled" = "无标题";
+
+// MARK: - Routing
+
+"URL Scheme & App Intents" = "URL Scheme 与应用指令";
+"Automate SnapGlass via URL Scheme and Shortcuts" = "通过 URL Scheme 和快捷指令自动化控制 SnapGlass";
+"Registered URL Schemes" = "已注册的 URL Scheme";
+"Available Shortcuts Actions" = "可用的快捷指令操作";
+"Routing Status" = "路由状态";
+"Capture Area" = "区域截图";
+"Capture Fullscreen" = "全屏截图";
+"Area screenshot" = "区域截图";
+"Fullscreen screenshot" = "全屏截图";
+"OCR Image" = "图片文字识别";
+"Recognize text in image" = "识别图片中的文字";
+"Scan barcode / QR code" = "扫描条码 / 二维码";
+"Search History" = "搜索历史记录";
+"Search screenshot history" = "搜索截图历史记录";
+"Waiting for incoming URL..." = "等待传入的 URL…";
+"Processing: %@" = "处理中：%@";
+"Error: %@" = "错误：%@";
+"Capture complete: %@" = "截图完成：%@";
+"OCR complete:\n%@" = "文字识别完成：\n%@";
+"Barcode scan: %@" = "条码扫描：%@";
+"Command received: %@" = "已接收命令：%@";
+"File not found: %@" = "未找到文件：%@";
+"No barcode detected in the image" = "未在图片中检测到条码";
+"Failed to save screenshot: %@" = "截图保存失败：%@";

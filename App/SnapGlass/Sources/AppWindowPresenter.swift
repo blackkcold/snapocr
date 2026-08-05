@@ -33,7 +33,7 @@ private final class AppWindowRegistry {
     }
 
     private var windows: [String: WeakWindow] = [:]
-    private var observedWindows: [ObjectIdentifier: Void] = [:]
+    private var observedWindows: [ObjectIdentifier: NSObjectProtocol] = [:]
 
     func register(_ window: NSWindow?, id: String) {
         if let window {
@@ -66,9 +66,8 @@ private final class AppWindowRegistry {
     private func observeWindowClose(_ window: NSWindow) {
         let token = ObjectIdentifier(window)
         guard observedWindows[token] == nil else { return }
-        observedWindows[token] = ()
 
-        NotificationCenter.default.addObserver(
+        let observer = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
@@ -80,7 +79,12 @@ private final class AppWindowRegistry {
             if !stillOpen {
                 NSApplication.shared.setActivationPolicy(.accessory)
             }
+            Self.shared.windows = Self.shared.windows.filter { $0.value.value !== window }
+            if let observer = Self.shared.observedWindows.removeValue(forKey: token) {
+                NotificationCenter.default.removeObserver(observer)
+            }
         }
+        observedWindows[token] = observer
     }
 }
 

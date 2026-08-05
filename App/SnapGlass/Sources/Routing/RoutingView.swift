@@ -56,10 +56,10 @@ struct RoutingView: View {
             switch command {
             case .capture(let mode, _):
                 let result = try await executeCapture(mode: mode)
-                let message = "截图完成: \(result)"
+                let message = String(format: String(localized: "Capture complete: %@"), result)
 
                 if routeResult.ocrAfterCapture, let outputPath = result.split(separator: "\n").last {
-                    let path = String(outputPath.dropFirst("文件: ".count))
+                    let path = String(outputPath.dropFirst("File: ".count))
                     let ocrResult = try await executeOCR(file: path)
                     routingStatus = .completed("\(message)\nOCR: \(ocrResult)")
                 } else {
@@ -68,14 +68,14 @@ struct RoutingView: View {
 
             case .ocr(let file, _, _, _, _):
                 let text = try await executeOCR(file: file)
-                routingStatus = .completed("OCR 识别完成:\n\(text)")
+                routingStatus = .completed(String(format: String(localized: "OCR complete:\n%@"), text))
 
             case .barcode(let file, _, _):
                 let content = try await executeBarcode(file: file)
-                routingStatus = .completed("条码扫描: \(content)")
+                routingStatus = .completed(String(format: String(localized: "Barcode scan: %@"), content))
 
             default:
-                routingStatus = .completed("命令已接收: \(command)")
+                routingStatus = .completed(String(format: String(localized: "Command received: %@"), command))
             }
         } catch {
             routingStatus = .error(error.localizedDescription)
@@ -102,7 +102,7 @@ struct RoutingView: View {
             .appendingPathComponent("snapglass-url-\(UUID().uuidString).png")
         try saveCGImage(result.image, to: tempURL)
 
-        return "文件: \(tempURL.path)"
+        return "File: \(tempURL.path)"
     }
 
     private func executeOCR(file: String) async throws -> String {
@@ -158,7 +158,7 @@ extension RoutingView {
         VStack(alignment: .leading, spacing: 4) {
             Text("URL Scheme & App Intents")
                 .font(.headline)
-            Text("通过 URL Scheme 和 Shortcuts 自动化控制 SnapGlass")
+            Text("Automate SnapGlass via URL Scheme and Shortcuts")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -196,11 +196,11 @@ extension RoutingView {
                 .fontWeight(.medium)
 
             VStack(alignment: .leading, spacing: 6) {
-                ShortcutRow(icon: "camera.viewfinder", title: "Capture Area", subtitle: "区域截图")
-                ShortcutRow(icon: "rectangle.dashed", title: "Capture Fullscreen", subtitle: "全屏截图")
-                ShortcutRow(icon: "text.viewfinder", title: "OCR Image", subtitle: "图片文字识别")
-                ShortcutRow(icon: "qrcode", title: "Scan Barcode", subtitle: "扫描条码/二维码")
-                ShortcutRow(icon: "magnifyingglass", title: "Search History", subtitle: "搜索截图历史")
+                ShortcutRow(icon: "camera.viewfinder", title: String(localized: "Capture Area"), subtitle: String(localized: "Area screenshot"))
+                ShortcutRow(icon: "rectangle.dashed", title: String(localized: "Capture Fullscreen"), subtitle: String(localized: "Fullscreen screenshot"))
+                ShortcutRow(icon: "text.viewfinder", title: String(localized: "OCR Image"), subtitle: String(localized: "Recognize text in image"))
+                ShortcutRow(icon: "qrcode", title: String(localized: "Scan Barcode"), subtitle: String(localized: "Scan barcode / QR code"))
+                ShortcutRow(icon: "magnifyingglass", title: String(localized: "Search History"), subtitle: String(localized: "Search screenshot history"))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -214,7 +214,7 @@ extension RoutingView {
 
             switch routingStatus {
             case .idle:
-                Text("等待 incoming URL...")
+                Text("Waiting for incoming URL...")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -223,7 +223,7 @@ extension RoutingView {
                     ProgressView()
                         .scaleEffect(0.7)
                         .frame(width: 14, height: 14)
-                    Text("处理中: \(routingCommand)")
+                    Text(String(format: String(localized: "Processing: %@"), routingCommand))
                         .font(.caption)
                 }
 
@@ -233,7 +233,7 @@ extension RoutingView {
                     .foregroundColor(.green)
 
             case .error(let detail):
-                Text("错误: \(detail)")
+                Text(String(format: String(localized: "Error: %@"), detail))
                     .font(.caption)
                     .foregroundColor(.red)
             }
@@ -278,9 +278,9 @@ enum RoutingError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .fileNotFound(let path): return "文件未找到: \(path)"
-        case .noBarcodeFound: return "未在图片中检测到条码"
-        case .saveFailed(let path): return "截图保存失败: \(path)"
+        case .fileNotFound(let path): return String(format: String(localized: "File not found: %@"), path)
+        case .noBarcodeFound: return String(localized: "No barcode detected in the image")
+        case .saveFailed(let path): return String(format: String(localized: "Failed to save screenshot: %@"), path)
         }
     }
 }

@@ -35,8 +35,15 @@ public actor HistoryActor: HistoryProtocol {
 
     // MARK: - State
 
-    /// 内存缓存
+    /// 内存缓存（热缓存，可被内存压力驱逐）
     private var entries: [UUID: HistoryEntry] = [:]
+
+    /// 磁盘快照缓存（权威磁盘状态，仅在磁盘写入/删除时失效）。
+    ///
+    /// 避免每次 `allPersistedEntries()` 都全量重读并解密所有 `.enc` 文件，
+    /// 将历史操作从 O(n) 磁盘+解密降为 O(1) 内存合并。单进程内保持与磁盘一致；
+    /// 跨进程（CLI）写入需重启进程后才会反映到本缓存。
+    private var diskCache: [UUID: HistoryEntry] = [:]
 
     /// 加密服务（struct，避免 actor 嵌套死锁 R14）
     private let cryptoService: CryptoService
@@ -100,6 +107,7 @@ public actor HistoryActor: HistoryProtocol {
             }
         }
         self.entries = loaded
+        self.diskCache = loaded
         logger.info("HistoryActor 初始化完成，已加载 \(entries.count) 条记录")
     }
 
@@ -189,6 +197,7 @@ public actor HistoryActor: HistoryProtocol {
         }
 
         entries[entry.id] = mutableEntry
+        invalidateDiskCache()
         committed = true
         logger.info("历史条目已保存: \(entry.id)")
 
@@ -281,14 +290,8 @@ public actor HistoryActor: HistoryProtocol {
     // MARK: - HistoryProtocol: Search
 
     public func search(query: String) async throws -> [HistoryEntry] {
-        // 合并内存缓存与磁盘条目，确保搜索覆盖所有已持久化的数据
-        var merged = entries
-        let diskEntries = loadAllEntriesSync()
-        for (id, entry) in diskEntries {
-            if merged[id] == nil {
-                merged[id] = entry
-            }
-        }
+        // 合并内存缓存与磁盘快照，确保搜索覆盖所有已持久化的数据
+        let merged = allPersistedEntries()
 
         let results = merged.values.filter { entry in
             entry.textContent.localizedCaseInsensitiveContains(query)
@@ -330,6 +333,7 @@ public actor HistoryActor: HistoryProtocol {
         }
 
         entries.removeValue(forKey: id)
+        invalidateDiskCache()
         do {
             try FileManager.default.removeItem(at: transactionDir)
         } catch {
@@ -367,6 +371,7 @@ public actor HistoryActor: HistoryProtocol {
         }
 
         entries.removeAll()
+        invalidateDiskCache()
         do {
             try FileManager.default.removeItem(at: transactionDir)
         } catch {
@@ -557,14 +562,19 @@ public actor HistoryActor: HistoryProtocol {
 
     // MARK: - Private: Disk I/O
 
-    /// Merges the disk index with the in-memory cache. Cached entries win because
+    /// Merges the disk snapshot with the in-memory cache. Cached entries win because
     /// they may contain a more recent metadata update.
     private func allPersistedEntries() -> [UUID: HistoryEntry] {
-        var merged = loadAllEntriesSync()
+        var merged = diskCache
         for (id, entry) in entries {
             merged[id] = entry
         }
         return merged
+    }
+
+    /// Invalidates the disk snapshot cache so the next read reloads from disk.
+    private func invalidateDiskCache() {
+        diskCache = [:]
     }
 
     /// Encrypts and atomically persists entry metadata.
@@ -601,6 +611,7 @@ public actor HistoryActor: HistoryProtocol {
             if entries[id] != nil {
                 entries[id] = entry
             }
+            invalidateDiskCache()
             return
         }
 
@@ -638,6 +649,7 @@ public actor HistoryActor: HistoryProtocol {
             if entries[id] != nil {
                 entries[id] = entry
             }
+            invalidateDiskCache()
         } catch {
             if let sourceURL, let stagedURL {
                 do {
@@ -685,25 +697,6 @@ public actor HistoryActor: HistoryProtocol {
     }
 
     /// 同步加载所有磁盘条目到内存
-    private func loadAllEntriesSync() -> [UUID: HistoryEntry] {
-        var loaded: [UUID: HistoryEntry] = [:]
-
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: entriesDir, includingPropertiesForKeys: [.fileSizeKey]
-        ) else {
-            return loaded
-        }
-
-        let encFiles = files.filter { $0.pathExtension == "enc" }
-
-        for file in encFiles {
-            guard let entry = loadEntryFromFileSync(file) else { continue }
-            loaded[entry.id] = entry
-        }
-
-        return loaded
-    }
-
     /// 从指定文件路径同步加载单个条目
     private func loadEntryFromFileSync(_ fileURL: URL) -> HistoryEntry? {
         do {

@@ -23,8 +23,10 @@ struct MenuBarView: View {
         .globalKeyboardShortcut(.captureFullscreen)
 
         if viewModel.isScrollCaptureActive {
-            Button("Capture Next Scroll Frame (\(viewModel.scrollCapturedFrameCount))") {
+            Button {
                 viewModel.captureNextScrollFrame()
+            } label: {
+                Text(String(format: String(localized: "Capture Next Scroll Frame (%d)"), viewModel.scrollCapturedFrameCount))
             }
 
             Button("Finish Scrolling Capture") {

@@ -4,7 +4,7 @@ import SwiftUI
 /// all bound to the same underlying integer value. Used for the history
 /// retention count and days settings.
 struct TriValueControl: View {
-    let title: String
+    let title: LocalizedStringKey
     let unit: String
     let presets: [Int]
     let range: ClosedRange<Int>

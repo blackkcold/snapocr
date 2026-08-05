@@ -162,3 +162,171 @@
 "Adjust only the top and bottom edges of a long screenshot" = "Adjust only the top and bottom edges of a long screenshot";
 "Drag the top or bottom edge, then press Return" = "Drag the top or bottom edge, then press Return";
 "Return / double-click to crop" = "Return / double-click to crop";
+
+// MARK: - Menu Bar
+
+"Capture Next Scroll Frame (%d)" = "Capture Next Scroll Frame (%d)";
+
+// MARK: - Permission Guide
+
+"Permission granted" = "Permission granted";
+"Screen Capture Required" = "Screen Capture Required";
+"SnapGlass needs screen recording permission to capture screenshots and perform OCR." = "SnapGlass needs screen recording permission to capture screenshots and perform OCR.";
+"Open System Settings" = "Open System Settings";
+"Remind Later" = "Remind Later";
+"Requesting permission..." = "Requesting permission...";
+"Please manually enable screen recording permission in System Settings." = "Please manually enable screen recording permission in System Settings.";
+"Permission Denied" = "Permission Denied";
+"Permission granted. You can now use screen capture." = "Permission granted. You can now use screen capture.";
+
+// MARK: - Annotation Editor
+
+"Add" = "Add";
+"Copy" = "Copy";
+"Save" = "Save";
+"Add Text" = "Add Text";
+"Text" = "Text";
+"Loading image…" = "Loading image…";
+"Undo (⌘Z)" = "Undo (⌘Z)";
+"Redo (⇧⌘Z)" = "Redo (⇧⌘Z)";
+"Show or hide recognized text regions" = "Show or hide recognized text regions";
+"Copy annotated image to clipboard" = "Copy annotated image to clipboard";
+"Appearance" = "Appearance";
+"Stroke" = "Stroke";
+"Width" = "Width";
+"Opacity" = "Opacity";
+"Stroke style" = "Stroke style";
+"Fill / text background" = "Fill / text background";
+"Fill color" = "Fill color";
+"Rectangle" = "Rectangle";
+"Corner radius" = "Corner radius";
+"Arrowhead" = "Arrowhead";
+"Font" = "Font";
+"Size" = "Size";
+"Alignment" = "Alignment";
+"Left" = "Left";
+"Center" = "Center";
+"Right" = "Right";
+"Edit Text" = "Edit Text";
+"Blur" = "Blur";
+"Mode" = "Mode";
+"Gaussian" = "Gaussian";
+"Pixelate" = "Pixelate";
+"Mosaic" = "Mosaic";
+"Intensity" = "Intensity";
+"Edit %@" = "Edit %@";
+"New %@" = "New %@";
+"Annotation" = "Annotation";
+"Changes apply immediately" = "Changes apply immediately";
+"Used for the next annotation" = "Used for the next annotation";
+"Duplicate" = "Duplicate";
+"Delete selected annotation" = "Delete selected annotation";
+"Send backward" = "Send backward";
+"Bring forward" = "Bring forward";
+"Select" = "Select";
+"Arrow" = "Arrow";
+"Pen" = "Pen";
+"Highlight" = "Highlight";
+"Crop" = "Crop";
+"OCR Text" = "OCR Text";
+"Emphasis" = "Emphasis";
+"Note" = "Note";
+"Subtle" = "Subtle";
+"Monochrome" = "Monochrome";
+"Custom" = "Custom";
+"Preset" = "Preset";
+"Annotation color" = "Annotation color";
+"Stroke width" = "Stroke width";
+"Recognizing text" = "Recognizing text";
+"Run OCR again" = "Run OCR again";
+"Copy all recognized text" = "Copy all recognized text";
+
+// MARK: - History
+
+"History Error" = "History Error";
+"Unknown error" = "Unknown error";
+"Search history…" = "Search history…";
+"No results found" = "No results found";
+"Try a different search term" = "Try a different search term";
+"Check the application support folder permissions" = "Check the application support folder permissions";
+"Delete" = "Delete";
+"Open in Editor" = "Open in Editor";
+"Copy Text" = "Copy Text";
+"Export" = "Export";
+"Clear All" = "Clear All";
+"Export as JSON" = "Export as JSON";
+"Export as CSV" = "Export as CSV";
+"Export as Plaintext" = "Export as Plaintext";
+"Clear All History?" = "Clear All History?";
+"Clear" = "Clear";
+"This will permanently delete all %d history entries." = "This will permanently delete all %d history entries.";
+"No text detected" = "No text detected";
+"The original screenshot is no longer available. It may have been removed by the retention policy." = "The original screenshot is no longer available. It may have been removed by the retention policy.";
+"The stored screenshot could not be decoded." = "The stored screenshot could not be decoded.";
+
+// MARK: - Storage Dashboard
+
+"Storage Overview" = "Storage Overview";
+"Refresh" = "Refresh";
+"Loading history statistics…" = "Loading history statistics…";
+"History statistics unavailable." = "History statistics unavailable.";
+"Entries" = "Entries";
+"Favourites" = "Favourites";
+"Avg. confidence" = "Avg. confidence";
+"Storage used" = "Storage used";
+"No captures yet." = "No captures yet.";
+"Capture modes" = "Capture modes";
+"of %@ GB limit" = "of %@ GB limit";
+
+// MARK: - Preferences
+
+"Version" = "Version";
+"items" = "items";
+"Global Shortcuts" = "Global Shortcuts";
+"Reset All" = "Reset All";
+"Enabled Languages" = "Enabled Languages";
+"Japanese" = "Japanese";
+"Korean" = "Korean";
+"Japanese First" = "Japanese First";
+"Korean First" = "Korean First";
+"On" = "On";
+"Off" = "Off";
+"Capacity" = "Capacity";
+
+// MARK: - Sidebar & Window
+
+"Expand sidebar" = "Expand sidebar";
+"Collapse sidebar" = "Collapse sidebar";
+
+// MARK: - Window Picker
+
+"Select Window" = "Select Window";
+"Unknown App" = "Unknown App";
+"Untitled" = "Untitled";
+
+// MARK: - Routing
+
+"URL Scheme & App Intents" = "URL Scheme & App Intents";
+"Automate SnapGlass via URL Scheme and Shortcuts" = "Automate SnapGlass via URL Scheme and Shortcuts";
+"Registered URL Schemes" = "Registered URL Schemes";
+"Available Shortcuts Actions" = "Available Shortcuts Actions";
+"Routing Status" = "Routing Status";
+"Capture Area" = "Capture Area";
+"Capture Fullscreen" = "Capture Fullscreen";
+"Area screenshot" = "Area screenshot";
+"Fullscreen screenshot" = "Fullscreen screenshot";
+"OCR Image" = "OCR Image";
+"Recognize text in image" = "Recognize text in image";
+"Scan barcode / QR code" = "Scan barcode / QR code";
+"Search History" = "Search History";
+"Search screenshot history" = "Search screenshot history";
+"Waiting for incoming URL..." = "Waiting for incoming URL...";
+"Processing: %@" = "Processing: %@";
+"Error: %@" = "Error: %@";
+"Capture complete: %@" = "Capture complete: %@";
+"OCR complete:\n%@" = "OCR complete:\n%@";
+"Barcode scan: %@" = "Barcode scan: %@";
+"Command received: %@" = "Command received: %@";
+"File not found: %@" = "File not found: %@";
+"No barcode detected in the image" = "No barcode detected in the image";
+"Failed to save screenshot: %@" = "Failed to save screenshot: %@";

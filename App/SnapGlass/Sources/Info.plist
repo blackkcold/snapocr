@@ -10,6 +10,8 @@
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
+		<string>ja</string>
+		<string>ko</string>
 	</array>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>

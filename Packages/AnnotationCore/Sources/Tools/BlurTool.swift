@@ -10,6 +10,12 @@ import SharedKit
 public struct BlurTool: Sendable {
     private let logger = Logger(category: "annotation.blur")
 
+    /// 共享的 Core Image 渲染上下文。
+    ///
+    /// `CIContext` 是线程安全的，可在多次渲染间复用。每次渲染新建上下文开销较大，
+    /// 而模糊标注在编辑拖动时会反复重绘，复用可显著降低 CPU 开销。
+    private static let sharedCIContext = CIContext(options: [.useSoftwareRenderer: false])
+
     public init() {}
 
     /// 在图形上下文中渲染模糊标注。
@@ -102,8 +108,7 @@ public struct BlurTool: Sendable {
         }
 
         guard let output else { return nil }
-        let ciContext = CIContext(options: [.useSoftwareRenderer: false])
-        return ciContext.createCGImage(output, from: ciImage.extent)
+        return Self.sharedCIContext.createCGImage(output, from: ciImage.extent)
     }
 
     private func denormalize(point: CGPoint, to size: CGSize) -> CGPoint {

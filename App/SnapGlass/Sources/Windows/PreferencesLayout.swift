@@ -56,10 +56,10 @@ struct PreferencesCard<Content: View>: View {
 
 struct PreferencesCardHeader<Accessory: View>: View {
     let systemImage: String
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder var accessory: Accessory
 
-    init(systemImage: String, title: String, @ViewBuilder accessory: () -> Accessory) {
+    init(systemImage: String, title: LocalizedStringKey, @ViewBuilder accessory: () -> Accessory) {
         self.systemImage = systemImage
         self.title = title
         self.accessory = accessory()
@@ -78,13 +78,13 @@ struct PreferencesCardHeader<Accessory: View>: View {
 }
 
 extension PreferencesCardHeader where Accessory == EmptyView {
-    init(systemImage: String, title: String) {
+    init(systemImage: String, title: LocalizedStringKey) {
         self.init(systemImage: systemImage, title: title) { EmptyView() }
     }
 }
 
 struct PreferencesCardCaption: View {
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         Text(text)

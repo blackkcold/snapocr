@@ -155,7 +155,8 @@ struct CaptureProtocolTests {
             bundleIdentifier: "com.example.browser",
             layer: 0,
             frame: CGRect(x: 20, y: 20, width: 1_200, height: 800),
-            isOnScreen: true
+            isOnScreen: true,
+            windowTitle: "Settings — com.example.browser"
         )
 
         #expect(WindowCapturePolicy.isSelectable(
@@ -165,24 +166,83 @@ struct CaptureProtocolTests {
         ))
     }
 
+    @Test func windowCapturePolicyRejectsBlankTitleWindows() {
+        let blankTitle = WindowCaptureCandidate(
+            bundleIdentifier: "com.example.helper",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700),
+            isOnScreen: true,
+            windowTitle: "   "
+        )
+        let nilTitle = WindowCaptureCandidate(
+            bundleIdentifier: "com.example.helper",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700),
+            isOnScreen: true,
+            windowTitle: nil
+        )
+
+        #expect(!WindowCapturePolicy.isSelectable(
+            blankTitle,
+            currentBundleIdentifier: nil,
+            systemWindowLevel: 20
+        ))
+        #expect(!WindowCapturePolicy.isSelectable(
+            nilTitle,
+            currentBundleIdentifier: nil,
+            systemWindowLevel: 20
+        ))
+    }
+
+    @Test func windowCapturePolicyRejectsWindowManagerTitles() {
+        let ddpm = WindowCaptureCandidate(
+            bundleIdentifier: "com.example.windowmanager",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700),
+            isOnScreen: true,
+            windowTitle: "DDPM Window Manager"
+        )
+        let lowercasedDDPM = WindowCaptureCandidate(
+            bundleIdentifier: "com.example.other",
+            layer: 0,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700),
+            isOnScreen: true,
+            windowTitle: "ddpm helper panel"
+        )
+
+        #expect(!WindowCapturePolicy.isSelectable(
+            ddpm,
+            currentBundleIdentifier: nil,
+            systemWindowLevel: 20
+        ))
+        #expect(!WindowCapturePolicy.isSelectable(
+            lowercasedDDPM,
+            currentBundleIdentifier: nil,
+            systemWindowLevel: 20
+        ))
+    }
+
     @Test func windowCapturePolicyRejectsSelfAndSystemUI() {
         let selfWindow = WindowCaptureCandidate(
             bundleIdentifier: "com.snapglass.app",
             layer: 0,
             frame: CGRect(x: 0, y: 0, width: 700, height: 500),
-            isOnScreen: true
+            isOnScreen: true,
+            windowTitle: "SnapGlass"
         )
         let dockWindow = WindowCaptureCandidate(
             bundleIdentifier: "com.apple.dock",
             layer: 0,
             frame: CGRect(x: 0, y: 0, width: 900, height: 80),
-            isOnScreen: true
+            isOnScreen: true,
+            windowTitle: "Dock"
         )
         let menuBarWindow = WindowCaptureCandidate(
             bundleIdentifier: "com.apple.WindowServer",
             layer: 24,
             frame: CGRect(x: 0, y: 0, width: 1_440, height: 28),
-            isOnScreen: true
+            isOnScreen: true,
+            windowTitle: "Window Server"
         )
 
         #expect(!WindowCapturePolicy.isSelectable(
@@ -207,13 +267,15 @@ struct CaptureProtocolTests {
             bundleIdentifier: "com.example.helper",
             layer: 0,
             frame: CGRect(x: 0, y: 0, width: 20, height: 20),
-            isOnScreen: true
+            isOnScreen: true,
+            windowTitle: "Helper"
         )
         let offscreenWindow = WindowCaptureCandidate(
             bundleIdentifier: "com.example.browser",
             layer: 0,
             frame: CGRect(x: 0, y: 0, width: 900, height: 700),
-            isOnScreen: false
+            isOnScreen: false,
+            windowTitle: "Browser"
         )
 
         #expect(!WindowCapturePolicy.isSelectable(

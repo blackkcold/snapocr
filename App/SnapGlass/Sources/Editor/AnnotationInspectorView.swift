@@ -17,8 +17,8 @@ struct AnnotationInspectorView: View {
             HStack {
                 Label(
                     isEditingSelection
-                        ? "Edit \(currentTool?.rawValue.capitalized ?? "Annotation")"
-                        : "New \(currentTool?.rawValue.capitalized ?? "Annotation")",
+                        ? LocalizedStringKey(String(format: String(localized: "Edit %@"), currentTool?.rawValue.capitalized ?? String(localized: "Annotation")))
+                        : LocalizedStringKey(String(format: String(localized: "New %@"), currentTool?.rawValue.capitalized ?? String(localized: "Annotation"))),
                     systemImage: "slider.horizontal.3"
                 )
                     .font(.headline)
@@ -147,7 +147,9 @@ struct AnnotationInspectorView: View {
             }
 
             Label(
-                isEditingSelection ? "Changes apply immediately" : "Used for the next annotation",
+                isEditingSelection
+                    ? LocalizedStringKey("Changes apply immediately")
+                    : LocalizedStringKey("Used for the next annotation"),
                 systemImage: isEditingSelection ? "checkmark.circle" : "paintbrush"
             )
             .font(.caption)

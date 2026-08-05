@@ -556,7 +556,7 @@ struct HistoryPreferencesView: View {
 
             TriValueControl(
                 title: "Maximum screenshots",
-                unit: "items",
+                unit: String(localized: "items"),
                 presets: [50, 100, 200, 500, 1000],
                 range: 10...5_000,
                 value: maxItems
@@ -569,7 +569,7 @@ struct HistoryPreferencesView: View {
             if !keepIndefinitely {
                 TriValueControl(
                     title: "Retention period",
-                    unit: "days",
+                    unit: String(localized: "days"),
                     presets: [7, 30, 90, 365],
                     range: 1...3_650,
                     value: retentionDays
@@ -695,13 +695,13 @@ private enum OCRLanguageOption: String, CaseIterable, Identifiable {
         }
     }
 
-    var displayName: String {
+    var displayName: LocalizedStringKey {
         switch self {
-        case .english: return "English"
-        case .simplifiedChinese: return "简体中文"
-        case .traditionalChinese: return "繁體中文"
-        case .japanese: return "日本語"
-        case .korean: return "한국어"
+        case .english: "English"
+        case .simplifiedChinese: "简体中文"
+        case .traditionalChinese: "繁體中文"
+        case .japanese: "日本語"
+        case .korean: "한국어"
         }
     }
 }

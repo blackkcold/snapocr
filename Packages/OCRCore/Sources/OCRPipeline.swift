@@ -47,6 +47,12 @@ public final class OCRPipeline: Sendable {
     private let options: OCROptions
     private let logger: Logger
 
+    /// 分块 OCR 的并发 tile 数上限。
+    ///
+    /// 限制同时识别的 tile 数量，平衡多核吞吐与内存占用，
+    /// 避免超大图一次性解码过多 tile 导致内存峰值飙升。
+    private static let maxConcurrentTiles = 3
+
     // MARK: - 初始化
 
     /// 创建 OCR 管道
@@ -168,7 +174,10 @@ public final class OCRPipeline: Sendable {
         }
     }
 
-    /// 将超大图片拆分为重叠 tile，逐块识别后映射回全图坐标。
+    /// 将超大图片拆分为重叠 tile，并发逐块识别后合并映射回全图坐标。
+    ///
+    /// 使用限并发 `TaskGroup` 并行识别各 tile，利用多核提升吞吐，同时用
+    /// `maxConcurrentTiles` 限制并发数，避免同时解码过多 tile 导致内存飙升。
     private func performTiledRecognition(image: CGImage, options: OCROptions) async throws -> OCRResult {
         let startTime = CFAbsoluteTimeGetCurrent()
         let tiles = TiledOCRProcessor.tiles(imageWidth: image.width, imageHeight: image.height)
@@ -176,26 +185,58 @@ public final class OCRPipeline: Sendable {
             throw OCRError.imageTooLarge(width: image.width, height: image.height)
         }
 
-        logger.info("超大图片 \(image.width)x\(image.height)，拆分为 \(tiles.count) 个重叠分块")
+        logger.info("超大图片 \(image.width)x\(image.height)，拆分为 \(tiles.count) 个重叠分块，并发识别")
+
+        // 先裁剪所有 tile（裁剪在主任务中串行完成，避免并发裁剪竞争）
+        var tileImages: [(tile: OCRTile, image: CGImage?)] = []
+        tileImages.reserveCapacity(tiles.count)
+        for (index, tile) in tiles.enumerated() {
+            try Task.checkCancellation()
+            tileImages.append((tile, image.cropping(to: tile.pixelRect)))
+        }
+
+        let maxConcurrent = min(tiles.count, Self.maxConcurrentTiles)
+        var results: [(index: Int, tileResult: OCRResult?)] = []
+        results.reserveCapacity(tiles.count)
+
+        try await withThrowingTaskGroup(of: (Int, OCRResult?).self) { group in
+            var submitted = 0
+            while submitted < tileImages.count {
+                guard submitted - results.count < maxConcurrent else {
+                    if let (index, tileResult) = try await group.next() {
+                        results.append((index, tileResult))
+                    }
+                    continue
+                }
+                let entry = tileImages[submitted]
+                let taskIndex = submitted
+                submitted += 1
+                group.addTask { [weak self] in
+                    guard let self, let tileImage = entry.image else { return (taskIndex, nil) }
+                    do {
+                        let tileResult = try await self.performRecognition(image: tileImage, options: options)
+                        return (taskIndex, tileResult)
+                    } catch let error as OCRError where self.isNoTextError(error) {
+                        return (taskIndex, nil)
+                    }
+                }
+            }
+            while let result = try await group.next() {
+                results.append(result)
+            }
+        }
+
+        // 按原始顺序整理结果并映射回全图坐标
         let fullSize = CGSize(width: image.width, height: image.height)
         var mappedLines: [OCRLine] = []
         var resultEngine: OCREngineType?
-
-        for (index, tile) in tiles.enumerated() {
-            try Task.checkCancellation()
-            guard let tileImage = image.cropping(to: tile.pixelRect) else {
-                throw OCRError.recognitionFailed(reason: "无法裁剪 OCR 分块 \(index + 1)/\(tiles.count)")
-            }
-
-            do {
-                let tileResult = try await performRecognition(image: tileImage, options: options)
-                resultEngine = resultEngine ?? tileResult.engineType
-                mappedLines.append(contentsOf: tileResult.observations.map {
-                    TiledOCRProcessor.remap($0, from: tile, fullImageSize: fullSize)
-                })
-            } catch let error as OCRError where isNoTextError(error) {
-                logger.debug("OCR 分块 \(index + 1)/\(tiles.count) 未检测到文字")
-            }
+        for (index, tileResult) in results.sorted(by: { $0.index < $1.index }) {
+            guard let tileResult else { continue }
+            resultEngine = resultEngine ?? tileResult.engineType
+            let tile = tiles[index]
+            mappedLines.append(contentsOf: tileResult.observations.map {
+                TiledOCRProcessor.remap($0, from: tile, fullImageSize: fullSize)
+            })
         }
 
         try Task.checkCancellation()

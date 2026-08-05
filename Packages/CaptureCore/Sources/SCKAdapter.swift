@@ -148,36 +148,68 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
     }
 
     /// Captures a scaled still image suitable for a window-picker preview.
+    ///
+    /// When `content` is provided it is reused, avoiding a second
+    /// `SCShareableContent` enumeration per thumbnail.
     func captureWindowThumbnail(
         windowID: CGWindowID,
-        maximumSize: CGSize
+        maximumSize: CGSize,
+        content: SCShareableContent? = nil
     ) async throws -> CGImage {
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            true,
-            onScreenWindowsOnly: true
-        )
-        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+        let resolvedContent: SCShareableContent
+        if let content {
+            resolvedContent = content
+        } else {
+            resolvedContent = try await SCShareableContent.excludingDesktopWindows(
+                true,
+                onScreenWindowsOnly: true
+            )
+        }
+
+        guard let window = resolvedContent.windows.first(where: { $0.windowID == windowID }) else {
             throw CaptureError.windowNotFound
         }
-        guard let display = display(containing: window, from: content.displays) else {
+        guard let display = display(containing: window, from: resolvedContent.displays) else {
             throw CaptureError.displayUnavailable
         }
 
-        let sourceSize = window.frame.size
-        guard sourceSize.width > 0, sourceSize.height > 0,
+        let pointSize = window.frame.size
+        guard pointSize.width > 0, pointSize.height > 0,
               maximumSize.width > 0, maximumSize.height > 0 else {
             throw CaptureError.captureFailed(reason: "Invalid window thumbnail size")
         }
+
+        // Compute the output size in *physical* pixels so thumbnails stay sharp on
+        // Retina displays, then let ScreenCaptureKit's GPU pipeline scale down the
+        // streamed frame (faster and higher quality than a CPU resize).
+        let backing = Self.pixelScale(imageWidth: display.width, displayFrame: display.frame)
+        let pixelSize = CGSize(
+            width: pointSize.width * backing,
+            height: pointSize.height * backing
+        )
         let scale = min(
-            maximumSize.width / sourceSize.width,
-            maximumSize.height / sourceSize.height,
+            maximumSize.width / pointSize.width,
+            maximumSize.height / pointSize.height,
             1
+        )
+
+        // Cap the physical output to avoid allocating huge buffers for very large
+        // windows (e.g. 4K+). 640pt max is plenty for an ~84pt table row.
+        let cappedMaxWidth = max(1, Int((maximumSize.width * backing).rounded(.up)))
+        let cappedMaxHeight = max(1, Int((maximumSize.height * backing).rounded(.up)))
+        let outputWidth = min(
+            max(1, Int((pixelSize.width * scale).rounded(.up))),
+            cappedMaxWidth * 3
+        )
+        let outputHeight = min(
+            max(1, Int((pixelSize.height * scale).rounded(.up))),
+            cappedMaxHeight * 3
         )
 
         let filter = SCContentFilter(display: display, including: [window])
         let configuration = SCStreamConfiguration()
-        configuration.width = max(1, Int((sourceSize.width * scale).rounded(.up)))
-        configuration.height = max(1, Int((sourceSize.height * scale).rounded(.up)))
+        configuration.width = outputWidth
+        configuration.height = outputHeight
         configuration.showsCursor = false
         configuration.capturesAudio = false
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
@@ -624,7 +656,10 @@ private func withThrowingTimeout<T: Sendable>(ms: Int, operation: @escaping @Sen
             throw CaptureError.captureFailed(reason: "SCStream capture timed out after \(ms)ms")
         }
 
-        let result = try await group.next()!
+        guard let result = try await group.next() else {
+            group.cancelAll()
+            throw CaptureError.captureFailed(reason: "SCStream capture produced no result")
+        }
         group.cancelAll()
         return result
     }

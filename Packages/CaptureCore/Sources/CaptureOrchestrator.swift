@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+
+@preconcurrency import ScreenCaptureKit
 import SharedKit
 
 // MARK: - CaptureOrchestrator
@@ -90,13 +92,18 @@ public final class CaptureOrchestrator: @unchecked Sendable {
     ///
     /// This path intentionally stays on ScreenCaptureKit and does not invoke the legacy
     /// Core Graphics fallback, which would be too expensive when several previews load.
+    ///
+    /// - Parameter content: Optional pre-fetched `SCShareableContent` to reuse,
+    ///   avoiding a fresh enumeration per thumbnail.
     public func captureWindowThumbnail(
         windowID: CGWindowID,
-        maximumSize: CGSize
+        maximumSize: CGSize,
+        content: SCShareableContent? = nil
     ) async throws -> CGImage {
         try await sckAdapter.captureWindowThumbnail(
             windowID: windowID,
-            maximumSize: maximumSize
+            maximumSize: maximumSize,
+            content: content
         )
     }
 

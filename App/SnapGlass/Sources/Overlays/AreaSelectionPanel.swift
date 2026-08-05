@@ -176,13 +176,17 @@ final class WindowSelectionPanel: NSPanel {
     static func show(onComplete: @escaping (WindowSelectionResult?) -> Void) {
         Task { @MainActor in
             do {
-                let windows = try await fetchAvailableWindows()
+                let (content, windows) = try await fetchAvailableWindows()
                 guard !windows.isEmpty else {
                     onComplete(nil)
                     return
                 }
 
-                let panel = WindowSelectionPanel(windows: windows, onComplete: onComplete)
+                let panel = WindowSelectionPanel(
+                    windows: windows,
+                    content: content,
+                    onComplete: onComplete
+                )
                 retain(panel)
                 panel.orderFrontRegardless()
                 panel.makeKey()
@@ -200,10 +204,14 @@ final class WindowSelectionPanel: NSPanel {
         retainedPanels.removeAll { $0 === panel }
     }
 
-    private init(windows: [SelectableWindow], onComplete: @escaping (WindowSelectionResult?) -> Void) {
+    private init(
+        windows: [SelectableWindow],
+        content: SCShareableContent,
+        onComplete: @escaping (WindowSelectionResult?) -> Void
+    ) {
         self.windows = windows
         self.onComplete = onComplete
-        self.coordinator = WindowSelectionCoordinator(windows: windows)
+        self.coordinator = WindowSelectionCoordinator(windows: windows, content: content)
 
         let panelSize = NSSize(
             width: 720,
@@ -223,13 +231,15 @@ final class WindowSelectionPanel: NSPanel {
         )
 
         self.coordinator.panel = self
-        title = "Select Window"
+        // No native `title`: with `.fullSizeContentView` + transparent titlebar the
+        // native title would overlap the custom `titleLabel` below. The picker's
+        // heading is rendered entirely by the custom label in `makeContentView()`.
         isFloatingPanel = true
         level = .floating
         backgroundColor = .clear
         isOpaque = false
         hasShadow = true
-        hidesOnDeactivate = true
+        hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         acceptsMouseMovedEvents = true
         titlebarAppearsTransparent = true
@@ -240,6 +250,14 @@ final class WindowSelectionPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func resignKey() {
+        super.resignKey()
+        // The user clicked elsewhere (another SnapGlass window or another app).
+        // Finish the picker so the pending capture continuation always resolves
+        // and `isCapturing` is released instead of leaving the UI stuck.
+        finish(with: nil)
+    }
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
@@ -394,22 +412,25 @@ final class WindowSelectionPanel: NSPanel {
         finish(with: result)
     }
 
-    private static func fetchAvailableWindows() async throws -> [SelectableWindow] {
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            true,
-            onScreenWindowsOnly: true
-        )
+    private static func fetchAvailableWindows() async throws -> (SCShareableContent, [SelectableWindow]) {
+        let content = try await withThrowingTimeout(ms: 8_000) {
+            try await SCShareableContent.excludingDesktopWindows(
+                true,
+                onScreenWindowsOnly: true
+            )
+        }
         let currentBundleID = Bundle.main.bundleIdentifier
         let systemWindowLevel = Int(CGWindowLevelForKey(.dockWindow))
 
-        return content.windows
+        let windows = content.windows
             .filter { window in
                 WindowCapturePolicy.isSelectable(
                     WindowCaptureCandidate(
                         bundleIdentifier: window.owningApplication?.bundleIdentifier,
                         layer: window.windowLayer,
                         frame: window.frame,
-                        isOnScreen: window.isOnScreen
+                        isOnScreen: window.isOnScreen,
+                        windowTitle: window.title
                     ),
                     currentBundleIdentifier: currentBundleID,
                     systemWindowLevel: systemWindowLevel
@@ -427,6 +448,8 @@ final class WindowSelectionPanel: NSPanel {
             .sorted { lhs, rhs in
                 lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
+
+        return (content, windows)
     }
 }
 
@@ -438,8 +461,8 @@ private struct SelectableWindow {
     let bundleIdentifier: String?
 
     var displayName: String {
-        let app = appName?.isEmpty == false ? appName ?? "Unknown App" : "Unknown App"
-        let title = windowTitle?.isEmpty == false ? windowTitle ?? "Untitled" : "Untitled"
+        let app = appName?.isEmpty == false ? appName ?? String(localized: "Unknown App") : String(localized: "Unknown App")
+        let title = windowTitle?.isEmpty == false ? windowTitle ?? String(localized: "Untitled") : String(localized: "Untitled")
         return "\(app) — \(title)"
     }
 
@@ -455,11 +478,13 @@ private final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource,
     fileprivate weak var panel: WindowSelectionPanel?
     fileprivate weak var tableView: NSTableView?
     private let windows: [SelectableWindow]
+    private let content: SCShareableContent
     private var thumbnails: [CGWindowID: NSImage] = [:]
     private var loadingWindowIDs: Set<CGWindowID> = []
 
-    init(windows: [SelectableWindow]) {
+    init(windows: [SelectableWindow], content: SCShareableContent) {
         self.windows = windows
+        self.content = content
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -543,8 +568,12 @@ private final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource,
         guard thumbnails[window.windowID] == nil,
               loadingWindowIDs.insert(window.windowID).inserted else { return }
 
+        let sharedContent = content
         Task { @MainActor [weak self] in
-            let image = await WindowThumbnailLoader.shared.thumbnail(for: window.windowID)
+            let image = await WindowThumbnailLoader.shared.thumbnail(
+                for: window.windowID,
+                content: sharedContent
+            )
             guard let self else { return }
             loadingWindowIDs.remove(window.windowID)
             if let image {
@@ -560,25 +589,56 @@ private final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource,
     }
 }
 
+/// Loads window-picker thumbnails with a small concurrency pool.
+/// The pool bounds simultaneous SCStreams, which would stall the picker if unbounded.
 private actor WindowThumbnailLoader {
     static let shared = WindowThumbnailLoader()
 
     private let orchestrator = CaptureOrchestrator()
     private var cache: [CGWindowID: CGImage] = [:]
 
-    func thumbnail(for windowID: CGWindowID) async -> CGImage? {
+    /// Max concurrent SCStream captures.
+    private static let maxConcurrentCaptures = 4
+    private var activeCaptures = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func thumbnail(for windowID: CGWindowID, content: SCShareableContent) async -> CGImage? {
         if let cached = cache[windowID] {
             return cached
         }
+
+        await acquireSlot()
+
+        let result: CGImage?
         do {
             let image = try await orchestrator.captureWindowThumbnail(
                 windowID: windowID,
-                maximumSize: CGSize(width: 240, height: 140)
+                maximumSize: CGSize(width: 240, height: 140),
+                content: content
             )
             cache[windowID] = image
-            return image
+            result = image
         } catch {
-            return nil
+            result = nil
+        }
+
+        await releaseSlot()
+        return result
+    }
+
+    private func acquireSlot() async {
+        guard activeCaptures >= Self.maxConcurrentCaptures else {
+            activeCaptures += 1
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    private func releaseSlot() {
+        if waiters.isEmpty {
+            activeCaptures -= 1
+        } else {
+            waiters.removeFirst().resume()
         }
     }
 }
@@ -1132,5 +1192,22 @@ private final class AreaTrackingView: NSView {
     private func boundingRect(for points: [CGPoint]) -> CGRect {
         guard let first = points.first else { return .zero }
         return points.dropFirst().reduce(CGRect(origin: first, size: .zero)) { rect, point in rect.union(CGRect(origin: point, size: .zero)) }
+    }
+}
+
+/// Runs `operation`, throwing a timeout error if it does not finish in `ms`.
+private func withThrowingTimeout<T: Sendable>(
+    ms: Int,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask { try await operation() }
+        group.addTask {
+            try await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+            throw CaptureError.captureFailed(reason: "Window enumeration timed out after \(ms)ms")
+        }
+        let result = try await group.next()!
+        group.cancelAll()
+        return result
     }
 }

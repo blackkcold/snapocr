@@ -41,6 +41,9 @@ packages:
     path: Packages/ScrollCore
   HistoryCore:
     path: Packages/HistoryCore
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 2.0.0
 targets:
   SnapGlass:
     type: application
@@ -54,6 +57,10 @@ targets:
       - path: App/SnapGlass/Resources/en.lproj
         buildPhase: resources
       - path: App/SnapGlass/Resources/zh-Hans.lproj
+        buildPhase: resources
+      - path: App/SnapGlass/Resources/ja.lproj
+        buildPhase: resources
+      - path: App/SnapGlass/Resources/ko.lproj
         buildPhase: resources
     settings:
       base:
@@ -73,6 +80,7 @@ targets:
       - package: AnnotationCore
       - package: ScrollCore
       - package: HistoryCore
+      - package: KeyboardShortcuts
     preBuildScripts:
       - name: "SwiftLint"
         basedOnDependencyAnalysis: false

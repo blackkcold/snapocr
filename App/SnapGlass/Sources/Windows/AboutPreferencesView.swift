@@ -50,7 +50,7 @@ struct AboutPreferencesView: View {
                             .monospacedDigit()
                     }
 
-                    PreferencesCardCaption(text: copyright)
+                    PreferencesCardCaption(text: LocalizedStringKey(copyright))
                 }
             }
         }
@@ -65,7 +65,7 @@ struct AboutPreferencesView: View {
     }
 
     private var copyright: String {
-        "Copyright © SnapGlass Contributors. Released under the MIT License."
+        String(localized: "Copyright © SnapGlass Contributors. Released under the MIT License.")
     }
 
     private func openGitHub() {

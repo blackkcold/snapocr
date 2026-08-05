@@ -10,6 +10,7 @@ struct HistoryView: View {
     @State private var isClearing = false
     @State private var selectedEntryID: HistoryEntry.ID?
     @State private var errorMessage: String?
+    @State private var searchTask: Task<Void, Never>?
 
     private let history = HistoryActor.shared
 
@@ -29,7 +30,7 @@ struct HistoryView: View {
         .alert("History Error", isPresented: errorAlertBinding) {
             Button("OK") { errorMessage = nil }
         } message: {
-            Text(errorMessage ?? "Unknown error")
+            Text(errorMessage ?? String(localized: "Unknown error"))
         }
     }
 
@@ -43,7 +44,12 @@ struct HistoryView: View {
                 .textFieldStyle(.plain)
                 .font(.body)
                 .onChange(of: searchQuery) { _ in
-                    Task { await loadEntries() }
+                    searchTask?.cancel()
+                    searchTask = Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                        await loadEntries()
+                    }
                 }
             if !searchQuery.isEmpty {
                 Button {
@@ -61,13 +67,20 @@ struct HistoryView: View {
 
     // MARK: - Empty State
 
+    private var emptyStateTitle: LocalizedStringKey {
+        if history == nil {
+            return "History unavailable"
+        }
+        return searchQuery.isEmpty ? "No captures yet" : "No results found"
+    }
+
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
 
-            Text(history == nil ? "History unavailable" : (searchQuery.isEmpty ? "No captures yet" : "No results found"))
+            Text(emptyStateTitle)
                 .font(.title3)
                 .foregroundColor(.secondary)
 
@@ -164,7 +177,7 @@ struct HistoryView: View {
                             Task { await clearAll() }
                         }
                     } message: {
-                        Text("This will permanently delete all \(entries.count) history entries.")
+                        Text(String(format: String(localized: "This will permanently delete all %d history entries."), entries.count))
                     }
                 }
             }
@@ -207,13 +220,13 @@ struct HistoryView: View {
         guard let history else { return }
         do {
             guard let data = try await history.imageData(for: entry.id) else {
-                errorMessage = "The original screenshot is no longer available. It may have been removed by the retention policy."
+                errorMessage = String(localized: "The original screenshot is no longer available. It may have been removed by the retention policy.")
                 return
             }
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
             else {
-                errorMessage = "The stored screenshot could not be decoded."
+                errorMessage = String(localized: "The stored screenshot could not be decoded.")
                 return
             }
             captureViewModel.openEditor(with: image, captureMode: entry.captureMode)
@@ -342,7 +355,7 @@ private struct HistoryRow: View {
     // MARK: - Text Preview
 
     private var textPreview: some View {
-        Text(entry.textContent.isEmpty ? "No text detected" : entry.textContent)
+        Text(entry.textContent.isEmpty ? LocalizedStringKey("No text detected") : LocalizedStringKey(entry.textContent))
             .lineLimit(2)
             .font(.body)
             .foregroundColor(entry.textContent.isEmpty ? .secondary : .primary)

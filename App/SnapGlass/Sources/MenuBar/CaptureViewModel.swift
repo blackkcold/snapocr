@@ -572,12 +572,23 @@ public final class CaptureViewModel: ObservableObject {
     private func selectWindow() async -> WindowSelectionResult? {
         await withCheckedContinuation { continuation in
             var didResume = false
+            let resumeOnce: (WindowSelectionResult?) -> Void = { result in
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(returning: result)
+            }
+
             DispatchQueue.main.async {
                 WindowSelectionPanel.show { result in
-                    guard !didResume else { return }
-                    didResume = true
-                    continuation.resume(returning: result)
+                    resumeOnce(result)
                 }
+            }
+
+            // Safety net: if the panel never completes (e.g. a stale/leaked
+            // instance), force-resume so `isCapturing` is always released.
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(8))
+                resumeOnce(nil)
             }
         }
     }

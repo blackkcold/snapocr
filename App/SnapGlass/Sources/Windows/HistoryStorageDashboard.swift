@@ -177,7 +177,7 @@ struct HistoryStorageDashboard: View {
             .tint(ratio > 0.85 ? .red : (ratio > 0.6 ? .orange : .green))
             .frame(width: 90, height: 90)
 
-            Text("of \(capGB.formatted(.number.precision(.fractionLength(1)))) GB limit")
+            Text(String(format: String(localized: "of %@ GB limit"), capGB.formatted(.number.precision(.fractionLength(1)))))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

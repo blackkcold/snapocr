@@ -42,7 +42,7 @@ enum EditorTool: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var displayName: String {
+    var displayName: LocalizedStringKey {
         switch self {
         case .select: "Select"
         case .arrow: "Arrow"
@@ -66,7 +66,7 @@ enum AnnotationStylePreset: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    var displayName: String {
+    var displayName: LocalizedStringKey {
         switch self {
         case .emphasis: "Emphasis"
         case .note: "Note"

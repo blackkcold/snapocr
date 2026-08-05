@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-05
+
+### Added
+- 完整的多语言支持：补齐菜单栏、权限引导、标注编辑器、历史记录、存储仪表盘、设置页等全部界面文本的本地化，简体中文界面不再出现英文残留
+- 新增日文（ja）与韩文（ko）完整翻译；应用语言切换现在可正确显示中文 / 日文 / 韩文
+- URL Scheme / App Intents 路由调试页中英混杂文本统一本地化
+
+### Fixed
+- 修复窗口截图在无窗口或选择器被取消时卡死、`isCapturing` 永久置位，导致其他截图无法触发的问题
+- 修复窗口选择器失焦（点击 History、设置或其他应用）时仅隐藏不结束选择，形成与其它窗口抢焦点的循环 bug
+- 修复窗口选择器标题与自绘标题重叠的布局问题，标题层级与间距重新梳理
+- 窗口选择器仅显示有一定内容的窗口：过滤 DDPM 等窗口管理软件的悬浮窗，并排除空标题窗口
+
 ## [0.5.0] - 2026-08-04
 
 ### Added
@@ -150,7 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Liquid Glass UI support (macOS 26+) with material fallback
 - Memory pressure monitoring and automatic degradation
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/blackkcold/snapocr/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/blackkcold/snapocr/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/blackkcold/snapocr/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/blackkcold/snapocr/compare/v0.2.1...v0.3.0
