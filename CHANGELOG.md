@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-08-06
+
+### Fixed
+- 窗口截图选择器移除悬浮高亮，选中态由点击驱动，仅保留选中高亮
+- 点击「Capture Window」现在强制进入截图编辑器，不再受“截图后打开编辑器”偏好影响
+- 截图进入编辑器时不再叠加成功提示，避免与编辑器 UI 产生层级遮挡；捕获或复制失败时仍显示错误提示
+- 窗口截图裁剪为仅窗口高清图，去除环绕窗口的黑色全屏背景；对部分离屏窗口优雅降级
+- 修复窗口截图预览缓存陈旧，跨会话与会话内均能跟随窗口实时刷新
+
 ## [0.5.1] - 2026-08-05
 
 ### Added
@@ -163,7 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Liquid Glass UI support (macOS 26+) with material fallback
 - Memory pressure monitoring and automatic degradation
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/blackkcold/snapocr/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/blackkcold/snapocr/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/blackkcold/snapocr/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/blackkcold/snapocr/compare/v0.3.0...v0.4.0

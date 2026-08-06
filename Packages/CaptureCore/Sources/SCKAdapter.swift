@@ -366,7 +366,12 @@ extension SCKAdapter {
         return image
     }
 
-    /// 使用 SCStream 捕获窗口的单帧图像
+    /// 使用 SCStream 捕获窗口的单帧图像。
+    ///
+    /// `SCContentFilter(display:including:)` streams the entire display region, so the
+    /// raw frame is full-screen with the surrounding desktop rendered black. Crop the
+    /// output to the window's visible bounds (frame ∩ display) so the result is a clean
+    /// high-resolution window image, handling partially-offscreen windows gracefully.
     private func captureWindowImage(_ window: SCWindow, options: CaptureOptions) async throws -> CGImage {
         let display = window.frame.width > 0 ? await currentDisplay(for: window) : nil
         guard let targetDisplay = display else {
@@ -385,7 +390,24 @@ extension SCKAdapter {
             try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
         }
 
-        return image
+        let visibleBounds = window.frame.intersection(targetDisplay.frame)
+        guard !visibleBounds.isEmpty else {
+            logger.warning("Window \(window.windowID) has no visible bounds on its display; returning uncropped frame")
+            return image
+        }
+
+        let windowCrop = Self.pixelCropRect(
+            areaRect: visibleBounds,
+            displayFrame: targetDisplay.frame,
+            imageSize: CGSize(width: image.width, height: image.height)
+        )
+
+        guard let windowCrop, let cropped = image.cropping(to: windowCrop) else {
+            logger.warning("Window \(window.windowID): crop computation failed, returning uncropped frame")
+            return image
+        }
+
+        return cropped
     }
 
     /// 获取窗口所在的显示器

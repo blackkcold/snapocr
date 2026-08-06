@@ -238,6 +238,15 @@ public final class CaptureViewModel: ObservableObject {
                     destination: destination,
                     managesCaptureState: false
                 )
+            case .edit:
+                // Double-clicking a window preview opens it directly in the editor.
+                await performCapture(
+                    mode: CaptureCore.CaptureMode.window(selectedWindow.windowID),
+                    sourceAppName: selectedWindow.appName,
+                    sourceWindowTitle: selectedWindow.windowTitle,
+                    destination: .editorOnly,
+                    managesCaptureState: false
+                )
             case .scrolling:
                 await beginScrollCapture(with: selectedWindow)
             }
@@ -471,21 +480,29 @@ public final class CaptureViewModel: ObservableObject {
         }
 
         let imageCopySucceeded = !shouldCopyImage || writeImageToClipboard(image)
-        let completionMessage: String
+        // Opening the editor is itself the success feedback, so suppress the
+        // success toast to avoid it overlapping the editor UI. Failure to copy
+        // (when copying was requested) is still surfaced as an error toast.
         if !imageCopySucceeded {
-            completionMessage = NSLocalizedString("Unable to copy image", comment: "Capture copy failure")
-        } else if destination == .clipboardOnly {
-            completionMessage = NSLocalizedString(
-                "Screenshot copied to clipboard",
-                comment: "Direct capture copy success"
+            showToast(
+                message: NSLocalizedString("Unable to copy image", comment: "Capture copy failure"),
+                type: .error
             )
-        } else {
-            completionMessage = NSLocalizedString("Capture successful", comment: "Capture completion")
+        } else if !shouldOpenEditor {
+            let completionMessage: String
+            if destination == .clipboardOnly {
+                completionMessage = NSLocalizedString(
+                    "Screenshot copied to clipboard",
+                    comment: "Direct capture copy success"
+                )
+            } else {
+                completionMessage = NSLocalizedString("Capture successful", comment: "Capture completion")
+            }
+            showToast(
+                message: completionMessage,
+                type: .success
+            )
         }
-        showToast(
-            message: completionMessage,
-            type: imageCopySucceeded ? .success : .error
-        )
 
         let barcodeResults = shouldOpenEditor ? await detectBarcodesForSuggestion(in: image) : []
 

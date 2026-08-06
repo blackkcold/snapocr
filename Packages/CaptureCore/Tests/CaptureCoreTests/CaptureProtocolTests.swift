@@ -132,6 +132,39 @@ struct CaptureProtocolTests {
         #expect(crop == nil)
     }
 
+    @Test func windowCrop_clipsPartiallyOffscreenWindowToVisibleBounds() {
+        // A window that hangs off the right edge of a 1920×1080 display.
+        let display = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let window = CGRect(x: 1600, y: 100, width: 600, height: 400)
+
+        let visible = window.intersection(display)
+        #expect(visible == CGRect(x: 1600, y: 100, width: 320, height: 400))
+
+        let crop = SCKAdapter.pixelCropRect(
+            areaRect: visible,
+            displayFrame: display,
+            imageSize: CGSize(width: 3840, height: 2160)
+        )
+
+        #expect(crop == CGRect(x: 3200, y: 200, width: 640, height: 800))
+    }
+
+    @Test func windowCrop_fullyVisibleWindowKeepsFullWidth() {
+        let display = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let window = CGRect(x: 200, y: 150, width: 800, height: 500)
+
+        let visible = window.intersection(display)
+        #expect(visible == window)
+
+        let crop = SCKAdapter.pixelCropRect(
+            areaRect: visible,
+            displayFrame: display,
+            imageSize: CGSize(width: 2880, height: 1800)
+        )
+
+        #expect(crop == CGRect(x: 400, y: 300, width: 1600, height: 1000))
+    }
+
     @Test func freeformMaskPreservesSizeAndAddsAlpha() throws {
         let source = try makeOpaqueImage(width: 20, height: 10)
         let masked = try SelectionMaskProcessor.apply(

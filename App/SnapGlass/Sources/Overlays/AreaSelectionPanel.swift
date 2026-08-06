@@ -153,6 +153,7 @@ final class AreaSelectionPanel: NSPanel {
 enum WindowCaptureAction {
     case still
     case scrolling
+    case edit
 }
 
 struct WindowSelectionResult {
@@ -181,6 +182,10 @@ final class WindowSelectionPanel: NSPanel {
                     onComplete(nil)
                     return
                 }
+
+                // Start with a clean thumbnail cache so the previews reflect each
+                // window's current contents, not a stale frame from a prior picker.
+                await WindowThumbnailLoader.shared.clearCache()
 
                 let panel = WindowSelectionPanel(
                     windows: windows,
@@ -276,6 +281,7 @@ final class WindowSelectionPanel: NSPanel {
         didFinish = true
 
         let completion = onComplete
+        coordinator.stopRefreshTimer()
         Self.release(self)
         super.close()
         completion(result)
@@ -303,7 +309,7 @@ final class WindowSelectionPanel: NSPanel {
         subtitleLabel.textColor = .secondaryLabelColor
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let tableView = HoverTableView()
+        let tableView = NSTableView()
         tableView.headerView = nil
         tableView.rowHeight = 84
         tableView.intercellSpacing = NSSize(width: 0, height: 4)
@@ -361,6 +367,8 @@ final class WindowSelectionPanel: NSPanel {
             guard tableView.numberOfRows > 0 else { return }
             tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
             self.setActionButtonsEnabled(true)
+            // Keep previews fresh while the picker is open.
+            self.coordinator.startRefreshTimer()
         }
 
         return container
@@ -399,8 +407,11 @@ final class WindowSelectionPanel: NSPanel {
         scrollCaptureButton.isEnabled = enabled
     }
 
+    /// Captures the selected window and opens the result directly in the editor.
+    /// This mirrors double-click behavior so a single click on "Capture Window"
+    /// always enters the editor regardless of the general capture preference.
     @objc private func captureStillWindow() {
-        finishSelectedWindow(action: .still)
+        finishSelectedWindow(action: .edit)
     }
 
     @objc private func captureScrollingWindow() {
@@ -481,10 +492,50 @@ private final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource,
     private let content: SCShareableContent
     private var thumbnails: [CGWindowID: NSImage] = [:]
     private var loadingWindowIDs: Set<CGWindowID> = []
+    private var refreshTimer: Timer?
+
+    /// How often to re-capture thumbnails for the currently visible rows so the
+    /// previews track each window's live contents without capturing every row.
+    private static let refreshInterval: TimeInterval = 3.0
 
     init(windows: [SelectableWindow], content: SCShareableContent) {
         self.windows = windows
         self.content = content
+    }
+
+    /// Starts a low-frequency timer that re-captures thumbnails for the rows
+    /// currently visible in the table, keeping previews fresh while the picker
+    /// is open.
+    func startRefreshTimer() {
+        guard refreshTimer == nil else { return }
+        let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refreshVisibleThumbnails()
+            }
+        }
+        timer.tolerance = 0.5
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
+    }
+
+    func stopRefreshTimer() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    private func refreshVisibleThumbnails() {
+        guard let tableView, let scrollView = tableView.enclosingScrollView else { return }
+        let visibleRect = scrollView.contentView.bounds
+        let visibleRange = tableView.rows(in: visibleRect)
+        guard visibleRange.length > 0 else { return }
+
+        for row in visibleRange.location ..< visibleRange.location + visibleRange.length
+        where windows.indices.contains(row) {
+            let window = windows[row]
+            guard thumbnails[window.windowID] != nil,
+                  !loadingWindowIDs.contains(window.windowID) else { continue }
+            loadThumbnail(for: window, row: row, forceRefresh: true)
+        }
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -549,7 +600,8 @@ private final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource,
         let row = sender.clickedRow >= 0 ? sender.clickedRow : sender.selectedRow
         guard windows.indices.contains(row) else { return }
         sender.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        panel?.finishSelectedWindow(action: .still)
+        // Double-click opens the preview directly in the annotation editor.
+        panel?.finishSelectedWindow(action: .edit)
     }
 
     func selectedResult(action: WindowCaptureAction) -> WindowSelectionResult? {
@@ -566,13 +618,19 @@ private final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource,
 
     private func loadThumbnailIfNeeded(for window: SelectableWindow, row: Int) {
         guard thumbnails[window.windowID] == nil,
-              loadingWindowIDs.insert(window.windowID).inserted else { return }
+              !loadingWindowIDs.contains(window.windowID) else { return }
+        loadThumbnail(for: window, row: row, forceRefresh: false)
+    }
+
+    private func loadThumbnail(for window: SelectableWindow, row: Int, forceRefresh: Bool) {
+        guard loadingWindowIDs.insert(window.windowID).inserted else { return }
 
         let sharedContent = content
         Task { @MainActor [weak self] in
             let image = await WindowThumbnailLoader.shared.thumbnail(
                 for: window.windowID,
-                content: sharedContent
+                content: sharedContent,
+                forceRefresh: forceRefresh
             )
             guard let self else { return }
             loadingWindowIDs.remove(window.windowID)
@@ -607,6 +665,17 @@ private actor WindowThumbnailLoader {
             return cached
         }
 
+        return await thumbnail(for: windowID, content: content, forceRefresh: false)
+    }
+
+    /// Fetches (or re-fetches) a window thumbnail. Pass `forceRefresh: true` to
+    /// bypass the cache so the picker shows the window's *current* contents rather
+    /// than a stale frame from an earlier session.
+    func thumbnail(for windowID: CGWindowID, content: SCShareableContent, forceRefresh: Bool) async -> CGImage? {
+        if !forceRefresh, let cached = cache[windowID] {
+            return cached
+        }
+
         await acquireSlot()
 
         let result: CGImage?
@@ -626,6 +695,12 @@ private actor WindowThumbnailLoader {
         return result
     }
 
+    /// Invalidates every cached thumbnail so the next picker session re-captures
+    /// fresh window contents.
+    func clearCache() {
+        cache.removeAll()
+    }
+
     private func acquireSlot() async {
         guard activeCaptures >= Self.maxConcurrentCaptures else {
             activeCaptures += 1
@@ -640,36 +715,6 @@ private actor WindowThumbnailLoader {
         } else {
             waiters.removeFirst().resume()
         }
-    }
-}
-
-private final class HoverTableView: NSTableView {
-    private var trackingAreaRef: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-
-        if let trackingAreaRef {
-            removeTrackingArea(trackingAreaRef)
-        }
-
-        let trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        trackingAreaRef = trackingArea
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let location = convert(event.locationInWindow, from: nil)
-        let hoveredRow = row(at: location)
-        if hoveredRow >= 0, hoveredRow != selectedRow {
-            selectRowIndexes(IndexSet(integer: hoveredRow), byExtendingSelection: false)
-        }
-        super.mouseMoved(with: event)
     }
 }
 
