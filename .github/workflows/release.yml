@@ -59,25 +59,90 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           NOTES_FILE="release-notes.md"
 
-          # 从 CHANGELOG.md 提取对应版本条目（精确匹配 ## [VERSION] - YYYY-MM-DD）
-          awk -v ver="$VERSION" '
-            $0 ~ "^## \\[" ver "\\] " { in_section = 1; print; next }
-            in_section && $0 ~ "^## \\[" { exit }
-            in_section { print }
-          ' CHANGELOG.md > "$NOTES_FILE"
+          # 从 CHANGELOG.md 提取对应版本条目，转换为统一的 emoji 分组风格。
+          # 输出结构：
+          #   vX.Y.Z — <副标题>
+          #   ---
+          #   ### ✨ 新增 / 🐛 修复 / ♻️ 改进 / 🔄 移除
+          python3 - "$VERSION" "$TAG" "$NOTES_FILE" <<'PY'
+          import re, subprocess, sys
+
+          version, tag, notes_file = sys.argv[1], sys.argv[2], sys.argv[3]
+
+          # 副标题取自 annotated tag 注释首行（格式 "vX.Y.Z — 描述"），去掉版本前缀
+          try:
+              subject = subprocess.check_output(
+                  ["git", "for-each-ref", f"refs/tags/{tag}",
+                   "--format=%(contents:subject)"],
+                  text=True, stderr=subprocess.DEVNULL).strip()
+              m = re.match(r"^v?[\d.]+\s*[—-]\s*(.+)$", subject)
+              subtitle = m.group(1).strip() if m else ""
+          except Exception:
+              subtitle = ""
+
+          # 分组标题映射：CHANGELOG 的 ### X → emoji 分组标题
+          section_map = {
+              "Added":   "### ✨ 新增",
+              "Fixed":   "### 🐛 修复",
+              "Changed": "### ♻️ 改进",
+              "Removed": "### 🔄 移除",
+              "Security": "### 🔐 安全",
+              "Performance": "### ⚡ 性能优化",
+          }
+
+          lines = open("CHANGELOG.md", encoding="utf-8").read().splitlines()
+          in_section = False
+          items = []          # (emoji_heading, [bullet_lines])
+          cur = None
+          for ln in lines:
+              if re.match(r"^## \[\s*" + re.escape(version) + r"\s*\]", ln):
+                  in_section = True
+                  continue
+              if in_section and (re.match(r"^## \[", ln) or re.match(r"^\[[^\]]+\]:", ln)):
+                  break
+              if not in_section:
+                  continue
+              sec_m = re.match(r"^###\s+(\w+)", ln)
+              if sec_m:
+                  heading = section_map.get(sec_m.group(1))
+                  if heading:
+                      cur = heading
+                      items.append([heading])
+                  continue
+              if cur is not None and ln.strip():
+                  items[-1].append(ln.rstrip())
+
+          body = []
+          if subtitle:
+              body.append(f"v{version} — {subtitle}")
+          elif items:
+              body.append(f"v{version}")
+          body.append("")
+          body.append("---")
+          body.append("")
+          for heading, *bullets in items:
+              body.append(heading)
+              body.append("")
+              body.extend(bullets)
+              body.append("")
+          body.append("---")
+          body.append("")
 
           # 动态解析上一个 tag（当前 tag 的父提交上的最近 tag）
-          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")"
+          try:
+              prev = subprocess.check_output(
+                  ["git", "describe", "--tags", "--abbrev=0", f"{tag}^"],
+                  text=True, stderr=subprocess.DEVNULL).strip()
+          except Exception:
+              prev = ""
+          if prev:
+              body.append(f"**Full Changelog**: https://github.com/blackkcold/snapocr/compare/{prev}...{tag}")
+          else:
+              body.append(f"**Release**: https://github.com/blackkcold/snapocr/releases/tag/{tag}")
 
-          # 追加 Full Changelog 链接
-          echo "" >> "$NOTES_FILE"
-          echo "---" >> "$NOTES_FILE"
-          echo "" >> "$NOTES_FILE"
-          if [ -n "$PREV_TAG" ]; then
-            echo "**Full Changelog**: https://github.com/blackkcold/snapocr/compare/${PREV_TAG}...${TAG}" >> "$NOTES_FILE"
-          else
-            echo "**Release**: https://github.com/blackkcold/snapocr/releases/tag/${TAG}" >> "$NOTES_FILE"
-          fi
+          with open(notes_file, "w", encoding="utf-8") as f:
+              f.write("\n".join(body).strip() + "\n")
+          PY
 
           echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
