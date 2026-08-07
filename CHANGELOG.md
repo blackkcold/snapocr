@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-08-07
+
+### Fixed
+- 确认窗口截图选中后点击「Capture Window」或双击预览即强制进入截图编辑器，不再受「截图后打开编辑器」偏好影响
+- 窗口截图流程从选中到编辑器跳转全链路验证通过
+
 ## [0.5.2] - 2026-08-06
 
 ### Fixed
@@ -172,7 +178,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Liquid Glass UI support (macOS 26+) with material fallback
 - Memory pressure monitoring and automatic degradation
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/blackkcold/snapocr/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/blackkcold/snapocr/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/blackkcold/snapocr/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/blackkcold/snapocr/compare/v0.4.0...v0.5.0
