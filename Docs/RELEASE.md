@@ -26,6 +26,31 @@
 
 所有发版产物统一归档到 `release/vX.Y.Z/`（版本子目录），**禁止**使用 `output/`、`release/latest/`、`release/manual-*/` 等临时或软链目录。
 
+### 正式发版 vs 本地实验打包（重要区分）
+
+| 维度 | 正式发版 | 本地实验打包 |
+|------|----------|--------------|
+| 触发方式 | `./scripts/build.sh`（默认） | `./scripts/build.sh --experimental`（别名 `--exp`） |
+| 输出目录 | `release/vX.Y.Z/`（固定） | `release/exp-vX.Y.Z-<时间戳>-<随机码>/`（每次唯一） |
+| 是否覆盖 | 目录已存在则**拒绝**并报错 | **永不覆盖**，每次生成新目录 |
+| 用途 | 正式发布、`release.sh`、CI、GitHub Release | 多轮构建对比测试、A/B 验证 |
+| 是否入库 | 是（`.dmg`/`.sha256`/`BUILD_INFO.json`） | 否（`.gitignore` 忽略 `release/exp-*/`） |
+| `BUILD_INFO.json` | `kind: "release"` | `kind: "experimental"`，含唯一 `buildId` |
+
+> **⚠️ Agent 使用指引**：后续任何 agent 或脚本调用 `build.sh` 时，**必须**先明确意图——
+> - 目标是**正式发版**（打 tag、上传 Release、CI 产物）→ 用默认模式，输出 `release/vX.Y.Z/`。
+> - 目标是**本地对比测试**（多轮打包并存、验证不同改动）→ 用 `--experimental`，输出 `release/exp-*/`。
+>
+> 两者**互斥**，不可同时指定 `--experimental` 与 `--release-dir`。误用会导致产物目录混乱或正式发版目录被实验产物污染。
+
+### `release/latest/` 快捷入口
+
+每次打包成功后，`build.sh` 会在 `release/latest/SnapGlass.app` 创建（或更新）一个**相对路径软链**，始终指向**最近一次打包**的 app（无论正式发版还是实验打包）。用于快速定位最新产物，方便对比测试。
+
+- 软链目标：`release/latest/SnapGlass.app -> ../<产物目录>/SnapGlass.app`（相对路径，可移植）。
+- **不入库**：`.gitignore` 已忽略 `release/latest/`。
+- 若被指向的产物目录被清理，软链会失效（属预期，重新打包即恢复）。
+
 ### 目录结构
 
 ```
@@ -75,6 +100,10 @@ release/.DS_Store
 # 指定输出目录（默认 release/vX.Y.Z/）
 ./scripts/build.sh --release-dir /tmp/snapglass-build
 
+# 本地实验打包：每次生成唯一目录 release/exp-vX.Y.Z-<时间戳>-<随机码>/，永不覆盖
+./scripts/build.sh --experimental
+./scripts/build.sh --exp --version 0.5.3
+
 # 构建后打开 Finder
 ./scripts/build.sh --open
 
@@ -88,13 +117,17 @@ DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
 
 1. 读取版本号（`--version` 或 `version.txt`）
 2. 校验版本号格式 `^[0-9]+\.[0-9]+\.[0-9]+$`
-3. 确定输出目录（默认 `release/vX.Y.Z/`），若已存在则拒绝覆盖
+3. 确定输出目录：
+   - 默认（正式发版）→ `release/vX.Y.Z/`，若已存在则拒绝覆盖
+   - `--experimental` → `release/exp-vX.Y.Z-<时间戳>-<随机码>/`，每次唯一，永不覆盖
+   - `--release-dir PATH` → 指定目录（与 `--experimental` 互斥）
 4. `xcodegen generate` → 分别构建 arm64 与 x86_64 Release
 5. 使用 `lipo` 合并主程序并验证 Universal 架构
 6. `ditto` 拷贝 `.app` 到产物目录
 7. 本地 ad-hoc 签名 + 严格验证
 8. 使用 `--dmg` 时，通过 `dmgbuild` 生成品牌背景、Applications 拖放入口与 SHA-256
-9. 输出 `✅ App packaged: release/vX.Y.Z/SnapGlass.app`
+9. 更新 `release/latest/SnapGlass.app` 软链，指向最近一次打包的 app
+10. 输出 `✅ App packaged: <产物目录>/SnapGlass.app`
 
 ---
 

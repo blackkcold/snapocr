@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.5.3-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.5.5-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -148,6 +148,10 @@ xcodegen generate
 # 构建 Release 产物
 ./scripts/build.sh --version 0.5.1
 
+# 本地实验打包：每次生成唯一目录 release/exp-vX.Y.Z-<时间戳>-<随机码>/，永不覆盖，用于多轮产物对比测试
+./scripts/build.sh --experimental
+
+# 每次打包后，release/latest/SnapGlass.app 软链始终指向最近一次打包的 app，方便快速定位
 # 构建后打开 Finder（产物统一输出到 release/vX.Y.Z/）
 ./scripts/build.sh --open
 

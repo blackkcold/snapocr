@@ -75,15 +75,17 @@ struct SnapGlassApp: App {
         }
         
         Window("Annotation Editor", id: "editor") {
-            if let image = viewModel.editorImage {
-                EditorView(image: image, context: viewModel.editorContext)
-                    .id(viewModel.editorSessionID)
-                    .frame(minWidth: 800, minHeight: 600)
-                    .toast(message: $viewModel.toastMessage)
-                    .environment(\.locale, locale)
-                    .preferredColorScheme(preferredColorScheme)
-                    .background(AppWindowRegistrationView(id: "editor"))
+            Group {
+                if let image = viewModel.editorImage {
+                    EditorView(image: image, context: viewModel.editorContext)
+                        .id(viewModel.editorSessionID)
+                        .frame(minWidth: 800, minHeight: 600)
+                        .toast(message: $viewModel.toastMessage)
+                        .environment(\.locale, locale)
+                        .preferredColorScheme(preferredColorScheme)
+                }
             }
+            .background(AppWindowRegistrationView(id: "editor"))
         }
         
         Window("Permission Required", id: "permission") {
@@ -109,7 +111,6 @@ private struct AppLifecycleBridge: View {
         Color.clear
             .frame(width: 0, height: 0)
             .onAppear {
-                NSApplication.shared.setActivationPolicy(.accessory)
                 viewModel.openWindow = { id in
                     AppWindowPresenter.present(id: id) {
                         openWindow(id: id)

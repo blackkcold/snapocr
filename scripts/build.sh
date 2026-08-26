@@ -8,6 +8,7 @@ VERSION=""
 OUTPUT_DIR=""
 OPEN_FINDER=false
 CREATE_DMG=false
+EXPERIMENTAL=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -24,6 +25,10 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
+        --experimental|--exp)
+            EXPERIMENTAL=true
+            shift
+            ;;
         --open)
             OPEN_FINDER=true
             shift
@@ -33,15 +38,16 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [--version X.Y.Z] [--release-dir PATH] [--dmg] [--open]"
+            echo "Usage: $0 [--version X.Y.Z] [--release-dir PATH] [--experimental] [--dmg] [--open]"
             echo ""
             echo "Options:"
-            echo "  --version X.Y.Z    指定版本号（默认读取 version.txt）"
-            echo "  --release-dir PATH  指定输出目录（默认 release/vX.Y.Z/）"
-            echo "  --open              构建后在 Finder 中显示产物"
-            echo "  --dmg               同时生成品牌 DMG 与 SHA-256"
+            echo "  --version X.Y.Z      指定版本号（默认读取 version.txt）"
+            echo "  --release-dir PATH   指定输出目录（默认 release/vX.Y.Z/）"
+            echo "  --experimental|--exp 本地实验打包：输出唯一目录 release/exp-vX.Y.Z-<时间戳>-<随机码>/，永不覆盖，用于多轮产物对比测试"
+            echo "  --open               构建后在 Finder 中显示产物"
+            echo "  --dmg                同时生成品牌 DMG 与 SHA-256"
             echo ""
-            echo "产物统一输出到 release/vX.Y.Z/ 目录。详见 Docs/RELEASE.md。"
+            echo "产物统一输出到 release/ 目录。正式发版用 release/vX.Y.Z/，本地实验打包用 release/exp-*/。详见 Docs/RELEASE.md。"
             exit 0
             ;;
         *)
@@ -61,8 +67,19 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
+if [[ "$EXPERIMENTAL" == true && -n "$OUTPUT_DIR" ]]; then
+    echo "--experimental and --release-dir are mutually exclusive" >&2
+    exit 1
+fi
+
 if [[ -z "$OUTPUT_DIR" ]]; then
-    OUTPUT_DIR="release/v${VERSION}"
+    if [[ "$EXPERIMENTAL" == true ]]; then
+        TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+        RANDOM_SUFFIX="$(openssl rand -hex 3 2>/dev/null || echo "$$")"
+        OUTPUT_DIR="release/exp-v${VERSION}-${TIMESTAMP}-${RANDOM_SUFFIX}"
+    else
+        OUTPUT_DIR="release/v${VERSION}"
+    fi
 fi
 
 if [[ -e "$OUTPUT_DIR" ]]; then
@@ -127,6 +144,8 @@ cat > "$OUTPUT_DIR/BUILD_INFO.json" <<EOF
 {
   "version": "$VERSION",
   "buildDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "kind": "$([[ "$EXPERIMENTAL" == true ]] && echo "experimental" || echo "release")",
+  "buildId": "$([[ "$EXPERIMENTAL" == true ]] && basename "$OUTPUT_DIR" || echo "release/v${VERSION}")",
   "app": "${APP_NAME}.app",
   "configuration": "Release",
   "architectures": ["arm64", "x86_64"]
@@ -136,6 +155,16 @@ EOF
 echo ""
 echo "✅ App packaged: $OUTPUT_APP"
 echo "✅ Build info:  $OUTPUT_DIR/BUILD_INFO.json"
+
+# 更新 release/latest/ 快捷入口：始终指向最近一次打包的 app（相对路径软链，可移植）
+LATEST_DIR="release/latest"
+LATEST_APP="$LATEST_DIR/${APP_NAME}.app"
+mkdir -p "$LATEST_DIR"
+# 相对路径：从 release/latest/ 指向产物目录中的 app
+LATEST_TARGET="$(python3 -c "import os,sys; print(os.path.relpath('$OUTPUT_APP', '$LATEST_DIR'))")"
+rm -f "$LATEST_APP"
+ln -s "$LATEST_TARGET" "$LATEST_APP"
+echo "✅ Latest shortcut: $LATEST_APP -> $LATEST_TARGET"
 
 if [[ "$CREATE_DMG" == true ]]; then
     bash "$PROJECT_DIR/scripts/package-dmg.sh" \

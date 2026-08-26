@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-08-26
+
+### Fixed
+- 重构菜单栏应用窗口生命周期：先切换常规激活策略并请求激活，再打开或前置窗口，修复关闭后第二次打开不显示 Dock 且窗口被遮挡的问题
+- 使用 `didBecomeKey` / `willClose` 事件确认窗口状态，并在关闭事件后统一重算激活策略，移除固定延迟、跨窗口共享重试任务和关闭阶段竞态
+- 修复应用生命周期视图重入时无条件切回纯菜单栏激活策略，避免已打开窗口意外失焦
+- 修复窗口关闭观察覆盖缺口和编辑器无图像时未注册，确保关闭最后一个窗口后可靠回落纯菜单栏模式
+- 修复本地 Debug 构建默认混编 arm64 与 x86_64，导致 Swift Package 模块架构冲突的问题
+
+### Changed
+- 同步项目营销版本配置至 `0.5.5`
+
 ## [0.5.3] - 2026-08-07
 
 ### Fixed
@@ -130,7 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/blackkcold/snapocr/compare/v0.5.3...v0.5.5
 [0.5.3]: https://github.com/blackkcold/snapocr/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/blackkcold/snapocr/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/blackkcold/snapocr/compare/v0.5.0...v0.5.1
