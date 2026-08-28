@@ -80,7 +80,7 @@ final class EditableAnnotationCanvasNSView: NSView {
     var nodes: [AnnotationNode] = []
     var currentTool: EditorTool = .select {
         didSet {
-            if currentTool != .ocr {
+            if currentTool != .ocr, currentTool != .select {
                 ocrTextSelection = nil
             }
             if oldValue == .crop, currentTool != .crop {
@@ -179,7 +179,7 @@ final class EditableAnnotationCanvasNSView: NSView {
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        guard currentTool == .ocr, showsOCROverlay else { return }
+        guard currentTool == .ocr || currentTool == .select, showsOCROverlay else { return }
         for line in orderedOCRLines {
             addCursorRect(
                 viewRect(from: line.editorBoundingBox).insetBy(dx: -3, dy: -3),
@@ -224,6 +224,14 @@ final class EditableAnnotationCanvasNSView: NSView {
         switch currentTool {
         case .select:
             beginSelectionInteraction(at: point, clickCount: event.clickCount)
+            // 未命中任何标注节点（空白点）且命中 OCR 行时，转 OCR 文本选取。
+            if selectedNodeID == nil, ocrLineHit(at: point) != nil {
+                beginOCRTextSelection(
+                    at: point,
+                    clickCount: event.clickCount,
+                    extendsSelection: event.modifierFlags.contains(.shift)
+                )
+            }
         case .ocr:
             beginOCRTextSelection(
                 at: point,
@@ -329,8 +337,10 @@ final class EditableAnnotationCanvasNSView: NSView {
             }
             return
         }
-        if currentTool == .ocr, handleOCRKeyDown(event) {
-            return
+        if currentTool == .ocr || ocrTextSelection != nil {
+            if handleOCRKeyDown(event) {
+                return
+            }
         }
         switch event.keyCode {
         case 51, 117:
@@ -350,7 +360,7 @@ final class EditableAnnotationCanvasNSView: NSView {
             if character == "c" {
                 return copySelectedOCRText()
             }
-            if character == "a", let lastLine = orderedOCRLines.indices.last {
+            if currentTool == .ocr, character == "a", let lastLine = orderedOCRLines.indices.last {
                 ocrTextSelection = OCRTextSelection(
                     anchor: OCRTextPosition(lineIndex: 0, offset: 0),
                     extent: OCRTextPosition(
@@ -363,13 +373,14 @@ final class EditableAnnotationCanvasNSView: NSView {
             }
         }
 
-        if event.keyCode == 53 {
+        if currentTool == .ocr, event.keyCode == 53 {
             ocrTextSelection = nil
             needsDisplay = true
             return true
         }
 
-        guard [UInt16(123), 124, 125, 126].contains(event.keyCode),
+        guard currentTool == .ocr,
+              [UInt16(123), 124, 125, 126].contains(event.keyCode),
               !orderedOCRLines.isEmpty else { return false }
         moveOCRCaret(
             keyCode: event.keyCode,
@@ -442,7 +453,7 @@ final class EditableAnnotationCanvasNSView: NSView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard currentTool == .ocr else { return super.menu(for: event) }
+        guard currentTool == .ocr || currentTool == .select else { return super.menu(for: event) }
         let point = convert(event.locationInWindow, from: nil)
         guard let hit = ocrLineHit(at: point) else { return nil }
         let line = hit.line
@@ -500,9 +511,11 @@ final class EditableAnnotationCanvasNSView: NSView {
 
         guard let hitNode = hitNode(at: point) else {
             onSelectionChanged?(nil)
+            ocrTextSelection = nil
             interaction = .none
             return
         }
+        ocrTextSelection = nil
         onSelectionChanged?(hitNode.id)
         if clickCount == 2, hitNode.tool == .text {
             onTextEditRequested?(hitNode)
@@ -778,7 +791,7 @@ final class EditableAnnotationCanvasNSView: NSView {
             context.stroke(rect)
         }
 
-        if currentTool == .ocr, let selection = ocrTextSelection {
+        if currentTool == .ocr || currentTool == .select, let selection = ocrTextSelection {
             if selection.isEmpty {
                 drawOCRInsertionPoint(selection.extent, in: context)
             } else {

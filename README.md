@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.5.5-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.5.6-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -93,7 +93,8 @@
 
 - 7 种工具：箭头、矩形、文本、画笔、高亮、模糊、裁剪
 - 完整撤销/重做支持
-- 矩形标注自动填充与描边同色
+- 矩形默认纯线框，可通过填充开关或预设显式填充
+- 选择工具下可直接选取 OCR 文本，复制或添加为标注
 - 裁剪工具支持移动、缩放、确认后执行
 
 ### 条码识别

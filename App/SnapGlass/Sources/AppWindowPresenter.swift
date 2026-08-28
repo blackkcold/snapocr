@@ -19,6 +19,7 @@ enum AppWindowPresenter {
 protocol ApplicationActivationControlling: AnyObject {
     var activationPolicy: NSApplication.ActivationPolicy { get }
     var isActive: Bool { get }
+    var hasVisibleUserFacingWindow: Bool { get }
 
     func setActivationPolicy(_ policy: NSApplication.ActivationPolicy) -> Bool
     func requestActivation()
@@ -32,6 +33,14 @@ final class SystemApplicationActivationController: ApplicationActivationControll
 
     var isActive: Bool {
         NSApplication.shared.isActive
+    }
+
+    var hasVisibleUserFacingWindow: Bool {
+        NSApplication.shared.windows.contains { window in
+            !(window is NSPanel)
+                && window.styleMask.contains(.titled)
+                && (window.isVisible || window.isMiniaturized)
+        }
     }
 
     func setActivationPolicy(_ policy: NSApplication.ActivationPolicy) -> Bool {
@@ -128,6 +137,7 @@ final class WindowPresentationCoordinator {
 
     func register(_ window: NSWindow?, id: String) {
         guard let window else {
+            logger.info("window.register.defer id=\(id) reason=no-window")
             purgeStaleWindows()
             reevaluateActivationPolicy()
             return
@@ -145,6 +155,10 @@ final class WindowPresentationCoordinator {
         }
         observeWindow(window, id: id, token: reference.token)
 
+        if window.isKeyWindow {
+            handleDidBecomeKey(id: id, token: reference.token)
+        }
+
         if lifecycleState.isPresentationPending(id: id) {
             _ = ensureRegularPolicy()
             if !activationController.isActive {
@@ -158,11 +172,6 @@ final class WindowPresentationCoordinator {
 
     private func registeredWindow(id: String) -> NSWindow? {
         guard let reference = windows[id], let window = reference.value else {
-            removeStaleWindow(id: id)
-            return nil
-        }
-
-        guard window.isVisible || window.isMiniaturized else {
             removeStaleWindow(id: id)
             return nil
         }
@@ -303,6 +312,10 @@ final class WindowPresentationCoordinator {
     private func reevaluateActivationPolicy() {
         guard lifecycleState.shouldUseAccessoryPolicy else {
             logger.debug("policy.accessory.defer \(lifecycleSummary)")
+            return
+        }
+        guard !activationController.hasVisibleUserFacingWindow else {
+            logger.info("policy.accessory.defer reason=visible-window \(lifecycleSummary)")
             return
         }
         if activationController.activationPolicy != .accessory {

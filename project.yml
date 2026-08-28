@@ -97,6 +97,9 @@ targets:
     sources:
       - path: App/SnapGlass/Tests
       - path: App/SnapGlass/Sources/WindowLifecycleState.swift
+      - path: App/SnapGlass/Sources/AppWindowPresenter.swift
+    dependencies:
+      - package: SharedKit
     settings:
       base:
         PRODUCT_NAME: WindowLifecycleStateTests

@@ -174,11 +174,12 @@ public final class EditorViewModel: ObservableObject {
         if tool != .select {
             selectNode(nil)
         }
-        if tool == .rect {
-            fillEnabled = true
-            fillColor = selectedColor
-        } else if tool != .select {
+        if tool != .select {
+            // 画框默认线框；仍播种填充色，避免手动开填充时产生透明填充。
             fillEnabled = false
+            if fillColor == .clear || tool == .rect {
+                fillColor = selectedColor
+            }
         }
     }
 
@@ -194,8 +195,7 @@ public final class EditorViewModel: ObservableObject {
         selectedPreset = .custom
         if selectedNode != nil {
             updateSelectedStyle()
-        } else if selectedTool == .rect {
-            fillEnabled = true
+        } else if fillEnabled {
             fillColor = color
         }
     }

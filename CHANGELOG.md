@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-08-28
+
+### Fixed
+- 修复截图编辑器可能在打开约 3 秒后因窗口注册状态与真实可见状态不一致而被切回纯菜单栏模式并隐藏的问题
+
+### Changed
+- 矩形标注默认改为纯线框（不再自动填充描边同色），可通过填充开关或 `.note`/`.monochrome` 预设显式填充
+- 选择（select）工具下可直接选取 OCR 文本（点击定位 / 双击选词 / 三击选行 / 拖拽连续选 / Shift 扩展），并支持右键菜单；方向键仍用于微调标注，不抢冲突
+- 从标注工具栏移除 OCR 工具按钮（右下角 OCR 识别与复制入口保留）
+
 ## [0.5.5] - 2026-08-26
 
 ### Fixed
@@ -142,7 +152,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/blackkcold/snapocr/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/blackkcold/snapocr/compare/v0.5.3...v0.5.5
 [0.5.3]: https://github.com/blackkcold/snapocr/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/blackkcold/snapocr/compare/v0.5.1...v0.5.2

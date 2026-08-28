@@ -45,7 +45,9 @@ struct ToolPickerView: View {
             }
 
             ForEach(EditorTool.allCases) { tool in
-                toolButton(tool)
+                if tool != .ocr {
+                    toolButton(tool)
+                }
             }
 
             Divider()
@@ -150,10 +152,6 @@ struct ToolPickerView: View {
                     lineWidth: 1
                 )
         )
-        .help(
-            tool == .ocr
-                ? "Drag to select text. Double-click a word, triple-click a line, or hold Shift to extend."
-                : tool.displayName
-        )
+        .help(tool.displayName)
     }
 }
