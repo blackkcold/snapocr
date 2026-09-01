@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-01
+
+### Added
+- 取色器：区域截图 overlay 与标注编辑器新增取色工具，悬停实时显示 hex，单击复制单色，拖拽采样区域的平均色与主色（主色数量可在偏好设置中调整，默认 5）
+
+### Fixed
+- 更新检查改用 GitHub Release 静态清单，避免匿名 REST API 的共享 IP 限额导致 HTTP 403
+- 更新下载同时校验清单内 SHA-256 与 Release sidecar，拒绝版本、资源路径或校验值不一致的发布
+- 更新检查先通过 `/releases/latest` 重定向发现版本并先行比较，无清单的旧版本按命名约定确定性降级，消除「无清单即报错」的问题
+
+### Changed
+- Release 流程自动生成并核验 `SnapGlass-update.json`，SHA-256 文件改用可移植的相对文件名
+
 ## [0.5.6] - 2026-08-28
 
 ### Fixed
@@ -152,7 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/blackkcold/snapocr/compare/v0.5.6...v0.6.0
 [0.5.6]: https://github.com/blackkcold/snapocr/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/blackkcold/snapocr/compare/v0.5.3...v0.5.5
 [0.5.3]: https://github.com/blackkcold/snapocr/compare/v0.5.2...v0.5.3
