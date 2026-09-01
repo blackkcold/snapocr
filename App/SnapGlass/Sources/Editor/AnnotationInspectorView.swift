@@ -12,6 +12,10 @@ struct AnnotationInspectorView: View {
         viewModel.selectedNode != nil
     }
 
+    private var isPickerActive: Bool {
+        viewModel.selectedTool == .picker
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -77,6 +81,10 @@ struct AnnotationInspectorView: View {
                     }
                     .padding(8)
                 }
+            }
+
+            if isPickerActive {
+                pickerCard
             }
 
             if currentTool == .arrow {
@@ -231,6 +239,73 @@ struct AnnotationInspectorView: View {
         liveBinding(\.blurIntensity)
     }
 
+    private var pickerCard: some View {
+        GroupBox("Color Picker") {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(
+                    "Click to copy a single color. Drag to sample a region.",
+                    systemImage: "eyedropper"
+                )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let hover = viewModel.pickerHoverColor {
+                    colorRow(hover, title: "Hover")
+                }
+
+                if let average = viewModel.pickerAverageColor {
+                    colorRow(average, title: "Average")
+                }
+
+                if !viewModel.pickerDominantColors.isEmpty {
+                    Text("Dominant colors")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        ForEach(
+                        Array(viewModel.pickerDominantColors.enumerated()),
+                        id: \.offset
+                    ) { _, hex in
+                        swatch(hex)
+                    }
+                    }
+                }
+
+                Text("Click a swatch to copy its hex value.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(8)
+        }
+    }
+
+    private func colorRow(_ hex: String, title: LocalizedStringKey) -> some View {
+        Button {
+            viewModel.copyColorToClipboard(hex)
+        } label: {
+            HStack(spacing: 8) {
+                swatch(hex)
+                Text(title)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(hex)
+                    .font(.system(.caption, design: .monospaced))
+                    .monospacedDigit()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func swatch(_ hex: String) -> some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color(hexString: hex))
+            .frame(width: 18, height: 18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(.secondary.opacity(0.4), lineWidth: 0.5)
+            )
+    }
+
     private func liveBinding<Value>(_ keyPath: ReferenceWritableKeyPath<EditorViewModel, Value>) -> Binding<Value> {
         Binding(
             get: { viewModel[keyPath: keyPath] },
@@ -241,6 +316,19 @@ struct AnnotationInspectorView: View {
                     viewModel.updateSelectedStyle()
                 }
             }
+        )
+    }
+}
+
+private extension Color {
+    init(hexString: String) {
+        var value: UInt64 = 0
+        let cleaned = hexString.replacingOccurrences(of: "#", with: "")
+        Scanner(string: cleaned).scanHexInt64(&value)
+        self.init(
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255
         )
     }
 }

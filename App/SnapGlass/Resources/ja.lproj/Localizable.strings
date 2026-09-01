@@ -330,3 +330,11 @@
 "File not found: %@" = "ファイルが見つかりません：%@";
 "No barcode detected in the image" = "画像内にバーコードが検出されませんでした";
 "Failed to save screenshot: %@" = "スクリーンショットの保存に失敗：%@";
+"Color Picker" = "カラーピッカー";
+"Color %@ copied" = "色 %@ をコピーしました";
+"Number of dominant colors" = "主要色の数";
+"Click to copy a single color. Drag to sample a region." = "クリックで単色をコピー、ドラッグで領域をサンプリング。";
+"Hover" = "ホバー";
+"Average" = "平均色";
+"Dominant colors" = "主要色";
+"Click a swatch to copy its hex value." = "スウォッチをクリックすると HEX 値がコピーされます。";

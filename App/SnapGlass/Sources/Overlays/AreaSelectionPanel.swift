@@ -5,149 +5,6 @@ import SwiftUI
 
 @preconcurrency import ScreenCaptureKit
 
-/// 全屏透明覆盖面板，用于区域截图的交互式选择。
-enum AreaCaptureAction {
-    case copy
-    case edit
-}
-
-struct AreaSelectionResult {
-    let screenRect: CGRect
-    let normalizedPath: [CGPoint]?
-    let action: AreaCaptureAction
-
-    var isFreeform: Bool { normalizedPath != nil }
-}
-
-/// Coordinates the per-display panels that make up one area-selection session.
-@MainActor
-private final class AreaSelectionSession {
-    private static var retainedSessions: [AreaSelectionSession] = []
-
-    private let onComplete: (AreaSelectionResult?) -> Void
-    private var panels: [AreaSelectionPanel] = []
-    private var didFinish = false
-
-    static func show(
-        style: CaptureSelectionStyle,
-        onComplete: @escaping (AreaSelectionResult?) -> Void
-    ) {
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else {
-            onComplete(nil)
-            return
-        }
-
-        let session = AreaSelectionSession(onComplete: onComplete)
-        retainedSessions.append(session)
-        session.present(on: screens, style: style)
-    }
-
-    private init(onComplete: @escaping (AreaSelectionResult?) -> Void) {
-        self.onComplete = onComplete
-    }
-
-    private func present(on screens: [NSScreen], style: CaptureSelectionStyle) {
-        panels = screens.map { screen in
-            AreaSelectionPanel(screen: screen, style: style) { [weak self] result in
-                self?.finish(with: result)
-            }
-        }
-
-        for panel in panels {
-            panel.orderFrontRegardless()
-        }
-
-        let mouseLocation = NSEvent.mouseLocation
-        let initialPanel = panels.first { $0.frame.contains(mouseLocation) } ?? panels.first
-        initialPanel?.makeKey()
-    }
-
-    private func finish(with result: AreaSelectionResult?) {
-        guard !didFinish else { return }
-        didFinish = true
-
-        let completion = onComplete
-        let activePanels = panels
-        panels.removeAll()
-        for panel in activePanels {
-            panel.dismissWithoutCompleting()
-        }
-        Self.retainedSessions.removeAll { $0 === self }
-        DispatchQueue.main.async {
-            completion(result)
-        }
-    }
-}
-
-final class AreaSelectionPanel: NSPanel {
-    private let onComplete: (AreaSelectionResult?) -> Void
-    private var trackingView: AreaTrackingView!
-    private var didFinish = false
-
-    static func show(
-        style: CaptureSelectionStyle,
-        onComplete: @escaping (AreaSelectionResult?) -> Void
-    ) {
-        AreaSelectionSession.show(style: style, onComplete: onComplete)
-    }
-
-    fileprivate init(
-        screen: NSScreen,
-        style: CaptureSelectionStyle,
-        onComplete: @escaping (AreaSelectionResult?) -> Void
-    ) {
-        self.onComplete = onComplete
-
-        super.init(
-            contentRect: screen.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        isFloatingPanel = true
-        level = .screenSaver
-        backgroundColor = .clear
-        isOpaque = false
-        hasShadow = false
-        hidesOnDeactivate = false
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        ignoresMouseEvents = false
-        acceptsMouseMovedEvents = true
-        isMovableByWindowBackground = false
-        setFrame(screen.frame, display: true)
-
-        guard let contentView else { return }
-        trackingView = AreaTrackingView(frame: contentView.bounds, style: style)
-        trackingView.onSelectionComplete = { [weak self] rect in self?.finish(with: rect) }
-        trackingView.autoresizingMask = [.width, .height]
-        contentView.addSubview(trackingView)
-    }
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func close() {
-        finish(with: nil)
-    }
-
-    fileprivate func dismissWithoutCompleting() {
-        guard !didFinish else { return }
-        didFinish = true
-        super.close()
-    }
-
-    private func finish(with result: AreaSelectionResult?) {
-        guard !didFinish else { return }
-        didFinish = true
-
-        let completion = onComplete
-        super.close()
-        completion(result)
-    }
-}
-
 // MARK: - WindowSelectionPanel
 
 enum WindowCaptureAction {
@@ -363,7 +220,7 @@ final class WindowSelectionPanel: NSPanel {
             buttonStack.heightAnchor.constraint(equalToConstant: 34),
         ])
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             guard tableView.numberOfRows > 0 else { return }
             tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
             self.setActionButtonsEnabled(true)
@@ -424,7 +281,9 @@ final class WindowSelectionPanel: NSPanel {
     }
 
     private static func fetchAvailableWindows() async throws -> (SCShareableContent, [SelectableWindow]) {
-        let content = try await withThrowingTimeout(ms: 8_000) {
+        let content = try await withThrowingTimeout(milliseconds: 8_000, timeoutError: {
+            CaptureError.captureFailed(reason: "Window enumeration timed out after 8000ms")
+        }) {
             try await SCShareableContent.excludingDesktopWindows(
                 true,
                 onScreenWindowsOnly: true
@@ -847,7 +706,7 @@ private final class CaptureActionBarView: NSVisualEffectView {
     @objc private func editScreenshot() { onEdit?() }
 }
 
-private final class AreaTrackingView: NSView {
+final class AreaTrackingView: NSView {
     var onSelectionComplete: ((AreaSelectionResult?) -> Void)?
 
     private enum Phase { case idle, drawing, adjusting, choosingAction }
@@ -858,17 +717,30 @@ private final class AreaTrackingView: NSView {
     }
 
     private let style: CaptureSelectionStyle
+    private let screen: NSScreen
+    private let capturedFrames: [CGDirectDisplayID: CGImage]
+    private let onColorPicked: ((String) -> Void)?
     private var phase: Phase = .idle
     private var startPoint: CGPoint?
     private var selectionRect: CGRect = .zero
     private var freeformPoints: [CGPoint] = []
     private var dragAction: DragAction?
     private var hoverPoint: CGPoint = .zero
+    private var hoverColor: SampledColor?
     private var trackingAreaReference: NSTrackingArea?
     private let actionBar = CaptureActionBarView(frame: .zero)
 
-    init(frame frameRect: NSRect, style: CaptureSelectionStyle) {
+    init(
+        frame frameRect: NSRect,
+        style: CaptureSelectionStyle,
+        screen: NSScreen,
+        capturedFrames: [CGDirectDisplayID: CGImage],
+        onColorPicked: ((String) -> Void)?
+    ) {
         self.style = style
+        self.screen = screen
+        self.capturedFrames = capturedFrames
+        self.onColorPicked = onColorPicked
         super.init(frame: frameRect)
 
         actionBar.isHidden = true
@@ -917,6 +789,7 @@ private final class AreaTrackingView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         hoverPoint = convert(event.locationInWindow, from: nil)
+        hoverColor = sampleColor(at: hoverPoint)
         needsDisplay = true
     }
 
@@ -950,7 +823,60 @@ private final class AreaTrackingView: NSView {
             drawSizeLabel(for: selectionRect)
             if phase == .adjusting { drawActionHint(for: selectionRect) }
         }
-        if phase != .choosingAction { drawCrosshair(at: hoverPoint) }
+        if phase != .choosingAction {
+            drawCrosshair(at: hoverPoint)
+            if let hoverColor { drawHoverColorLabel(for: hoverColor, near: hoverPoint) }
+        }
+    }
+
+    /// Samples the pixel directly beneath a view point from the pre-captured
+    /// frame for the screen this panel covers.
+    private func sampleColor(at viewPoint: CGPoint) -> SampledColor? {
+        guard let window,
+              let displayID = screen.deviceDescription[
+                  NSDeviceDescriptionKey("NSScreenNumber")
+              ] as? CGDirectDisplayID,
+              let frame = capturedFrames[displayID]
+        else { return nil }
+
+        let viewRect = CGRect(origin: viewPoint, size: .zero)
+        let windowRect = convert(viewRect, to: nil)
+        let appKitRect = window.convertToScreen(windowRect)
+        let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
+
+        // Convert the AppKit global point to Quartz, then to a local offset
+        // within this screen's frame, then to pixel coordinates in the image.
+        guard
+            let quartzPoint = ScreenCoordinateGeometry.quartzPoint(
+                from: center,
+                appKitScreenFrame: screen.frame,
+                quartzScreenFrame: CGDisplayBounds(displayID)
+            )
+        else { return nil }
+
+        let quartzFrame = CGDisplayBounds(displayID)
+        let localX = quartzPoint.x - quartzFrame.minX
+        let localY = quartzPoint.y - quartzFrame.minY
+        let scaleX = CGFloat(frame.width) / quartzFrame.width
+        let scaleY = CGFloat(frame.height) / quartzFrame.height
+        let pixel = CGPoint(x: localX * scaleX, y: localY * scaleY)
+        return ColorSampler.pixelColor(in: frame, at: pixel)
+    }
+
+    private func drawHoverColorLabel(for color: SampledColor, near point: CGPoint) {
+        guard bounds.contains(point) else { return }
+        let label = color.hexString
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let size = (label as NSString).size(withAttributes: attributes)
+        let x = point.x + 16
+        let y = point.y + 16
+        let rect = CGRect(x: x, y: y, width: size.width + 12, height: size.height + 8)
+        NSColor.black.withAlphaComponent(0.75).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+        (label as NSString).draw(at: CGPoint(x: rect.minX + 6, y: rect.minY + 4), withAttributes: attributes)
     }
 
     private func drawCrosshair(at point: CGPoint) {
@@ -1039,11 +965,11 @@ private final class AreaTrackingView: NSView {
             updateAdjustedSelection(action: dragAction, current: point)
         } else if style == .freeform {
             if let last = freeformPoints.last, hypot(point.x - last.x, point.y - last.y) >= 2 {
-                freeformPoints.append(clamped(point))
+                freeformPoints.append(point.clamped(to: bounds))
                 selectionRect = boundingRect(for: freeformPoints)
             }
         } else if let startPoint {
-            selectionRect = normalizedRect(from: startPoint, to: clamped(point))
+        selectionRect = CGRect(spanning: startPoint, and: point.clamped(to: bounds))
         }
         needsDisplay = true
     }
@@ -1066,10 +992,23 @@ private final class AreaTrackingView: NSView {
         }
 
         guard selectionRect.width > 5, selectionRect.height > 5 else {
-            resetSelection()
+            if onColorPicked != nil {
+                pickColorAndFinish(at: hoverPoint)
+            } else {
+                resetSelection()
+            }
             return
         }
         phase = .adjusting
+    }
+
+    private func pickColorAndFinish(at point: CGPoint) {
+        guard let color = sampleColor(at: point) else {
+            resetSelection()
+            return
+        }
+        onColorPicked?(color.hexString)
+        onSelectionComplete?(nil)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -1217,7 +1156,7 @@ private final class AreaTrackingView: NSView {
             var maxX = initial.maxX
             var minY = initial.minY
             var maxY = initial.maxY
-            let point = clamped(current)
+            let point = current.clamped(to: bounds)
             if [.topLeft, .left, .bottomLeft].contains(handle) { minX = min(point.x, maxX - 5) }
             if [.topRight, .right, .bottomRight].contains(handle) { maxX = max(point.x, minX + 5) }
             if [.bottomLeft, .bottom, .bottomRight].contains(handle) { minY = min(point.y, maxY - 5) }
@@ -1226,33 +1165,9 @@ private final class AreaTrackingView: NSView {
         }
     }
 
-    private func clamped(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: min(max(point.x, bounds.minX), bounds.maxX), y: min(max(point.y, bounds.minY), bounds.maxY))
-    }
-
-    private func normalizedRect(from start: CGPoint, to end: CGPoint) -> CGRect {
-        CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
-    }
 
     private func boundingRect(for points: [CGPoint]) -> CGRect {
         guard let first = points.first else { return .zero }
         return points.dropFirst().reduce(CGRect(origin: first, size: .zero)) { rect, point in rect.union(CGRect(origin: point, size: .zero)) }
-    }
-}
-
-/// Runs `operation`, throwing a timeout error if it does not finish in `ms`.
-private func withThrowingTimeout<T: Sendable>(
-    ms: Int,
-    operation: @escaping @Sendable () async throws -> T
-) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask { try await operation() }
-        group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
-            throw CaptureError.captureFailed(reason: "Window enumeration timed out after \(ms)ms")
-        }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
     }
 }

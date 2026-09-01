@@ -330,3 +330,11 @@
 "File not found: %@" = "File not found: %@";
 "No barcode detected in the image" = "No barcode detected in the image";
 "Failed to save screenshot: %@" = "Failed to save screenshot: %@";
+"Color Picker" = "Color Picker";
+"Color %@ copied" = "Color %@ copied";
+"Number of dominant colors" = "Number of dominant colors";
+"Click to copy a single color. Drag to sample a region." = "Click to copy a single color. Drag to sample a region.";
+"Hover" = "Hover";
+"Average" = "Average";
+"Dominant colors" = "Dominant colors";
+"Click a swatch to copy its hex value." = "Click a swatch to copy its hex value.";

@@ -15,6 +15,7 @@ public enum PreferenceKeys {
     public static let captureHighResolution = "capture_highResolution"
     public static let captureImageFormat = "capture_imageFormat"
     public static let captureJPEGQuality = "capture_jpegQuality"
+    public static let pickerDominantColorCount = "capture_pickerDominantColorCount"
 
     public static let ocrLanguagePriority = "ocr_languagePriority"
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"
@@ -48,6 +49,7 @@ public enum PreferenceDefaults {
     public static let captureHighResolution = true
     public static let captureImageFormat = "png"
     public static let captureJPEGQuality = 0.9
+    public static let pickerDominantColorCount = 5
 
     public static let ocrLanguagePriority = "auto"
     public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]

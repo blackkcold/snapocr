@@ -330,3 +330,11 @@
 "File not found: %@" = "未找到文件：%@";
 "No barcode detected in the image" = "未在图片中检测到条码";
 "Failed to save screenshot: %@" = "截图保存失败：%@";
+"Color Picker" = "取色器";
+"Color %@ copied" = "颜色 %@ 已复制";
+"Number of dominant colors" = "主色数量";
+"Click to copy a single color. Drag to sample a region." = "单击复制单色，拖拽采样区域。";
+"Hover" = "悬停";
+"Average" = "平均色";
+"Dominant colors" = "主色";
+"Click a swatch to copy its hex value." = "点击色块可复制其十六进制值。";

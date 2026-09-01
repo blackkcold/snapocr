@@ -12,12 +12,13 @@ enum EditorTool: String, CaseIterable, Identifiable, Hashable {
     case blur
     case crop
     case ocr
+    case picker
 
     var id: String { rawValue }
 
     var annotationTool: AnnotationToolType? {
         switch self {
-        case .select, .ocr: nil
+        case .select, .ocr, .picker: nil
         case .arrow: .arrow
         case .rect: .rect
         case .text: .text
@@ -39,6 +40,7 @@ enum EditorTool: String, CaseIterable, Identifiable, Hashable {
         case .blur: "drop.halffull"
         case .crop: "crop"
         case .ocr: "text.viewfinder"
+        case .picker: "eyedropper"
         }
     }
 
@@ -53,6 +55,7 @@ enum EditorTool: String, CaseIterable, Identifiable, Hashable {
         case .blur: "Blur"
         case .crop: "Crop"
         case .ocr: "OCR Text"
+        case .picker: "Color Picker"
         }
     }
 }

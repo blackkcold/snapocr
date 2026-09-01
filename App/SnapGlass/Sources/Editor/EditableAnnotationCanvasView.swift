@@ -2,76 +2,8 @@ import AnnotationCore
 import AppKit
 import CoreText
 import OCRCore
+import SharedKit
 import SwiftUI
-
-struct EditableAnnotationCanvasView: NSViewRepresentable {
-    let image: CGImage
-    let nodes: [AnnotationNode]
-    let tool: EditorTool
-    let color: CGColor
-    let lineWidth: CGFloat
-    let opacity: CGFloat
-    let fillColor: CGColor?
-    let strokeStyle: AnnotationStrokeStyle
-    let cornerRadius: CGFloat
-    let arrowStyle: AnnotationArrowStyle
-    let fontName: String
-    let fontSize: CGFloat
-    let textAlignment: AnnotationTextAlignment
-    let blurMode: AnnotationBlurMode
-    let blurIntensity: CGFloat
-    let selectedNodeID: UUID?
-    let ocrLines: [OCRLine]
-    let showsOCROverlay: Bool
-    let verticalCropOnly: Bool
-    var onNodeCreated: (AnnotationNode) -> Void
-    var onNodeUpdated: (AnnotationNode) -> Void
-    var onSelectionChanged: (UUID?) -> Void
-    var onDeleteSelection: () -> Void
-    var onTextRequested: (CGPoint) -> Void
-    var onTextEditRequested: (AnnotationNode) -> Void
-    var onOCRLinesCopied: ([OCRLine]) -> Void
-    var onOCRTextCopied: (String) -> Void
-    var onOCRLineAsAnnotation: (OCRLine) -> Void
-
-    func makeNSView(context: Context) -> EditableAnnotationCanvasNSView {
-        EditableAnnotationCanvasNSView()
-    }
-
-    func updateNSView(_ view: EditableAnnotationCanvasNSView, context: Context) {
-        view.image = image
-        view.nodes = nodes
-        view.verticalCropOnly = verticalCropOnly
-        view.currentTool = tool
-        view.currentColor = color
-        view.currentLineWidth = lineWidth
-        view.currentOpacity = opacity
-        view.currentFillColor = fillColor
-        view.currentStrokeStyle = strokeStyle
-        view.currentCornerRadius = cornerRadius
-        view.currentArrowStyle = arrowStyle
-        view.currentFontName = fontName
-        view.currentFontSize = fontSize
-        view.currentTextAlignment = textAlignment
-        view.currentBlurMode = blurMode
-        view.currentBlurIntensity = blurIntensity
-        view.selectedNodeID = selectedNodeID
-        view.ocrLines = ocrLines
-        view.showsOCROverlay = showsOCROverlay
-        view.onNodeCreated = onNodeCreated
-        view.onNodeUpdated = onNodeUpdated
-        view.onSelectionChanged = onSelectionChanged
-        view.onDeleteSelection = onDeleteSelection
-        view.onTextRequested = onTextRequested
-        view.onTextEditRequested = onTextEditRequested
-        view.onOCRLinesCopied = onOCRLinesCopied
-        view.onOCRTextCopied = onOCRTextCopied
-        view.onOCRLineAsAnnotation = onOCRLineAsAnnotation
-        view.invalidateRenderedPreview()
-        view.updateOCRTextOverlay()
-        view.needsDisplay = true
-    }
-}
 
 final class EditableAnnotationCanvasNSView: NSView {
     var image: CGImage? {
@@ -130,6 +62,8 @@ final class EditableAnnotationCanvasNSView: NSView {
     var onOCRLinesCopied: (([OCRLine]) -> Void)?
     var onOCRTextCopied: ((String) -> Void)?
     var onOCRLineAsAnnotation: ((OCRLine) -> Void)?
+    var onColorPicked: ((String) -> Void)?
+    var onRegionColorsPicked: (([String]) -> Void)?
 
     enum Interaction {
         case none
@@ -162,11 +96,66 @@ final class EditableAnnotationCanvasNSView: NSView {
     private var ocrTextSelection: OCRTextSelection?
     private var ocrContentSignature = ""
     private var resizePointerOffset: CGPoint = .zero
+    private var trackingAreaReference: NSTrackingArea?
+    private var hoverPoint: CGPoint = .zero
+    private var pickerHoverColor: String?
+    private var pickerRegionRect: CGRect = .zero
+    var dominantColorCount = 5
 
     override var acceptsFirstResponder: Bool { true }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaReference = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        hoverPoint = convert(event.locationInWindow, from: nil)
+        pickerHoverColor = currentTool == .picker ? sampledHex(at: hoverPoint) : nil
+        needsDisplay = true
+    }
+
+    /// Samples the color under a view point in the base image.
+    private func sampledHex(at point: CGPoint) -> String? {
+        guard let image, imageDisplayRect.contains(point) else { return nil }
+        let normalized = normalizedPoint(point)
+        let pixel = CGPoint(
+            x: normalized.x * CGFloat(image.width),
+            y: (1 - normalized.y) * CGFloat(image.height)
+        )
+        guard let color = ColorSampler.pixelColor(in: image, at: pixel) else { return nil }
+        return color.hexString
+    }
+
+    /// Samples the dominant colors over a view-space region.
+    private func sampledRegionHexes(for viewRect: CGRect) -> [String] {
+        guard let image, !viewRect.isEmpty else { return [] }
+        let normalized = CGRect(
+            x: (viewRect.minX - imageDisplayRect.minX) / imageDisplayRect.width,
+            y: (viewRect.minY - imageDisplayRect.minY) / imageDisplayRect.height,
+            width: viewRect.width / imageDisplayRect.width,
+            height: viewRect.height / imageDisplayRect.height
+        )
+        let pixelRect = CGRect(
+            x: normalized.minX * CGFloat(image.width),
+            y: (1 - normalized.maxY) * CGFloat(image.height),
+            width: normalized.width * CGFloat(image.width),
+            height: normalized.height * CGFloat(image.height)
+        )
+        return ColorSampler.dominantColors(in: image, in: pixelRect, count: dominantColorCount)
+            .map(\.hexString)
     }
 
     override init(frame frameRect: NSRect) {
@@ -213,6 +202,41 @@ final class EditableAnnotationCanvasNSView: NSView {
         }
         drawPendingCrop(in: context)
         drawSelection(in: context)
+        if currentTool == .picker {
+            drawPickerOverlay(in: context)
+        }
+    }
+
+    private func drawPickerOverlay(in context: CGContext) {
+        if !pickerRegionRect.isEmpty {
+            context.saveGState()
+            context.setStrokeColor(NSColor.white.withAlphaComponent(0.9).cgColor)
+            context.setLineWidth(1.5)
+            context.setLineDash(phase: 0, lengths: [4, 3])
+            context.stroke(pickerRegionRect)
+            context.restoreGState()
+        }
+        if let pickerHoverColor {
+            drawColorLabel(pickerHoverColor, near: hoverPoint)
+        }
+    }
+
+    private func drawColorLabel(_ hex: String, near point: CGPoint) {
+        guard imageDisplayRect.contains(point) else { return }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let size = (hex as NSString).size(withAttributes: attributes)
+        let rect = CGRect(
+            x: point.x + 14,
+            y: point.y + 14,
+            width: size.width + 12,
+            height: size.height + 8
+        )
+        NSColor.black.withAlphaComponent(0.75).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+        (hex as NSString).draw(at: CGPoint(x: rect.minX + 6, y: rect.minY + 4), withAttributes: attributes)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -240,6 +264,11 @@ final class EditableAnnotationCanvasNSView: NSView {
             )
         case .crop:
             beginCropInteraction(at: point, clickCount: event.clickCount)
+        case .picker:
+            interaction = .drawing
+            dragStartPoint = point
+            dragCurrentRect = .zero
+            pickerRegionRect = .zero
         default:
             interaction = .drawing
             dragCurrentPoints = [normalizedPoint(point)]
@@ -252,7 +281,11 @@ final class EditableAnnotationCanvasNSView: NSView {
         let point = clampedViewPoint(convert(event.locationInWindow, from: nil))
         switch interaction {
         case .drawing:
-            updateCreationPreview(to: point)
+            if currentTool == .picker {
+                pickerRegionRect = CGRect(spanning: dragStartPoint, and: clampedViewPoint(point))
+            } else {
+                updateCreationPreview(to: point)
+            }
         case .moving:
             updateMove(to: point)
         case .resizing(let handle):
@@ -288,6 +321,7 @@ final class EditableAnnotationCanvasNSView: NSView {
             interactiveNode = nil
             dragCurrentPoints = []
             dragCurrentRect = .zero
+            pickerRegionRect = .zero
             cropInteractionStartRect = .zero
             resizePointerOffset = .zero
             invalidateRenderedPreview()
@@ -296,7 +330,16 @@ final class EditableAnnotationCanvasNSView: NSView {
 
         switch interaction {
         case .drawing:
-            if currentTool == .crop {
+            if currentTool == .picker {
+                let viewRect = CGRect(spanning: dragStartPoint, and: clampedViewPoint(point))
+                if viewRect.width > 5, viewRect.height > 5 {
+                    onRegionColorsPicked?(sampledRegionHexes(for: viewRect))
+                } else {
+                    if let hex = sampledHex(at: clampedViewPoint(point)) {
+                        onColorPicked?(hex)
+                    }
+                }
+            } else if currentTool == .crop {
                 updateCreationPreview(to: point)
                 let viewRect = viewRect(from: dragCurrentRect)
                 if viewRect.width > 5, viewRect.height > 5 {
@@ -1136,9 +1179,7 @@ final class EditableAnnotationCanvasNSView: NSView {
     }
 
     private func normalizedRect(from start: CGPoint, to end: CGPoint) -> CGRect {
-        let a = normalizedPoint(start)
-        let b = normalizedPoint(end)
-        return CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y))
+        CGRect(spanning: normalizedPoint(start), and: normalizedPoint(end))
     }
 
     func viewPoint(from normalized: CGPoint) -> CGPoint {

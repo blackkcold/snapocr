@@ -257,6 +257,8 @@ struct CapturePreferencesView: View {
     private var imageFormat = PreferenceDefaults.captureImageFormat
     @AppStorage(PreferenceKeys.captureJPEGQuality)
     private var jpegQuality = PreferenceDefaults.captureJPEGQuality
+    @AppStorage(PreferenceKeys.pickerDominantColorCount)
+    private var pickerDominantColorCount = PreferenceDefaults.pickerDominantColorCount
     
     var body: some View {
         ScrollView {
@@ -305,6 +307,13 @@ struct CapturePreferencesView: View {
             Picker("Saved image format", selection: $imageFormat) {
                 Text("PNG (lossless)").tag(ImageFileFormat.png.rawValue)
                 Text("JPEG (smaller)").tag(ImageFileFormat.jpeg.rawValue)
+            }
+            .pickerStyle(.menu)
+
+            Picker("Number of dominant colors", selection: $pickerDominantColorCount) {
+                ForEach(3...6, id: \.self) { count in
+                    Text("\(count)").tag(count)
+                }
             }
             .pickerStyle(.menu)
 

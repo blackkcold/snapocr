@@ -174,16 +174,53 @@ public final class CaptureViewModel: ObservableObject {
             isCapturing = true
             defer { isCapturing = false }
 
-            let selectionStyle = CaptureSelectionStyle(
-                rawValue: Self.stringPreference(
-                    forKey: PreferenceKeys.captureSelectionStyle,
-                    defaultValue: PreferenceDefaults.captureSelectionStyle
-                )
-            ) ?? .rectangle
+            let selectionStyle =
+                CaptureSelectionStyle(
+                    rawValue: Self.stringPreference(
+                        forKey: PreferenceKeys.captureSelectionStyle,
+                        defaultValue: PreferenceDefaults.captureSelectionStyle
+                    )
+                ) ?? .rectangle
+
+            // Pre-capture each screen's full frame before the overlay appears so
+            // the frames contain no overlay windows, no cursor, and a stable
+            // sample source for hover/click color picking. Sampling only needs
+            // non-hiDPI frames, so we reuse the default 1x capture options.
+            var capturedFrames: [CGDirectDisplayID: CGImage] = [:]
+            let captureOptions = CaptureOptions(
+                includeCursor: false,
+                highResolution: false,
+                preferredScaleFactor: 1
+            )
+            for screen in NSScreen.screens {
+                guard
+                    let displayID = screen.deviceDescription[
+                        NSDeviceDescriptionKey("NSScreenNumber")
+                    ] as? CGDirectDisplayID
+                else { continue }
+                do {
+                    let result = try await captureOrchestrator.capture(
+                        mode: CaptureCore.CaptureMode.area(screen.frame),
+                        options: captureOptions
+                    )
+                    capturedFrames[displayID] = result.image
+                } catch {
+                    logger.warning(
+                        "Pre-capture failed for display \(displayID): \(error.localizedDescription)"
+                    )
+                }
+            }
+
             let selection: AreaSelectionResult? = await withCheckedContinuation { continuation in
                 var didResume = false
-                DispatchQueue.main.async {
-                    AreaSelectionPanel.show(style: selectionStyle) { result in
+                Task { @MainActor in
+                    AreaSelectionPanel.show(
+                        style: selectionStyle,
+                        capturedFrames: capturedFrames,
+                        onColorPicked: { [weak self] hex in
+                            self?.copyHexToClipboard(hex)
+                        }
+                    ) { result in
                         guard !didResume else { return }
                         didResume = true
                         continuation.resume(returning: result)
@@ -192,10 +229,11 @@ public final class CaptureViewModel: ObservableObject {
             }
 
             guard let selection else { return }
-            let destination: CaptureDestination = switch selection.action {
-            case .copy: .clipboardOnly
-            case .edit: .editorOnly
-            }
+            let destination: CaptureDestination =
+                switch selection.action {
+                case .copy: .clipboardOnly
+                case .edit: .editorOnly
+                }
             await performCapture(
                 mode: CaptureCore.CaptureMode.area(selection.screenRect),
                 normalizedMaskPath: selection.normalizedPath,
@@ -205,7 +243,22 @@ public final class CaptureViewModel: ObservableObject {
             )
         }
     }
-    
+
+    private func copyHexToClipboard(_ hex: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(hex, forType: .string)
+        showToast(
+            message: String(
+                format: NSLocalizedString(
+                    "Color %@ copied",
+                    comment: "Area color picker copy success"
+                ),
+                hex
+            ),
+            type: .success
+        )
+    }
+
     /// Triggers a window capture.
     public func captureWindow() {
         startWindowCapture(destination: .configured)
@@ -595,7 +648,7 @@ public final class CaptureViewModel: ObservableObject {
                 continuation.resume(returning: result)
             }
 
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 WindowSelectionPanel.show { result in
                     resumeOnce(result)
                 }
@@ -634,7 +687,11 @@ public final class CaptureViewModel: ObservableObject {
         alert.addButton(withTitle: NSLocalizedString("View on GitHub", comment: "Open release page button"))
         alert.addButton(withTitle: NSLocalizedString("Later", comment: "Dismiss update button"))
 
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        if #available(macOS 14.0, *) {
+            NSApplication.shared.activate()
+        } else {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             await download(release)
@@ -680,7 +737,11 @@ public final class CaptureViewModel: ObservableObject {
         alert.messageText = title
         alert.informativeText = message
         alert.addButton(withTitle: NSLocalizedString("OK", comment: "Alert confirmation"))
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        if #available(macOS 14.0, *) {
+            NSApplication.shared.activate()
+        } else {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
         alert.runModal()
     }
     

@@ -31,4 +31,30 @@ public enum ScreenCoordinateGeometry {
             height: appKitRect.height
         )
     }
+
+    /// Converts a single AppKit global point to a Quartz global point.
+    ///
+    /// - Parameters:
+    ///   - appKitPoint: AppKit 全局坐标中的点。
+    ///   - appKitScreenFrame: 目标显示器的 `NSScreen.frame`。
+    ///   - quartzScreenFrame: 同一显示器的 `CGDisplayBounds`。
+    /// - Returns: Quartz 全局坐标中的点；显示器尺寸无效时返回 `nil`。
+    public static func quartzPoint(
+        from appKitPoint: CGPoint,
+        appKitScreenFrame: CGRect,
+        quartzScreenFrame: CGRect
+    ) -> CGPoint? {
+        guard appKitScreenFrame.width > 0, appKitScreenFrame.height > 0,
+              quartzScreenFrame.width > 0, quartzScreenFrame.height > 0
+        else {
+            return nil
+        }
+
+        let localX = appKitPoint.x - appKitScreenFrame.minX
+        let localTop = appKitScreenFrame.maxY - appKitPoint.y
+        return CGPoint(
+            x: quartzScreenFrame.minX + localX,
+            y: quartzScreenFrame.minY + localTop
+        )
+    }
 }

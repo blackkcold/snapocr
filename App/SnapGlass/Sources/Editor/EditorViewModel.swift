@@ -57,6 +57,15 @@ public final class EditorViewModel: ObservableObject {
     @Published public private(set) var isOCRRunning = false
     @Published public var showsOCROverlay = true
 
+    /// Live color under the picker cursor while hovering.
+    @Published public private(set) var pickerHoverColor: String?
+
+    /// Average color of the last picked region.
+    @Published public private(set) var pickerAverageColor: String?
+
+    /// Dominant colors of the last picked region.
+    @Published public private(set) var pickerDominantColors: [String] = []
+
     /// Whether the editor is manually scanning the current image for barcodes.
     @Published public private(set) var isBarcodeScanning = false
 
@@ -74,6 +83,15 @@ public final class EditorViewModel: ObservableObject {
 
     /// The current toast message to display.
     @Published public var toastMessage: ToastMessage?
+
+    /// Number of dominant colors reported for region picks (3–6).
+    public var dominantColorCount: Int {
+        let stored = UserDefaults.standard.integer(forKey: PreferenceKeys.pickerDominantColorCount)
+        if UserDefaults.standard.object(forKey: PreferenceKeys.pickerDominantColorCount) == nil {
+            return PreferenceDefaults.pickerDominantColorCount
+        }
+        return min(max(stored, 3), 6)
+    }
 
     /// Called when the user cancels editing to close the editor window.
     public var onClose: (() -> Void)?
@@ -554,6 +572,59 @@ public final class EditorViewModel: ObservableObject {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         showToast(message: "Copied OCR text", type: .success)
+    }
+
+    // MARK: - Color Picker
+
+    /// Handles a single-point color pick from the canvas.
+    public func handleColorPicked(_ hex: String) {
+        pickerHoverColor = hex
+        copyColorToClipboard(hex)
+    }
+
+    /// Handles a region pick, computing the average and dominant colors.
+    public func handleRegionColorsPicked(_ hexes: [String]) {
+        guard !hexes.isEmpty else { return }
+        pickerDominantColors = hexes
+        pickerAverageColor = averageHex(of: hexes)
+        copyColorToClipboard(hexes.first ?? "")
+    }
+
+    private func averageHex(of hexes: [String]) -> String? {
+        guard !hexes.isEmpty else { return nil }
+        var totalRed = 0
+        var totalGreen = 0
+        var totalBlue = 0
+        for hex in hexes {
+            var value: UInt64 = 0
+            let cleaned = hex.replacingOccurrences(of: "#", with: "")
+            guard cleaned.count == 6, Scanner(string: cleaned).scanHexInt64(&value) else { continue }
+            totalRed += Int((value >> 16) & 0xFF)
+            totalGreen += Int((value >> 8) & 0xFF)
+            totalBlue += Int(value & 0xFF)
+        }
+        let count = hexes.count
+        guard count > 0 else { return nil }
+        return ColorSampler.hexString(
+            red: UInt8(totalRed / count),
+            green: UInt8(totalGreen / count),
+            blue: UInt8(totalBlue / count)
+        )
+    }
+
+    func copyColorToClipboard(_ hex: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(hex, forType: .string)
+        showToast(
+            message: String(
+                format: NSLocalizedString(
+                    "Color %@ copied",
+                    comment: "Editor color picker copy success"
+                ),
+                hex
+            ),
+            type: .success
+        )
     }
 
     // MARK: - Barcode Recognition
