@@ -45,13 +45,15 @@
 1. 检出代码
 2. 从 tag 名提取版本号
 3. `xcodegen generate`
-4. `xcodebuild -configuration Release build`（无签名）
-5. 打包 `.app` → `.dmg`（`hdiutil`）
+4. `xcodebuild -configuration Release build`（ad-hoc 签名）
+5. 通过 `dmgbuild` 打包 `.app` → `.dmg`
 6. 生成 `.sha256` 校验文件
-7. 创建 GitHub Release：
+7. 生成并校验 `SnapGlass-update.json` 静态更新清单
+8. 创建 GitHub Release：
    - 标题：`vX.Y.Z`
    - Body：从 tag message 或 `CHANGELOG.md` 对应条目生成
-   - 上传 `.dmg` + `.sha256` 作为 Release assets
+   - 上传 `.dmg` + `.sha256` + `SnapGlass-update.json` 作为 Release assets
+9. 发布后复核三个必需资产，缺少任意资产则工作流失败
 
 ### 触发方式
 
@@ -67,6 +69,7 @@ GitHub Release 页面提供：
 
 - `SnapGlass-vX.Y.Z.dmg` — 安装包
 - `SnapGlass-vX.Y.Z.dmg.sha256` — SHA-256 校验文件
+- `SnapGlass-update.json` — App 检查更新使用的固定名称静态清单
 
 用户验证完整性：
 

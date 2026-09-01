@@ -62,8 +62,8 @@ release/
 ├── v0.2.0/                   # 当前发版产物
 │   ├── SnapGlass-0.2.0.dmg
 │   ├── SnapGlass-0.2.0.dmg.sha256
+│   ├── SnapGlass-update.json
 │   └── BUILD_INFO.json
-└── versions.json             # 版本索引（发版后回填）
 ```
 
 > **目录命名规则**：版本子目录一律使用 `v` 前缀（`release/vX.Y.Z/`），与 `build.sh`、`release.sh` 的默认行为保持一致，避免新旧命名并存造成混淆。
@@ -74,8 +74,8 @@ release/
 
 - `release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg`
 - `release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg.sha256`
+- `release/vX.Y.Z/SnapGlass-update.json`
 - `release/vX.Y.Z/BUILD_INFO.json`
-- `release/versions.json`
 
 ### 忽略产物（.gitignore）
 
@@ -143,7 +143,7 @@ DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
    - 构建 Release 配置
    - 生成 `.dmg` + `.sha256`
    - 创建 GitHub Release 并上传产物
-6. 回填 `release/versions.json`（可选，由 CI 自动完成）
+6. CI 自动生成并上传固定名称的 `SnapGlass-update.json`，供 App 检查更新
 
 ### 方式二：本地构建 + 手动上传
 
@@ -180,25 +180,20 @@ emoji 分组按 Conventional Commits 前缀映射，详见 [CONTRIBUTING.md](./C
 
 ---
 
-## versions.json
+## 静态更新清单
 
-`release/versions.json` 是版本索引，发版后更新：
+App 检查更新的流程（不调用受匿名 IP 配额限制的 GitHub REST API）：
 
-```json
-[
-  {
-    "version": "0.2.0",
-    "date": "2026-07-31",
-    "file": "SnapGlass-0.2.0.dmg",
-    "sha256": "release/v0.2.0/SnapGlass-0.2.0.dmg.sha256"
-  },
-  {
-    "version": "0.1.5",
-    "date": "2026-07-08",
-    "file": "SnapGlass-0.1.5.dmg"
-  }
-]
-```
+1. 通过 `https://github.com/blackkcold/snapocr/releases/latest` 的 302 重定向发现最新稳定版本号；
+2. 若本地版本不落后于最新版，直接判定为「已是最新」，不再请求清单；
+3. 需要更新时，拉取版本化清单
+   `https://github.com/blackkcold/snapocr/releases/download/v{版本}/SnapGlass-update.json`；
+4. 清单缺失（404，例如无清单的旧版本）时，按 `SnapGlass-v{版本}.dmg` / `.dmg.sha256`
+   命名约定确定性降级，下载时仍以 `.sha256` sidecar 做 SHA-256 校验。
+
+每个 GitHub Release 必须包含固定名称的 `SnapGlass-update.json`。清单由
+`scripts/generate-update-manifest.py` 生成，CI 与本地 `release.sh` 共用同一脚本。
+清单包含版本、Release Notes、DMG/校验文件地址及 SHA-256；禁止手工维护或在清单中写入凭证。
 
 ---
 

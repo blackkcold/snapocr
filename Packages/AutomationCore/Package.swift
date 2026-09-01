@@ -10,11 +10,12 @@ let package = Package(
         .package(path: "../CaptureCore"),
         .package(path: "../OCRCore"),
         .package(path: "../BarcodeCore"),
+        .package(path: "../HistoryCore"),
     ],
     targets: [
         .target(
             name: "AutomationCore",
-            dependencies: ["SharedKit", "CaptureCore", "OCRCore", "BarcodeCore"],
+            dependencies: ["SharedKit", "CaptureCore", "OCRCore", "BarcodeCore", "HistoryCore"],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
                 .enableUpcomingFeature("ExistentialAny"),

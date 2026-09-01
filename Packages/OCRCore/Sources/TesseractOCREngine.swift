@@ -345,7 +345,23 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
     // MARK: - 协议属性
 
     let engineType: OCREngineType
-    var logHandler: ((OCRLogEntry) -> Void)?
+
+    /// 日志回调。通过 `logHandlerLock` 保护读写，保证 `@unchecked Sendable` 下的线程安全。
+    var logHandler: ((OCRLogEntry) -> Void)? {
+        get {
+            logHandlerLock.lock()
+            defer { logHandlerLock.unlock() }
+            return _logHandler
+        }
+        set {
+            logHandlerLock.lock()
+            defer { logHandlerLock.unlock() }
+            _logHandler = newValue
+        }
+    }
+
+    private var _logHandler: ((OCRLogEntry) -> Void)?
+    private let logHandlerLock = NSLock()
     private let languageDataPath: URL
 
     // MARK: - 常量

@@ -73,8 +73,11 @@ struct UpdateServiceTests {
     }
 
     @Test func latestReleaseRequiresNewerVersionUnlessForced() async throws {
-        let client = MockUpdateHTTPClient(releaseData: makeReleaseData(version: "0.2.0"))
-        let service = UpdateService(client: client)
+        let client = try makeClient(
+            discoveryVersion: "0.2.0",
+            manifestData: makeManifestData(version: "0.2.0")
+        )
+        let service = UpdateService(client: client, latestReleaseURL: try testLatestReleaseURL())
 
         let normal = try await service.check(currentVersion: "0.2.0")
         let forced = try await service.check(currentVersion: "0.2.0", force: true)
@@ -91,9 +94,33 @@ struct UpdateServiceTests {
         #expect(release.assetName == "SnapGlass-v0.2.0.dmg")
     }
 
+    @Test func upToDateSkipsManifestWhenAlreadyLatest() async throws {
+        let client = try makeClient(
+            discoveryVersion: "0.5.6",
+            manifestData: Data(),
+            manifestStatusCode: 404
+        )
+        let result = try await UpdateService(
+            client: client,
+            latestReleaseURL: try testLatestReleaseURL()
+        ).check(currentVersion: "0.5.6")
+
+        guard case .upToDate(let latestVersion) = result else {
+            Issue.record("An installed version equal to latest must be up to date")
+            return
+        }
+        #expect(latestVersion == SemanticVersion("0.5.6"))
+    }
+
     @Test func latestReleaseSelectsExactDMGAndChecksumAssets() async throws {
-        let client = MockUpdateHTTPClient(releaseData: makeReleaseData(version: "0.3.0"))
-        let result = try await UpdateService(client: client).check(currentVersion: "0.2.0")
+        let client = try makeClient(
+            discoveryVersion: "0.3.0",
+            manifestData: makeManifestData(version: "0.3.0")
+        )
+        let result = try await UpdateService(
+            client: client,
+            latestReleaseURL: try testLatestReleaseURL()
+        ).check(currentVersion: "0.2.0")
 
         guard case .updateAvailable(let release) = result else {
             Issue.record("A newer semantic version must be available")
@@ -102,6 +129,7 @@ struct UpdateServiceTests {
         #expect(release.version == SemanticVersion("0.3.0"))
         #expect(release.dmgURL.lastPathComponent == "SnapGlass-v0.3.0.dmg")
         #expect(release.checksumURL.lastPathComponent == "SnapGlass-v0.3.0.dmg.sha256")
+        #expect(release.expectedChecksum == String(repeating: "a", count: 64))
     }
 
     @Test func checksumParserRejectsMalformedValues() {
@@ -109,14 +137,226 @@ struct UpdateServiceTests {
         #expect(UpdateService.parseChecksum(Data("\(valid)  SnapGlass.dmg\n".utf8)) == valid)
         #expect(UpdateService.parseChecksum(Data("not-a-checksum".utf8)) == nil)
     }
+
+    @Test func rateLimitResponseIncludesRetryDate() async throws {
+        let resetDate = Date().addingTimeInterval(600)
+        let client = try makeClient(
+            discoveryVersion: "0.3.0",
+            manifestData: Data(),
+            manifestStatusCode: 403,
+            manifestHeaders: [
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": String(Int(resetDate.timeIntervalSince1970)),
+            ]
+        )
+
+        do {
+            _ = try await UpdateService(
+                client: client,
+                latestReleaseURL: try testLatestReleaseURL()
+            ).check(currentVersion: "0.2.0")
+            Issue.record("A rate-limited response must throw")
+        } catch UpdateServiceError.rateLimited(let retryDate) {
+            #expect(retryDate != nil)
+        }
+    }
+
+    @Test func missingManifestFallsBackToNamingConvention() async throws {
+        let client = try makeClient(
+            discoveryVersion: "0.3.0",
+            manifestData: Data(),
+            manifestStatusCode: 404
+        )
+        let result = try await UpdateService(
+            client: client,
+            latestReleaseURL: try testLatestReleaseURL()
+        ).check(currentVersion: "0.2.0")
+
+        guard case .updateAvailable(let release) = result else {
+            Issue.record("A missing manifest must fall back to a constructed release")
+            return
+        }
+        #expect(release.version == SemanticVersion("0.3.0"))
+        #expect(release.tagName == "v0.3.0")
+        #expect(release.releaseNotes == "")
+        #expect(release.expectedChecksum == nil)
+        #expect(release.dmgURL.lastPathComponent == "SnapGlass-v0.3.0.dmg")
+        #expect(release.checksumURL.lastPathComponent == "SnapGlass-v0.3.0.dmg.sha256")
+    }
+
+    @Test func manifestVersionMismatchIsRejected() async throws {
+        let client = try makeClient(
+            discoveryVersion: "0.3.0",
+            manifestData: makeManifestData(version: "0.3.0", declaredVersion: "0.4.0")
+        )
+
+        do {
+            _ = try await UpdateService(
+                client: client,
+                latestReleaseURL: try testLatestReleaseURL()
+            ).check(currentVersion: "0.2.0")
+            Issue.record("A manifest version mismatch must throw")
+        } catch UpdateServiceError.invalidResponse {
+            // Expected.
+        }
+    }
+
+    @Test func discoveryRejectsNonGitHubRedirect() async throws {
+        let latestReleaseURL = try testLatestReleaseURL()
+        let manifestURL = try testManifestURL(version: "0.3.0")
+        guard let untrustedFinalURL = URL(string: "https://example.com/releases/tag/v0.3.0") else {
+            Issue.record("Test URL must parse")
+            return
+        }
+        let client = MockUpdateHTTPClient(
+            latestReleaseURL: latestReleaseURL,
+            discoveryFinalURL: untrustedFinalURL,
+            manifestURL: manifestURL,
+            manifestData: makeManifestData(version: "0.3.0")
+        )
+
+        do {
+            _ = try await UpdateService(client: client, latestReleaseURL: latestReleaseURL)
+                .check(currentVersion: "0.2.0")
+            Issue.record("A non-GitHub redirect must throw")
+        } catch UpdateServiceError.invalidResponse {
+            // Expected.
+        }
+    }
+
+    @Test func manifestRejectsUntrustedAssetURL() async throws {
+        let client = try makeClient(
+            discoveryVersion: "0.3.0",
+            manifestData: makeManifestData(
+                version: "0.3.0",
+                dmgURL: "https://example.com/SnapGlass-v0.3.0.dmg"
+            )
+        )
+
+        do {
+            _ = try await UpdateService(
+                client: client,
+                latestReleaseURL: try testLatestReleaseURL()
+            ).check(currentVersion: "0.2.0")
+            Issue.record("An untrusted asset URL must throw")
+        } catch UpdateServiceError.untrustedURL(let url) {
+            #expect(url.contains("example.com"))
+        }
+    }
+
+    @Test func verifiedDownloadUsesUniqueDestination() async throws {
+        let checksum = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        let temporaryFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snapglass-update-\(UUID().uuidString)")
+        try Data("hello".utf8).write(to: temporaryFile)
+        let destinationDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snapglass-download-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: destinationDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: destinationDirectory) }
+        try Data().write(
+            to: destinationDirectory.appendingPathComponent("SnapGlass-v0.3.0.dmg")
+        )
+
+        let client = try makeClient(
+            discoveryVersion: "0.3.0",
+            manifestData: makeManifestData(version: "0.3.0", checksum: checksum),
+            checksumData: Data("\(checksum)  SnapGlass-v0.3.0.dmg\n".utf8),
+            downloadFileURL: temporaryFile
+        )
+        let service = UpdateService(client: client, latestReleaseURL: try testLatestReleaseURL())
+        let result = try await service.check(currentVersion: "0.2.0")
+        guard case .updateAvailable(let release) = result else {
+            Issue.record("A newer semantic version must be available")
+            return
+        }
+
+        let downloadedURL = try await service.download(
+            release,
+            downloadsDirectory: destinationDirectory
+        )
+
+        #expect(downloadedURL.lastPathComponent == "SnapGlass-v0.3.0-1.dmg")
+        #expect(try Data(contentsOf: downloadedURL) == Data("hello".utf8))
+    }
+
+    @Test func fallbackDownloadVerifiesSidecarWithoutPinnedChecksum() async throws {
+        let checksum = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        let temporaryFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snapglass-update-\(UUID().uuidString)")
+        try Data("hello".utf8).write(to: temporaryFile)
+        let destinationDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snapglass-download-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: destinationDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: destinationDirectory) }
+
+        let client = try makeClient(
+            discoveryVersion: "0.3.0",
+            manifestData: Data(),
+            manifestStatusCode: 404,
+            checksumData: Data("\(checksum)  SnapGlass-v0.3.0.dmg\n".utf8),
+            downloadFileURL: temporaryFile
+        )
+        let service = UpdateService(client: client, latestReleaseURL: try testLatestReleaseURL())
+        let result = try await service.check(currentVersion: "0.2.0")
+        guard case .updateAvailable(let release) = result else {
+            Issue.record("A missing manifest must fall back to a constructed release")
+            return
+        }
+
+        let downloadedURL = try await service.download(
+            release,
+            downloadsDirectory: destinationDirectory
+        )
+
+        #expect(downloadedURL.lastPathComponent == "SnapGlass-v0.3.0.dmg")
+        #expect(try Data(contentsOf: downloadedURL) == Data("hello".utf8))
+    }
 }
 
 private struct MockUpdateHTTPClient: UpdateHTTPClient {
-    let releaseData: Data
+    let latestReleaseURL: URL
+    let discoveryFinalURL: URL
+    var discoveryStatusCode = 200
+    let manifestURL: URL
+    let manifestData: Data
+    var manifestStatusCode = 200
+    var manifestHeaders: [String: String]? = nil
+    var checksumData = Data()
+    var downloadFileURL: URL? = nil
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        guard let url = request.url,
-              let response = HTTPURLResponse(
+        guard let url = request.url else {
+            throw MockUpdateError.invalidRequest
+        }
+        if url == latestReleaseURL {
+            guard let response = HTTPURLResponse(
+                url: discoveryFinalURL,
+                statusCode: discoveryStatusCode,
+                httpVersion: nil,
+                headerFields: nil
+            ) else {
+                throw MockUpdateError.invalidRequest
+            }
+            return (Data(), response)
+        }
+        if url == manifestURL {
+            guard let response = HTTPURLResponse(
+                url: url,
+                statusCode: manifestStatusCode,
+                httpVersion: nil,
+                headerFields: manifestHeaders
+            ) else {
+                throw MockUpdateError.invalidRequest
+            }
+            return (manifestData, response)
+        }
+        guard let response = HTTPURLResponse(
             url: url,
             statusCode: 200,
             httpVersion: nil,
@@ -124,11 +364,21 @@ private struct MockUpdateHTTPClient: UpdateHTTPClient {
         ) else {
             throw MockUpdateError.invalidRequest
         }
-        return (releaseData, response)
+        return (checksumData, response)
     }
 
     func download(for request: URLRequest) async throws -> (URL, URLResponse) {
-        throw MockUpdateError.downloadNotExpected
+        guard let url = request.url,
+              let downloadFileURL,
+              let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        ) else {
+            throw MockUpdateError.downloadNotExpected
+        }
+        return (downloadFileURL, response)
     }
 }
 
@@ -137,24 +387,67 @@ private enum MockUpdateError: Error {
     case invalidRequest
 }
 
-private func makeReleaseData(version: String) -> Data {
-    Data("""
+private func testLatestReleaseURL() throws -> URL {
+    guard let url = URL(string: UpdateService.latestReleaseURLString) else {
+        throw MockUpdateError.invalidRequest
+    }
+    return url
+}
+
+private func testManifestURL(version: String) throws -> URL {
+    guard let url = URL(string: String(format: UpdateService.manifestURLTemplateString, "v\(version)")) else {
+        throw MockUpdateError.invalidRequest
+    }
+    return url
+}
+
+private func testDiscoveryFinalURL(version: String) throws -> URL {
+    guard let url = URL(string: "https://github.com/blackkcold/snapocr/releases/tag/v\(version)") else {
+        throw MockUpdateError.invalidRequest
+    }
+    return url
+}
+
+private func makeClient(
+    discoveryVersion: String,
+    manifestData: Data,
+    manifestStatusCode: Int = 200,
+    manifestHeaders: [String: String]? = nil,
+    checksumData: Data = Data(),
+    downloadFileURL: URL? = nil
+) throws -> MockUpdateHTTPClient {
+    let latestReleaseURL = try testLatestReleaseURL()
+    return MockUpdateHTTPClient(
+        latestReleaseURL: latestReleaseURL,
+        discoveryFinalURL: try testDiscoveryFinalURL(version: discoveryVersion),
+        manifestURL: try testManifestURL(version: discoveryVersion),
+        manifestData: manifestData,
+        manifestStatusCode: manifestStatusCode,
+        manifestHeaders: manifestHeaders,
+        checksumData: checksumData,
+        downloadFileURL: downloadFileURL
+    )
+}
+
+private func makeManifestData(
+    version: String,
+    declaredVersion: String? = nil,
+    checksum: String = String(repeating: "a", count: 64),
+    dmgURL: String? = nil
+) -> Data {
+    let declared = declaredVersion ?? version
+    let resolvedDMGURL = dmgURL
+        ?? "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg"
+    return Data("""
     {
-      "tag_name": "v\(version)",
-      "body": "Release notes",
-      "html_url": "https://github.com/blackkcold/snapocr/releases/tag/v\(version)",
-      "draft": false,
-      "prerelease": false,
-      "assets": [
-        {
-          "name": "SnapGlass-v\(version).dmg",
-          "browser_download_url": "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg"
-        },
-        {
-          "name": "SnapGlass-v\(version).dmg.sha256",
-          "browser_download_url": "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg.sha256"
-        }
-      ]
+      "schemaVersion": 1,
+      "version": "\(declared)",
+      "releaseNotes": "Release notes",
+      "releasePageURL": "https://github.com/blackkcold/snapocr/releases/tag/v\(version)",
+      "dmgURL": "\(resolvedDMGURL)",
+      "checksumURL": "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg.sha256",
+      "assetName": "SnapGlass-v\(version).dmg",
+      "sha256": "\(checksum)"
     }
     """.utf8)
 }

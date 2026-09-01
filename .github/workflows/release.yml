@@ -51,6 +51,7 @@ jobs:
 
           echo "DMG_PATH=$DMG_NAME" >> "$GITHUB_ENV"
           echo "SHA_PATH=$DMG_NAME.sha256" >> "$GITHUB_ENV"
+          echo "UPDATE_MANIFEST_PATH=SnapGlass-update.json" >> "$GITHUB_ENV"
 
       - name: Generate release notes
         id: notes
@@ -146,6 +147,16 @@ jobs:
 
           echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
+      - name: Generate update manifest
+        run: |
+          python3 scripts/generate-update-manifest.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            --checksum-file "$SHA_PATH" \
+            --output "$UPDATE_MANIFEST_PATH"
+
+          python3 -m json.tool "$UPDATE_MANIFEST_PATH" >/dev/null
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -155,6 +166,20 @@ jobs:
 
           gh release create "$TAG" \
             --title "$TAG" \
-            --notes-file "${{ steps.notes.outputs.notes_file }}" \
-            "$DMG_PATH" \
-            "$SHA_PATH"
+             --notes-file "${{ steps.notes.outputs.notes_file }}" \
+             "$DMG_PATH" \
+             "$SHA_PATH" \
+             "$UPDATE_MANIFEST_PATH"
+
+      - name: Verify release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          for expected in "$DMG_PATH" "$SHA_PATH" "$UPDATE_MANIFEST_PATH"; do
+            if ! grep -Fxq "$expected" <<< "$ASSETS"; then
+              echo "Missing release asset: $expected" >&2
+              exit 1
+            fi
+          done

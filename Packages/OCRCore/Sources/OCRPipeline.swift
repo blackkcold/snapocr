@@ -190,7 +190,7 @@ public final class OCRPipeline: Sendable {
         // 先裁剪所有 tile（裁剪在主任务中串行完成，避免并发裁剪竞争）
         var tileImages: [(tile: OCRTile, image: CGImage?)] = []
         tileImages.reserveCapacity(tiles.count)
-        for (index, tile) in tiles.enumerated() {
+        for tile in tiles {
             try Task.checkCancellation()
             tileImages.append((tile, image.cropping(to: tile.pixelRect)))
         }

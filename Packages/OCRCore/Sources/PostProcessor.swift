@@ -5,15 +5,24 @@ public struct PostProcessor: Sendable {
     public init() {}
 
     public func process(_ result: OCRResult) -> OCRResult {
-        // TODO: 实现后处理逻辑
-        // 1. 合并相邻行
-        // 2. URL 检测与链接化
-        // 3. 词典替换与纠错
-        return result
+        let observations = result.observations.map { line in
+            OCRLine(
+                text: line.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                confidence: line.confidence,
+                boundingBox: line.boundingBox
+            )
+        }
+        return OCRResult(
+            text: observations.isEmpty ? result.text : observations.map(\.text).joined(separator: "\n"),
+            confidence: result.confidence,
+            engineType: result.engineType,
+            layoutPreserved: result.layoutPreserved,
+            observations: observations,
+            processingTimeMs: result.processingTimeMs
+        )
     }
 
     public func detectURLs(in text: String) -> [URL] {
-        // TODO: 使用 NSDataDetector 检测 URL
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
             return []
         }

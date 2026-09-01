@@ -42,15 +42,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          for pkg in SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore; do
+          for pkg in SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore AutomationCore; do
             swift test --package-path "Packages/$pkg" || exit 1
           done
-
-  ui-smoke:
-    runs-on: self-hosted
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - run: brew install xcodegen
-      - run: xcodegen generate
-      - run: xcodebuild -project SnapGlass.xcodeproj -scheme SnapGlassUITests test

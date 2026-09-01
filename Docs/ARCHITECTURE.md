@@ -134,7 +134,7 @@ Struct (无状态工具)
 |------|------|----------|
 | **SharedKit** | 日志系统、图片编码、加密服务（CryptoKit AES-GCM）、本地密钥存取、统一错误类型 | CryptoKit, ImageIO |
 | **CaptureCore** | 区域/窗口/全屏截图；多显示器 DPI 适配；SCK 主 + CG 兼容 | ScreenCaptureKit |
-| **OCRCore** | Vision OCR 主引擎 + Tesseract 降级；开发者模式双引擎对比；内存管理 | Vision, libtesseract |
+| **OCRCore** | Vision OCR 主引擎 + 运行时动态加载 Tesseract 降级；开发者模式双引擎对比；内存管理 | Vision, optional libtesseract |
 | **BarcodeCore** | QR/Code128/EAN 等条码识别 | Vision |
 | **AnnotationCore** | 标注工具集（箭头/矩形/文本/画笔/高亮/模糊/裁剪）；撤销/重做 | Core Image |
 | **ScrollCore** | 半自动滚动截图拼接；SSIM 帧去重 | CaptureCore |
@@ -212,4 +212,4 @@ Struct (无状态工具)
 | 热键 | KeyboardShortcuts |
 | 项目生成 | XcodeGen + SPM |
 | 加密 | CryptoKit AES-GCM + App Support 0600 密钥文件 |
-| 崩溃 | 本地 PLCrashReporter |
+| 崩溃 | macOS 系统日志与用户反馈（当前未集成第三方崩溃收集器） |

@@ -215,7 +215,9 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
         configuration.queueDepth = 1
 
-        return try await withThrowingTimeout(ms: Self.captureTimeoutMs) {
+        return try await withThrowingTimeout(milliseconds: Self.captureTimeoutMs, timeoutError: {
+            CaptureError.captureFailed(reason: "SCStream capture timed out")
+        }) {
             try await SingleFrameCapture.capture(
                 with: filter,
                 configuration: configuration,
@@ -359,7 +361,9 @@ extension SCKAdapter {
         streamConfig.showsCursor = options.includeCursor
         streamConfig.capturesAudio = false
 
-        let image = try await withThrowingTimeout(ms: Self.captureTimeoutMs) {
+        let image = try await withThrowingTimeout(milliseconds: Self.captureTimeoutMs, timeoutError: {
+            CaptureError.captureFailed(reason: "SCStream capture timed out")
+        }) {
             try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
         }
 
@@ -386,7 +390,9 @@ extension SCKAdapter {
         streamConfig.showsCursor = options.includeCursor
         streamConfig.capturesAudio = false
 
-        let image = try await withThrowingTimeout(ms: Self.captureTimeoutMs) {
+        let image = try await withThrowingTimeout(milliseconds: Self.captureTimeoutMs, timeoutError: {
+            CaptureError.captureFailed(reason: "SCStream capture timed out")
+        }) {
             try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
         }
 
@@ -658,31 +664,5 @@ fileprivate final class StreamOutputAdaptor: NSObject, SCStreamOutput, @unchecke
 
         logger.info("SCStream captured frame: \(cgImage.width)x\(cgImage.height)")
         session.finish(returning: cgImage)
-    }
-}
-
-// MARK: - Timeout Helper
-
-/// 为异步操作添加超时保护。
-///
-/// 在指定毫秒数后如果操作未完成，自动抛出超时错误。
-/// 用于保护 SCStream 免于长时间无响应。
-private func withThrowingTimeout<T: Sendable>(ms: Int, operation: @escaping @Sendable () async throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await operation()
-        }
-        group.addTask {
-            let nanoseconds = UInt64(ms) * 1_000_000
-            try await Task.sleep(nanoseconds: nanoseconds)
-            throw CaptureError.captureFailed(reason: "SCStream capture timed out after \(ms)ms")
-        }
-
-        guard let result = try await group.next() else {
-            group.cancelAll()
-            throw CaptureError.captureFailed(reason: "SCStream capture produced no result")
-        }
-        group.cancelAll()
-        return result
     }
 }
