@@ -1,4 +1,5 @@
 import AnnotationCore
+import SharedKit
 import SwiftUI
 
 struct AnnotationInspectorView: View {
@@ -265,8 +266,8 @@ struct AnnotationInspectorView: View {
                         ForEach(
                         Array(viewModel.pickerDominantColors.enumerated()),
                         id: \.offset
-                    ) { _, hex in
-                        swatch(hex)
+                    ) { _, color in
+                        swatch(color)
                     }
                     }
                 }
@@ -279,26 +280,35 @@ struct AnnotationInspectorView: View {
         }
     }
 
-    private func colorRow(_ hex: String, title: LocalizedStringKey) -> some View {
+    private func colorRow(_ color: SampledColor, title: LocalizedStringKey) -> some View {
         Button {
-            viewModel.copyColorToClipboard(hex)
+            viewModel.copyColorToClipboard(color)
         } label: {
             HStack(spacing: 8) {
-                swatch(hex)
+                swatch(color)
                 Text(title)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(hex)
-                    .font(.system(.caption, design: .monospaced))
-                    .monospacedDigit()
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(color.hexString)
+                        .font(.system(.caption, design: .monospaced))
+                        .monospacedDigit()
+                    Text(color.rgbString)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .buttonStyle(.plain)
     }
 
-    private func swatch(_ hex: String) -> some View {
+    private func swatch(_ color: SampledColor) -> some View {
         RoundedRectangle(cornerRadius: 4)
-            .fill(Color(hexString: hex))
+            .fill(Color(
+                red: Double(color.red) / 255,
+                green: Double(color.green) / 255,
+                blue: Double(color.blue) / 255
+            ))
             .frame(width: 18, height: 18)
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
@@ -316,19 +326,6 @@ struct AnnotationInspectorView: View {
                     viewModel.updateSelectedStyle()
                 }
             }
-        )
-    }
-}
-
-private extension Color {
-    init(hexString: String) {
-        var value: UInt64 = 0
-        let cleaned = hexString.replacingOccurrences(of: "#", with: "")
-        Scanner(string: cleaned).scanHexInt64(&value)
-        self.init(
-            red: Double((value >> 16) & 0xFF) / 255,
-            green: Double((value >> 8) & 0xFF) / 255,
-            blue: Double(value & 0xFF) / 255
         )
     }
 }

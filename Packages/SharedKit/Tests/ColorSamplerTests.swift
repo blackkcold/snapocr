@@ -117,6 +117,20 @@ struct ColorSamplerTests {
     #expect(ColorSampler.hexString(red: 0, green: 0, blue: 0) == "#000000")
   }
 
+  @Test func rgbStringFormatsDecimal() {
+    let color = SampledColor(red: 255, green: 128, blue: 0, alpha: 255)
+    #expect(color.rgbString == "rgb(255, 128, 0)")
+    #expect(SampledColor(red: 0, green: 0, blue: 0, alpha: 255).rgbString == "rgb(0, 0, 0)")
+    #expect(SampledColor(red: 16, green: 32, blue: 64, alpha: 255).rgbString == "rgb(16, 32, 64)")
+  }
+
+  @Test func sampledColorCodableRoundTrip() throws {
+    let color = SampledColor(red: 255, green: 128, blue: 0, alpha: 255)
+    let data = try JSONEncoder().encode(color)
+    let decoded = try JSONDecoder().decode(SampledColor.self, from: data)
+    #expect(decoded == color)
+  }
+
   @Test func averageColorClampsEmptyOrOutOfBoundsRect() throws {
     let image = try #require(
       TestImageFactory.solidImage(width: 4, height: 4, red: 1, green: 2, blue: 3)

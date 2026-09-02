@@ -5,9 +5,11 @@ struct HistoryStorageDashboard: View {
     let storageSizeGB: Double
 
     @State private var stats: HistoryStats?
+    @State private var colorCount: Int?
     @State private var isLoading = true
 
     private let history = HistoryActor.shared
+    private let colorHistory = ColorHistoryStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -72,6 +74,12 @@ struct HistoryStorageDashboard: View {
                     title: "Favourites",
                     value: "\(stats.favouriteCount)",
                     tint: .yellow
+                )
+                metricCard(
+                    icon: "eyedropper",
+                    title: "Colors",
+                    value: "\(colorCount ?? 0)",
+                    tint: .orange
                 )
                 metricCard(
                     icon: "gauge.with.dots.needle.50percent",
@@ -194,6 +202,11 @@ struct HistoryStorageDashboard: View {
             stats = try await history.stats()
         } catch {
             stats = nil
+        }
+        if let colorHistory {
+            colorCount = await colorHistory.count()
+        } else {
+            colorCount = nil
         }
         isLoading = false
     }

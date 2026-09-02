@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-02
+
+### Added
+- 取色显示：hex 旁同时显示 RGB 值（区域截图悬停气泡、编辑器悬停气泡、编辑器 Inspector 色块三处两行显示）
+- 取色历史：取色器复制的颜色记录到本地 AES-256-GCM 加密历史（复用截图历史密钥，单文件存储）；历史窗口新增「截图 / 颜色」分段，颜色段支持网格浏览、hex 过滤、点击复制与右键删除
+- 存储管理：偏好设置新增取色历史卡片（启用开关、数量上限、清空），存储概览新增颜色记录数；清空截图历史时同步清空取色历史，取色历史也可单独清空
+
+### Fixed
+- 修复多显示器副屏区域截图取色无效（预捕获改用 Quartz 全局坐标边界）、悬停与编辑器取色气泡缺失色块
+- 修复取色历史复制通知无自动消失、常驻遮挡界面
+
+### Changed
+- toast 通知位置可配置，无固定底栏窗口（偏好设置/历史/权限）移至底部，避开操作栏
+
 ## [0.6.0] - 2026-09-01
 
 ### Added
@@ -165,7 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/blackkcold/snapocr/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/blackkcold/snapocr/compare/v0.5.6...v0.6.0
 [0.5.6]: https://github.com/blackkcold/snapocr/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/blackkcold/snapocr/compare/v0.5.3...v0.5.5

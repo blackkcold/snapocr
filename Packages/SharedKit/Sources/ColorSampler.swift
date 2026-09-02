@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// A single RGBA color sample represented in the sRGB color space.
-public struct SampledColor: Equatable, Sendable {
+public struct SampledColor: Equatable, Sendable, Codable {
   /// Red component (0–255).
   public let red: UInt8
   /// Green component (0–255).
@@ -12,9 +12,22 @@ public struct SampledColor: Equatable, Sendable {
   /// Alpha component (0–255).
   public let alpha: UInt8
 
+  /// Creates a color sample from raw sRGB components.
+  public init(red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) {
+    self.red = red
+    self.green = green
+    self.blue = blue
+    self.alpha = alpha
+  }
+
   /// The `#RRGGBB` hex representation, ignoring alpha.
   public var hexString: String {
     ColorSampler.hexString(red: red, green: green, blue: blue)
+  }
+
+  /// The `rgb(r, g, b)` decimal representation, ignoring alpha.
+  public var rgbString: String {
+    "rgb(\(red), \(green), \(blue))"
   }
 }
 

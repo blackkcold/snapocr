@@ -62,8 +62,8 @@ final class EditableAnnotationCanvasNSView: NSView {
     var onOCRLinesCopied: (([OCRLine]) -> Void)?
     var onOCRTextCopied: ((String) -> Void)?
     var onOCRLineAsAnnotation: ((OCRLine) -> Void)?
-    var onColorPicked: ((String) -> Void)?
-    var onRegionColorsPicked: (([String]) -> Void)?
+    var onColorPicked: ((SampledColor) -> Void)?
+    var onRegionColorsPicked: (([SampledColor]) -> Void)?
 
     enum Interaction {
         case none
@@ -98,7 +98,7 @@ final class EditableAnnotationCanvasNSView: NSView {
     private var resizePointerOffset: CGPoint = .zero
     private var trackingAreaReference: NSTrackingArea?
     private var hoverPoint: CGPoint = .zero
-    private var pickerHoverColor: String?
+    private var pickerHoverColor: SampledColor?
     private var pickerRegionRect: CGRect = .zero
     var dominantColorCount = 5
 
@@ -123,24 +123,23 @@ final class EditableAnnotationCanvasNSView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         hoverPoint = convert(event.locationInWindow, from: nil)
-        pickerHoverColor = currentTool == .picker ? sampledHex(at: hoverPoint) : nil
+        pickerHoverColor = currentTool == .picker ? sampledColor(at: hoverPoint) : nil
         needsDisplay = true
     }
 
     /// Samples the color under a view point in the base image.
-    private func sampledHex(at point: CGPoint) -> String? {
+    private func sampledColor(at point: CGPoint) -> SampledColor? {
         guard let image, imageDisplayRect.contains(point) else { return nil }
         let normalized = normalizedPoint(point)
         let pixel = CGPoint(
             x: normalized.x * CGFloat(image.width),
             y: (1 - normalized.y) * CGFloat(image.height)
         )
-        guard let color = ColorSampler.pixelColor(in: image, at: pixel) else { return nil }
-        return color.hexString
+        return ColorSampler.pixelColor(in: image, at: pixel)
     }
 
     /// Samples the dominant colors over a view-space region.
-    private func sampledRegionHexes(for viewRect: CGRect) -> [String] {
+    private func sampledRegionColors(for viewRect: CGRect) -> [SampledColor] {
         guard let image, !viewRect.isEmpty else { return [] }
         let normalized = CGRect(
             x: (viewRect.minX - imageDisplayRect.minX) / imageDisplayRect.width,
@@ -155,7 +154,6 @@ final class EditableAnnotationCanvasNSView: NSView {
             height: normalized.height * CGFloat(image.height)
         )
         return ColorSampler.dominantColors(in: image, in: pixelRect, count: dominantColorCount)
-            .map(\.hexString)
     }
 
     override init(frame frameRect: NSRect) {
@@ -221,22 +219,53 @@ final class EditableAnnotationCanvasNSView: NSView {
         }
     }
 
-    private func drawColorLabel(_ hex: String, near point: CGPoint) {
+    private func drawColorLabel(_ color: SampledColor, near point: CGPoint) {
         guard imageDisplayRect.contains(point) else { return }
+        let hexLabel = color.hexString
+        let rgbLabel = color.rgbString
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.white,
         ]
-        let size = (hex as NSString).size(withAttributes: attributes)
+        let secondaryAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.7),
+        ]
+        let hexSize = (hexLabel as NSString).size(withAttributes: attributes)
+        let rgbSize = (rgbLabel as NSString).size(withAttributes: secondaryAttributes)
+        let swatchSize: CGFloat = 10
+        let swatchPadding: CGFloat = 5
+        let textPadding: CGFloat = 6
+        let lineHeight = max(hexSize.height, rgbSize.height)
+        let textWidth = max(hexSize.width, rgbSize.width)
         let rect = CGRect(
             x: point.x + 14,
             y: point.y + 14,
-            width: size.width + 12,
-            height: size.height + 8
+            width: swatchSize + swatchPadding + textWidth + textPadding * 2,
+            height: lineHeight * 2 + 8
         )
         NSColor.black.withAlphaComponent(0.75).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
-        (hex as NSString).draw(at: CGPoint(x: rect.minX + 6, y: rect.minY + 4), withAttributes: attributes)
+        let swatchRect = CGRect(
+            x: rect.minX + 6,
+            y: rect.midY - swatchSize / 2,
+            width: swatchSize,
+            height: swatchSize
+        )
+        NSColor(
+            srgbRed: CGFloat(color.red) / 255,
+            green: CGFloat(color.green) / 255,
+            blue: CGFloat(color.blue) / 255,
+            alpha: 1
+        ).setFill()
+        NSBezierPath(roundedRect: swatchRect, xRadius: 2, yRadius: 2).fill()
+        NSColor.white.withAlphaComponent(0.5).setStroke()
+        NSBezierPath(roundedRect: swatchRect, xRadius: 2, yRadius: 2).stroke()
+        let textX = swatchRect.maxX + swatchPadding
+        let hexBaseline = rect.maxY - 4 - hexSize.height
+        let rgbBaseline = rect.minY + 4
+        (hexLabel as NSString).draw(at: CGPoint(x: textX, y: hexBaseline), withAttributes: attributes)
+        (rgbLabel as NSString).draw(at: CGPoint(x: textX, y: rgbBaseline), withAttributes: secondaryAttributes)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -333,10 +362,10 @@ final class EditableAnnotationCanvasNSView: NSView {
             if currentTool == .picker {
                 let viewRect = CGRect(spanning: dragStartPoint, and: clampedViewPoint(point))
                 if viewRect.width > 5, viewRect.height > 5 {
-                    onRegionColorsPicked?(sampledRegionHexes(for: viewRect))
+                    onRegionColorsPicked?(sampledRegionColors(for: viewRect))
                 } else {
-                    if let hex = sampledHex(at: clampedViewPoint(point)) {
-                        onColorPicked?(hex)
+                    if let color = sampledColor(at: clampedViewPoint(point)) {
+                        onColorPicked?(color)
                     }
                 }
             } else if currentTool == .crop {

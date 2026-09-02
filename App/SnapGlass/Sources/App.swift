@@ -42,7 +42,7 @@ struct SnapGlassApp: App {
         Window("Preferences", id: "preferences") {
             PreferencesView()
                 .environmentObject(router)
-                .toast(message: $viewModel.toastMessage)
+                .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environmentObject(viewModel)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
@@ -68,7 +68,7 @@ struct SnapGlassApp: App {
         Window("History", id: "history") {
             HistoryView()
                 .environmentObject(viewModel)
-                .toast(message: $viewModel.toastMessage)
+                .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "history"))
@@ -90,7 +90,7 @@ struct SnapGlassApp: App {
         
         Window("Permission Required", id: "permission") {
             PermissionGuideView()
-                .toast(message: $viewModel.toastMessage)
+                .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "permission"))

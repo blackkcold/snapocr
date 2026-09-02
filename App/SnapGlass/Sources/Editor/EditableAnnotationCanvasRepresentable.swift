@@ -1,6 +1,7 @@
 import AnnotationCore
 import AppKit
 import OCRCore
+import SharedKit
 import SwiftUI
 
 struct EditableAnnotationCanvasView: NSViewRepresentable {
@@ -33,8 +34,8 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     var onOCRLinesCopied: ([OCRLine]) -> Void
     var onOCRTextCopied: (String) -> Void
     var onOCRLineAsAnnotation: (OCRLine) -> Void
-    var onColorPicked: (String) -> Void
-    var onRegionColorsPicked: ([String]) -> Void
+    var onColorPicked: (SampledColor) -> Void
+    var onRegionColorsPicked: ([SampledColor]) -> Void
 
     func makeNSView(context: Context) -> EditableAnnotationCanvasNSView { EditableAnnotationCanvasNSView() }
 

@@ -184,8 +184,15 @@ public final class CaptureViewModel: ObservableObject {
 
             // Pre-capture each screen's full frame before the overlay appears so
             // the frames contain no overlay windows, no cursor, and a stable
-            // sample source for hover/click color picking. Sampling only needs
-            // non-hiDPI frames, so we reuse the default 1x capture options.
+            // sample source for hover/click color picking. The area rect must
+            // use Quartz global bounds (CGDisplayBounds) so it matches both the
+            // sampling path above (which converts AppKit points via
+            // quartzScreenFrame: CGDisplayBounds) and the selection path below
+            // (selection.screenRect is already a Quartz rect). AppKit
+            // screen.frame coordinates can diverge from Quartz bounds on
+            // secondary displays arranged above/left of the main screen.
+            // Sampling only needs non-hiDPI frames, so we reuse the default
+            // 1x capture options.
             var capturedFrames: [CGDirectDisplayID: CGImage] = [:]
             let captureOptions = CaptureOptions(
                 includeCursor: false,
@@ -200,7 +207,7 @@ public final class CaptureViewModel: ObservableObject {
                 else { continue }
                 do {
                     let result = try await captureOrchestrator.capture(
-                        mode: CaptureCore.CaptureMode.area(screen.frame),
+                        mode: CaptureCore.CaptureMode.area(CGDisplayBounds(displayID)),
                         options: captureOptions
                     )
                     capturedFrames[displayID] = result.image
@@ -217,8 +224,8 @@ public final class CaptureViewModel: ObservableObject {
                     AreaSelectionPanel.show(
                         style: selectionStyle,
                         capturedFrames: capturedFrames,
-                        onColorPicked: { [weak self] hex in
-                            self?.copyHexToClipboard(hex)
+                        onColorPicked: { [weak self] color in
+                            self?.copyHexToClipboard(color)
                         }
                     ) { result in
                         guard !didResume else { return }
@@ -244,19 +251,35 @@ public final class CaptureViewModel: ObservableObject {
         }
     }
 
-    private func copyHexToClipboard(_ hex: String) {
+    private func copyHexToClipboard(_ color: SampledColor) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(hex, forType: .string)
+        NSPasteboard.general.setString(color.hexString, forType: .string)
         showToast(
             message: String(
                 format: NSLocalizedString(
                     "Color %@ copied",
                     comment: "Area color picker copy success"
                 ),
-                hex
+                color.hexString
             ),
             type: .success
         )
+        recordColorHistory(color, source: .area)
+    }
+
+    private func recordColorHistory(_ color: SampledColor, source: ColorHistoryEntry.Source) {
+        guard colorHistoryEnabled else { return }
+        guard let colorHistory = ColorHistoryStore.shared else { return }
+        Task {
+            try? await colorHistory.save(color, source: source)
+        }
+    }
+
+    private var colorHistoryEnabled: Bool {
+        guard UserDefaults.standard.object(forKey: PreferenceKeys.colorHistoryEnabled) != nil else {
+            return PreferenceDefaults.colorHistoryEnabled
+        }
+        return UserDefaults.standard.bool(forKey: PreferenceKeys.colorHistoryEnabled)
     }
 
     /// Triggers a window capture.

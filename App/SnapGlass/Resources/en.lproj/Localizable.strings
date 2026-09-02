@@ -338,3 +338,20 @@
 "Average" = "Average";
 "Dominant colors" = "Dominant colors";
 "Click a swatch to copy its hex value." = "Click a swatch to copy its hex value.";
+
+/* Color history */
+"Screenshots" = "Screenshots";
+"Colors" = "Colors";
+"Search colors…" = "Search colors…";
+"No colors captured yet" = "No colors captured yet";
+"No matching colors" = "No matching colors";
+"Clear Colors" = "Clear Colors";
+"Clear Color History?" = "Clear Color History?";
+"This will permanently delete all %d color entries." = "This will permanently delete all %d color entries.";
+"This will permanently delete all color entries." = "This will permanently delete all color entries.";
+"Area" = "Area";
+"Editor" = "Editor";
+"Color History" = "Color History";
+"Record picked colors" = "Record picked colors";
+"Maximum color entries" = "Maximum color entries";
+"Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here.";

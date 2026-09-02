@@ -338,3 +338,20 @@
 "Average" = "平均色";
 "Dominant colors" = "主要色";
 "Click a swatch to copy its hex value." = "スウォッチをクリックすると HEX 値がコピーされます。";
+
+/* Color history */
+"Screenshots" = "スクリーンショット";
+"Colors" = "カラー";
+"Search colors…" = "カラーを検索…";
+"No colors captured yet" = "まだカラーの記録がありません";
+"No matching colors" = "一致するカラーがありません";
+"Clear Colors" = "カラーを消去";
+"Clear Color History?" = "カラー履歴を消去しますか？";
+"This will permanently delete all %d color entries." = "全 %d 件のカラー記録を完全に削除します。";
+"This will permanently delete all color entries." = "すべてのカラー記録を完全に削除します。";
+"Area" = "範囲";
+"Editor" = "エディタ";
+"Color History" = "カラー履歴";
+"Record picked colors" = "ピックしたカラーを記録";
+"Maximum color entries" = "カラー履歴の最大件数";
+"Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "カラーはこの Mac にのみ暗号化して保存されます。ピッカーでコピーするとここに記録されます。";

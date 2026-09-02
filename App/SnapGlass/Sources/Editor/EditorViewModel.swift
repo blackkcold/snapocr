@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import AnnotationCore
 import BarcodeCore
+import HistoryCore
 import OCRCore
 import SharedKit
 import UniformTypeIdentifiers
@@ -58,13 +59,13 @@ public final class EditorViewModel: ObservableObject {
     @Published public var showsOCROverlay = true
 
     /// Live color under the picker cursor while hovering.
-    @Published public private(set) var pickerHoverColor: String?
+    @Published public private(set) var pickerHoverColor: SampledColor?
 
     /// Average color of the last picked region.
-    @Published public private(set) var pickerAverageColor: String?
+    @Published public private(set) var pickerAverageColor: SampledColor?
 
     /// Dominant colors of the last picked region.
-    @Published public private(set) var pickerDominantColors: [String] = []
+    @Published public private(set) var pickerDominantColors: [SampledColor] = []
 
     /// Whether the editor is manually scanning the current image for barcodes.
     @Published public private(set) var isBarcodeScanning = false
@@ -577,54 +578,72 @@ public final class EditorViewModel: ObservableObject {
     // MARK: - Color Picker
 
     /// Handles a single-point color pick from the canvas.
-    public func handleColorPicked(_ hex: String) {
-        pickerHoverColor = hex
-        copyColorToClipboard(hex)
+    public func handleColorPicked(_ color: SampledColor) {
+        pickerHoverColor = color
+        copyColorToClipboard(color)
     }
 
     /// Handles a region pick, computing the average and dominant colors.
-    public func handleRegionColorsPicked(_ hexes: [String]) {
-        guard !hexes.isEmpty else { return }
-        pickerDominantColors = hexes
-        pickerAverageColor = averageHex(of: hexes)
-        copyColorToClipboard(hexes.first ?? "")
+    /// Only the dominant (first) color reaches the clipboard/history so the
+    /// history is not flooded by one region pick.
+    public func handleRegionColorsPicked(_ colors: [SampledColor]) {
+        guard let dominant = colors.first else { return }
+        pickerDominantColors = colors
+        pickerAverageColor = averageColor(of: colors)
+        copyColorToClipboard(dominant)
     }
 
-    private func averageHex(of hexes: [String]) -> String? {
-        guard !hexes.isEmpty else { return nil }
+    private func averageColor(of colors: [SampledColor]) -> SampledColor? {
+        guard !colors.isEmpty else { return nil }
         var totalRed = 0
         var totalGreen = 0
         var totalBlue = 0
-        for hex in hexes {
-            var value: UInt64 = 0
-            let cleaned = hex.replacingOccurrences(of: "#", with: "")
-            guard cleaned.count == 6, Scanner(string: cleaned).scanHexInt64(&value) else { continue }
-            totalRed += Int((value >> 16) & 0xFF)
-            totalGreen += Int((value >> 8) & 0xFF)
-            totalBlue += Int(value & 0xFF)
+        for color in colors {
+            totalRed += Int(color.red)
+            totalGreen += Int(color.green)
+            totalBlue += Int(color.blue)
         }
-        let count = hexes.count
-        guard count > 0 else { return nil }
-        return ColorSampler.hexString(
+        let count = colors.count
+        return SampledColor(
             red: UInt8(totalRed / count),
             green: UInt8(totalGreen / count),
-            blue: UInt8(totalBlue / count)
+            blue: UInt8(totalBlue / count),
+            alpha: 255
         )
     }
 
-    func copyColorToClipboard(_ hex: String) {
+    func copyColorToClipboard(_ color: SampledColor) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(hex, forType: .string)
+        NSPasteboard.general.setString(color.hexString, forType: .string)
         showToast(
             message: String(
                 format: NSLocalizedString(
                     "Color %@ copied",
                     comment: "Editor color picker copy success"
                 ),
-                hex
+                color.hexString
             ),
             type: .success
         )
+        recordColorHistory(color)
+    }
+
+    /// Single recording point for editor-side color picks. Every copy path
+    /// (single point, region, inspector swatch) funnels through here, so a
+    /// pick is recorded exactly once.
+    private func recordColorHistory(_ color: SampledColor) {
+        guard colorHistoryEnabled else { return }
+        guard let colorHistory = ColorHistoryStore.shared else { return }
+        Task {
+            try? await colorHistory.save(color, source: .editor)
+        }
+    }
+
+    private var colorHistoryEnabled: Bool {
+        guard UserDefaults.standard.object(forKey: PreferenceKeys.colorHistoryEnabled) != nil else {
+            return PreferenceDefaults.colorHistoryEnabled
+        }
+        return UserDefaults.standard.bool(forKey: PreferenceKeys.colorHistoryEnabled)
     }
 
     // MARK: - Barcode Recognition

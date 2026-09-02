@@ -63,15 +63,17 @@ public struct ToastView: View {
 public struct ToastModifier: ViewModifier {
     /// The binding to the toast message.
     @Binding var toast: ToastMessage?
+    /// The edge of the container where the toast appears.
+    var edge: Edge = .top
     
     public func body(content: Content) -> some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: edge == .top ? .top : .bottom) {
             content
             
             if let toast = toast {
                 ToastView(message: toast)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .padding(.top, 20)
+                    .transition(.move(edge: edge).combined(with: .opacity))
+                    .padding(Edge.Set(edge), 20)
                     .zIndex(100)
             }
         }
@@ -82,9 +84,11 @@ public struct ToastModifier: ViewModifier {
 public extension View {
     /// Adds a toast notification overlay to the view.
     ///
-    /// - Parameter message: A binding to the toast message to display.
+    /// - Parameters:
+    ///   - message: A binding to the toast message to display.
+    ///   - edge: The edge of the container where the toast appears. Defaults to `.top`.
     /// - Returns: A view with the toast overlay.
-    func toast(message: Binding<ToastMessage?>) -> some View {
-        modifier(ToastModifier(toast: message))
+    func toast(message: Binding<ToastMessage?>, edge: Edge = .top) -> some View {
+        modifier(ToastModifier(toast: message, edge: edge))
     }
 }

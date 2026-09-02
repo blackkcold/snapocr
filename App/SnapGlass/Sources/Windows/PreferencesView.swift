@@ -510,12 +510,18 @@ struct HistoryPreferencesView: View {
     private var autoSave = PreferenceDefaults.historyAutoSave
     @AppStorage(PreferenceKeys.historySaveFullText)
     private var saveFullText = PreferenceDefaults.historySaveFullText
+    @AppStorage(PreferenceKeys.colorHistoryEnabled)
+    private var colorHistoryEnabled = PreferenceDefaults.colorHistoryEnabled
+    @AppStorage(PreferenceKeys.colorHistoryMaxItems)
+    private var storedColorHistoryMaxItems = PreferenceDefaults.colorHistoryMaxItems
 
     @State private var maxItems = PreferenceDefaults.historyMaxItems
     @State private var retentionDays = PreferenceDefaults.historyRetentionDays
     @State private var keepIndefinitely = false
     @State private var lastFiniteRetentionDays = PreferenceDefaults.historyRetentionDays
     @State private var storageSize = PreferenceDefaults.historyStorageSize
+    @State private var colorHistoryMaxItems = PreferenceDefaults.colorHistoryMaxItems
+    @State private var isClearingColors = false
 
     private let logger = Logger(category: "preferences")
 
@@ -528,6 +534,8 @@ struct HistoryPreferencesView: View {
 
                 storageCard
 
+                colorHistoryCard
+
                 saveCard
             }
         }
@@ -539,6 +547,7 @@ struct HistoryPreferencesView: View {
             retentionDays = lastFiniteRetentionDays
             maxItems = storedMaxItems
             storageSize = storedStorageSize
+            colorHistoryMaxItems = storedColorHistoryMaxItems
         }
     }
 
@@ -626,6 +635,53 @@ struct HistoryPreferencesView: View {
                 Toggle("Save full OCR text", isOn: $saveFullText)
                     .help("Store complete OCR text in encrypted history entries. Off stores an empty text field.")
             }
+        }
+    }
+
+    private var colorHistoryCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "eyedropper", title: "Color History")
+
+            Toggle("Record picked colors", isOn: $colorHistoryEnabled)
+                .help("Record colors copied with the area or editor color picker")
+
+            if colorHistoryEnabled {
+                TriValueControl(
+                    title: "Maximum color entries",
+                    unit: String(localized: "items"),
+                    presets: [50, 100, 200, 500],
+                    range: 10...5_000,
+                    value: colorHistoryMaxItems
+                ) { newValue in
+                    colorHistoryMaxItems = newValue
+                    storedColorHistoryMaxItems = newValue
+                }
+            }
+
+            Button(role: .destructive) {
+                isClearingColors = true
+            } label: {
+                Label("Clear Colors", systemImage: "trash")
+            }
+
+            PreferencesCardCaption(text: "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here.")
+        }
+        .alert("Clear Color History?", isPresented: $isClearingColors) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) {
+                Task { await clearColorHistory() }
+            }
+        } message: {
+            Text("This will permanently delete all color entries.")
+        }
+    }
+
+    private func clearColorHistory() async {
+        guard let colorHistory = ColorHistoryStore.shared else { return }
+        do {
+            try await colorHistory.clear()
+        } catch {
+            logger.error("Failed to clear color history: \(error.localizedDescription)")
         }
     }
 

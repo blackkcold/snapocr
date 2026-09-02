@@ -34,10 +34,11 @@ SnapGlass 是一款**离线优先**的开源截图与 OCR 工具，遵循以下�
 ## 数据存储
 
 | 数据 | 存储位置 | 加密 | 生命周期 | 用户控制 |
-|------|----------|------|----------|----------|
+| --- | --- | --- | --- | --- |
 | 截图原图 | `~/Library/Application Support/SnapGlass/History/v2/images/` | AES-256-GCM | 7天 / 100条 | 可在偏好设置中修改策略 |
 | OCR 文本 | `~/Library/Application Support/SnapGlass/History/v2/entries/` | AES-256-GCM | 30天 / 500条 | 可在偏好设置中开启或禁用全文保存 |
 | 缩略图 | `~/Library/Application Support/SnapGlass/History/v2/thumbs/` | 无加密 | 90天 / 1000条 | 可在偏好设置中修改 |
+| 取色历史 | `~/Library/Application Support/SnapGlass/History/v2/colors/` | AES-256-GCM | 100条 | 可在偏好设置中关闭、调整上限或清空；清空截图历史时一并清空 |
 | 历史密钥 | `~/Library/Application Support/SnapGlass/Security/history-v2.key` | 本地 0600 权限文件 | 持久 | 随应用支持目录管理 |
 | 崩溃日志 | `~/Library/Logs/SnapGlass/` | 无加密 | 30天 | 手动删除 |
 | 应用偏好 | `UserDefaults` | 无加密 | 持久 | 偏好设置界面 |

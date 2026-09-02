@@ -338,3 +338,20 @@
 "Average" = "평균 색상";
 "Dominant colors" = "주요 색상";
 "Click a swatch to copy its hex value." = "견본을 클릭하면 HEX 값이 복사됩니다.";
+
+/* Color history */
+"Screenshots" = "스크린샷";
+"Colors" = "색상";
+"Search colors…" = "색상 검색…";
+"No colors captured yet" = "아직 기록된 색상이 없습니다";
+"No matching colors" = "일치하는 색상이 없습니다";
+"Clear Colors" = "색상 지우기";
+"Clear Color History?" = "색상 기록을 지울까요?";
+"This will permanently delete all %d color entries." = "모든 색상 항목 %d개를 영구 삭제합니다.";
+"This will permanently delete all color entries." = "모든 색상 항목을 영구 삭제합니다.";
+"Area" = "영역";
+"Editor" = "편집기";
+"Color History" = "색상 기록";
+"Record picked colors" = "복사한 색상 기록";
+"Maximum color entries" = "최대 색상 항목 수";
+"Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "색상은 이 Mac에만 암호화되어 저장됩니다. 피커로 색상을 복사하면 여기에 기록됩니다.";

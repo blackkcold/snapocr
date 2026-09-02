@@ -28,6 +28,8 @@ public enum PreferenceKeys {
     public static let historyStorageSize = "history_storageSize"
     public static let historyAutoSave = "history_autoSave"
     public static let historySaveFullText = "history_saveFullText"
+    public static let colorHistoryEnabled = "history_colorHistoryEnabled"
+    public static let colorHistoryMaxItems = "history_colorHistoryMaxItems"
 
     public static let developerMode = "dev_devMode"
     public static let engineComparison = "dev_engineComparison"
@@ -62,6 +64,8 @@ public enum PreferenceDefaults {
     public static let historyStorageSize = 1.0
     public static let historyAutoSave = true
     public static let historySaveFullText = false
+    public static let colorHistoryEnabled = true
+    public static let colorHistoryMaxItems = 100
 
     public static let developerMode = false
     public static let engineComparison = false

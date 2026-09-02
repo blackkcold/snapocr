@@ -138,7 +138,7 @@ Struct (无状态工具)
 | **BarcodeCore** | QR/Code128/EAN 等条码识别 | Vision |
 | **AnnotationCore** | 标注工具集（箭头/矩形/文本/画笔/高亮/模糊/裁剪）；撤销/重做 | Core Image |
 | **ScrollCore** | 半自动滚动截图拼接；SSIM 帧去重 | CaptureCore |
-| **HistoryCore** | 加密环形缓存；自动清理策略；数据迁移 | CryptoKit |
+| **HistoryCore** | 加密环形缓存；自动清理策略；取色历史（单文件加密存储）；数据迁移 | CryptoKit |
 | **AutomationCore** | 保留的 CLI / URL Scheme / App Intents 源码，不进入当前产品构建 | — |
 
 ---

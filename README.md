@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.5.6-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.6.1-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -96,7 +96,8 @@
 - 矩形默认纯线框，可通过填充开关或预设显式填充
 - 选择工具下可直接选取 OCR 文本，复制或添加为标注
 - 裁剪工具支持移动、缩放、确认后执行
-- 取色器悬停实时显示 hex，单击复制单色，拖拽采样区域平均色与主色
+- 取色器悬停实时显示 hex 与 RGB，单击复制单色，拖拽采样区域平均色与主色
+- 取色历史：复制的颜色自动记录到本地加密历史，历史窗口「颜色」分段可网格浏览、hex 过滤、点击复制，偏好设置可调整上限或清空
 
 ### 条码识别
 

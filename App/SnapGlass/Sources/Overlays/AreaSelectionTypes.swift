@@ -26,7 +26,7 @@ private final class AreaSelectionSession {
     static func show(
         style: CaptureSelectionStyle,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
-        onColorPicked: ((String) -> Void)? = nil,
+        onColorPicked: ((SampledColor) -> Void)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         let screens = NSScreen.screens
@@ -47,7 +47,7 @@ private final class AreaSelectionSession {
     private func present(
         on screens: [NSScreen],
         style: CaptureSelectionStyle,
-        onColorPicked: ((String) -> Void)?
+        onColorPicked: ((SampledColor) -> Void)?
     ) {
         panels = screens.map { screen in
             AreaSelectionPanel(
@@ -86,7 +86,7 @@ final class AreaSelectionPanel: NSPanel {
     static func show(
         style: CaptureSelectionStyle,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
-        onColorPicked: ((String) -> Void)? = nil,
+        onColorPicked: ((SampledColor) -> Void)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         AreaSelectionSession.show(
@@ -101,7 +101,7 @@ final class AreaSelectionPanel: NSPanel {
         screen: NSScreen,
         style: CaptureSelectionStyle,
         capturedFrames: [CGDirectDisplayID: CGImage],
-        onColorPicked: ((String) -> Void)?,
+        onColorPicked: ((SampledColor) -> Void)?,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         self.onComplete = onComplete
