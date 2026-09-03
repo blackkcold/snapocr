@@ -67,9 +67,9 @@ public struct OverlapDetector: Sendable {
         var overlaps: [CGFloat] = []
         overlaps.reserveCapacity(frames.count - 1)
 
-        for i in 0..<(frames.count - 1) {
-            let frameA = frames[i]
-            let frameB = frames[i + 1]
+        for index in 0..<(frames.count - 1) {
+            let frameA = frames[index]
+            let frameB = frames[index + 1]
 
             let heightA = CGFloat(frameA.image.height)
             let stitchOffset = estimateStitchOffset(
@@ -139,14 +139,14 @@ public struct OverlapDetector: Sendable {
         guard maximumOverlap >= minimumOverlap else { return 0 }
 
         let sampleHeight = min(48, minimumOverlap)
-        let x1 = (width1 - comparisonWidth) / 2
-        let x2 = (width2 - comparisonWidth) / 2
+        let originX1 = (width1 - comparisonWidth) / 2
+        let originX2 = (width2 - comparisonWidth) / 2
 
         guard
             let pixels1 = grayscalePixels(
                 from: frame1,
                 region: CGRect(
-                    x: x1,
+                    x: originX1,
                     y: height1 - maximumOverlap,
                     width: comparisonWidth,
                     height: maximumOverlap
@@ -154,51 +154,92 @@ public struct OverlapDetector: Sendable {
             ),
             let pixels2 = grayscalePixels(
                 from: frame2,
-                region: CGRect(x: x2, y: 0, width: comparisonWidth, height: sampleHeight)
+                region: CGRect(x: originX2, y: 0, width: comparisonWidth, height: sampleHeight)
             )
         else {
             return 0
         }
 
-        var bestOverlap = minimumOverlap
+        let best = findBestOverlap(
+            pixels1: pixels1,
+            pixels2: pixels2,
+            geometry: OverlapGeometry(
+                comparisonWidth: comparisonWidth,
+                sampleHeight: sampleHeight,
+                minimumOverlap: minimumOverlap,
+                maximumOverlap: maximumOverlap
+            )
+        )
+
+        if best.similarity < similarityThreshold {
+            return 0
+        }
+
+        return CGFloat(height1 - best.overlap)
+    }
+
+    /// 在重叠范围内搜索相似度最高的偏移量。
+    private func findBestOverlap(
+        pixels1: [Float],
+        pixels2: [Float],
+        geometry: OverlapGeometry
+    ) -> (overlap: Int, similarity: Float) {
+        var bestOverlap = geometry.minimumOverlap
         var bestSimilarity: Float = 0
 
         func similarity(for overlap: Int) -> Float {
-            let pixelOffset = maximumOverlap - overlap
+            let pixelOffset = geometry.maximumOverlap - overlap
             return computeSSIM(
                 pixels1: pixels1,
                 pixels2: pixels2,
                 offset: pixelOffset,
-                width: comparisonWidth,
-                height: sampleHeight
+                width: geometry.comparisonWidth,
+                height: geometry.sampleHeight
             )
         }
 
-        for overlap in Swift.stride(from: minimumOverlap, through: maximumOverlap, by: searchStep) {
-            let similarity = similarity(for: overlap)
-            if similarity > bestSimilarity {
-                bestSimilarity = similarity
+        let coarse = searchBestOverlap(
+            from: geometry.minimumOverlap,
+            through: geometry.maximumOverlap,
+            by: searchStep,
+            similarity: similarity
+        )
+        bestOverlap = coarse.bestOverlap
+        bestSimilarity = coarse.bestSimilarity
+
+        let refinementStart = max(geometry.minimumOverlap, bestOverlap - searchStep + 1)
+        let refinementEnd = min(geometry.maximumOverlap, bestOverlap + searchStep - 1)
+        if refinementStart <= refinementEnd {
+            let refined = searchBestOverlap(
+                from: refinementStart,
+                through: refinementEnd,
+                by: 1,
+                similarity: similarity
+            )
+            bestOverlap = refined.bestOverlap
+            bestSimilarity = refined.bestSimilarity
+        }
+
+        return (bestOverlap, bestSimilarity)
+    }
+
+    /// 在指定范围内搜索相似度最高的重叠量。
+    private func searchBestOverlap(
+        from start: Int,
+        through end: Int,
+        by step: Int,
+        similarity: (Int) -> Float
+    ) -> (bestOverlap: Int, bestSimilarity: Float) {
+        var bestOverlap = start
+        var bestSimilarity: Float = 0
+        for overlap in Swift.stride(from: start, through: end, by: step) {
+            let value = similarity(overlap)
+            if value > bestSimilarity {
+                bestSimilarity = value
                 bestOverlap = overlap
             }
         }
-
-        let refinementStart = max(minimumOverlap, bestOverlap - searchStep + 1)
-        let refinementEnd = min(maximumOverlap, bestOverlap + searchStep - 1)
-        if refinementStart <= refinementEnd {
-            for overlap in refinementStart...refinementEnd {
-                let similarity = similarity(for: overlap)
-                if similarity > bestSimilarity {
-                    bestSimilarity = similarity
-                    bestOverlap = overlap
-                }
-            }
-        }
-
-        if bestSimilarity < similarityThreshold {
-            return 0
-        }
-
-        return CGFloat(height1 - bestOverlap)
+        return (bestOverlap, bestSimilarity)
     }
 }
 
@@ -240,29 +281,29 @@ extension OverlapDetector {
         for row in 0..<height {
             let rowOffset = row * stride
             for col in 0..<width {
-                let idx = rowOffset + col
-                let x = pixels1[base1 + idx]
-                let y = pixels2[idx]
-                sumX += x
-                sumY += y
-                sumXX += x * x
-                sumYY += y * y
-                sumXY += x * y
+                let index = rowOffset + col
+                let pixel1 = pixels1[base1 + index]
+                let pixel2 = pixels2[index]
+                sumX += pixel1
+                sumY += pixel2
+                sumXX += pixel1 * pixel1
+                sumYY += pixel2 * pixel2
+                sumXY += pixel1 * pixel2
             }
         }
 
-        let n = Float(windowSize)
-        let muX = sumX / n
-        let muY = sumY / n
-        let sigmaX2 = max(0, (sumXX / n) - (muX * muX))
-        let sigmaY2 = max(0, (sumYY / n) - (muY * muY))
-        let sigmaXY = (sumXY / n) - (muX * muY)
+        let pixelCount = Float(windowSize)
+        let muX = sumX / pixelCount
+        let muY = sumY / pixelCount
+        let sigmaX2 = max(0, (sumXX / pixelCount) - (muX * muX))
+        let sigmaY2 = max(0, (sumYY / pixelCount) - (muY * muY))
+        let sigmaXY = (sumXY / pixelCount) - (muX * muY)
 
-        let c1: Float = 0.01 * 0.01
-        let c2: Float = 0.03 * 0.03
+        let constant1: Float = 0.01 * 0.01
+        let constant2: Float = 0.03 * 0.03
 
-        let numerator = (2 * muX * muY + c1) * (2 * sigmaXY + c2)
-        let denominator = (muX * muX + muY * muY + c1) * (sigmaX2 + sigmaY2 + c2)
+        let numerator = (2 * muX * muY + constant1) * (2 * sigmaXY + constant2)
+        let denominator = (muX * muX + muY * muY + constant1) * (sigmaX2 + sigmaY2 + constant2)
 
         guard denominator > 0 else { return 0 }
         return min(max(numerator / denominator, 0), 1)
@@ -308,6 +349,14 @@ extension OverlapDetector {
 // MARK: - SSIM Constants
 
 extension OverlapDetector {
-    static let c1: Float = 0.01 * 0.01
-    static let c2: Float = 0.03 * 0.03
+    static let ssimConstant1: Float = 0.01 * 0.01
+    static let ssimConstant2: Float = 0.03 * 0.03
+}
+
+/// 重叠搜索所需的几何参数。
+private struct OverlapGeometry {
+    let comparisonWidth: Int
+    let sampleHeight: Int
+    let minimumOverlap: Int
+    let maximumOverlap: Int
 }

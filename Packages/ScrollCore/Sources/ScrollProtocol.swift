@@ -288,14 +288,14 @@ public enum MemoryPressureLevel: Int, Sendable, Comparable {
     }
 }
 
-// MARK: - ScrollWhitelist
+// MARK: - ScrollAllowlist
 
-/// 滚动截图白名单应用列表。
+/// 支持滚动截图的应用白名单。
 ///
 /// 首版仅支持经过验证的应用，确保拼接质量（设计文档 §R2）。
 /// 白名单外的应用返回 `ScrollError.applicationNotSupported`，
 /// 引导用户使用手动截图方式。
-public struct ScrollWhitelist: Sendable {
+public struct ScrollAllowlist: Sendable {
     /// 支持滚动截图的应用 bundle identifier 集合
     public static let supportedBundleIDs: Set<String> = [
         "com.apple.Safari",        // Safari

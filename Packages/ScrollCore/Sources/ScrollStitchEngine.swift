@@ -110,7 +110,7 @@ public actor ScrollStitchActor: ScrollProtocol {
 extension ScrollStitchActor {
 
     public func startCapture(windowID: CGWindowID) async throws -> ScrollSession {
-        guard ScrollWhitelist.isSupported(windowID.bundleIdentifier ?? "") else {
+        guard ScrollAllowlist.isSupported(windowID.bundleIdentifier ?? "") else {
             throw ScrollError.applicationNotSupported(windowID.bundleIdentifier ?? "unknown")
         }
 
@@ -238,18 +238,18 @@ extension ScrollStitchActor {
     ) async throws -> CGImage {
         var composite = frames[0].image
 
-        for i in 0..<(frames.count - 1) {
+        for index in 0..<(frames.count - 1) {
             try Task.checkCancellation()
 
             if memoryPressureLevel >= .high {
                 try await Task.sleep(nanoseconds: 500_000_000)
             }
 
-            let frameB = frames[i + 1]
+            let frameB = frames[index + 1]
             let stitchOffset = findStitchOffset(
                 frameA: composite,
                 frameB: frameB.image,
-                overlapRatio: overlaps.indices.contains(i) ? overlaps[i] : 0
+                overlapRatio: overlaps.indices.contains(index) ? overlaps[index] : 0
             )
 
             guard let stitched = stitchPair(
@@ -258,13 +258,13 @@ extension ScrollStitchActor {
                 stitchOffset: stitchOffset
             ) else {
                 throw ScrollError.stitchFailed(
-                    reason: "帧 \(i) 和 \(i + 1) 拼接失败: 无法创建合成画布"
+                    reason: "帧 \(index) 和 \(index + 1) 拼接失败: 无法创建合成画布"
                 )
             }
 
             composite = stitched
 
-            if i % Self.maxFramesBeforePressureCheck == 0 {
+            if index % Self.maxFramesBeforePressureCheck == 0 {
                 updateMemoryPressure()
                 if memoryPressureLevel >= .critical {
                     throw ScrollError.memoryPressureHigh
@@ -487,26 +487,5 @@ extension ScrollStitchActor {
 
         guard result == KERN_SUCCESS else { return 0 }
         return info.resident_size
-    }
-}
-
-// MARK: - CGWindowID Extension
-
-extension CGWindowID {
-    /// 获取与窗口关联的 bundle identifier。
-    ///
-    /// 先通过 `CGWindowListCopyWindowInfo` 获取窗口所属进程 PID，
-    /// 再通过 `NSRunningApplication` 获取该进程的 bundle identifier。
-    fileprivate var bundleIdentifier: String? {
-        guard let windowInfo = CGWindowListCopyWindowInfo(
-            [.optionIncludingWindow],
-            self
-        ) as? [[String: Any]],
-              let ownerPID = windowInfo.first?[kCGWindowOwnerPID as String] as? pid_t
-        else {
-            return nil
-        }
-
-        return NSRunningApplication(processIdentifier: ownerPID)?.bundleIdentifier
     }
 }
