@@ -94,10 +94,10 @@ public struct BarcodeResult: Sendable, Codable {
         }
         type = decodedType
         confidence = try container.decode(Float.self, forKey: .confidence)
-        let x = try container.decode(Double.self, forKey: .boxX)
-        let y = try container.decode(Double.self, forKey: .boxY)
+        let boxX = try container.decode(Double.self, forKey: .boxX)
+        let boxY = try container.decode(Double.self, forKey: .boxY)
         let width = try container.decode(Double.self, forKey: .boxWidth)
         let height = try container.decode(Double.self, forKey: .boxHeight)
-        boundingBox = CGRect(x: x, y: y, width: width, height: height)
+        boundingBox = CGRect(x: boxX, y: boxY, width: width, height: height)
     }
 }
