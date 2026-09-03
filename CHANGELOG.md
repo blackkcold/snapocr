@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- 代码规范：全量清理 SwiftLint 债务（295 → 0 违规），拆分超长文件为扩展/新文件，统一命名与行宽，`.swiftlint.yml` 显式排除各包 `.build` 目录并启用 `trailing_comma: mandatory_comma`，与 swift-format 对齐
+
 ## [0.6.1] - 2026-09-02
 
 ### Added
