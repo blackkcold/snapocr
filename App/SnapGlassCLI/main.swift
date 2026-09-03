@@ -10,80 +10,99 @@ let arguments = CommandLine.arguments
 func showHelp(command: String? = nil) {
     switch command {
     case "ocr":
-        print("ocr — OCR 文字识别")
-        print("")
-        print("用法:")
-        print("  snapglass-cli ocr file <path> [--engine vision|tesseract] [--lang <lang>]")
-        print("  snapglass-cli ocr --file <path> [--engine vision|tesseract] [--languages <l1,l2>]")
-        print("")
-        print("选项:")
-        print("  --engine      OCR 引擎 (vision 或 tesseract)，默认 vision")
-        print("  --lang        识别语言代码（如 zh-Hans, en）")
-        print("  --languages   逗号分隔的语言列表（如 zh-Hans,en）")
-        print("")
-        print("示例:")
-        print("  snapglass-cli ocr file screenshot.png")
-        print("  snapglass-cli ocr file photo.jpg --lang en")
-        print("  snapglass-cli ocr --file scan.png --engine tesseract --languages zh-Hans,en")
-
+        showOCRHelp()
     case "barcode":
-        print("barcode — 条码/二维码识别")
-        print("")
-        print("用法:")
-        print("  snapglass-cli barcode file <path>")
-        print("  snapglass-cli barcode --file <path> [--types qr,code128,...]")
-        print("")
-        print("选项:")
-        print("  --types  条码类型列表（逗号分隔），不指定则检测所有类型")
-        print("")
-        print("示例:")
-        print("  snapglass-cli barcode file qrcode.png")
-        print("  snapglass-cli barcode --file label.jpg --types qr,ean13")
-
+        showBarcodeHelp()
     case "dev":
-        print("dev — 开发者工具")
-        print("")
-        print("用法:")
-        print("  snapglass-cli dev logs [--format json] [--output <path>]")
-        print("  snapglass-cli dev compare <path> [--lang <lang>]")
-        print("")
-        print("子命令:")
-        print("  logs         导出引擎对比日志")
-        print("  compare      对比 Vision 和 Tesseract 引擎识别效果")
-        print("")
-        print("示例:")
-        print("  snapglass-cli dev logs --format json")
-        print("  snapglass-cli dev logs --output /tmp/dev-logs.json")
-        print("  snapglass-cli dev compare screenshot.png --lang zh-Hans")
-
+        showDevHelp()
     case "capture":
-        print("capture — 截图（尚未实现）")
-        print("")
-        print("用法:")
-        print("  snapglass-cli capture --mode <area|window|fullscreen> [--output <path>]")
-
+        showCaptureHelp()
     case "history":
-        print("history — 历史管理（尚未实现）")
-        print("")
-        print("用法:")
-        print("  snapglass-cli history <list|search|delete|export|clear>")
-
+        showHistoryHelp()
     default:
-        print("SnapGlass CLI — 命令行截图与 OCR 工具")
-        print("")
-        print("用法: snapglass-cli <command> [options]")
-        print("")
-        print("命令:")
-        print("  ocr         OCR 文字识别（从图片提取文字）")
-        print("  barcode     条码/二维码识别")
-        print("  dev         开发者工具（引擎对比、日志导出）")
-        print("  capture     截图（尚未实现）")
-        print("  history     历史管理（尚未实现）")
-        print("  preferences 偏好设置")
-        print("")
-        print("使用 snapglass-cli <command> --help 查看各命令详细用法")
+        showGeneralHelp()
     }
     print("")
+}
+
+private func showOCRHelp() {
+    print("ocr — OCR 文字识别")
+    print("")
+    print("用法:")
+    print("  snapglass-cli ocr file <path> [--engine vision|tesseract] [--lang <lang>]")
+    print("  snapglass-cli ocr --file <path> [--engine vision|tesseract] [--languages <l1,l2>]")
+    print("")
+    print("选项:")
+    print("  --engine      OCR 引擎 (vision 或 tesseract)，默认 vision")
+    print("  --lang        识别语言代码（如 zh-Hans, en）")
+    print("  --languages   逗号分隔的语言列表（如 zh-Hans,en）")
+    print("")
+    print("示例:")
+    print("  snapglass-cli ocr file screenshot.png")
+    print("  snapglass-cli ocr file photo.jpg --lang en")
+    print("  snapglass-cli ocr --file scan.png --engine tesseract --languages zh-Hans,en")
+}
+
+private func showBarcodeHelp() {
+    print("barcode — 条码/二维码识别")
+    print("")
+    print("用法:")
+    print("  snapglass-cli barcode file <path>")
+    print("  snapglass-cli barcode --file <path> [--types qr,code128,...]")
+    print("")
+    print("选项:")
+    print("  --types  条码类型列表（逗号分隔），不指定则检测所有类型")
+    print("")
+    print("示例:")
+    print("  snapglass-cli barcode file qrcode.png")
+    print("  snapglass-cli barcode --file label.jpg --types qr,ean13")
+}
+
+private func showDevHelp() {
+    print("dev — 开发者工具")
+    print("")
+    print("用法:")
+    print("  snapglass-cli dev logs [--format json] [--output <path>]")
+    print("  snapglass-cli dev compare <path> [--lang <lang>]")
+    print("")
+    print("子命令:")
+    print("  logs         导出引擎对比日志")
+    print("  compare      对比 Vision 和 Tesseract 引擎识别效果")
+    print("")
+    print("示例:")
+    print("  snapglass-cli dev logs --format json")
+    print("  snapglass-cli dev logs --output /tmp/dev-logs.json")
+    print("  snapglass-cli dev compare screenshot.png --lang zh-Hans")
+}
+
+private func showCaptureHelp() {
+    print("capture — 截图（尚未实现）")
+    print("")
+    print("用法:")
+    print("  snapglass-cli capture --mode <area|window|fullscreen> [--output <path>]")
+}
+
+private func showHistoryHelp() {
+    print("history — 历史管理（尚未实现）")
+    print("")
+    print("用法:")
+    print("  snapglass-cli history <list|search|delete|export|clear>")
+}
+
+private func showGeneralHelp() {
+    print("SnapGlass CLI — 命令行截图与 OCR 工具")
+    print("")
+    print("用法: snapglass-cli <command> [options]")
+    print("")
+    print("命令:")
+    print("  ocr         OCR 文字识别（从图片提取文字）")
+    print("  barcode     条码/二维码识别")
+    print("  dev         开发者工具（引擎对比、日志导出）")
+    print("  capture     截图（尚未实现）")
+    print("  history     历史管理（尚未实现）")
+    print("  preferences 偏好设置")
+    print("")
+    print("使用 snapglass-cli <command> --help 查看各命令详细用法")
 }
 
 func exitWithCode(_ code: ExitCode, _ message: String? = nil) -> Never {

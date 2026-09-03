@@ -112,19 +112,19 @@ struct PermissionGuideView: View {
         VStack(spacing: 12) {
             Button(action: {
                 requestPermission()
-            }) {
+            }, label: {
                 Text("Open System Settings")
                     .frame(maxWidth: .infinity)
-            }
+            })
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
 
             Button(action: {
                 dismiss()
-            }) {
+            }, label: {
                 Text("Remind Later")
                     .frame(maxWidth: .infinity)
-            }
+            })
             .buttonStyle(.bordered)
             .controlSize(.large)
         }
@@ -154,19 +154,19 @@ struct PermissionGuideView: View {
 
             Button(action: {
                 permissionService.openScreenCaptureSettings()
-            }) {
+            }, label: {
                 Text("Open System Settings")
                     .frame(maxWidth: .infinity)
-            }
+            })
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .frame(maxWidth: 260)
 
             Button(action: {
                 dismiss()
-            }) {
+            }, label: {
                 Text("Remind Later")
-            }
+            })
             .buttonStyle(.borderless)
             .foregroundColor(.secondary)
         }
