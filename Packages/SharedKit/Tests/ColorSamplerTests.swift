@@ -84,10 +84,10 @@ struct ColorSamplerTests {
 
   @Test func dominantColorsReturnsMostFrequentColorFirst() throws {
     var pixels = [UInt8](repeating: 0, count: 8 * 8 * 4)
-    for y in 0..<8 {
-      for x in 0..<8 {
-        let index = (y * 8 + x) * 4
-        if x < 4 {
+    for row in 0..<8 {
+      for column in 0..<8 {
+        let index = (row * 8 + column) * 4
+        if column < 4 {
           pixels[index] = 200
           pixels[index + 1] = 0
           pixels[index + 2] = 0

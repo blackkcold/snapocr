@@ -326,9 +326,9 @@ private struct MockUpdateHTTPClient: UpdateHTTPClient {
     let manifestURL: URL
     let manifestData: Data
     var manifestStatusCode = 200
-    var manifestHeaders: [String: String]? = nil
+    var manifestHeaders: [String: String]?
     var checksumData = Data()
-    var downloadFileURL: URL? = nil
+    var downloadFileURL: URL?
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         guard let url = request.url else {
@@ -438,6 +438,8 @@ private func makeManifestData(
     let declared = declaredVersion ?? version
     let resolvedDMGURL = dmgURL
         ?? "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg"
+    let resolvedChecksumURL = "https://github.com/blackkcold/snapocr/releases/download/v\(version)"
+        + "/SnapGlass-v\(version).dmg.sha256"
     return Data("""
     {
       "schemaVersion": 1,
@@ -445,7 +447,7 @@ private func makeManifestData(
       "releaseNotes": "Release notes",
       "releasePageURL": "https://github.com/blackkcold/snapocr/releases/tag/v\(version)",
       "dmgURL": "\(resolvedDMGURL)",
-      "checksumURL": "https://github.com/blackkcold/snapocr/releases/download/v\(version)/SnapGlass-v\(version).dmg.sha256",
+      "checksumURL": "\(resolvedChecksumURL)",
       "assetName": "SnapGlass-v\(version).dmg",
       "sha256": "\(checksum)"
     }
@@ -481,24 +483,5 @@ struct ImageEncoderTests {
             throw AppError.internalError("Unable to create test image")
         }
         return image
-    }
-}
-
-struct LocalKeyStoreTests {
-    @Test func createsStableOwnerOnlyKeyFile() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("snapglass-key-test-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
-        let keyURL = root.appendingPathComponent("Security/history-v2.key")
-
-        let first = try LocalKeyStore.loadOrCreateKey(at: keyURL)
-        let second = try LocalKeyStore.loadOrCreateKey(at: keyURL)
-        let firstData = first.withUnsafeBytes { Data($0) }
-        let secondData = second.withUnsafeBytes { Data($0) }
-        let attributes = try FileManager.default.attributesOfItem(atPath: keyURL.path)
-
-        #expect(firstData.count == 32)
-        #expect(firstData == secondData)
-        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
     }
 }

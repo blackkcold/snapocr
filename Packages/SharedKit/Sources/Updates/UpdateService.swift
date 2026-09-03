@@ -219,6 +219,28 @@ public actor UpdateService {
             throw UpdateServiceError.invalidResponse
         }
 
+        let expectedChecksum = try Self.validateManifest(
+            manifest,
+            latestVersion: latestVersion
+        )
+
+        return UpdateRelease(
+            version: latestVersion,
+            tagName: "v\(latestVersion)",
+            releaseNotes: manifest.releaseNotes,
+            releasePageURL: manifest.releasePageURL,
+            dmgURL: manifest.dmgURL,
+            checksumURL: manifest.checksumURL,
+            assetName: manifest.assetName,
+            expectedChecksum: expectedChecksum
+        )
+    }
+
+    /// 校验清单的 schema、版本、资产名与 URL，返回期望的校验和。
+    private static func validateManifest(
+        _ manifest: UpdateManifest,
+        latestVersion: SemanticVersion
+    ) throws -> String {
         guard manifest.schemaVersion == 1 else {
             throw UpdateServiceError.unsupportedManifestSchema(manifest.schemaVersion)
         }
@@ -247,17 +269,7 @@ public actor UpdateService {
             manifest.checksumURL,
             expectedPath: "\(Self.repositoryPathPrefix)/releases/download/v\(latestVersion)/\(checksumName)"
         )
-
-        return UpdateRelease(
-            version: latestVersion,
-            tagName: "v\(latestVersion)",
-            releaseNotes: manifest.releaseNotes,
-            releasePageURL: manifest.releasePageURL,
-            dmgURL: manifest.dmgURL,
-            checksumURL: manifest.checksumURL,
-            assetName: manifest.assetName,
-            expectedChecksum: expectedChecksum
-        )
+        return expectedChecksum
     }
 
     private func manifestURL(for version: SemanticVersion) -> URL? {
@@ -475,15 +487,4 @@ private enum UpdateResource {
     case checksum
     case update
     case discovery
-}
-
-private struct UpdateManifest: Decodable {
-    let schemaVersion: Int
-    let version: String
-    let releaseNotes: String
-    let releasePageURL: URL
-    let dmgURL: URL
-    let checksumURL: URL
-    let assetName: String
-    let sha256: String
 }

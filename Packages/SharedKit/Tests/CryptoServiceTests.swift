@@ -35,11 +35,11 @@ struct CryptoServiceTests {
         let plaintext = Data("same input".utf8)
 
         // AES-GCM 每次使用随机 nonce，同明文应产生不同密文
-        let a = try crypto.encrypt(plaintext)
-        let b = try crypto.encrypt(plaintext)
-        #expect(a != b)
-        #expect(try crypto.decrypt(a) == plaintext)
-        #expect(try crypto.decrypt(b) == plaintext)
+        let firstCipher = try crypto.encrypt(plaintext)
+        let secondCipher = try crypto.encrypt(plaintext)
+        #expect(firstCipher != secondCipher)
+        #expect(try crypto.decrypt(firstCipher) == plaintext)
+        #expect(try crypto.decrypt(secondCipher) == plaintext)
     }
 
     @Test func decryptWithWrongKeyFails() throws {
