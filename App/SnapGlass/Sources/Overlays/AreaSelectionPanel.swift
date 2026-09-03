@@ -133,7 +133,7 @@ final class WindowSelectionPanel: NSPanel {
         finish(with: nil)
     }
 
-    fileprivate func finish(with result: WindowSelectionResult?) {
+    func finish(with result: WindowSelectionResult?) {
         guard !didFinish else { return }
         didFinish = true
 
@@ -150,50 +150,22 @@ final class WindowSelectionPanel: NSPanel {
         container.blendingMode = .behindWindow
         container.state = .active
 
-        let titleLabel = NSTextField(labelWithString: NSLocalizedString(
-            "Choose a window to capture",
-            comment: "Window picker heading"
-        ))
-        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        titleLabel.textColor = .labelColor
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        let titleLabel = makeLabel(
+            NSLocalizedString("Choose a window to capture", comment: "Window picker heading"),
+            font: .systemFont(ofSize: 14, weight: .semibold),
+            color: .labelColor
+        )
+        let subtitleLabel = makeLabel(
+            NSLocalizedString(
+                "Select a preview, then choose a still or scrolling capture.",
+                comment: "Window picker instruction"
+            ),
+            font: .systemFont(ofSize: 11),
+            color: .secondaryLabelColor
+        )
 
-        let subtitleLabel = NSTextField(labelWithString: NSLocalizedString(
-            "Select a preview, then choose a still or scrolling capture.",
-            comment: "Window picker instruction"
-        ))
-        subtitleLabel.font = .systemFont(ofSize: 11)
-        subtitleLabel.textColor = .secondaryLabelColor
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        let tableView = NSTableView()
-        tableView.headerView = nil
-        tableView.rowHeight = 84
-        tableView.intercellSpacing = NSSize(width: 0, height: 4)
-        tableView.selectionHighlightStyle = .regular
-        tableView.allowsEmptySelection = false
-        tableView.dataSource = coordinator
-        tableView.delegate = coordinator
-        tableView.target = coordinator
-        tableView.doubleAction = #selector(WindowSelectionCoordinator.captureSelectedWindow(_:))
-        coordinator.tableView = tableView
-
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("window"))
-        column.resizingMask = .autoresizingMask
-        tableView.addTableColumn(column)
-
-        let scrollView = NSScrollView()
-        scrollView.documentView = tableView
-        scrollView.hasVerticalScroller = true
-        scrollView.drawsBackground = false
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-
-        let buttonStack = NSStackView(views: [captureButton, scrollCaptureButton])
-        buttonStack.orientation = .horizontal
-        buttonStack.alignment = .centerY
-        buttonStack.distribution = .fillEqually
-        buttonStack.spacing = 10
-        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        let scrollView = makeWindowListScrollView()
+        let buttonStack = makeActionButtonStack()
 
         container.addSubview(titleLabel)
         container.addSubview(subtitleLabel)
@@ -221,14 +193,57 @@ final class WindowSelectionPanel: NSPanel {
         ])
 
         Task { @MainActor in
-            guard tableView.numberOfRows > 0 else { return }
-            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+            guard coordinator.tableView?.numberOfRows ?? 0 > 0 else { return }
+            coordinator.tableView?.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
             self.setActionButtonsEnabled(true)
             // Keep previews fresh while the picker is open.
             self.coordinator.startRefreshTimer()
         }
 
         return container
+    }
+
+    private func makeLabel(_ text: String, font: NSFont, color: NSColor) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = font
+        label.textColor = color
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }
+
+    private func makeActionButtonStack() -> NSStackView {
+        let buttonStack = NSStackView(views: [captureButton, scrollCaptureButton])
+        buttonStack.orientation = .horizontal
+        buttonStack.alignment = .centerY
+        buttonStack.distribution = .fillEqually
+        buttonStack.spacing = 10
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        return buttonStack
+    }
+
+    private func makeWindowListScrollView() -> NSScrollView {
+        let tableView = NSTableView()
+        tableView.headerView = nil
+        tableView.rowHeight = 84
+        tableView.intercellSpacing = NSSize(width: 0, height: 4)
+        tableView.selectionHighlightStyle = .regular
+        tableView.allowsEmptySelection = false
+        tableView.dataSource = coordinator
+        tableView.delegate = coordinator
+        tableView.target = coordinator
+        tableView.doubleAction = #selector(WindowSelectionCoordinator.captureSelectedWindow(_:))
+        coordinator.tableView = tableView
+
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("window"))
+        column.resizingMask = .autoresizingMask
+        tableView.addTableColumn(column)
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = tableView
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        return scrollView
     }
 
     private func configureActionButtons() {
@@ -259,7 +274,7 @@ final class WindowSelectionPanel: NSPanel {
         button.action = action
     }
 
-    fileprivate func setActionButtonsEnabled(_ enabled: Bool) {
+    func setActionButtonsEnabled(_ enabled: Bool) {
         captureButton.isEnabled = enabled
         scrollCaptureButton.isEnabled = enabled
     }
@@ -275,20 +290,24 @@ final class WindowSelectionPanel: NSPanel {
         finishSelectedWindow(action: .scrolling)
     }
 
-    fileprivate func finishSelectedWindow(action: WindowCaptureAction) {
+    func finishSelectedWindow(action: WindowCaptureAction) {
         guard let result = coordinator.selectedResult(action: action) else { return }
         finish(with: result)
     }
 
     private static func fetchAvailableWindows() async throws -> (SCShareableContent, [SelectableWindow]) {
-        let content = try await withThrowingTimeout(milliseconds: 8_000, timeoutError: {
-            CaptureError.captureFailed(reason: "Window enumeration timed out after 8000ms")
-        }) {
-            try await SCShareableContent.excludingDesktopWindows(
-                true,
-                onScreenWindowsOnly: true
-            )
-        }
+        let content = try await withThrowingTimeout(
+            milliseconds: 8_000,
+            timeoutError: {
+                CaptureError.captureFailed(reason: "Window enumeration timed out after 8000ms")
+            },
+            operation: {
+                try await SCShareableContent.excludingDesktopWindows(
+                    true,
+                    onScreenWindowsOnly: true
+                )
+            }
+        )
         let currentBundleID = Bundle.main.bundleIdentifier
         let systemWindowLevel = Int(CGWindowLevelForKey(.dockWindow))
 
@@ -320,887 +339,5 @@ final class WindowSelectionPanel: NSPanel {
             }
 
         return (content, windows)
-    }
-}
-
-private struct SelectableWindow {
-    let windowID: CGWindowID
-    let appName: String?
-    let windowTitle: String?
-    let frame: CGRect
-    let bundleIdentifier: String?
-
-    var displayName: String {
-        let app = appName?.isEmpty == false ? appName ?? String(localized: "Unknown App") : String(localized: "Unknown App")
-        let title = windowTitle?.isEmpty == false ? windowTitle ?? String(localized: "Untitled") : String(localized: "Untitled")
-        return "\(app) — \(title)"
-    }
-
-    var subtitle: String {
-        let size = "\(Int(frame.width)) × \(Int(frame.height))"
-        guard let bundleIdentifier, !bundleIdentifier.isEmpty else { return size }
-        return "\(bundleIdentifier)  ·  \(size)"
-    }
-}
-
-@MainActor
-private final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
-    fileprivate weak var panel: WindowSelectionPanel?
-    fileprivate weak var tableView: NSTableView?
-    private let windows: [SelectableWindow]
-    private let content: SCShareableContent
-    private var thumbnails: [CGWindowID: NSImage] = [:]
-    private var loadingWindowIDs: Set<CGWindowID> = []
-    private var refreshTimer: Timer?
-
-    /// How often to re-capture thumbnails for the currently visible rows so the
-    /// previews track each window's live contents without capturing every row.
-    private static let refreshInterval: TimeInterval = 3.0
-
-    init(windows: [SelectableWindow], content: SCShareableContent) {
-        self.windows = windows
-        self.content = content
-    }
-
-    /// Starts a low-frequency timer that re-captures thumbnails for the rows
-    /// currently visible in the table, keeping previews fresh while the picker
-    /// is open.
-    func startRefreshTimer() {
-        guard refreshTimer == nil else { return }
-        let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refreshVisibleThumbnails()
-            }
-        }
-        timer.tolerance = 0.5
-        RunLoop.main.add(timer, forMode: .common)
-        refreshTimer = timer
-    }
-
-    func stopRefreshTimer() {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
-    }
-
-    private func refreshVisibleThumbnails() {
-        guard let tableView, let scrollView = tableView.enclosingScrollView else { return }
-        let visibleRect = scrollView.contentView.bounds
-        let visibleRange = tableView.rows(in: visibleRect)
-        guard visibleRange.length > 0 else { return }
-
-        for row in visibleRange.location ..< visibleRange.location + visibleRange.length
-        where windows.indices.contains(row) {
-            let window = windows[row]
-            guard thumbnails[window.windowID] != nil,
-                  !loadingWindowIDs.contains(window.windowID) else { continue }
-            loadThumbnail(for: window, row: row, forceRefresh: true)
-        }
-    }
-
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        windows.count
-    }
-
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard windows.indices.contains(row) else { return nil }
-
-        let window = windows[row]
-        let cell = NSTableCellView()
-
-        let preview = NSImageView()
-        preview.image = thumbnails[window.windowID]
-            ?? NSImage(systemSymbolName: "macwindow", accessibilityDescription: window.displayName)
-        preview.imageScaling = .scaleProportionallyUpOrDown
-        preview.wantsLayer = true
-        preview.layer?.cornerRadius = 7
-        preview.layer?.masksToBounds = true
-        preview.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        preview.translatesAutoresizingMaskIntoConstraints = false
-
-        let title = NSTextField(labelWithString: window.displayName)
-        title.font = .systemFont(ofSize: 13, weight: .medium)
-        title.lineBreakMode = .byTruncatingTail
-        title.translatesAutoresizingMaskIntoConstraints = false
-
-        let subtitle = NSTextField(labelWithString: window.subtitle)
-        subtitle.font = .systemFont(ofSize: 11)
-        subtitle.textColor = .secondaryLabelColor
-        subtitle.translatesAutoresizingMaskIntoConstraints = false
-
-        cell.addSubview(preview)
-        cell.addSubview(title)
-        cell.addSubview(subtitle)
-
-        NSLayoutConstraint.activate([
-            preview.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
-            preview.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            preview.widthAnchor.constraint(equalToConstant: 120),
-            preview.heightAnchor.constraint(equalToConstant: 70),
-
-            title.topAnchor.constraint(equalTo: cell.topAnchor, constant: 17),
-            title.leadingAnchor.constraint(equalTo: preview.trailingAnchor, constant: 12),
-            title.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
-
-            subtitle.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 2),
-            subtitle.leadingAnchor.constraint(equalTo: title.leadingAnchor),
-            subtitle.trailingAnchor.constraint(equalTo: title.trailingAnchor),
-        ])
-
-        loadThumbnailIfNeeded(for: window, row: row)
-
-        return cell
-    }
-
-    func tableViewSelectionDidChange(_ notification: Notification) {
-        panel?.setActionButtonsEnabled(tableView?.selectedRow ?? -1 >= 0)
-    }
-
-    @MainActor @objc func captureSelectedWindow(_ sender: NSTableView) {
-        let row = sender.clickedRow >= 0 ? sender.clickedRow : sender.selectedRow
-        guard windows.indices.contains(row) else { return }
-        sender.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        // Double-click opens the preview directly in the annotation editor.
-        panel?.finishSelectedWindow(action: .edit)
-    }
-
-    func selectedResult(action: WindowCaptureAction) -> WindowSelectionResult? {
-        let row = tableView?.selectedRow ?? -1
-        guard windows.indices.contains(row) else { return nil }
-        let window = windows[row]
-        return WindowSelectionResult(
-            windowID: window.windowID,
-            appName: window.appName,
-            windowTitle: window.windowTitle,
-            action: action
-        )
-    }
-
-    private func loadThumbnailIfNeeded(for window: SelectableWindow, row: Int) {
-        guard thumbnails[window.windowID] == nil,
-              !loadingWindowIDs.contains(window.windowID) else { return }
-        loadThumbnail(for: window, row: row, forceRefresh: false)
-    }
-
-    private func loadThumbnail(for window: SelectableWindow, row: Int, forceRefresh: Bool) {
-        guard loadingWindowIDs.insert(window.windowID).inserted else { return }
-
-        let sharedContent = content
-        Task { @MainActor [weak self] in
-            let image = await WindowThumbnailLoader.shared.thumbnail(
-                for: window.windowID,
-                content: sharedContent,
-                forceRefresh: forceRefresh
-            )
-            guard let self else { return }
-            loadingWindowIDs.remove(window.windowID)
-            if let image {
-                thumbnails[window.windowID] = NSImage(
-                    cgImage: image,
-                    size: NSSize(width: image.width, height: image.height)
-                )
-            }
-            guard windows.indices.contains(row),
-                  windows[row].windowID == window.windowID else { return }
-            tableView?.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integer: 0))
-        }
-    }
-}
-
-/// Loads window-picker thumbnails with a small concurrency pool.
-/// The pool bounds simultaneous SCStreams, which would stall the picker if unbounded.
-private actor WindowThumbnailLoader {
-    static let shared = WindowThumbnailLoader()
-
-    private let orchestrator = CaptureOrchestrator()
-    private var cache: [CGWindowID: CGImage] = [:]
-
-    /// Max concurrent SCStream captures.
-    private static let maxConcurrentCaptures = 4
-    private var activeCaptures = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    func thumbnail(for windowID: CGWindowID, content: SCShareableContent) async -> CGImage? {
-        if let cached = cache[windowID] {
-            return cached
-        }
-
-        return await thumbnail(for: windowID, content: content, forceRefresh: false)
-    }
-
-    /// Fetches (or re-fetches) a window thumbnail. Pass `forceRefresh: true` to
-    /// bypass the cache so the picker shows the window's *current* contents rather
-    /// than a stale frame from an earlier session.
-    func thumbnail(for windowID: CGWindowID, content: SCShareableContent, forceRefresh: Bool) async -> CGImage? {
-        if !forceRefresh, let cached = cache[windowID] {
-            return cached
-        }
-
-        await acquireSlot()
-
-        let result: CGImage?
-        do {
-            let image = try await orchestrator.captureWindowThumbnail(
-                windowID: windowID,
-                maximumSize: CGSize(width: 240, height: 140),
-                content: content
-            )
-            cache[windowID] = image
-            result = image
-        } catch {
-            result = nil
-        }
-
-        await releaseSlot()
-        return result
-    }
-
-    /// Invalidates every cached thumbnail so the next picker session re-captures
-    /// fresh window contents.
-    func clearCache() {
-        cache.removeAll()
-    }
-
-    private func acquireSlot() async {
-        guard activeCaptures >= Self.maxConcurrentCaptures else {
-            activeCaptures += 1
-            return
-        }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    private func releaseSlot() {
-        if waiters.isEmpty {
-            activeCaptures -= 1
-        } else {
-            waiters.removeFirst().resume()
-        }
-    }
-}
-
-// MARK: - AreaTrackingView
-
-private final class CaptureActionBarView: NSVisualEffectView {
-    var onBack: (() -> Void)?
-    var onCopy: (() -> Void)?
-    var onEdit: (() -> Void)?
-
-    private let backButton = NSButton()
-    private let copyButton = NSButton()
-    private let editButton = NSButton()
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-
-        material = .hudWindow
-        blendingMode = .withinWindow
-        state = .active
-        wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.masksToBounds = true
-
-        configure(
-            backButton,
-            title: NSLocalizedString("Back", comment: "Return from capture actions to selection adjustment"),
-            symbol: "chevron.backward",
-            toolTip: NSLocalizedString(
-                "Return to selection adjustments",
-                comment: "Capture action bar back button help"
-            ),
-            action: #selector(back)
-        )
-        backButton.keyEquivalent = "\u{1b}"
-
-        configure(
-            copyButton,
-            title: NSLocalizedString("Copy Image", comment: "Capture action that copies the selected area"),
-            symbol: "doc.on.doc",
-            toolTip: NSLocalizedString(
-                "Copy the screenshot to the clipboard",
-                comment: "Capture action bar copy button help"
-            ),
-            action: #selector(copyImage)
-        )
-        copyButton.keyEquivalent = "\r"
-
-        configure(
-            editButton,
-            title: NSLocalizedString("Edit Screenshot", comment: "Capture action that opens the selected area in the editor"),
-            symbol: "pencil.and.outline",
-            toolTip: NSLocalizedString(
-                "Open the screenshot in the annotation editor",
-                comment: "Capture action bar edit button help"
-            ),
-            action: #selector(editScreenshot)
-        )
-        editButton.keyEquivalent = "e"
-
-        let stack = NSStackView(views: [backButton, copyButton, editButton])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.distribution = .fill
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-        ])
-
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(NSLocalizedString("Screenshot Actions", comment: "Capture action bar accessibility label"))
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        for button in [backButton, copyButton, editButton] {
-            if button.convert(button.bounds, to: self).contains(point) {
-                return button
-            }
-        }
-        return super.hitTest(point)
-    }
-
-    func focusDefaultAction() {
-        window?.makeFirstResponder(copyButton)
-    }
-
-    func performAction(at point: NSPoint) -> Bool {
-        let actions: [(NSButton, () -> Void)] = [
-            (backButton, { [weak self] in self?.onBack?() }),
-            (copyButton, { [weak self] in self?.onCopy?() }),
-            (editButton, { [weak self] in self?.onEdit?() }),
-        ]
-        guard let action = actions.first(where: { button, _ in
-            button.convert(button.bounds, to: self).contains(point)
-        })?.1 else {
-            return false
-        }
-        action()
-        return true
-    }
-
-    private func configure(
-        _ button: NSButton,
-        title: String,
-        symbol: String,
-        toolTip: String,
-        action: Selector
-    ) {
-        button.title = title
-        button.bezelStyle = .rounded
-        button.target = self
-        button.action = action
-        button.toolTip = toolTip
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        button.imagePosition = .imageLeading
-    }
-
-    @objc private func back() { onBack?() }
-    @objc private func copyImage() { onCopy?() }
-    @objc private func editScreenshot() { onEdit?() }
-}
-
-final class AreaTrackingView: NSView {
-    var onSelectionComplete: ((AreaSelectionResult?) -> Void)?
-
-    private enum Phase { case idle, drawing, adjusting, choosingAction }
-    private enum ResizeHandle: CaseIterable { case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left }
-    private enum DragAction {
-        case resize(ResizeHandle, initial: CGRect, start: CGPoint)
-        case move(initial: CGRect, start: CGPoint)
-    }
-
-    private let style: CaptureSelectionStyle
-    private let screen: NSScreen
-    private let capturedFrames: [CGDirectDisplayID: CGImage]
-    private let onColorPicked: ((SampledColor) -> Void)?
-    private var phase: Phase = .idle
-    private var startPoint: CGPoint?
-    private var selectionRect: CGRect = .zero
-    private var freeformPoints: [CGPoint] = []
-    private var dragAction: DragAction?
-    private var hoverPoint: CGPoint = .zero
-    private var hoverColor: SampledColor?
-    private var trackingAreaReference: NSTrackingArea?
-    private let actionBar = CaptureActionBarView(frame: .zero)
-
-    init(
-        frame frameRect: NSRect,
-        style: CaptureSelectionStyle,
-        screen: NSScreen,
-        capturedFrames: [CGDirectDisplayID: CGImage],
-        onColorPicked: ((SampledColor) -> Void)?
-    ) {
-        self.style = style
-        self.screen = screen
-        self.capturedFrames = capturedFrames
-        self.onColorPicked = onColorPicked
-        super.init(frame: frameRect)
-
-        actionBar.isHidden = true
-        actionBar.onBack = { [weak self] in self?.hideActionChooser() }
-        actionBar.onCopy = { [weak self] in self?.completeSelection(action: .copy) }
-        actionBar.onEdit = { [weak self] in self?.completeSelection(action: .edit) }
-        addSubview(actionBar)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func layout() {
-        super.layout()
-        positionActionBar()
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        window?.makeFirstResponder(self)
-        hoverPoint = window?.mouseLocationOutsideOfEventStream ?? .zero
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        trackingAreaReference = area
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        if phase == .choosingAction {
-            NSCursor.arrow.set()
-        } else {
-            NSCursor.crosshair.set()
-        }
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        hoverPoint = convert(event.locationInWindow, from: nil)
-        hoverColor = sampleColor(at: hoverPoint)
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        context.setFillColor(NSColor.black.withAlphaComponent(0.32).cgColor)
-        context.fill(bounds)
-
-        if style == .freeform, freeformPoints.count >= 2 {
-            let path = freeformPath()
-            context.saveGState()
-            context.addPath(path)
-            context.clip()
-            context.clear(bounds)
-            context.restoreGState()
-            context.setStrokeColor(NSColor.white.cgColor)
-            context.setLineWidth(2)
-            context.addPath(path)
-            context.strokePath()
-        } else if !selectionRect.isEmpty {
-            context.clear(selectionRect)
-            context.setStrokeColor(NSColor.white.cgColor)
-            context.setLineWidth(2)
-            context.stroke(selectionRect.insetBy(dx: -1, dy: -1))
-            if phase == .adjusting { drawHandles() }
-        }
-
-        if !selectionRect.isEmpty {
-            drawSizeLabel(for: selectionRect)
-            if phase == .adjusting { drawActionHint(for: selectionRect) }
-        }
-        if phase != .choosingAction {
-            drawCrosshair(at: hoverPoint)
-            if let hoverColor { drawHoverColorLabel(for: hoverColor, near: hoverPoint) }
-        }
-    }
-
-    /// Samples the pixel directly beneath a view point from the pre-captured
-    /// frame for the screen this panel covers.
-    private func sampleColor(at viewPoint: CGPoint) -> SampledColor? {
-        guard let window,
-              let displayID = screen.deviceDescription[
-                  NSDeviceDescriptionKey("NSScreenNumber")
-              ] as? CGDirectDisplayID,
-              let frame = capturedFrames[displayID]
-        else { return nil }
-
-        let viewRect = CGRect(origin: viewPoint, size: .zero)
-        let windowRect = convert(viewRect, to: nil)
-        let appKitRect = window.convertToScreen(windowRect)
-        let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
-
-        // Convert the AppKit global point to Quartz, then to a local offset
-        // within this screen's frame, then to pixel coordinates in the image.
-        guard
-            let quartzPoint = ScreenCoordinateGeometry.quartzPoint(
-                from: center,
-                appKitScreenFrame: screen.frame,
-                quartzScreenFrame: CGDisplayBounds(displayID)
-            )
-        else { return nil }
-
-        let quartzFrame = CGDisplayBounds(displayID)
-        let localX = quartzPoint.x - quartzFrame.minX
-        let localY = quartzPoint.y - quartzFrame.minY
-        let scaleX = CGFloat(frame.width) / quartzFrame.width
-        let scaleY = CGFloat(frame.height) / quartzFrame.height
-        let pixel = CGPoint(x: localX * scaleX, y: localY * scaleY)
-        return ColorSampler.pixelColor(in: frame, at: pixel)
-    }
-
-    private func drawHoverColorLabel(for color: SampledColor, near point: CGPoint) {
-        guard bounds.contains(point) else { return }
-        let hexLabel = color.hexString
-        let rgbLabel = color.rgbString
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let secondaryAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.7),
-        ]
-        let hexSize = (hexLabel as NSString).size(withAttributes: attributes)
-        let rgbSize = (rgbLabel as NSString).size(withAttributes: secondaryAttributes)
-        let swatchSize: CGFloat = 10
-        let swatchPadding: CGFloat = 5
-        let textPadding: CGFloat = 6
-        let lineHeight = max(hexSize.height, rgbSize.height)
-        let textWidth = max(hexSize.width, rgbSize.width)
-        let rect = CGRect(
-            x: point.x + 16,
-            y: point.y + 16,
-            width: swatchSize + swatchPadding + textWidth + textPadding * 2,
-            height: lineHeight * 2 + 8
-        )
-        NSColor.black.withAlphaComponent(0.75).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
-        let swatchRect = CGRect(
-            x: rect.minX + 6,
-            y: rect.midY - swatchSize / 2,
-            width: swatchSize,
-            height: swatchSize
-        )
-        NSColor(
-            srgbRed: CGFloat(color.red) / 255,
-            green: CGFloat(color.green) / 255,
-            blue: CGFloat(color.blue) / 255,
-            alpha: 1
-        ).setFill()
-        NSBezierPath(roundedRect: swatchRect, xRadius: 2, yRadius: 2).fill()
-        NSColor.white.withAlphaComponent(0.5).setStroke()
-        NSBezierPath(roundedRect: swatchRect, xRadius: 2, yRadius: 2).stroke()
-        let textX = swatchRect.maxX + swatchPadding
-        let hexBaseline = rect.maxY - 4 - hexSize.height
-        let rgbBaseline = rect.minY + 4
-        (hexLabel as NSString).draw(at: CGPoint(x: textX, y: hexBaseline), withAttributes: attributes)
-        (rgbLabel as NSString).draw(at: CGPoint(x: textX, y: rgbBaseline), withAttributes: secondaryAttributes)
-    }
-
-    private func drawCrosshair(at point: CGPoint) {
-        guard bounds.contains(point), let context = NSGraphicsContext.current?.cgContext else { return }
-        let length: CGFloat = 18
-        context.setStrokeColor(NSColor.white.withAlphaComponent(0.85).cgColor)
-        context.setLineWidth(1)
-        context.move(to: CGPoint(x: point.x - length, y: point.y))
-        context.addLine(to: CGPoint(x: point.x + length, y: point.y))
-        context.move(to: CGPoint(x: point.x, y: point.y - length))
-        context.addLine(to: CGPoint(x: point.x, y: point.y + length))
-        context.strokePath()
-    }
-
-    private func drawHandles() {
-        NSColor.white.setFill()
-        for point in handlePoints().values {
-            NSBezierPath(ovalIn: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)).fill()
-        }
-    }
-
-    private func drawSizeLabel(for rect: CGRect) {
-        drawLabel("\(Int(rect.width)) × \(Int(rect.height))", at: CGPoint(x: rect.midX, y: rect.maxY + 18))
-    }
-
-    private func drawActionHint(for rect: CGRect) {
-        let text = NSLocalizedString(
-            "Return / double-click to choose an action",
-            comment: "Area capture selection confirmation hint"
-        )
-        drawLabel(text, at: CGPoint(x: rect.midX, y: rect.minY - 18))
-    }
-
-    private func drawLabel(_ text: String, at point: CGPoint) {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let size = (text as NSString).size(withAttributes: attributes)
-        let rect = CGRect(x: point.x - size.width / 2 - 6, y: point.y - size.height / 2 - 4, width: size.width + 12, height: size.height + 8)
-        NSColor.black.withAlphaComponent(0.75).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
-        (text as NSString).draw(at: CGPoint(x: rect.minX + 6, y: rect.minY + 4), withAttributes: attributes)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        hoverPoint = point
-        if phase == .choosingAction {
-            let actionPoint = actionBar.convert(point, from: self)
-            if !actionBar.performAction(at: actionPoint) {
-                actionBar.focusDefaultAction()
-            }
-            return
-        }
-        if event.clickCount == 2, phase == .adjusting {
-            showActionChooser()
-            return
-        }
-
-        if style == .rectangle, phase == .adjusting {
-            if let handle = hitHandle(at: point) {
-                dragAction = .resize(handle, initial: selectionRect, start: point)
-                return
-            }
-            if selectionRect.contains(point) {
-                dragAction = .move(initial: selectionRect, start: point)
-                return
-            }
-        }
-
-        phase = .drawing
-        startPoint = point
-        selectionRect = .zero
-        freeformPoints = style == .freeform ? [point] : []
-        dragAction = nil
-        needsDisplay = true
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard phase != .choosingAction else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        hoverPoint = point
-
-        if let dragAction {
-            updateAdjustedSelection(action: dragAction, current: point)
-        } else if style == .freeform {
-            if let last = freeformPoints.last, hypot(point.x - last.x, point.y - last.y) >= 2 {
-                freeformPoints.append(point.clamped(to: bounds))
-                selectionRect = boundingRect(for: freeformPoints)
-            }
-        } else if let startPoint {
-        selectionRect = CGRect(spanning: startPoint, and: point.clamped(to: bounds))
-        }
-        needsDisplay = true
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        guard phase != .choosingAction else { return }
-        defer {
-            dragAction = nil
-            startPoint = nil
-            needsDisplay = true
-        }
-        guard dragAction == nil else { return }
-
-        if style == .freeform {
-            guard freeformPoints.count >= 3 else {
-                resetSelection()
-                return
-            }
-            selectionRect = boundingRect(for: freeformPoints)
-        }
-
-        guard selectionRect.width > 5, selectionRect.height > 5 else {
-            if onColorPicked != nil {
-                pickColorAndFinish(at: hoverPoint)
-            } else {
-                resetSelection()
-            }
-            return
-        }
-        phase = .adjusting
-    }
-
-    private func pickColorAndFinish(at point: CGPoint) {
-        guard let color = sampleColor(at: point) else {
-            resetSelection()
-            return
-        }
-        onColorPicked?(color)
-        onSelectionComplete?(nil)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        switch event.keyCode {
-        case 53:
-            if phase == .choosingAction {
-                hideActionChooser()
-            } else {
-                onSelectionComplete?(nil)
-            }
-        case 36, 76:
-            if phase == .choosingAction {
-                completeSelection(action: .copy)
-            } else {
-                showActionChooser()
-            }
-        default:
-            super.keyDown(with: event)
-        }
-    }
-
-    private func showActionChooser() {
-        guard phase == .adjusting, selectionRect.width > 5, selectionRect.height > 5 else { return }
-        phase = .choosingAction
-        actionBar.isHidden = false
-        positionActionBar()
-        actionBar.focusDefaultAction()
-        needsDisplay = true
-    }
-
-    private func hideActionChooser() {
-        guard phase == .choosingAction else { return }
-        actionBar.isHidden = true
-        phase = .adjusting
-        window?.makeFirstResponder(self)
-        needsDisplay = true
-    }
-
-    private func completeSelection(action: AreaCaptureAction) {
-        guard phase == .choosingAction, selectionRect.width > 5, selectionRect.height > 5 else { return }
-        let normalizedPath: [CGPoint]?
-        if style == .freeform {
-            normalizedPath = freeformPoints.map {
-                CGPoint(
-                    x: ($0.x - selectionRect.minX) / selectionRect.width,
-                    y: ($0.y - selectionRect.minY) / selectionRect.height
-                )
-            }
-        } else {
-            normalizedPath = nil
-        }
-        onSelectionComplete?(AreaSelectionResult(
-            screenRect: quartzScreenRect(from: selectionRect),
-            normalizedPath: normalizedPath,
-            action: action
-        ))
-    }
-
-    private func positionActionBar() {
-        guard !actionBar.isHidden, !selectionRect.isEmpty else { return }
-
-        let fittingSize = actionBar.fittingSize
-        let size = CGSize(width: max(fittingSize.width, 320), height: max(fittingSize.height, 44))
-        let margin: CGFloat = 12
-        let horizontalInset: CGFloat = 8
-        let proposedX = selectionRect.midX - size.width / 2
-        let x = min(
-            max(proposedX, bounds.minX + horizontalInset),
-            bounds.maxX - size.width - horizontalInset
-        )
-
-        var y = selectionRect.minY - size.height - margin
-        if y < bounds.minY + horizontalInset {
-            y = selectionRect.maxY + margin
-        }
-        if y + size.height > bounds.maxY - horizontalInset {
-            y = max(bounds.minY + horizontalInset, selectionRect.midY - size.height / 2)
-        }
-
-        actionBar.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
-    }
-
-    private func resetSelection() {
-        actionBar.isHidden = true
-        phase = .idle
-        selectionRect = .zero
-        freeformPoints = []
-    }
-
-    private func quartzScreenRect(from viewRect: CGRect) -> CGRect {
-        guard let window else { return viewRect }
-        let windowRect = convert(viewRect, to: nil)
-        let appKitRect = window.convertToScreen(windowRect)
-        let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }),
-              let displayID = screen.deviceDescription[
-                  NSDeviceDescriptionKey("NSScreenNumber")
-              ] as? CGDirectDisplayID else {
-            return appKitRect
-        }
-
-        return ScreenCoordinateGeometry.quartzRect(
-            from: appKitRect,
-            appKitScreenFrame: screen.frame,
-            quartzScreenFrame: CGDisplayBounds(displayID)
-        ) ?? appKitRect
-    }
-
-    private func freeformPath() -> CGPath {
-        let path = CGMutablePath()
-        guard let first = freeformPoints.first else { return path }
-        path.move(to: first)
-        for point in freeformPoints.dropFirst() { path.addLine(to: point) }
-        if phase == .adjusting || phase == .choosingAction { path.closeSubpath() }
-        return path
-    }
-
-    private func handlePoints() -> [ResizeHandle: CGPoint] {
-        [
-            .topLeft: CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
-            .top: CGPoint(x: selectionRect.midX, y: selectionRect.maxY),
-            .topRight: CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
-            .right: CGPoint(x: selectionRect.maxX, y: selectionRect.midY),
-            .bottomRight: CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
-            .bottom: CGPoint(x: selectionRect.midX, y: selectionRect.minY),
-            .bottomLeft: CGPoint(x: selectionRect.minX, y: selectionRect.minY),
-            .left: CGPoint(x: selectionRect.minX, y: selectionRect.midY),
-        ]
-    }
-
-    private func hitHandle(at point: CGPoint) -> ResizeHandle? {
-        handlePoints().first { _, center in
-            CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14).contains(point)
-        }?.key
-    }
-
-    private func updateAdjustedSelection(action: DragAction, current: CGPoint) {
-        switch action {
-        case .move(let initial, let start):
-            let dx = min(max(current.x - start.x, bounds.minX - initial.minX), bounds.maxX - initial.maxX)
-            let dy = min(max(current.y - start.y, bounds.minY - initial.minY), bounds.maxY - initial.maxY)
-            selectionRect = initial.offsetBy(dx: dx, dy: dy)
-        case .resize(let handle, let initial, _):
-            var minX = initial.minX
-            var maxX = initial.maxX
-            var minY = initial.minY
-            var maxY = initial.maxY
-            let point = current.clamped(to: bounds)
-            if [.topLeft, .left, .bottomLeft].contains(handle) { minX = min(point.x, maxX - 5) }
-            if [.topRight, .right, .bottomRight].contains(handle) { maxX = max(point.x, minX + 5) }
-            if [.bottomLeft, .bottom, .bottomRight].contains(handle) { minY = min(point.y, maxY - 5) }
-            if [.topLeft, .top, .topRight].contains(handle) { maxY = max(point.y, minY + 5) }
-            selectionRect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-        }
-    }
-
-
-    private func boundingRect(for points: [CGPoint]) -> CGRect {
-        guard let first = points.first else { return .zero }
-        return points.dropFirst().reduce(CGRect(origin: first, size: .zero)) { rect, point in rect.union(CGRect(origin: point, size: .zero)) }
     }
 }

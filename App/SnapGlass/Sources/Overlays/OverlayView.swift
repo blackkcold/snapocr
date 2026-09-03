@@ -13,9 +13,9 @@ struct CaptureToolbarView: View {
     var body: some View {
         HStack(spacing: 12) {
             ForEach(OverlayCaptureMode.allCases, id: \.self) { captureMode in
-                Button(action: { mode = captureMode }) {
+                Button(action: { mode = captureMode }, label: {
                     Image(systemName: iconFor(mode: captureMode))
-                }
+                })
                 .buttonStyle(.plain)
             }
         }

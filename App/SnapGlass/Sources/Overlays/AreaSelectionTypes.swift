@@ -80,7 +80,7 @@ private final class AreaSelectionSession {
 
 final class AreaSelectionPanel: NSPanel {
     private let onComplete: (AreaSelectionResult?) -> Void
-    private var trackingView: AreaTrackingView!
+    private let trackingView: AreaTrackingView
     private var didFinish = false
 
     static func show(
@@ -104,8 +104,22 @@ final class AreaSelectionPanel: NSPanel {
         onColorPicked: ((SampledColor) -> Void)?,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
+        let contentSize = screen.frame.size
+        let trackingView = AreaTrackingView(
+            frame: CGRect(origin: .zero, size: contentSize),
+            style: style,
+            screen: screen,
+            capturedFrames: capturedFrames,
+            onColorPicked: onColorPicked
+        )
+        self.trackingView = trackingView
         self.onComplete = onComplete
-        super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        super.init(
+            contentRect: screen.frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
         isFloatingPanel = true
         level = .screenSaver
         backgroundColor = .clear
@@ -117,17 +131,9 @@ final class AreaSelectionPanel: NSPanel {
         acceptsMouseMovedEvents = true
         isMovableByWindowBackground = false
         setFrame(screen.frame, display: true)
-        guard let contentView else { return }
-        trackingView = AreaTrackingView(
-            frame: contentView.bounds,
-            style: style,
-            screen: screen,
-            capturedFrames: capturedFrames,
-            onColorPicked: onColorPicked
-        )
         trackingView.onSelectionComplete = { [weak self] rect in self?.finish(with: rect) }
         trackingView.autoresizingMask = [.width, .height]
-        contentView.addSubview(trackingView)
+        contentView?.addSubview(trackingView)
     }
 
     override var canBecomeKey: Bool { true }
