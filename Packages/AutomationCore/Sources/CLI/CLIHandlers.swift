@@ -147,7 +147,7 @@ public struct CLIHandlers: Sendable {
             return AutomationResult(
                 success: true,
                 output: "[]",
-                data: "[]".data(using: .utf8),
+                data: Data("[]".utf8),
                 exitCode: .success
             )
         }
@@ -264,7 +264,12 @@ public struct CLIHandlers: Sendable {
             lines.append("类型: \(barcode.type.rawValue.uppercased())")
             lines.append("内容: \(barcode.payload)")
             lines.append("置信度: \(String(format: "%.2f", barcode.confidence))")
-            lines.append("位置: (\(String(format: "%.3f", barcode.boundingBox.origin.x)), \(String(format: "%.3f", barcode.boundingBox.origin.y)), \(String(format: "%.3f", barcode.boundingBox.size.width))x\(String(format: "%.3f", barcode.boundingBox.size.height)))")
+            lines.append(
+                "位置: (\(String(format: "%.3f", barcode.boundingBox.origin.x)), "
+                    + "\(String(format: "%.3f", barcode.boundingBox.origin.y)), "
+                    + "\(String(format: "%.3f", barcode.boundingBox.size.width))x"
+                    + "\(String(format: "%.3f", barcode.boundingBox.size.height)))"
+            )
             lines.append("")
         }
         return lines.joined(separator: "\n")

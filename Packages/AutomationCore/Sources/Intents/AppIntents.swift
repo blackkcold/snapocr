@@ -305,7 +305,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "Capture area with \(.applicationName)",
                 "Take area screenshot with \(.applicationName)",
-                "区域截图 (\(.applicationName))"
+                "区域截图 (\(.applicationName))",
             ],
             shortTitle: "Capture Area",
             systemImageName: "camera.viewfinder"
@@ -316,7 +316,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "Capture fullscreen with \(.applicationName)",
                 "Take fullscreen screenshot with \(.applicationName)",
-                "全屏截图 (\(.applicationName))"
+                "全屏截图 (\(.applicationName))",
             ],
             shortTitle: "Capture Fullscreen",
             systemImageName: "rectangle.dashed"
@@ -327,7 +327,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "OCR image with \(.applicationName)",
                 "Recognize text in image with \(.applicationName)",
-                "图片文字识别 (\(.applicationName))"
+                "图片文字识别 (\(.applicationName))",
             ],
             shortTitle: "OCR Image",
             systemImageName: "text.viewfinder"
@@ -338,7 +338,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "Scan barcode with \(.applicationName)",
                 "Scan QR code with \(.applicationName)",
-                "扫描条码 (\(.applicationName))"
+                "扫描条码 (\(.applicationName))",
             ],
             shortTitle: "Scan Barcode",
             systemImageName: "qrcode"
