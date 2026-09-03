@@ -182,7 +182,9 @@ extension CaptureOrchestrator {
             return try fallbackArea(rect: rect, options: options, timestamp: timestamp)
 
         case .scroll:
-            throw CaptureError.captureFailed(reason: "Scroll capture requires ScrollCore, not available in fallback path")
+            throw CaptureError.captureFailed(
+                reason: "Scroll capture requires ScrollCore, not available in fallback path"
+            )
         }
     }
 
@@ -216,7 +218,11 @@ extension CaptureOrchestrator {
     }
 
     /// CG 窗口截图
-    private func fallbackWindow(windowID: CGWindowID?, options: CaptureOptions, timestamp: Date) throws -> CaptureResult {
+    private func fallbackWindow(
+        windowID: CGWindowID?,
+        options: CaptureOptions,
+        timestamp: Date
+    ) throws -> CaptureResult {
         guard let targetID = windowID else {
             // 未指定窗口 ID，尝试通过 CG 枚举查找第一个非桌面窗口
             let windows = cgAdapter.enumerateWindows()

@@ -103,11 +103,11 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         }
 
         // 轮询检查，一旦成功立即返回（最多等待 15 秒）
-        for i in 0..<15 {
+        for attempt in 0..<15 {
             try? await Task.sleep(for: .seconds(1))
             let granted = await checkPermissionStatus()
             if granted {
-                logger.info("SCK: Permission granted after \(i + 1) seconds")
+                logger.info("SCK: Permission granted after \(attempt + 1) seconds")
                 return true
             }
         }
@@ -179,6 +179,42 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
             throw CaptureError.captureFailed(reason: "Invalid window thumbnail size")
         }
 
+        let outputSize = thumbnailOutputSize(
+            pointSize: pointSize,
+            maximumSize: maximumSize,
+            display: display
+        )
+
+        let filter = SCContentFilter(display: display, including: [window])
+        let configuration = SCStreamConfiguration()
+        configuration.width = outputSize.width
+        configuration.height = outputSize.height
+        configuration.showsCursor = false
+        configuration.capturesAudio = false
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
+        configuration.queueDepth = 1
+
+        return try await withThrowingTimeout(
+            milliseconds: Self.captureTimeoutMs,
+            timeoutError: {
+                CaptureError.captureFailed(reason: "SCStream capture timed out")
+            },
+            operation: {
+                try await SingleFrameCapture.capture(
+                    with: filter,
+                    configuration: configuration,
+                    logger: self.logger
+                )
+            }
+        )
+    }
+
+    /// 计算缩略图的物理像素输出尺寸，让 ScreenCaptureKit 的 GPU 管线缩放。
+    private func thumbnailOutputSize(
+        pointSize: CGSize,
+        maximumSize: CGSize,
+        display: SCDisplay
+    ) -> (width: Int, height: Int) {
         // Compute the output size in *physical* pixels so thumbnails stay sharp on
         // Retina displays, then let ScreenCaptureKit's GPU pipeline scale down the
         // streamed frame (faster and higher quality than a CPU resize).
@@ -205,29 +241,9 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
             max(1, Int((pixelSize.height * scale).rounded(.up))),
             cappedMaxHeight * 3
         )
-
-        let filter = SCContentFilter(display: display, including: [window])
-        let configuration = SCStreamConfiguration()
-        configuration.width = outputWidth
-        configuration.height = outputHeight
-        configuration.showsCursor = false
-        configuration.capturesAudio = false
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
-        configuration.queueDepth = 1
-
-        return try await withThrowingTimeout(milliseconds: Self.captureTimeoutMs, timeoutError: {
-            CaptureError.captureFailed(reason: "SCStream capture timed out")
-        }) {
-            try await SingleFrameCapture.capture(
-                with: filter,
-                configuration: configuration,
-                logger: self.logger
-            )
-        }
+        return (outputWidth, outputHeight)
     }
 }
-
-// MARK: - Capture Implementations
 
 extension SCKAdapter {
     /// 全屏截图
@@ -266,7 +282,12 @@ extension SCKAdapter {
             guard let window = content.windows.first else {
                 throw CaptureError.windowNotFound
             }
-            return try await captureWindowByID(window.windowID, content: content, options: options, timestamp: timestamp)
+            return try await captureWindowByID(
+                window.windowID,
+                content: content,
+                options: options,
+                timestamp: timestamp
+            )
         }
 
         return try await captureWindowByID(targetID, content: content, options: options, timestamp: timestamp)
@@ -361,11 +382,15 @@ extension SCKAdapter {
         streamConfig.showsCursor = options.includeCursor
         streamConfig.capturesAudio = false
 
-        let image = try await withThrowingTimeout(milliseconds: Self.captureTimeoutMs, timeoutError: {
-            CaptureError.captureFailed(reason: "SCStream capture timed out")
-        }) {
-            try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
-        }
+        let image = try await withThrowingTimeout(
+            milliseconds: Self.captureTimeoutMs,
+            timeoutError: {
+                CaptureError.captureFailed(reason: "SCStream capture timed out")
+            },
+            operation: {
+                try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
+            }
+        )
 
         return image
     }
@@ -390,11 +415,15 @@ extension SCKAdapter {
         streamConfig.showsCursor = options.includeCursor
         streamConfig.capturesAudio = false
 
-        let image = try await withThrowingTimeout(milliseconds: Self.captureTimeoutMs, timeoutError: {
-            CaptureError.captureFailed(reason: "SCStream capture timed out")
-        }) {
-            try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
-        }
+        let image = try await withThrowingTimeout(
+            milliseconds: Self.captureTimeoutMs,
+            timeoutError: {
+                CaptureError.captureFailed(reason: "SCStream capture timed out")
+            },
+            operation: {
+                try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
+            }
+        )
 
         let visibleBounds = window.frame.intersection(targetDisplay.frame)
         guard !visibleBounds.isEmpty else {
@@ -431,238 +460,5 @@ extension SCKAdapter {
     private func display(containing window: SCWindow, from displays: [SCDisplay]) -> SCDisplay? {
         let windowCenter = CGPoint(x: window.frame.midX, y: window.frame.midY)
         return displays.first { $0.frame.contains(windowCenter) } ?? displays.first
-    }
-}
-
-// MARK: - Helpers
-
-extension SCKAdapter {
-    static func outputScale(for display: SCDisplay, options: CaptureOptions) -> CGFloat {
-        guard options.highResolution else { return 1 }
-        let nativeScale = pixelScale(imageWidth: display.width, displayFrame: display.frame)
-        let backingScale = NSScreen.screens.first { screen in
-            guard let screenNumber = screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")
-            ] as? UInt32 else {
-                return false
-            }
-            return screenNumber == display.displayID
-        }?.backingScaleFactor ?? 1
-        return max(1, nativeScale, backingScale)
-    }
-
-    static func pixelScale(imageWidth: Int, displayFrame: CGRect) -> CGFloat {
-        guard imageWidth > 0, displayFrame.width > 0 else { return 1 }
-        return CGFloat(imageWidth) / displayFrame.width
-    }
-
-    static func pixelCropRect(
-        areaRect: CGRect,
-        displayFrame: CGRect,
-        imageSize: CGSize
-    ) -> CGRect? {
-        guard displayFrame.contains(areaRect), imageSize.width > 0, imageSize.height > 0 else {
-            return nil
-        }
-
-        let scaleX = imageSize.width / displayFrame.width
-        let scaleY = imageSize.height / displayFrame.height
-        let localX = areaRect.minX - displayFrame.minX
-        let localY = areaRect.minY - displayFrame.minY
-        let cropRect = CGRect(
-            x: localX * scaleX,
-            y: localY * scaleY,
-            width: areaRect.width * scaleX,
-            height: areaRect.height * scaleY
-        ).integral
-        let imageBounds = CGRect(origin: .zero, size: imageSize)
-        let clamped = cropRect.intersection(imageBounds)
-        return clamped.isEmpty ? nil : clamped
-    }
-
-    /// 从 `SCDisplay` 构造 `CaptureDisplayInfo`
-    private func displayInfo(for display: SCDisplay) -> CaptureDisplayInfo {
-        let scaleFactor: CGFloat = {
-            let screens = NSScreen.screens
-            for screen in screens {
-                if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32,
-                   screenNumber == display.displayID {
-                    return screen.backingScaleFactor
-                }
-            }
-            return 2.0
-        }()
-
-        return CaptureDisplayInfo(
-            displayID: display.displayID,
-            scaleFactor: scaleFactor,
-            frame: display.frame
-        )
-    }
-}
-
-// MARK: - SingleFrameCaptureSession
-
-/// 生命周期安全的单帧捕获会话。
-///
-/// 强持有 `SCStream`，确保在成功/失败/超时/取消前不被释放。
-/// 所有路径通过统一的清理入口，保证恰好执行一次。
-fileprivate final class SingleFrameCaptureSession: @unchecked Sendable {
-    private let stream: SCStream
-    private var outputAdaptor: StreamOutputAdaptor?
-    private var continuation: CheckedContinuation<CGImage, any Error>?
-    private let lock = NSLock()
-    private var didFinish = false
-    private let logger: Logger
-
-    init(stream: SCStream, logger: Logger) {
-        self.stream = stream
-        self.logger = logger
-    }
-
-    /// 设置 continuation（在 `withCheckedThrowingContinuation` 闭包内调用）
-    func setContinuation(_ c: CheckedContinuation<CGImage, any Error>) {
-        lock.withLock { continuation = c }
-    }
-
-    /// Strongly retain the output adaptor for the lifetime of the capture session.
-    func retainOutputAdaptor(_ adaptor: StreamOutputAdaptor) {
-        lock.withLock { outputAdaptor = adaptor }
-    }
-
-    /// 以错误结束会话：停止流、恢复 continuation（仅首次生效）
-    func finish(throwing error: any Error) {
-        cleanupAndResume { $0?.resume(throwing: error) }
-    }
-
-    /// 以成功结束会话：停止流、恢复 continuation（仅首次生效）
-    func finish(returning image: CGImage) {
-        cleanupAndResume { $0?.resume(returning: image) }
-    }
-
-    private func cleanupAndResume(_ resume: (CheckedContinuation<CGImage, any Error>?) -> Void) {
-        lock.lock()
-        guard !didFinish else {
-            lock.unlock()
-            return
-        }
-        didFinish = true
-        let cont = continuation
-        continuation = nil
-        outputAdaptor = nil
-        lock.unlock()
-
-        stream.stopCapture { [logger] error in
-            if let error {
-                logger.warning("SCStream stopCapture error: \(error.localizedDescription)")
-            } else {
-                logger.debug("SCStream stopped after frame capture")
-            }
-        }
-
-        resume(cont)
-    }
-}
-
-// MARK: - SingleFrameCapture
-
-/// SCStream 单帧捕获辅助工具。
-///
-/// 内部管理 `SCStream` 的生命周期，接收一帧画面后立即停止流。
-/// 通过 `CheckedContinuation` 桥接 SCStreamOutput 的回调到 async/await。
-enum SingleFrameCapture {
-    private static let outputQueue = DispatchQueue(
-        label: "com.snapglass.capture.single-frame",
-        qos: .userInitiated
-    )
-
-    /// 使用给定的 filter 和 configuration 捕获单帧图像
-    static func capture(
-        with filter: SCContentFilter,
-        configuration: SCStreamConfiguration,
-        logger: Logger
-    ) async throws -> CGImage {
-        let stream = SCStream(filter: filter, configuration: configuration, delegate: nil)
-        let session = SingleFrameCaptureSession(stream: stream, logger: logger)
-        let adaptor = StreamOutputAdaptor(session: session, logger: logger)
-        session.retainOutputAdaptor(adaptor)
-
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                session.setContinuation(continuation)
-
-                do {
-                    try stream.addStreamOutput(adaptor, type: .screen, sampleHandlerQueue: outputQueue)
-                    stream.startCapture { [session, logger] error in
-                        if let error {
-                            logger.error("SCStream startCapture failed", error: error)
-                            session.finish(throwing: CaptureError.captureFailed(
-                                reason: "SCStream startCapture: \(error.localizedDescription)"
-                            ))
-                        } else {
-                            logger.debug("SCStream started successfully")
-                        }
-                    }
-                } catch {
-                    logger.error("SCStream setup failed", error: error)
-                    session.finish(throwing: CaptureError.captureFailed(
-                        reason: "SCStream setup: \(error.localizedDescription)"
-                    ))
-                }
-            }
-        } onCancel: {
-            session.finish(throwing: CaptureError.captureFailed(reason: "Capture cancelled"))
-        }
-    }
-}
-
-// MARK: - StreamOutputAdaptor
-
-/// SCStream 输出适配器。
-///
-/// 接收 `SCStreamOutput` 的帧回调，将 `CMSampleBuffer` 转换为 `CGImage`。
-/// 设计为一次性使用——收到第一帧后立即停止流并恢复 continuation。
-fileprivate final class StreamOutputAdaptor: NSObject, SCStreamOutput, @unchecked Sendable {
-    private static let imageContext = CIContext(options: [.workingColorSpace: NSNull()])
-
-    private let session: SingleFrameCaptureSession
-    private let logger: Logger
-    private let lock = NSLock()
-    nonisolated(unsafe) fileprivate var didDeliverResult = false
-
-    fileprivate init(
-        session: SingleFrameCaptureSession,
-        logger: Logger
-    ) {
-        self.session = session
-        self.logger = logger
-    }
-
-    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
-        guard outputType == .screen else { return }
-
-        lock.lock()
-        guard !didDeliverResult else {
-            lock.unlock()
-            return
-        }
-        didDeliverResult = true
-        lock.unlock()
-
-        guard let imageBuffer = sampleBuffer.imageBuffer else {
-            logger.error("Received nil imageBuffer from SCStream")
-            session.finish(throwing: CaptureError.captureFailed(reason: "SCStream received nil pixel buffer"))
-            return
-        }
-
-        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-        guard let cgImage = Self.imageContext.createCGImage(ciImage, from: ciImage.extent) else {
-            logger.error("Failed to convert CIImage to CGImage")
-            session.finish(throwing: CaptureError.captureFailed(reason: "Failed to convert SCStream frame to CGImage"))
-            return
-        }
-
-        logger.info("SCStream captured frame: \(cgImage.width)x\(cgImage.height)")
-        session.finish(returning: cgImage)
     }
 }

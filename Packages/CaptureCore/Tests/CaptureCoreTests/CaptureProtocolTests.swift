@@ -377,11 +377,11 @@ struct CaptureProtocolTests {
         return image
     }
 
-    private func alpha(atX x: Int, y: Int, in image: CGImage) -> UInt8 {
+    private func alpha(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {
         guard let data = image.dataProvider?.data,
               let bytes = CFDataGetBytePtr(data) else {
             return 0
         }
-        return bytes[y * image.bytesPerRow + x * 4 + 3]
+        return bytes[yCoordinate * image.bytesPerRow + xCoordinate * 4 + 3]
     }
 }

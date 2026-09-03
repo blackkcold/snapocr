@@ -198,10 +198,10 @@ final class CGCompatAdapter: @unchecked Sendable {
             return CGMainDisplayID()
         }
 
-        for i in 0 ..< Int(displayCount) {
-            let bounds = CGDisplayBounds(displayIDs[i])
+        for index in 0 ..< Int(displayCount) {
+            let bounds = CGDisplayBounds(displayIDs[index])
             if bounds.contains(point) {
-                return displayIDs[i]
+                return displayIDs[index]
             }
         }
 
@@ -237,7 +237,10 @@ private struct WindowInfo {
 /// 从窗口信息字典中提取窗口信息
 private extension CGCompatAdapter {
     func windowInfo(for windowID: CGWindowID) -> WindowInfo? {
-        guard let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
+        guard let windowList = CGWindowListCopyWindowInfo(
+            .optionOnScreenOnly,
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
             return nil
         }
 
