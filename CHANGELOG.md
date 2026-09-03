@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - CI unit-test 卡住：为 job 与 step 增加 `timeout-minutes`，避免单个 Package 挂起导致无限等待；OCRCore 在 CI 上跳过依赖真实 Vision OCR 的集成测试（无头 runner 上 Vision 首次初始化可能挂起），本地仍完整运行（`scripts/test.sh`）
+- 本地打包失败：SwiftLint 0.65+ 移除 `--path` 选项，`project.yml` 的 SwiftLint build phase 改用位置参数（新旧版本均兼容）
 
 ## [0.6.1] - 2026-09-02
 
