@@ -58,42 +58,7 @@ struct HistoryStorageDashboard: View {
         let storageUsedGB = Double(stats.totalSizeBytes) / 1_073_741_824
 
         VStack(alignment: .leading, spacing: 16) {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 130, maximum: .infinity), spacing: 12)],
-                alignment: .leading,
-                spacing: 12
-            ) {
-                metricCard(
-                    icon: "square.stack.3d.up",
-                    title: "Entries",
-                    value: "\(stats.totalCount)",
-                    tint: .blue
-                )
-                metricCard(
-                    icon: "star.fill",
-                    title: "Favourites",
-                    value: "\(stats.favouriteCount)",
-                    tint: .yellow
-                )
-                metricCard(
-                    icon: "eyedropper",
-                    title: "Colors",
-                    value: "\(colorCount ?? 0)",
-                    tint: .orange
-                )
-                metricCard(
-                    icon: "gauge.with.dots.needle.50percent",
-                    title: "Avg. confidence",
-                    value: stats.averageConfidence.formatted(.percent.precision(.fractionLength(0))),
-                    tint: .green
-                )
-                metricCard(
-                    icon: "internaldrive",
-                    title: "Storage used",
-                    value: "\(storageUsedGB.formatted(.number.precision(.fractionLength(2)))) GB",
-                    tint: .purple
-                )
-            }
+            metricGrid(stats: stats, storageUsedGB: storageUsedGB)
 
             Divider()
 
@@ -110,6 +75,45 @@ struct HistoryStorageDashboard: View {
 
                 usageRing(storageUsedGB: storageUsedGB, capGB: storageSizeGB)
             }
+        }
+    }
+
+    private func metricGrid(stats: HistoryStats, storageUsedGB: Double) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 130, maximum: .infinity), spacing: 12)],
+            alignment: .leading,
+            spacing: 12
+        ) {
+            metricCard(
+                icon: "square.stack.3d.up",
+                title: "Entries",
+                value: "\(stats.totalCount)",
+                tint: .blue
+            )
+            metricCard(
+                icon: "star.fill",
+                title: "Favourites",
+                value: "\(stats.favouriteCount)",
+                tint: .yellow
+            )
+            metricCard(
+                icon: "eyedropper",
+                title: "Colors",
+                value: "\(colorCount ?? 0)",
+                tint: .orange
+            )
+            metricCard(
+                icon: "gauge.with.dots.needle.50percent",
+                title: "Avg. confidence",
+                value: stats.averageConfidence.formatted(.percent.precision(.fractionLength(0))),
+                tint: .green
+            )
+            metricCard(
+                icon: "internaldrive",
+                title: "Storage used",
+                value: "\(storageUsedGB.formatted(.number.precision(.fractionLength(2)))) GB",
+                tint: .purple
+            )
         }
     }
 
@@ -185,7 +189,12 @@ struct HistoryStorageDashboard: View {
             .tint(ratio > 0.85 ? .red : (ratio > 0.6 ? .orange : .green))
             .frame(width: 90, height: 90)
 
-            Text(String(format: String(localized: "of %@ GB limit"), capGB.formatted(.number.precision(.fractionLength(1)))))
+            Text(
+                String(
+                    format: String(localized: "of %@ GB limit"),
+                    capGB.formatted(.number.precision(.fractionLength(1)))
+                )
+            )
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -211,4 +220,3 @@ struct HistoryStorageDashboard: View {
         isLoading = false
     }
 }
-

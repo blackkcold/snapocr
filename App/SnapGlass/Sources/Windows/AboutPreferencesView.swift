@@ -113,7 +113,10 @@ struct UpdatesPreferencesView: View {
                         .buttonStyle(.borderedProminent)
                     }
 
-                    PreferencesCardCaption(text: "Updates are downloaded from the GitHub Releases page and verified with SHA-256 before saving.")
+                    PreferencesCardCaption(text: LocalizedStringKey(
+                        "Updates are downloaded from the GitHub Releases page "
+                            + "and verified with SHA-256 before saving."
+                    ))
                 }
             }
         }

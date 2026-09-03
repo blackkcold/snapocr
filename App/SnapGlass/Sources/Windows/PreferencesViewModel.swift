@@ -42,7 +42,8 @@ final class PreferencesViewModel: ObservableObject {
         self.autoCopyToClipboard = UserDefaults.standard.bool(forKey: "autoCopyToClipboard")
         self.defaultCaptureMode = UserDefaults.standard.string(forKey: "defaultCaptureMode") ?? "area"
         self.saveLocation = UserDefaults.standard.string(forKey: "saveLocation") ?? "~/Pictures/SnapGlass"
-        self.ocrLanguagePriority = UserDefaults.standard.stringArray(forKey: "ocrLanguagePriority") ?? ["en-US", "zh-Hans"]
+        self.ocrLanguagePriority = UserDefaults.standard.stringArray(forKey: "ocrLanguagePriority")
+            ?? ["en-US", "zh-Hans"]
         self.ocrEngine = UserDefaults.standard.string(forKey: "ocrEngine") ?? "vision"
         self.confidenceThreshold = {
             let val = UserDefaults.standard.double(forKey: "confidenceThreshold")
