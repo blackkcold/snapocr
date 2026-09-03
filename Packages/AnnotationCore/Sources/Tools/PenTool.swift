@@ -41,12 +41,12 @@ public struct PenTool: Sendable {
 
         // 如果有足够多的点，使用二次贝塞尔平滑；否则直接连线
         if denormalized.count >= 3 {
-            for i in 1 ..< denormalized.count - 1 {
+            for index in 1 ..< denormalized.count - 1 {
                 let mid = CGPoint(
-                    x: (denormalized[i].x + denormalized[i + 1].x) / 2,
-                    y: (denormalized[i].y + denormalized[i + 1].y) / 2
+                    x: (denormalized[index].x + denormalized[index + 1].x) / 2,
+                    y: (denormalized[index].y + denormalized[index + 1].y) / 2
                 )
-                context.addQuadCurve(to: mid, control: denormalized[i])
+                context.addQuadCurve(to: mid, control: denormalized[index])
             }
             // 连接到最后一个点
             context.addLine(to: denormalized[denormalized.count - 1])

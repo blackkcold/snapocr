@@ -23,13 +23,13 @@ public struct CropTool: Sendable {
         if node.normalizedRect != .zero {
             rect = denormalize(rect: node.normalizedRect, to: image)
         } else if node.points.count >= 2 {
-            let p1 = denormalize(point: node.points[0], to: image)
-            let p2 = denormalize(point: node.points[1], to: image)
+            let firstPoint = denormalize(point: node.points[0], to: image)
+            let secondPoint = denormalize(point: node.points[1], to: image)
             rect = CGRect(
-                x: min(p1.x, p2.x),
-                y: min(p1.y, p2.y),
-                width: abs(p2.x - p1.x),
-                height: abs(p2.y - p1.y)
+                x: min(firstPoint.x, secondPoint.x),
+                y: min(firstPoint.y, secondPoint.y),
+                width: abs(secondPoint.x - firstPoint.x),
+                height: abs(secondPoint.y - firstPoint.y)
             )
         } else {
             logger.error("裁剪工具需要至少 2 个点或有效的 normalizedRect")

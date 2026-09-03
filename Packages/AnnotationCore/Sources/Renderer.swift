@@ -65,28 +65,8 @@ public struct Renderer: Sendable {
         let blurAndCropNodes = document.nodes.filter { $0.tool == .blur || $0.tool == .crop }
         let drawingNodes = document.nodes.filter { $0.tool != .blur && $0.tool != .crop }
 
-        // 使用 autoreleasepool 管理内存
-        for node in blurAndCropNodes {
-            autoreleasepool {
-                renderNode(
-                    node,
-                    in: context,
-                    imageSize: workingSize,
-                    styleScale: styleScale
-                )
-            }
-        }
-
-        for node in drawingNodes {
-            autoreleasepool {
-                renderNode(
-                    node,
-                    in: context,
-                    imageSize: workingSize,
-                    styleScale: styleScale
-                )
-            }
-        }
+        renderNodes(blurAndCropNodes, in: context, imageSize: workingSize, styleScale: styleScale)
+        renderNodes(drawingNodes, in: context, imageSize: workingSize, styleScale: styleScale)
 
         guard let result = context.makeImage() else {
             throw AnnotationError.renderFailed(reason: "CGContext.makeImage() 返回 nil")
@@ -94,6 +74,25 @@ public struct Renderer: Sendable {
 
         logger.metric("annotation.render.nodeCount", value: Double(document.nodes.count), unit: "nodes")
         return result
+    }
+
+    /// 使用 autoreleasepool 渲染一组节点。
+    private func renderNodes(
+        _ nodes: [AnnotationNode],
+        in context: CGContext,
+        imageSize: CGSize,
+        styleScale: CGFloat
+    ) {
+        for node in nodes {
+            autoreleasepool {
+                renderNode(
+                    node,
+                    in: context,
+                    imageSize: imageSize,
+                    styleScale: styleScale
+                )
+            }
+        }
     }
 
     /// 根据节点类型分派到对应工具进行渲染。
