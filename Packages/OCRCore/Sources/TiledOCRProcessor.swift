@@ -19,13 +19,13 @@ enum TiledOCRProcessor {
 
         let xOrigins = axisOrigins(length: imageWidth, tileLength: tileDimension, overlap: overlap)
         let yOrigins = axisOrigins(length: imageHeight, tileLength: tileDimension, overlap: overlap)
-        return yOrigins.flatMap { y in
-            xOrigins.map { x in
+        return yOrigins.flatMap { yOrigin in
+            xOrigins.map { xOrigin in
                 OCRTile(pixelRect: CGRect(
-                    x: x,
-                    y: y,
-                    width: min(tileDimension, imageWidth - x),
-                    height: min(tileDimension, imageHeight - y)
+                    x: xOrigin,
+                    y: yOrigin,
+                    width: min(tileDimension, imageWidth - xOrigin),
+                    height: min(tileDimension, imageHeight - yOrigin)
                 ))
             }
         }

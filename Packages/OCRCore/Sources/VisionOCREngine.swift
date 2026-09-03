@@ -91,20 +91,7 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         }
 
         // 3. 提取文本行，过滤过低置信度 (< 0.1) 的观察
-        let lines: [OCRLine] = observations.compactMap { observation in
-            guard let topCandidate = observation.topCandidates(1).first else {
-                return nil
-            }
-            let confidence = topCandidate.confidence
-            guard confidence >= 0.1 else { return nil }
-
-            return OCRLine(
-                text: topCandidate.string,
-                confidence: confidence,
-                boundingBox: observation.boundingBox
-            )
-        }
-
+        let lines = Self.mapObservations(observations)
         guard !lines.isEmpty else {
             throw OCRError.recognitionFailed(
                 reason: "未识别到任何有效文本（所有候选置信度均低于 0.1）"
@@ -169,5 +156,22 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
             }
         }
         return unique.values.sorted()
+    }
+
+    /// 将 Vision 观察结果映射为 OCRLine，过滤置信度低于 0.1 的候选。
+    private static func mapObservations(_ observations: [VNRecognizedTextObservation]) -> [OCRLine] {
+        observations.compactMap { observation in
+            guard let topCandidate = observation.topCandidates(1).first else {
+                return nil
+            }
+            let confidence = topCandidate.confidence
+            guard confidence >= 0.1 else { return nil }
+
+            return OCRLine(
+                text: topCandidate.string,
+                confidence: confidence,
+                boundingBox: observation.boundingBox
+            )
+        }
     }
 }

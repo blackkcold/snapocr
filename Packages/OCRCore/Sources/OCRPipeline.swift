@@ -86,7 +86,10 @@ public final class OCRPipeline: Sendable {
         options overrideOptions: OCROptions? = nil
     ) async throws -> OCRResult {
         let combinedOptions = overrideOptions ?? options
-        logger.info("开始 OCR 识别 | 语言: \(combinedOptions.languages.joined(separator: ", ")) | 引擎: \(engineLabel(combinedOptions.engineSelection))")
+        logger.info(
+            "开始 OCR 识别 | 语言: \(combinedOptions.languages.joined(separator: ", ")) "
+                + "| 引擎: \(engineLabel(combinedOptions.engineSelection))"
+        )
 
         try Task.checkCancellation()
 
@@ -112,7 +115,11 @@ public final class OCRPipeline: Sendable {
         logger.metric("ocr.confidence", value: Double(processedResult.confidence), unit: "score")
         logger.metric("ocr.text_length", value: Double(processedResult.text.count), unit: "chars")
 
-        logger.info("OCR 识别完成 | 耗时: \(String(format: "%.1f", processedResult.processingTimeMs))ms | 置信度: \(String(format: "%.2f", processedResult.confidence)) | 文本长度: \(processedResult.text.count)")
+        logger.info(
+            "OCR 识别完成 | 耗时: \(String(format: "%.1f", processedResult.processingTimeMs))ms "
+                + "| 置信度: \(String(format: "%.2f", processedResult.confidence)) "
+                + "| 文本长度: \(processedResult.text.count)"
+        )
 
         return processedResult
     }
@@ -141,7 +148,10 @@ public final class OCRPipeline: Sendable {
                 options: options
             )
             let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
-            logger.info("Vision 引擎识别 | 耗时: \(String(format: "%.1f", elapsed))ms | 置信度: \(String(format: "%.2f", result.confidence))")
+            logger.info(
+                "Vision 引擎识别 | 耗时: \(String(format: "%.1f", elapsed))ms "
+                    + "| 置信度: \(String(format: "%.2f", result.confidence))"
+            )
             return result
 
         case .tesseract(let languageDataPath):
@@ -154,7 +164,10 @@ public final class OCRPipeline: Sendable {
                     options: options
                 )
                 let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
-                logger.info("Tesseract 引擎识别 | 耗时: \(String(format: "%.1f", elapsed))ms | 置信度: \(String(format: "%.2f", result.confidence))")
+                logger.info(
+                    "Tesseract 引擎识别 | 耗时: \(String(format: "%.1f", elapsed))ms "
+                        + "| 置信度: \(String(format: "%.2f", result.confidence))"
+                )
                 return result
             } catch {
                 logger.warning("Tesseract 不可用，自动降级到 Vision: \(error.localizedDescription)")
@@ -165,7 +178,10 @@ public final class OCRPipeline: Sendable {
                     options: options
                 )
                 let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
-                logger.info("Vision 引擎识别（Tesseract 降级）| 耗时: \(String(format: "%.1f", elapsed))ms | 置信度: \(String(format: "%.2f", result.confidence))")
+                logger.info(
+                    "Vision 引擎识别（Tesseract 降级）| 耗时: \(String(format: "%.1f", elapsed))ms "
+                        + "| 置信度: \(String(format: "%.2f", result.confidence))"
+                )
                 return result
             }
 
@@ -187,44 +203,8 @@ public final class OCRPipeline: Sendable {
 
         logger.info("超大图片 \(image.width)x\(image.height)，拆分为 \(tiles.count) 个重叠分块，并发识别")
 
-        // 先裁剪所有 tile（裁剪在主任务中串行完成，避免并发裁剪竞争）
-        var tileImages: [(tile: OCRTile, image: CGImage?)] = []
-        tileImages.reserveCapacity(tiles.count)
-        for tile in tiles {
-            try Task.checkCancellation()
-            tileImages.append((tile, image.cropping(to: tile.pixelRect)))
-        }
-
-        let maxConcurrent = min(tiles.count, Self.maxConcurrentTiles)
-        var results: [(index: Int, tileResult: OCRResult?)] = []
-        results.reserveCapacity(tiles.count)
-
-        try await withThrowingTaskGroup(of: (Int, OCRResult?).self) { group in
-            var submitted = 0
-            while submitted < tileImages.count {
-                guard submitted - results.count < maxConcurrent else {
-                    if let (index, tileResult) = try await group.next() {
-                        results.append((index, tileResult))
-                    }
-                    continue
-                }
-                let entry = tileImages[submitted]
-                let taskIndex = submitted
-                submitted += 1
-                group.addTask { [weak self] in
-                    guard let self, let tileImage = entry.image else { return (taskIndex, nil) }
-                    do {
-                        let tileResult = try await self.performRecognition(image: tileImage, options: options)
-                        return (taskIndex, tileResult)
-                    } catch let error as OCRError where self.isNoTextError(error) {
-                        return (taskIndex, nil)
-                    }
-                }
-            }
-            while let result = try await group.next() {
-                results.append(result)
-            }
-        }
+        let tileImages = try cropTiles(tiles, from: image)
+        let results = try await recognizeTiles(tileImages, options: options)
 
         // 按原始顺序整理结果并映射回全图坐标
         let fullSize = CGSize(width: image.width, height: image.height)
@@ -255,6 +235,58 @@ public final class OCRPipeline: Sendable {
             observations: mergedLines,
             processingTimeMs: (CFAbsoluteTimeGetCurrent() - startTime) * 1000
         )
+    }
+
+    /// 串行裁剪所有 tile，避免并发裁剪竞争。
+    private func cropTiles(
+        _ tiles: [OCRTile],
+        from image: CGImage
+    ) throws -> [(tile: OCRTile, image: CGImage?)] {
+        var tileImages: [(tile: OCRTile, image: CGImage?)] = []
+        tileImages.reserveCapacity(tiles.count)
+        for tile in tiles {
+            try Task.checkCancellation()
+            tileImages.append((tile, image.cropping(to: tile.pixelRect)))
+        }
+        return tileImages
+    }
+
+    /// 使用限并发 `TaskGroup` 并行识别各 tile。
+    private func recognizeTiles(
+        _ tileImages: [(tile: OCRTile, image: CGImage?)],
+        options: OCROptions
+    ) async throws -> [(index: Int, tileResult: OCRResult?)] {
+        let maxConcurrent = min(tileImages.count, Self.maxConcurrentTiles)
+        var results: [(index: Int, tileResult: OCRResult?)] = []
+        results.reserveCapacity(tileImages.count)
+
+        try await withThrowingTaskGroup(of: (Int, OCRResult?).self) { group in
+            var submitted = 0
+            while submitted < tileImages.count {
+                guard submitted - results.count < maxConcurrent else {
+                    if let (index, tileResult) = try await group.next() {
+                        results.append((index, tileResult))
+                    }
+                    continue
+                }
+                let entry = tileImages[submitted]
+                let taskIndex = submitted
+                submitted += 1
+                group.addTask { [weak self] in
+                    guard let self, let tileImage = entry.image else { return (taskIndex, nil) }
+                    do {
+                        let tileResult = try await self.performRecognition(image: tileImage, options: options)
+                        return (taskIndex, tileResult)
+                    } catch let error as OCRError where self.isNoTextError(error) {
+                        return (taskIndex, nil)
+                    }
+                }
+            }
+            while let result = try await group.next() {
+                results.append(result)
+            }
+        }
+        return results
     }
 
     private func isNoTextError(_ error: OCRError) -> Bool {
