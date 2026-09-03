@@ -84,11 +84,11 @@ public struct PermissionService: Sendable {
         }
 
         // 轮询检查，一旦成功立即返回（最多等待 15 秒）
-        for i in 0..<15 {
+        for attempt in 0..<15 {
             try? await Task.sleep(for: .seconds(1))
             let granted = await checkScreenCapturePermission()
             if granted {
-                logger.info("Permission granted after \(i + 1) seconds")
+                logger.info("Permission granted after \(attempt + 1) seconds")
                 return true
             }
         }

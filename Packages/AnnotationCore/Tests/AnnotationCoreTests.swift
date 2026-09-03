@@ -352,11 +352,11 @@ struct AnnotationCoreTests {
         }
 
         let cell = 8
-        for y in stride(from: 0, to: height, by: cell) {
-            for x in stride(from: 0, to: width, by: cell) {
-                let isLight = ((x / cell) + (y / cell)).isMultiple(of: 2)
+        for row in stride(from: 0, to: height, by: cell) {
+            for column in stride(from: 0, to: width, by: cell) {
+                let isLight = ((column / cell) + (row / cell)).isMultiple(of: 2)
                 context.setFillColor(CGColor(gray: isLight ? 0.9 : 0.1, alpha: 1))
-                context.fill(CGRect(x: x, y: y, width: cell, height: cell))
+                context.fill(CGRect(x: column, y: row, width: cell, height: cell))
             }
         }
         guard let image = context.makeImage() else {
@@ -388,7 +388,7 @@ struct AnnotationCoreTests {
         return image
     }
 
-    private func sampledPixel(from image: CGImage) throws -> (red: UInt8, green: UInt8, blue: UInt8) {
+    private func sampledPixel(from image: CGImage) throws -> SampledPixel {
         var bytes = [UInt8](repeating: 0, count: 4)
         return try bytes.withUnsafeMutableBytes { buffer in
             guard let address = buffer.baseAddress,
@@ -407,7 +407,13 @@ struct AnnotationCoreTests {
             context.interpolationQuality = .none
             context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
             let pixels = address.assumingMemoryBound(to: UInt8.self)
-            return (pixels[0], pixels[1], pixels[2])
+            return SampledPixel(red: pixels[0], green: pixels[1], blue: pixels[2])
         }
     }
+}
+
+private struct SampledPixel {
+    let red: UInt8
+    let green: UInt8
+    let blue: UInt8
 }

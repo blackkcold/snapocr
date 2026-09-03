@@ -176,76 +176,11 @@ public actor LanguagePackDownloader {
         // 使用 Task 支持取消
         let downloadTask = Task<URL, any Error> { [weak self] in
             guard let self else { throw LanguagePackError.downloadFailed(lang) }
-
-            let (asyncBytes, response) = try await URLSession.shared.bytes(from: url)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw LanguagePackError.downloadFailed(lang)
-            }
-
-            // 处理非 200 响应
-            guard httpResponse.statusCode == 200 else {
-                if httpResponse.statusCode == 404 {
-                    logger.error("语言包 '\(lang)' 在仓库中不存在 (404)")
-                    throw LanguagePackError.downloadFailed(lang)
-                }
-                logger.error("下载语言包 '\(lang)' 返回 HTTP \(httpResponse.statusCode)")
-                throw LanguagePackError.downloadFailed(lang)
-            }
-
-            let totalBytes = httpResponse.expectedContentLength
-            var receivedBytes: Int64 = 0
-            var data = Data()
-
-            // 预分配内存（如果可以确定大小）
-            if totalBytes > 0 {
-                data.reserveCapacity(Int(totalBytes))
-            } else {
-                // 未知大小时使用合理默认值（traineddata 通常 1-50MB）
-                data.reserveCapacity(10 * 1024 * 1024)
-            }
-
-            let progressUpdateInterval: Int64 = 10 * 1024 // 每 10KB 更新一次进度
-
-            for try await byte in asyncBytes {
-                // 检查是否被取消
-                try Task.checkCancellation()
-
-                data.append(byte)
-                receivedBytes += 1
-
-                // 定期更新进度
-                if receivedBytes % progressUpdateInterval == 0 {
-                    if totalBytes > 0 {
-                        let progress = Double(receivedBytes) / Double(totalBytes)
-                        await self.updateState(.downloading(progress: min(progress, 0.99)))
-                    } else {
-                        // 未知总大小时显示已下载字节数
-                        await self.updateState(.downloading(progress: -1))
-                    }
-                }
-            }
-
-            // 拒绝空文件、异常短响应和被截断的响应，避免损坏现有语言包。
-            guard data.count >= 1024 else {
-                throw LanguagePackError.invalidDownloadedData(lang)
-            }
-            if totalBytes > 0, receivedBytes != totalBytes {
-                throw LanguagePackError.invalidDownloadedData(lang)
-            }
-
-            // 5. 写入本地文件
-            do {
-                try data.write(to: destination, options: .atomic)
-                logger.info("语言包 '\(lang)' 下载完成 (\(data.count) bytes): \(destination.path)")
-            } catch {
-                logger.error("写入语言包文件失败: \(error.localizedDescription)")
-                throw LanguagePackError.downloadFailed(lang)
-            }
-
+            let data = try await self.downloadData(from: url, for: lang)
+            try data.write(to: destination, options: .atomic)
+            logger.info("语言包 '\(lang)' 下载完成 (\(data.count) bytes): \(destination.path)")
             await self.updateDownloadedLanguages(lang)
             await self.updateState(.completed(destination))
-
             return destination
         }
 
@@ -270,6 +205,67 @@ public actor LanguagePackDownloader {
             logger.error("语言包 '\(lang)' 下载失败: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    /// 从远程仓库下载语言包数据，校验响应与数据完整性。
+    private func downloadData(from url: URL, for lang: String) async throws -> Data {
+        let (asyncBytes, response) = try await URLSession.shared.bytes(from: url)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LanguagePackError.downloadFailed(lang)
+        }
+
+        // 处理非 200 响应
+        guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 404 {
+                logger.error("语言包 '\(lang)' 在仓库中不存在 (404)")
+                throw LanguagePackError.downloadFailed(lang)
+            }
+            logger.error("下载语言包 '\(lang)' 返回 HTTP \(httpResponse.statusCode)")
+            throw LanguagePackError.downloadFailed(lang)
+        }
+
+        let totalBytes = httpResponse.expectedContentLength
+        var receivedBytes: Int64 = 0
+        var data = Data()
+
+        // 预分配内存（如果可以确定大小）
+        if totalBytes > 0 {
+            data.reserveCapacity(Int(totalBytes))
+        } else {
+            // 未知大小时使用合理默认值（traineddata 通常 1-50MB）
+            data.reserveCapacity(10 * 1024 * 1024)
+        }
+
+        let progressUpdateInterval: Int64 = 10 * 1024 // 每 10KB 更新一次进度
+
+        for try await byte in asyncBytes {
+            // 检查是否被取消
+            try Task.checkCancellation()
+
+            data.append(byte)
+            receivedBytes += 1
+
+            // 定期更新进度
+            if receivedBytes % progressUpdateInterval == 0 {
+                if totalBytes > 0 {
+                    let progress = Double(receivedBytes) / Double(totalBytes)
+                    await self.updateState(.downloading(progress: min(progress, 0.99)))
+                } else {
+                    // 未知总大小时显示已下载字节数
+                    await self.updateState(.downloading(progress: -1))
+                }
+            }
+        }
+
+        // 拒绝空文件、异常短响应和被截断的响应，避免损坏现有语言包。
+        guard data.count >= 1024 else {
+            throw LanguagePackError.invalidDownloadedData(lang)
+        }
+        if totalBytes > 0, receivedBytes != totalBytes {
+            throw LanguagePackError.invalidDownloadedData(lang)
+        }
+        return data
     }
 
     /// 取消当前正在进行的下载。
@@ -426,7 +422,8 @@ public enum LanguagePackError: LocalizedError, Sendable {
         case .downloadFailed(let lang):
             return String(localized: "语言包 '\(lang)' 下载失败，请检查网络连接后重试")
         case .unsupportedLanguage(let lang):
-            return String(localized: "不支持的语言 '\(lang)'，支持的语言: \(LanguagePackDownloader.supportedLanguages.map(\.code).joined(separator: ", "))")
+            let supported = LanguagePackDownloader.supportedLanguages.map(\.code).joined(separator: ", ")
+            return String(localized: "不支持的语言 '\(lang)'，支持的语言: \(supported)")
         case .invalidDownloadedData(let lang):
             return String(localized: "语言包 '\(lang)' 下载内容无效，未写入本地")
         case .invalidStorageLocation(let path):

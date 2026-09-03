@@ -3,6 +3,40 @@ import Testing
 @testable import CaptureCore
 
 struct CaptureProtocolTests {
+    @Test func quartzRectFlipsYAxisWithinDisplay() {
+        let appKitDisplay = CGRect(x: 100, y: 100, width: 1920, height: 1080)
+        let quartzDisplay = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let appKitRect = CGRect(x: 300, y: 400, width: 500, height: 200)
+
+        let result = ScreenCoordinateGeometry.quartzRect(
+            from: appKitRect,
+            appKitScreenFrame: appKitDisplay,
+            quartzScreenFrame: quartzDisplay
+        )
+
+        #expect(result == CGRect(x: 200, y: 580, width: 500, height: 200))
+    }
+
+    @Test func quartzRectSupportsSecondaryDisplayOrigin() {
+        let result = ScreenCoordinateGeometry.quartzRect(
+            from: CGRect(x: -700, y: 100, width: 300, height: 200),
+            appKitScreenFrame: CGRect(x: -1280, y: 0, width: 1280, height: 1024),
+            quartzScreenFrame: CGRect(x: 0, y: 0, width: 1280, height: 1024)
+        )
+
+        #expect(result == CGRect(x: 580, y: 724, width: 300, height: 200))
+    }
+
+    @Test func quartzRectRejectsInvalidDisplayFrames() {
+        let result = ScreenCoordinateGeometry.quartzRect(
+            from: .zero,
+            appKitScreenFrame: .zero,
+            quartzScreenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
+        )
+
+        #expect(result == nil)
+    }
+
     @Test func captureOptions_defaults() {
         let options = CaptureOptions()
         #expect(options.includeCursor)
@@ -343,11 +377,11 @@ struct CaptureProtocolTests {
         return image
     }
 
-    private func alpha(atX x: Int, y: Int, in image: CGImage) -> UInt8 {
+    private func alpha(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {
         guard let data = image.dataProvider?.data,
               let bytes = CFDataGetBytePtr(data) else {
             return 0
         }
-        return bytes[y * image.bytesPerRow + x * 4 + 3]
+        return bytes[yCoordinate * image.bytesPerRow + xCoordinate * 4 + 3]
     }
 }

@@ -86,7 +86,9 @@ public final class VisionBarcodeEngine: BarcodeProtocol, Sendable {
         logger.info("Detected \(results.count) barcode(s)")
 
         if results.isEmpty, !observations.isEmpty {
-            logger.warning("All \(observations.count) observation(s) fell below confidence threshold \(minimumConfidence)")
+            logger.warning(
+                "All \(observations.count) observation(s) fell below confidence threshold \(minimumConfidence)"
+            )
         }
 
         return results

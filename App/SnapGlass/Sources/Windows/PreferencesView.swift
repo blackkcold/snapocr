@@ -257,6 +257,8 @@ struct CapturePreferencesView: View {
     private var imageFormat = PreferenceDefaults.captureImageFormat
     @AppStorage(PreferenceKeys.captureJPEGQuality)
     private var jpegQuality = PreferenceDefaults.captureJPEGQuality
+    @AppStorage(PreferenceKeys.pickerDominantColorCount)
+    private var pickerDominantColorCount = PreferenceDefaults.pickerDominantColorCount
     
     var body: some View {
         ScrollView {
@@ -305,6 +307,13 @@ struct CapturePreferencesView: View {
             Picker("Saved image format", selection: $imageFormat) {
                 Text("PNG (lossless)").tag(ImageFileFormat.png.rawValue)
                 Text("JPEG (smaller)").tag(ImageFileFormat.jpeg.rawValue)
+            }
+            .pickerStyle(.menu)
+
+            Picker("Number of dominant colors", selection: $pickerDominantColorCount) {
+                ForEach(3...6, id: \.self) { count in
+                    Text("\(count)").tag(count)
+                }
             }
             .pickerStyle(.menu)
 
@@ -370,9 +379,10 @@ struct OCRPreferencesView: View {
                     Toggle(option.displayName, isOn: enabledBinding(for: option.code))
                 }
 
-                PreferencesCardCaption(
-                    text: "Disable languages you rarely use to prevent visually similar characters (such as Japanese kanji and Chinese hanzi) from being misrecognized."
-                )
+                PreferencesCardCaption(text: LocalizedStringKey(
+                    "Disable languages you rarely use to prevent visually similar characters "
+                        + "(such as Japanese kanji and Chinese hanzi) from being misrecognized."
+                ))
             }
 
             Picker("OCR Engine:", selection: $engine) {
@@ -414,8 +424,7 @@ struct OCRPreferencesView: View {
     }
 }
 
-struct ShortcutsPreferencesView: View {
-    var body: some View {
+struct ShortcutsPreferencesView: View {    var body: some View {
         ScrollView {
             PreferencesCardGrid {
                 PreferencesCard {
@@ -487,221 +496,5 @@ struct ShortcutsPreferencesView: View {
                 .fixedSize()
         }
         .padding(.vertical, 6)
-    }
-}
-
-struct HistoryPreferencesView: View {
-    @AppStorage(PreferenceKeys.historyRetentionDays)
-    private var storedRetentionDays = PreferenceDefaults.historyRetentionDays
-    @AppStorage(PreferenceKeys.historyMaxItems)
-    private var storedMaxItems = PreferenceDefaults.historyMaxItems
-    @AppStorage(PreferenceKeys.historyStorageSize)
-    private var storedStorageSize = PreferenceDefaults.historyStorageSize
-    @AppStorage(PreferenceKeys.historyAutoSave)
-    private var autoSave = PreferenceDefaults.historyAutoSave
-    @AppStorage(PreferenceKeys.historySaveFullText)
-    private var saveFullText = PreferenceDefaults.historySaveFullText
-
-    @State private var maxItems = PreferenceDefaults.historyMaxItems
-    @State private var retentionDays = PreferenceDefaults.historyRetentionDays
-    @State private var keepIndefinitely = false
-    @State private var lastFiniteRetentionDays = PreferenceDefaults.historyRetentionDays
-    @State private var storageSize = PreferenceDefaults.historyStorageSize
-
-    private let logger = Logger(category: "preferences")
-
-    var body: some View {
-        ScrollView {
-            PreferencesCardGrid {
-                dashboardCard
-
-                retentionCard
-
-                storageCard
-
-                saveCard
-            }
-        }
-        .onAppear {
-            keepIndefinitely = storedRetentionDays == 0
-            lastFiniteRetentionDays = storedRetentionDays == 0
-                ? PreferenceDefaults.historyRetentionDays
-                : storedRetentionDays
-            retentionDays = lastFiniteRetentionDays
-            maxItems = storedMaxItems
-            storageSize = storedStorageSize
-        }
-    }
-
-    private var dashboardCard: some View {
-        HistoryStorageDashboard(storageSizeGB: storageSize)
-    }
-
-    private var retentionCard: some View {
-        PreferencesCard {
-            PreferencesCardHeader(systemImage: "calendar", title: "Screenshot Retention") {
-                Toggle("Keep indefinitely", isOn: $keepIndefinitely)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: keepIndefinitely) { forever in
-                        if forever {
-                            lastFiniteRetentionDays = retentionDays
-                            storedRetentionDays = 0
-                            applyPolicy()
-                        } else {
-                            retentionDays = max(lastFiniteRetentionDays, 1)
-                        }
-                    }
-            }
-
-            TriValueControl(
-                title: "Maximum screenshots",
-                unit: String(localized: "items"),
-                presets: [50, 100, 200, 500, 1000],
-                range: 10...5_000,
-                value: maxItems
-            ) { newValue in
-                maxItems = newValue
-                storedMaxItems = newValue
-                applyPolicy()
-            }
-
-            if !keepIndefinitely {
-                TriValueControl(
-                    title: "Retention period",
-                    unit: String(localized: "days"),
-                    presets: [7, 30, 90, 365],
-                    range: 1...3_650,
-                    value: retentionDays
-                ) { newValue in
-                    retentionDays = newValue
-                    storedRetentionDays = newValue
-                    applyPolicy()
-                }
-            }
-
-            PreferencesCardCaption(text: "Favourite screenshots are not removed by count or age limits.")
-        }
-    }
-
-    private var storageCard: some View {
-        PreferencesCard {
-            PreferencesCardHeader(systemImage: "internaldrive", title: "Maximum storage")
-
-            LabeledContent {
-                HStack(spacing: 2) {
-                    Text(storageSize, format: .number.precision(.fractionLength(1)))
-                        .font(.body.weight(.semibold))
-                        .monospacedDigit()
-                    Text(" GB")
-                        .foregroundColor(.secondary)
-                }
-            } label: {
-                Text("Capacity")
-            }
-
-            Slider(value: $storageSize, in: 0.1...10.0, step: 0.1)
-                .onChange(of: storageSize) { newValue in
-                    storedStorageSize = newValue
-                    applyPolicy()
-                }
-        }
-    }
-
-    private var saveCard: some View {
-        PreferencesCard {
-            Toggle("Auto-save captures to history", isOn: $autoSave)
-                .help("Automatically save screenshots and thumbnails to local encrypted history")
-
-            if autoSave {
-                Toggle("Save full OCR text", isOn: $saveFullText)
-                    .help("Store complete OCR text in encrypted history entries. Off stores an empty text field.")
-            }
-        }
-    }
-
-    private func applyPolicy() {
-        Task {
-            do {
-                try await HistoryActor.shared?.reloadConfiguredPolicyAndCleanup()
-            } catch {
-                logger.error("Failed to apply history retention policy: \(error.localizedDescription)")
-            }
-        }
-    }
-}
-
-struct DeveloperPreferencesView: View {
-    @AppStorage(PreferenceKeys.developerMode)
-    private var devMode = PreferenceDefaults.developerMode
-    @AppStorage(PreferenceKeys.engineComparison)
-    private var engineComparison = PreferenceDefaults.engineComparison
-    @AppStorage(PreferenceKeys.forceUpdateAvailable)
-    private var forceUpdateAvailable = PreferenceDefaults.forceUpdateAvailable
-    
-    var body: some View {
-        ScrollView {
-            PreferencesCardGrid {
-                PreferencesCard {
-                    PreferencesCardHeader(systemImage: "hammer", title: "Developer Mode") {
-                        statusBadge(enabled: devMode)
-                    }
-                    Toggle("Enable Developer Mode", isOn: $devMode)
-                }
-
-                if devMode {
-                    PreferencesCard {
-                        PreferencesCardHeader(systemImage: "gearshape.2", title: "Diagnostics")
-
-                        Toggle("Enable Engine Comparison", isOn: $engineComparison)
-                        Toggle("Force Latest Release as Update", isOn: $forceUpdateAvailable)
-
-                        PreferencesCardCaption(text: "When enabled, Check for Updates shows the latest GitHub Release even if its version is not newer.")
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func statusBadge(enabled: Bool) -> some View {
-        Label(enabled ? "On" : "Off", systemImage: enabled ? "checkmark.circle.fill" : "circle")
-            .font(.caption.weight(.medium))
-            .foregroundStyle(enabled ? Color.green : Color.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(enabled ? Color.green.opacity(0.12) : Color.secondary.opacity(0.1), in: Capsule())
-    }
-}
-
-/// A selectable OCR recognition language. `code` is the compact identifier
-/// stored in `ocrEnabledLanguages`; Vision resolves it to its full identifier.
-private enum OCRLanguageOption: String, CaseIterable, Identifiable {
-    case english
-    case simplifiedChinese
-    case traditionalChinese
-    case japanese
-    case korean
-
-    var id: String { code }
-
-    var code: String {
-        switch self {
-        case .english: return "en"
-        case .simplifiedChinese: return "zh-Hans"
-        case .traditionalChinese: return "zh-Hant"
-        case .japanese: return "ja"
-        case .korean: return "ko"
-        }
-    }
-
-    var displayName: LocalizedStringKey {
-        switch self {
-        case .english: "English"
-        case .simplifiedChinese: "简体中文"
-        case .traditionalChinese: "繁體中文"
-        case .japanese: "日本語"
-        case .korean: "한국어"
-        }
     }
 }

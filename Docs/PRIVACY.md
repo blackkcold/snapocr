@@ -34,10 +34,11 @@ SnapGlass 是一款**离线优先**的开源截图与 OCR 工具，遵循以下�
 ## 数据存储
 
 | 数据 | 存储位置 | 加密 | 生命周期 | 用户控制 |
-|------|----------|------|----------|----------|
+| --- | --- | --- | --- | --- |
 | 截图原图 | `~/Library/Application Support/SnapGlass/History/v2/images/` | AES-256-GCM | 7天 / 100条 | 可在偏好设置中修改策略 |
 | OCR 文本 | `~/Library/Application Support/SnapGlass/History/v2/entries/` | AES-256-GCM | 30天 / 500条 | 可在偏好设置中开启或禁用全文保存 |
 | 缩略图 | `~/Library/Application Support/SnapGlass/History/v2/thumbs/` | 无加密 | 90天 / 1000条 | 可在偏好设置中修改 |
+| 取色历史 | `~/Library/Application Support/SnapGlass/History/v2/colors/` | AES-256-GCM | 100条 | 可在偏好设置中关闭、调整上限或清空；清空截图历史时一并清空 |
 | 历史密钥 | `~/Library/Application Support/SnapGlass/Security/history-v2.key` | 本地 0600 权限文件 | 持久 | 随应用支持目录管理 |
 | 崩溃日志 | `~/Library/Logs/SnapGlass/` | 无加密 | 30天 | 手动删除 |
 | 应用偏好 | `UserDefaults` | 无加密 | 持久 | 偏好设置界面 |
@@ -60,7 +61,7 @@ SnapGlass 的网络请求受到严格限制：
 | 场景 | 请求内容 | 域名 | 触发条件 |
 |------|----------|------|----------|
 | Tesseract 语言包下载 | 语言训练数据 | `raw.githubusercontent.com/tesseract-ocr/tessdata_best` | 用户显式触发 |
-| 版本更新检查 | 版本号、Release Notes、下载地址 | `api.github.com` | 用户显式触发 |
+| 版本更新检查 | 发现最新版本、版本号、Release Notes、下载地址、SHA-256 | `github.com` | 用户显式触发 |
 | 版本更新下载 | DMG 与 SHA-256 校验文件 | `github.com` / `objects.githubusercontent.com` | 用户确认下载 |
 
 - 所有网络请求必须由用户显式触发

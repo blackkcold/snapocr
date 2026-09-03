@@ -26,7 +26,12 @@ struct MenuBarView: View {
             Button {
                 viewModel.captureNextScrollFrame()
             } label: {
-                Text(String(format: String(localized: "Capture Next Scroll Frame (%d)"), viewModel.scrollCapturedFrameCount))
+                Text(
+                    String(
+                        format: String(localized: "Capture Next Scroll Frame (%d)"),
+                        viewModel.scrollCapturedFrameCount
+                    )
+                )
             }
 
             Button("Finish Scrolling Capture") {

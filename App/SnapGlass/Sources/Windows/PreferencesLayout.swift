@@ -30,7 +30,12 @@ struct PreferencesCardGrid<Content: View>: View {
 
     var body: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: PreferencesSpacing.minCardWidth, maximum: .infinity), spacing: spacing)],
+            columns: [
+                GridItem(
+                    .adaptive(minimum: PreferencesSpacing.minCardWidth, maximum: .infinity),
+                    spacing: spacing
+                ),
+            ],
             alignment: .leading,
             spacing: spacing
         ) {

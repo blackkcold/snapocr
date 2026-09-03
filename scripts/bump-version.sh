@@ -18,7 +18,7 @@ echo "▸ Bumping version: $CURRENT → $NEW_VERSION"
 
 echo "$NEW_VERSION" > version.txt
 
-sed -i '' "s/CFBundleShortVersionString: \".*\"/CFBundleShortVersionString: \"$NEW_VERSION\"/" project.yml
+sed -i '' "s/MARKETING_VERSION: \".*\"/MARKETING_VERSION: \"$NEW_VERSION\"/" project.yml
 
 if [ -f "CHANGELOG.md" ] && ! grep -q "## \[$NEW_VERSION\]" CHANGELOG.md; then
     DATE=$(date +%Y-%m-%d)

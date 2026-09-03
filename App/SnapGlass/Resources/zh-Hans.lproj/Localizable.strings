@@ -330,3 +330,28 @@
 "File not found: %@" = "未找到文件：%@";
 "No barcode detected in the image" = "未在图片中检测到条码";
 "Failed to save screenshot: %@" = "截图保存失败：%@";
+"Color Picker" = "取色器";
+"Color %@ copied" = "颜色 %@ 已复制";
+"Number of dominant colors" = "主色数量";
+"Click to copy a single color. Drag to sample a region." = "单击复制单色，拖拽采样区域。";
+"Hover" = "悬停";
+"Average" = "平均色";
+"Dominant colors" = "主色";
+"Click a swatch to copy its hex value." = "点击色块可复制其十六进制值。";
+
+/* Color history */
+"Screenshots" = "截图";
+"Colors" = "颜色";
+"Search colors…" = "搜索颜色…";
+"No colors captured yet" = "还没有取色记录";
+"No matching colors" = "没有匹配的颜色";
+"Clear Colors" = "清空颜色";
+"Clear Color History?" = "清空颜色历史？";
+"This will permanently delete all %d color entries." = "这将永久删除全部 %d 条颜色记录。";
+"This will permanently delete all color entries." = "这将永久删除全部颜色记录。";
+"Area" = "区域";
+"Editor" = "编辑器";
+"Color History" = "取色历史";
+"Record picked colors" = "记录取色的颜色";
+"Maximum color entries" = "颜色历史上限";
+"Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "颜色仅加密存储在本机。使用取色器复制颜色时会记录到此处。";

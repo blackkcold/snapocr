@@ -1,4 +1,5 @@
 import AnnotationCore
+import SharedKit
 import SwiftUI
 
 struct AnnotationInspectorView: View {
@@ -12,13 +13,27 @@ struct AnnotationInspectorView: View {
         viewModel.selectedNode != nil
     }
 
+    private var isPickerActive: Bool {
+        viewModel.selectedTool == .picker
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label(
                     isEditingSelection
-                        ? LocalizedStringKey(String(format: String(localized: "Edit %@"), currentTool?.rawValue.capitalized ?? String(localized: "Annotation")))
-                        : LocalizedStringKey(String(format: String(localized: "New %@"), currentTool?.rawValue.capitalized ?? String(localized: "Annotation"))),
+                        ? LocalizedStringKey(
+                            String(
+                                format: String(localized: "Edit %@"),
+                                currentTool?.rawValue.capitalized ?? String(localized: "Annotation")
+                            )
+                        )
+                        : LocalizedStringKey(
+                            String(
+                                format: String(localized: "New %@"),
+                                currentTool?.rawValue.capitalized ?? String(localized: "Annotation")
+                            )
+                        ),
                     systemImage: "slider.horizontal.3"
                 )
                     .font(.headline)
@@ -77,6 +92,10 @@ struct AnnotationInspectorView: View {
                     }
                     .padding(8)
                 }
+            }
+
+            if isPickerActive {
+                pickerCard
             }
 
             if currentTool == .arrow {
@@ -161,13 +180,13 @@ struct AnnotationInspectorView: View {
                         Label("Duplicate", systemImage: "plus.square.on.square")
                     }
                     Spacer()
-                    Button(action: { viewModel.moveSelectedNodeInLayer(by: -1) }) {
+                    Button(action: { viewModel.moveSelectedNodeInLayer(by: -1) }, label: {
                         Image(systemName: "square.2.layers.3d.bottom.filled")
-                    }
+                    })
                     .help("Send backward")
-                    Button(action: { viewModel.moveSelectedNodeInLayer(by: 1) }) {
+                    Button(action: { viewModel.moveSelectedNodeInLayer(by: 1) }, label: {
                         Image(systemName: "square.2.layers.3d.top.filled")
-                    }
+                    })
                     .help("Bring forward")
                 }
             }
@@ -229,6 +248,82 @@ struct AnnotationInspectorView: View {
 
     private var blurIntensityBinding: Binding<CGFloat> {
         liveBinding(\.blurIntensity)
+    }
+
+    private var pickerCard: some View {
+        GroupBox("Color Picker") {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(
+                    "Click to copy a single color. Drag to sample a region.",
+                    systemImage: "eyedropper"
+                )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let hover = viewModel.pickerHoverColor {
+                    colorRow(hover, title: "Hover")
+                }
+
+                if let average = viewModel.pickerAverageColor {
+                    colorRow(average, title: "Average")
+                }
+
+                if !viewModel.pickerDominantColors.isEmpty {
+                    Text("Dominant colors")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        ForEach(
+                        Array(viewModel.pickerDominantColors.enumerated()),
+                        id: \.offset
+                    ) { _, color in
+                        swatch(color)
+                    }
+                    }
+                }
+
+                Text("Click a swatch to copy its hex value.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(8)
+        }
+    }
+
+    private func colorRow(_ color: SampledColor, title: LocalizedStringKey) -> some View {
+        Button {
+            viewModel.copyColorToClipboard(color)
+        } label: {
+            HStack(spacing: 8) {
+                swatch(color)
+                Text(title)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(color.hexString)
+                        .font(.system(.caption, design: .monospaced))
+                        .monospacedDigit()
+                    Text(color.rgbString)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func swatch(_ color: SampledColor) -> some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color(
+                red: Double(color.red) / 255,
+                green: Double(color.green) / 255,
+                blue: Double(color.blue) / 255
+            ))
+            .frame(width: 18, height: 18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(.secondary.opacity(0.4), lineWidth: 0.5)
+            )
     }
 
     private func liveBinding<Value>(_ keyPath: ReferenceWritableKeyPath<EditorViewModel, Value>) -> Binding<Value> {

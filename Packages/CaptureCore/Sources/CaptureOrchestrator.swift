@@ -26,12 +26,21 @@ import SharedKit
 /// | 窗口未找到 | 不降级，抛出 `CaptureError.windowNotFound` |
 /// | 显示器不可用 | 不降级，抛出 `CaptureError.displayUnavailable` |
 ///
-public final class CaptureOrchestrator: @unchecked Sendable {
+private actor CaptureModeState {
+    var value: CaptureMode = .fullscreen
+
+    func set(_ mode: CaptureMode) {
+        value = mode
+    }
+}
+
+public final class CaptureOrchestrator: Sendable {
     private let sckAdapter: SCKAdapter
     private let cgAdapter: CGCompatAdapter
     private let permissionService: PermissionService
     private let logger: Logger
-    private var currentMode: CaptureMode = .fullscreen
+    private let currentMode = CaptureModeState()
+    private let currentModeLock = NSLock()
 
     /// 创建截图编排器实例。
     ///
@@ -62,7 +71,7 @@ public final class CaptureOrchestrator: @unchecked Sendable {
         mode: CaptureMode = .fullscreen,
         options: CaptureOptions = CaptureOptions()
     ) async throws -> CaptureResult {
-        self.currentMode = mode
+        await currentMode.set(mode)
 
         // 主路径 — SCK 截图失败时自动降级到 CG
         do {
@@ -141,8 +150,8 @@ public final class CaptureOrchestrator: @unchecked Sendable {
     }
 
     /// 返回当前捕获模式。
-    public func currentCaptureMode() -> CaptureMode {
-        currentMode
+    public func currentCaptureMode() async -> CaptureMode {
+        await currentMode.value
     }
 }
 
@@ -173,7 +182,9 @@ extension CaptureOrchestrator {
             return try fallbackArea(rect: rect, options: options, timestamp: timestamp)
 
         case .scroll:
-            throw CaptureError.captureFailed(reason: "Scroll capture requires ScrollCore, not available in fallback path")
+            throw CaptureError.captureFailed(
+                reason: "Scroll capture requires ScrollCore, not available in fallback path"
+            )
         }
     }
 
@@ -207,7 +218,11 @@ extension CaptureOrchestrator {
     }
 
     /// CG 窗口截图
-    private func fallbackWindow(windowID: CGWindowID?, options: CaptureOptions, timestamp: Date) throws -> CaptureResult {
+    private func fallbackWindow(
+        windowID: CGWindowID?,
+        options: CaptureOptions,
+        timestamp: Date
+    ) throws -> CaptureResult {
         guard let targetID = windowID else {
             // 未指定窗口 ID，尝试通过 CG 枚举查找第一个非桌面窗口
             let windows = cgAdapter.enumerateWindows()

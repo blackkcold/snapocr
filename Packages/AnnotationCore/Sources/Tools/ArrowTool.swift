@@ -46,13 +46,13 @@ public struct ArrowTool: Sendable {
         let arrowLength: CGFloat = node.lineWidth * 5.0
         let arrowAngle: CGFloat = .pi / 6
 
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        let lineLength = hypot(dx, dy)
+        let deltaX = end.x - start.x
+        let deltaY = end.y - start.y
+        let lineLength = hypot(deltaX, deltaY)
         guard lineLength > 0 else { return }
 
-        let unitX = dx / lineLength
-        let unitY = dy / lineLength
+        let unitX = deltaX / lineLength
+        let unitY = deltaY / lineLength
 
         let tip = end
         let left = CGPoint(

@@ -110,7 +110,7 @@ public struct TextTool: Sendable {
                     spec: .alignment,
                     valueSize: MemoryLayout<CTTextAlignment>.size,
                     value: pointer
-                )
+                ),
             ], 1)
         }
         return [

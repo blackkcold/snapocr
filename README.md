@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.5.3-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.6.1-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -70,8 +70,8 @@
 | **📸 截图** | 可调整矩形 / 自由圈选 / 窗口 / 全屏 / 手动滚动截图（ScreenCaptureKit） |
 | **🔤 OCR** | Apple Vision 离线识别，Tesseract 降级支持，开发者模式双引擎对比 |
 | **📦 条码** | QR / Code128 / EAN / PDF417 / Aztec / DataMatrix 识别 |
-| **✏️ 标注** | 箭头、矩形、文本、画笔、高亮、模糊、裁剪，支持撤销/重做 |
-| **🔐 隐私** | AES-256-GCM 本地加密历史，零网络请求，不访问系统钥匙链 |
+| **✏️ 标注** | 箭头、矩形、文本、画笔、高亮、模糊、裁剪、取色器，支持撤销/重做 |
+| **🔐 隐私** | AES-256-GCM 本地加密历史，无后台网络请求（仅用户主动触发更新检查），不访问系统钥匙链 |
 | **🎨 UI** | Liquid Glass 支持（macOS 26+），低版本自动降级 |
 
 ### 截图
@@ -91,10 +91,13 @@
 
 ### 标注编辑器
 
-- 7 种工具：箭头、矩形、文本、画笔、高亮、模糊、裁剪
+- 8 种工具：箭头、矩形、文本、画笔、高亮、模糊、裁剪、取色器
 - 完整撤销/重做支持
-- 矩形标注自动填充与描边同色
+- 矩形默认纯线框，可通过填充开关或预设显式填充
+- 选择工具下可直接选取 OCR 文本，复制或添加为标注
 - 裁剪工具支持移动、缩放、确认后执行
+- 取色器悬停实时显示 hex 与 RGB，单击复制单色，拖拽采样区域平均色与主色
+- 取色历史：复制的颜色自动记录到本地加密历史，历史窗口「颜色」分段可网格浏览、hex 过滤、点击复制，偏好设置可调整上限或清空
 
 ### 条码识别
 
@@ -148,6 +151,10 @@ xcodegen generate
 # 构建 Release 产物
 ./scripts/build.sh --version 0.5.1
 
+# 本地实验打包：每次生成唯一目录 release/exp-vX.Y.Z-<时间戳>-<随机码>/，永不覆盖，用于多轮产物对比测试
+./scripts/build.sh --experimental
+
+# 每次打包后，release/latest/SnapGlass.app 软链始终指向最近一次打包的 app，方便快速定位
 # 构建后打开 Finder（产物统一输出到 release/vX.Y.Z/）
 ./scripts/build.sh --open
 

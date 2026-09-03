@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- 代码规范：全量清理 SwiftLint 债务（295 → 0 违规），拆分超长文件为扩展/新文件，统一命名与行宽，`.swiftlint.yml` 显式排除各包 `.build` 目录并启用 `trailing_comma: mandatory_comma`，与 swift-format 对齐
+
+### Fixed
+- CI unit-test 卡住：为 job 与 step 增加 `timeout-minutes`，避免单个 Package 挂起导致无限等待；OCRCore 在 CI 上跳过依赖真实 Vision OCR 的集成测试（无头 runner 上 Vision 首次初始化可能挂起），本地仍完整运行（`scripts/test.sh`）
+
+## [0.6.1] - 2026-09-02
+
+### Added
+- 取色显示：hex 旁同时显示 RGB 值（区域截图悬停气泡、编辑器悬停气泡、编辑器 Inspector 色块三处两行显示）
+- 取色历史：取色器复制的颜色记录到本地 AES-256-GCM 加密历史（复用截图历史密钥，单文件存储）；历史窗口新增「截图 / 颜色」分段，颜色段支持网格浏览、hex 过滤、点击复制与右键删除
+- 存储管理：偏好设置新增取色历史卡片（启用开关、数量上限、清空），存储概览新增颜色记录数；清空截图历史时同步清空取色历史，取色历史也可单独清空
+
+### Fixed
+- 修复多显示器副屏区域截图取色无效（预捕获改用 Quartz 全局坐标边界）、悬停与编辑器取色气泡缺失色块
+- 修复取色历史复制通知无自动消失、常驻遮挡界面
+
+### Changed
+- toast 通知位置可配置，无固定底栏窗口（偏好设置/历史/权限）移至底部，避开操作栏
+
+## [0.6.0] - 2026-09-01
+
+### Added
+- 取色器：区域截图 overlay 与标注编辑器新增取色工具，悬停实时显示 hex，单击复制单色，拖拽采样区域的平均色与主色（主色数量可在偏好设置中调整，默认 5）
+
+### Fixed
+- 更新检查改用 GitHub Release 静态清单，避免匿名 REST API 的共享 IP 限额导致 HTTP 403
+- 更新下载同时校验清单内 SHA-256 与 Release sidecar，拒绝版本、资源路径或校验值不一致的发布
+- 更新检查先通过 `/releases/latest` 重定向发现版本并先行比较，无清单的旧版本按命名约定确定性降级，消除「无清单即报错」的问题
+
+### Changed
+- Release 流程自动生成并核验 `SnapGlass-update.json`，SHA-256 文件改用可移植的相对文件名
+
+## [0.5.6] - 2026-08-28
+
+### Fixed
+- 修复截图编辑器可能在打开约 3 秒后因窗口注册状态与真实可见状态不一致而被切回纯菜单栏模式并隐藏的问题
+
+### Changed
+- 矩形标注默认改为纯线框（不再自动填充描边同色），可通过填充开关或 `.note`/`.monochrome` 预设显式填充
+- 选择（select）工具下可直接选取 OCR 文本（点击定位 / 双击选词 / 三击选行 / 拖拽连续选 / Shift 扩展），并支持右键菜单；方向键仍用于微调标注，不抢冲突
+- 从标注工具栏移除 OCR 工具按钮（右下角 OCR 识别与复制入口保留）
+
+## [0.5.5] - 2026-08-26
+
+### Fixed
+- 重构菜单栏应用窗口生命周期：先切换常规激活策略并请求激活，再打开或前置窗口，修复关闭后第二次打开不显示 Dock 且窗口被遮挡的问题
+- 使用 `didBecomeKey` / `willClose` 事件确认窗口状态，并在关闭事件后统一重算激活策略，移除固定延迟、跨窗口共享重试任务和关闭阶段竞态
+- 修复应用生命周期视图重入时无条件切回纯菜单栏激活策略，避免已打开窗口意外失焦
+- 修复窗口关闭观察覆盖缺口和编辑器无图像时未注册，确保关闭最后一个窗口后可靠回落纯菜单栏模式
+- 修复本地 Debug 构建默认混编 arm64 与 x86_64，导致 Swift Package 模块架构冲突的问题
+
+### Changed
+- 同步项目营销版本配置至 `0.5.5`
+
 ## [0.5.3] - 2026-08-07
 
 ### Fixed
@@ -130,7 +185,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/blackkcold/snapocr/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/blackkcold/snapocr/compare/v0.5.6...v0.6.0
+[0.5.6]: https://github.com/blackkcold/snapocr/compare/v0.5.5...v0.5.6
+[0.5.5]: https://github.com/blackkcold/snapocr/compare/v0.5.3...v0.5.5
 [0.5.3]: https://github.com/blackkcold/snapocr/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/blackkcold/snapocr/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/blackkcold/snapocr/compare/v0.5.0...v0.5.1

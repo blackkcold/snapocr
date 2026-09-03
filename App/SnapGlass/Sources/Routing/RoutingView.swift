@@ -196,11 +196,31 @@ extension RoutingView {
                 .fontWeight(.medium)
 
             VStack(alignment: .leading, spacing: 6) {
-                ShortcutRow(icon: "camera.viewfinder", title: String(localized: "Capture Area"), subtitle: String(localized: "Area screenshot"))
-                ShortcutRow(icon: "rectangle.dashed", title: String(localized: "Capture Fullscreen"), subtitle: String(localized: "Fullscreen screenshot"))
-                ShortcutRow(icon: "text.viewfinder", title: String(localized: "OCR Image"), subtitle: String(localized: "Recognize text in image"))
-                ShortcutRow(icon: "qrcode", title: String(localized: "Scan Barcode"), subtitle: String(localized: "Scan barcode / QR code"))
-                ShortcutRow(icon: "magnifyingglass", title: String(localized: "Search History"), subtitle: String(localized: "Search screenshot history"))
+                ShortcutRow(
+                    icon: "camera.viewfinder",
+                    title: String(localized: "Capture Area"),
+                    subtitle: String(localized: "Area screenshot")
+                )
+                ShortcutRow(
+                    icon: "rectangle.dashed",
+                    title: String(localized: "Capture Fullscreen"),
+                    subtitle: String(localized: "Fullscreen screenshot")
+                )
+                ShortcutRow(
+                    icon: "text.viewfinder",
+                    title: String(localized: "OCR Image"),
+                    subtitle: String(localized: "Recognize text in image")
+                )
+                ShortcutRow(
+                    icon: "qrcode",
+                    title: String(localized: "Scan Barcode"),
+                    subtitle: String(localized: "Scan barcode / QR code")
+                )
+                ShortcutRow(
+                    icon: "magnifyingglass",
+                    title: String(localized: "Search History"),
+                    subtitle: String(localized: "Search screenshot history")
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

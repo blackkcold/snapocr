@@ -55,7 +55,7 @@ extension View {
     private func shapePath(_ shape: GlassShape) -> AnyShape {
         switch shape {
         case .rect: return AnyShape(Rectangle())
-        case .rounded(let r): return AnyShape(RoundedRectangle(cornerRadius: r))
+        case .rounded(let radius): return AnyShape(RoundedRectangle(cornerRadius: radius))
         case .circle: return AnyShape(Circle())
         case .capsule: return AnyShape(Capsule())
         case .concentric(let minimumRadius):

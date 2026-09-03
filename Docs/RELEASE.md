@@ -26,6 +26,31 @@
 
 所有发版产物统一归档到 `release/vX.Y.Z/`（版本子目录），**禁止**使用 `output/`、`release/latest/`、`release/manual-*/` 等临时或软链目录。
 
+### 正式发版 vs 本地实验打包（重要区分）
+
+| 维度 | 正式发版 | 本地实验打包 |
+|------|----------|--------------|
+| 触发方式 | `./scripts/build.sh`（默认） | `./scripts/build.sh --experimental`（别名 `--exp`） |
+| 输出目录 | `release/vX.Y.Z/`（固定） | `release/exp-vX.Y.Z-<时间戳>-<随机码>/`（每次唯一） |
+| 是否覆盖 | 目录已存在则**拒绝**并报错 | **永不覆盖**，每次生成新目录 |
+| 用途 | 正式发布、`release.sh`、CI、GitHub Release | 多轮构建对比测试、A/B 验证 |
+| 是否入库 | 是（`.dmg`/`.sha256`/`BUILD_INFO.json`） | 否（`.gitignore` 忽略 `release/exp-*/`） |
+| `BUILD_INFO.json` | `kind: "release"` | `kind: "experimental"`，含唯一 `buildId` |
+
+> **⚠️ Agent 使用指引**：后续任何 agent 或脚本调用 `build.sh` 时，**必须**先明确意图——
+> - 目标是**正式发版**（打 tag、上传 Release、CI 产物）→ 用默认模式，输出 `release/vX.Y.Z/`。
+> - 目标是**本地对比测试**（多轮打包并存、验证不同改动）→ 用 `--experimental`，输出 `release/exp-*/`。
+>
+> 两者**互斥**，不可同时指定 `--experimental` 与 `--release-dir`。误用会导致产物目录混乱或正式发版目录被实验产物污染。
+
+### `release/latest/` 快捷入口
+
+每次打包成功后，`build.sh` 会在 `release/latest/SnapGlass.app` 创建（或更新）一个**相对路径软链**，始终指向**最近一次打包**的 app（无论正式发版还是实验打包）。用于快速定位最新产物，方便对比测试。
+
+- 软链目标：`release/latest/SnapGlass.app -> ../<产物目录>/SnapGlass.app`（相对路径，可移植）。
+- **不入库**：`.gitignore` 已忽略 `release/latest/`。
+- 若被指向的产物目录被清理，软链会失效（属预期，重新打包即恢复）。
+
 ### 目录结构
 
 ```
@@ -37,8 +62,8 @@ release/
 ├── v0.2.0/                   # 当前发版产物
 │   ├── SnapGlass-0.2.0.dmg
 │   ├── SnapGlass-0.2.0.dmg.sha256
+│   ├── SnapGlass-update.json
 │   └── BUILD_INFO.json
-└── versions.json             # 版本索引（发版后回填）
 ```
 
 > **目录命名规则**：版本子目录一律使用 `v` 前缀（`release/vX.Y.Z/`），与 `build.sh`、`release.sh` 的默认行为保持一致，避免新旧命名并存造成混淆。
@@ -49,8 +74,8 @@ release/
 
 - `release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg`
 - `release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg.sha256`
+- `release/vX.Y.Z/SnapGlass-update.json`
 - `release/vX.Y.Z/BUILD_INFO.json`
-- `release/versions.json`
 
 ### 忽略产物（.gitignore）
 
@@ -75,6 +100,10 @@ release/.DS_Store
 # 指定输出目录（默认 release/vX.Y.Z/）
 ./scripts/build.sh --release-dir /tmp/snapglass-build
 
+# 本地实验打包：每次生成唯一目录 release/exp-vX.Y.Z-<时间戳>-<随机码>/，永不覆盖
+./scripts/build.sh --experimental
+./scripts/build.sh --exp --version 0.5.3
+
 # 构建后打开 Finder
 ./scripts/build.sh --open
 
@@ -88,13 +117,17 @@ DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
 
 1. 读取版本号（`--version` 或 `version.txt`）
 2. 校验版本号格式 `^[0-9]+\.[0-9]+\.[0-9]+$`
-3. 确定输出目录（默认 `release/vX.Y.Z/`），若已存在则拒绝覆盖
+3. 确定输出目录：
+   - 默认（正式发版）→ `release/vX.Y.Z/`，若已存在则拒绝覆盖
+   - `--experimental` → `release/exp-vX.Y.Z-<时间戳>-<随机码>/`，每次唯一，永不覆盖
+   - `--release-dir PATH` → 指定目录（与 `--experimental` 互斥）
 4. `xcodegen generate` → 分别构建 arm64 与 x86_64 Release
 5. 使用 `lipo` 合并主程序并验证 Universal 架构
 6. `ditto` 拷贝 `.app` 到产物目录
 7. 本地 ad-hoc 签名 + 严格验证
 8. 使用 `--dmg` 时，通过 `dmgbuild` 生成品牌背景、Applications 拖放入口与 SHA-256
-9. 输出 `✅ App packaged: release/vX.Y.Z/SnapGlass.app`
+9. 更新 `release/latest/SnapGlass.app` 软链，指向最近一次打包的 app
+10. 输出 `✅ App packaged: <产物目录>/SnapGlass.app`
 
 ---
 
@@ -110,7 +143,7 @@ DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
    - 构建 Release 配置
    - 生成 `.dmg` + `.sha256`
    - 创建 GitHub Release 并上传产物
-6. 回填 `release/versions.json`（可选，由 CI 自动完成）
+6. CI 自动生成并上传固定名称的 `SnapGlass-update.json`，供 App 检查更新
 
 ### 方式二：本地构建 + 手动上传
 
@@ -147,25 +180,20 @@ emoji 分组按 Conventional Commits 前缀映射，详见 [CONTRIBUTING.md](./C
 
 ---
 
-## versions.json
+## 静态更新清单
 
-`release/versions.json` 是版本索引，发版后更新：
+App 检查更新的流程（不调用受匿名 IP 配额限制的 GitHub REST API）：
 
-```json
-[
-  {
-    "version": "0.2.0",
-    "date": "2026-07-31",
-    "file": "SnapGlass-0.2.0.dmg",
-    "sha256": "release/v0.2.0/SnapGlass-0.2.0.dmg.sha256"
-  },
-  {
-    "version": "0.1.5",
-    "date": "2026-07-08",
-    "file": "SnapGlass-0.1.5.dmg"
-  }
-]
-```
+1. 通过 `https://github.com/blackkcold/snapocr/releases/latest` 的 302 重定向发现最新稳定版本号；
+2. 若本地版本不落后于最新版，直接判定为「已是最新」，不再请求清单；
+3. 需要更新时，拉取版本化清单
+   `https://github.com/blackkcold/snapocr/releases/download/v{版本}/SnapGlass-update.json`；
+4. 清单缺失（404，例如无清单的旧版本）时，按 `SnapGlass-v{版本}.dmg` / `.dmg.sha256`
+   命名约定确定性降级，下载时仍以 `.sha256` sidecar 做 SHA-256 校验。
+
+每个 GitHub Release 必须包含固定名称的 `SnapGlass-update.json`。清单由
+`scripts/generate-update-manifest.py` 生成，CI 与本地 `release.sh` 共用同一脚本。
+清单包含版本、Release Notes、DMG/校验文件地址及 SHA-256；禁止手工维护或在清单中写入凭证。
 
 ---
 

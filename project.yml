@@ -15,12 +15,13 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "0.3.0"
+    MARKETING_VERSION: "0.6.1"
     CURRENT_PROJECT_VERSION: "1"
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
       SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      ONLY_ACTIVE_ARCH: YES
     Release:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
       SWIFT_OPTIMIZATION_LEVEL: "-O"
@@ -90,4 +91,25 @@ targets:
           else
             echo "warning: SwiftLint not installed"
           fi
-    scheme: {}
+  WindowLifecycleStateTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: App/SnapGlass/Tests
+      - path: App/SnapGlass/Sources/WindowLifecycleState.swift
+      - path: App/SnapGlass/Sources/AppWindowPresenter.swift
+    dependencies:
+      - package: SharedKit
+    settings:
+      base:
+        PRODUCT_NAME: WindowLifecycleStateTests
+        PRODUCT_MODULE_NAME: WindowLifecycleStateTests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  WindowLifecycleStateTests:
+    build:
+      targets:
+        WindowLifecycleStateTests: test
+    test:
+      targets:
+        - WindowLifecycleStateTests

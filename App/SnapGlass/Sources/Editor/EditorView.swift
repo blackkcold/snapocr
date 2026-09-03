@@ -69,6 +69,7 @@ struct EditorView: View {
                         ocrLines: editorVM.ocrLines,
                         showsOCROverlay: editorVM.showsOCROverlay,
                         verticalCropOnly: editorVM.isVerticalTrimEnabled,
+                        dominantColorCount: editorVM.dominantColorCount,
                         onNodeCreated: { node in
                             editorVM.addNode(node)
                         },
@@ -81,7 +82,9 @@ struct EditorView: View {
                         onTextEditRequested: editorVM.beginTextEditing,
                         onOCRLinesCopied: editorVM.copyOCRLines,
                         onOCRTextCopied: editorVM.copyOCRSelection,
-                        onOCRLineAsAnnotation: editorVM.addOCRLineAsAnnotation
+                        onOCRLineAsAnnotation: editorVM.addOCRLineAsAnnotation,
+                        onColorPicked: editorVM.handleColorPicked,
+                        onRegionColorsPicked: editorVM.handleRegionColorsPicked
                     )
                     .frame(minWidth: 500, minHeight: 400)
                 } else {
@@ -89,7 +92,9 @@ struct EditorView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
-                if editorVM.selectedNode != nil || editorVM.selectedTool.annotationTool != nil {
+                if editorVM.selectedNode != nil
+                    || editorVM.selectedTool.annotationTool != nil
+                    || editorVM.selectedTool == .picker {
                     AnnotationInspectorView(viewModel: editorVM)
                 }
             }

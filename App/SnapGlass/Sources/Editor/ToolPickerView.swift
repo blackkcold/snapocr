@@ -45,7 +45,9 @@ struct ToolPickerView: View {
             }
 
             ForEach(EditorTool.allCases) { tool in
-                toolButton(tool)
+                if tool != .ocr {
+                    toolButton(tool)
+                }
             }
 
             Divider()
@@ -77,8 +79,8 @@ struct ToolPickerView: View {
                 .frame(height: 22)
 
             Picker("Width", selection: $strokeWidth) {
-                ForEach([1, 2, 3, 5, 8], id: \.self) { w in
-                    Text("\(w) px").tag(CGFloat(w))
+                ForEach([1, 2, 3, 5, 8], id: \.self) { width in
+                    Text("\(width) px").tag(CGFloat(width))
                 }
             }
             .pickerStyle(.menu)
@@ -150,10 +152,6 @@ struct ToolPickerView: View {
                     lineWidth: 1
                 )
         )
-        .help(
-            tool == .ocr
-                ? "Drag to select text. Double-click a word, triple-click a line, or hold Shift to extend."
-                : tool.displayName
-        )
+        .help(tool.displayName)
     }
 }

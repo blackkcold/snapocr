@@ -11,7 +11,10 @@ extension KeyboardShortcuts.Name {
     public static let captureWindow = Self("captureWindow", default: .init(.two, modifiers: [.command, .shift]))
     
     /// Shortcut for fullscreen capture (Default: ⌘⇧3)
-    public static let captureFullscreen = Self("captureFullscreen", default: .init(.three, modifiers: [.command, .shift]))
+    public static let captureFullscreen = Self(
+        "captureFullscreen",
+        default: .init(.three, modifiers: [.command, .shift])
+    )
     
     /// Shortcut for OCR from clipboard (Default: ⌘⇧O)
     public static let ocrFromClipboard = Self("ocrFromClipboard", default: .init(.o, modifiers: [.command, .shift]))

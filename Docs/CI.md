@@ -29,12 +29,10 @@
 
 ### unit-test
 - 对所有 Packages 执行 `swift test`：
-  - SharedKit / CaptureCore / OCRCore / BarcodeCore / AnnotationCore / ScrollCore / HistoryCore
+  - SharedKit / CaptureCore / OCRCore / BarcodeCore / AnnotationCore / ScrollCore / HistoryCore / AutomationCore
 - 任一 Package 测试失败则 job 失败
-
-### ui-smoke（仅 main push）
-- 运行 UITests（需 self-hosted runner，有屏幕录制权限）
-- 当前为可选 job，无 self-hosted runner 时自动跳过
+- job 与 step 均设置 `timeout-minutes`，避免单个 Package 挂起导致无限等待
+- OCRCore 在 CI 上跳过依赖真实 Vision OCR 的集成测试（`VisionIntegrationTests` 与 `pipelineFallsBackToVisionWhenTesseractDataIsMissing`）：无头 CI runner 上 Vision 首次初始化可能挂起。本地仍完整运行这些测试（见 `scripts/test.sh`）
 
 ---
 
@@ -45,13 +43,15 @@
 1. 检出代码
 2. 从 tag 名提取版本号
 3. `xcodegen generate`
-4. `xcodebuild -configuration Release build`（无签名）
-5. 打包 `.app` → `.dmg`（`hdiutil`）
+4. `xcodebuild -configuration Release build`（ad-hoc 签名）
+5. 通过 `dmgbuild` 打包 `.app` → `.dmg`
 6. 生成 `.sha256` 校验文件
-7. 创建 GitHub Release：
+7. 生成并校验 `SnapGlass-update.json` 静态更新清单
+8. 创建 GitHub Release：
    - 标题：`vX.Y.Z`
    - Body：从 tag message 或 `CHANGELOG.md` 对应条目生成
-   - 上传 `.dmg` + `.sha256` 作为 Release assets
+   - 上传 `.dmg` + `.sha256` + `SnapGlass-update.json` 作为 Release assets
+9. 发布后复核三个必需资产，缺少任意资产则工作流失败
 
 ### 触发方式
 
@@ -67,6 +67,7 @@ GitHub Release 页面提供：
 
 - `SnapGlass-vX.Y.Z.dmg` — 安装包
 - `SnapGlass-vX.Y.Z.dmg.sha256` — SHA-256 校验文件
+- `SnapGlass-update.json` — App 检查更新使用的固定名称静态清单
 
 用户验证完整性：
 
@@ -82,7 +83,6 @@ shasum -a 256 SnapGlass-vX.Y.Z.dmg
 | Job | Runner | 说明 |
 |-----|--------|------|
 | lint / build / unit-test | `macos-latest` | GitHub 托管的 macOS runner |
-| ui-smoke | `self-hosted` | 需屏幕录制权限（可选） |
 | release | `macos-latest` | GitHub 托管 |
 
 ---
@@ -104,4 +104,4 @@ xcodebuild -project SnapGlass.xcodeproj -scheme SnapGlass -configuration Release
 
 ---
 
-*最后更新: 2026-07-31*
+*最后更新: 2026-09-03*

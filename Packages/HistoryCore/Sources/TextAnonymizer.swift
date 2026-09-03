@@ -252,9 +252,9 @@ private enum SensitiveDataType: Sendable, CaseIterable {
 
             let domainComponents = domainPart.split(separator: ".", omittingEmptySubsequences: false)
             var maskedDomains: [String] = []
-            for (i, comp) in domainComponents.enumerated() {
+            for (index, comp) in domainComponents.enumerated() {
                 let compStr = String(comp)
-                if i == 0 {
+                if index == 0 {
                     maskedDomains.append(String(compStr.prefix(1)) + "***")
                 } else {
                     maskedDomains.append(compStr)

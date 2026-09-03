@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 import BarcodeCore
 import CaptureCore
+import HistoryCore
 import OCRCore
 
 // MARK: - App Intents for Shortcuts Integration
@@ -271,11 +272,17 @@ public struct SearchHistoryIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        // 历史搜索功能依赖 HistoryCore 的完整实现，当前返回占位结果。
-        // TODO: 接入 HistoryCore 的全文搜索能力
-        return .result(
-            value: "暂无历史记录。（搜索关键词: \(query)）"
-        )
+        guard let history = HistoryActor.shared else {
+            return .result(value: "历史记录暂不可用")
+        }
+        let entries = try await history.search(query: query)
+        let summary = entries.isEmpty
+            ? "未找到匹配的历史记录"
+            : entries.map { entry in
+                let preview = entry.textContent.replacingOccurrences(of: "\n", with: " ")
+                return "\(entry.timestamp.formatted())：\(preview)"
+            }.joined(separator: "\n")
+        return .result(value: summary)
     }
 }
 
@@ -298,7 +305,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "Capture area with \(.applicationName)",
                 "Take area screenshot with \(.applicationName)",
-                "区域截图 (\(.applicationName))"
+                "区域截图 (\(.applicationName))",
             ],
             shortTitle: "Capture Area",
             systemImageName: "camera.viewfinder"
@@ -309,7 +316,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "Capture fullscreen with \(.applicationName)",
                 "Take fullscreen screenshot with \(.applicationName)",
-                "全屏截图 (\(.applicationName))"
+                "全屏截图 (\(.applicationName))",
             ],
             shortTitle: "Capture Fullscreen",
             systemImageName: "rectangle.dashed"
@@ -320,7 +327,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "OCR image with \(.applicationName)",
                 "Recognize text in image with \(.applicationName)",
-                "图片文字识别 (\(.applicationName))"
+                "图片文字识别 (\(.applicationName))",
             ],
             shortTitle: "OCR Image",
             systemImageName: "text.viewfinder"
@@ -331,7 +338,7 @@ public struct SnapGlassShortcuts: AppShortcutsProvider {
             phrases: [
                 "Scan barcode with \(.applicationName)",
                 "Scan QR code with \(.applicationName)",
-                "扫描条码 (\(.applicationName))"
+                "扫描条码 (\(.applicationName))",
             ],
             shortTitle: "Scan Barcode",
             systemImageName: "qrcode"

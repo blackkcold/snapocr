@@ -1,108 +1,6 @@
 import CoreGraphics
 import Foundation
 
-// MARK: - Tesseract Language Support
-
-/// Tesseract 引擎语言代码工具。
-///
-/// 提供 Vision 框架语言代码与 Tesseract 语言代码之间的双向映射，
-/// 以及语言包可用性检查。
-///
-/// 语言映射关系（Vision → Tesseract）:
-/// - `en` / `en-US` / `en-GB` → `eng`
-/// - `zh-Hans` → `chi_sim`
-/// - `zh-Hant` → `chi_tra`
-/// - `ja` / `ja-JP` → `jpn`
-/// - `ko` / `ko-KR` → `kor`
-/// - `fr` / `fr-FR` → `fra`
-/// - `de` / `de-DE` → `deu`
-/// - `es` / `es-ES` → `spa`
-/// - `pt` / `pt-PT` → `por`
-/// - `it` / `it-IT` → `ita`
-enum TesseractLanguageSupport: Sendable {
-    /// Vision 框架语言代码到 Tesseract 语言代码的映射表。
-    static let visionToTesseract: [String: String] = [
-        "en": "eng",
-        "en-US": "eng",
-        "en-GB": "eng",
-        "zh-Hans": "chi_sim",
-        "zh-Hant": "chi_tra",
-        "ja": "jpn",
-        "ja-JP": "jpn",
-        "ko": "kor",
-        "ko-KR": "kor",
-        "fr": "fra",
-        "fr-FR": "fra",
-        "de": "deu",
-        "de-DE": "deu",
-        "es": "spa",
-        "es-ES": "spa",
-        "pt": "por",
-        "pt-PT": "por",
-        "it": "ita",
-        "it-IT": "ita",
-    ]
-
-    /// Tesseract 语言代码到本地化展示名称的映射。
-    static let displayNames: [String: String] = [
-        "eng": "English",
-        "chi_sim": "简体中文",
-        "chi_tra": "繁體中文",
-        "jpn": "日本語",
-        "kor": "한국어",
-        "fra": "Français",
-        "deu": "Deutsch",
-        "spa": "Español",
-        "por": "Português",
-        "ita": "Italiano",
-    ]
-
-    /// 所有支持的 Tesseract 语言代码集合。
-    ///
-    /// 包含设计文档中列出的 10 种语言:
-    /// eng, chi_sim, chi_tra, jpn, kor, fra, deu, spa, por, ita。
-    static let supportedTesseractLanguages: Set<String> = [
-        "eng", "chi_sim", "chi_tra", "jpn", "kor",
-        "fra", "deu", "spa", "por", "ita",
-    ]
-
-    /// 将 Vision 框架语言代码转换为 Tesseract 语言代码。
-    ///
-    /// - Parameter visionCode: Vision 框架语言代码（如 `"zh-Hans"`, `"en-US"`）。
-    /// - Returns: 对应的 Tesseract 语言代码（如 `"chi_sim"`, `"eng"`）。
-    ///   如果未找到映射，返回原代码。
-    static func tesseractCode(for visionCode: String) -> String {
-        // 尝试精确匹配
-        if let code = visionToTesseract[visionCode] {
-            return code
-        }
-        // 尝试短代码前缀匹配（如 "zh" → 取第一个匹配 "zh-Hans" 对应 "chi_sim"）
-        let shortCode = String(visionCode.prefix(2))
-        for (key, value) in visionToTesseract where key.hasPrefix(shortCode) {
-            return value
-        }
-        return visionCode
-    }
-
-    /// 将多个 Vision 语言代码批量转换为 Tesseract 语言代码。
-    ///
-    /// - Parameter visionCodes: Vision 语言代码数组。
-    /// - Returns: 去重后的 Tesseract 语言代码数组。
-    static func tesseractCodes(for visionCodes: [String]) -> [String] {
-        let codes = visionCodes.map { tesseractCode(for: $0) }
-        var seen = Set<String>()
-        return codes.filter { seen.insert($0).inserted }
-    }
-
-    /// 获取 Tesseract 语言代码的展示名称。
-    ///
-    /// - Parameter tesseractCode: Tesseract 语言代码（如 `"chi_sim"`）。
-    /// - Returns: 本地化展示名称（如 `"简体中文"`）。
-    static func displayName(for tesseractCode: String) -> String {
-        displayNames[tesseractCode] ?? tesseractCode
-    }
-}
-
 // MARK: - Tesseract Dynamic Library Bridge
 
 /// Tesseract C API 的动态库桥接。
@@ -241,10 +139,7 @@ final class TesseractLibrary: @unchecked Sendable {
     /// - Returns: 包含识别文本和平均置信度的元组。
     /// - Throws: `OCRError` 当初始化失败或识别过程出错时。
     func performOCR(
-        imageData: Data,
-        width: Int,
-        height: Int,
-        bytesPerRow: Int,
+        rgba: RGBAData,
         languages: [String],
         tessdataPath: String
     ) throws -> (text: String, confidence: Float) {
@@ -280,10 +175,10 @@ final class TesseractLibrary: @unchecked Sendable {
         }
 
         // 3. 设置图像
-        let bytesPerPixel = bytesPerRow / width
-        imageData.withUnsafeBytes { rawBuf in
+        let bytesPerPixel = rgba.bytesPerRow / rgba.width
+        rgba.data.withUnsafeBytes { rawBuf in
             guard let ptr = rawBuf.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
-            setImage(api, ptr, Int32(width), Int32(height), Int32(bytesPerPixel), Int32(bytesPerRow))
+            setImage(api, ptr, Int32(rgba.width), Int32(rgba.height), Int32(bytesPerPixel), Int32(rgba.bytesPerRow))
         }
 
         // 4. 执行识别
@@ -345,7 +240,23 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
     // MARK: - 协议属性
 
     let engineType: OCREngineType
-    var logHandler: ((OCRLogEntry) -> Void)?
+
+    /// 日志回调。通过 `logHandlerLock` 保护读写，保证 `@unchecked Sendable` 下的线程安全。
+    var logHandler: ((OCRLogEntry) -> Void)? {
+        get {
+            logHandlerLock.lock()
+            defer { logHandlerLock.unlock() }
+            return _logHandler
+        }
+        set {
+            logHandlerLock.lock()
+            defer { logHandlerLock.unlock() }
+            _logHandler = newValue
+        }
+    }
+
+    private var _logHandler: ((OCRLogEntry) -> Void)?
+    private let logHandlerLock = NSLock()
     private let languageDataPath: URL
 
     // MARK: - 常量
@@ -413,7 +324,8 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
             let packPath = tessdataDir.appendingPathComponent("\(lang).traineddata")
             guard fileManager.fileExists(atPath: packPath.path) else {
                 throw OCRError.languageNotSupported(
-                    "Tesseract 语言包 '\(lang)' (\(TesseractLanguageSupport.displayName(for: lang))) 未安装。请使用 LanguagePackDownloader 下载，或手动放置于 \(packPath.path)"
+                    "Tesseract 语言包 '\(lang)' (\(TesseractLanguageSupport.displayName(for: lang))) 未安装。"
+                        + "请使用 LanguagePackDownloader 下载，或手动放置于 \(packPath.path)"
                 )
             }
         }
@@ -424,14 +336,11 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
         }
 
         // 5. 将 CGImage 转换为 RGBA 像素数据
-        let (pixelData, width, height, bytesPerRow) = try Self.convertToRGBAData(image: image)
+        let rgba = try Self.convertToRGBAData(image: image)
 
         // 6. 执行 Tesseract OCR
         let (recognizedText, rawConfidence) = try TesseractLibrary.shared.performOCR(
-            imageData: pixelData,
-            width: width,
-            height: height,
-            bytesPerRow: bytesPerRow,
+            rgba: rgba,
             languages: tesseractLangs,
             tessdataPath: tessdataDir.path
         )
@@ -510,20 +419,19 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
     /// 目录位置: `~/Library/Application Support/SnapGlass/tessdata/`
     ///
     /// - Returns: tessdata 目录的 URL。
-    fileprivate static func tessdataDirectory() -> URL {
+    static func tessdataDirectory() -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return appSupport.appendingPathComponent(tessdataSubpath)
     }
 
     /// 将 CGImage 转换为 RGBA 像素数据。
     ///
-    /// 创建一个 32-bit RGBA 位图上下文，将 CGImage 绘制到其中，
-    /// 确保像素数据格式与 Tesseract 兼容。
+    /// 将 CGImage 转换为 Tesseract 兼容的 RGBA 像素数据。
     ///
     /// - Parameter image: 要转换的 CGImage。
-    /// - Returns: 包含像素数据、宽度、高度和每行字节数的元组。
+    /// - Returns: 包含像素数据、宽度、高度和每行字节数的结构。
     /// - Throws: `OCRError.recognitionFailed` 当转换失败时。
-    private static func convertToRGBAData(image: CGImage) throws -> (data: Data, width: Int, height: Int, bytesPerRow: Int) {
+    private static func convertToRGBAData(image: CGImage) throws -> RGBAData {
         let width = image.width
         let height = image.height
         let bytesPerPixel = 4
@@ -546,7 +454,7 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
 
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        return (Data(rawData), width, height, bytesPerRow)
+        return RGBAData(data: Data(rawData), width: width, height: height, bytesPerRow: bytesPerRow)
     }
 
     /// 将 Tesseract 识别的文本按行拆分。
@@ -571,50 +479,10 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
     }
 }
 
-// MARK: - TesseractLibrary 诊断扩展
-
-extension TesseractLibrary {
-    /// 返回 Tesseract 库加载状态的诊断信息。
-    ///
-    /// 用于开发者模式和调试日志，输出 Tesseract 版本和安装路径。
-    ///
-    /// - Returns: 诊断描述字符串。
-    var diagnosticsDescription: String {
-        guard isAvailable else {
-            return """
-            Tesseract: 未安装
-            请通过 Homebrew 安装: brew install tesseract
-            或从 https://github.com/tesseract-ocr/tesseract 下载
-            """
-        }
-        return """
-        Tesseract: 已加载 (v\(version))
-        语言数据路径: \(TesseractOCREngine.tessdataDirectory().path)
-        语言包: \(availableLanguagePacks().joined(separator: ", "))
-        """
-    }
-
-    /// 列出 tessdata 目录中已安装的语言包。
-    ///
-    /// - Returns: Tesseract 语言代码数组。
-    private func availableLanguagePacks() -> [String] {
-        let tessdataDir = TesseractOCREngine.tessdataDirectory()
-        let fileManager = FileManager.default
-
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            return []
-        }
-
-        do {
-            let files = try fileManager.contentsOfDirectory(atPath: tessdataDir.path)
-            return files.compactMap { filename in
-                guard filename.hasSuffix(".traineddata") else { return nil }
-                return String(filename.dropLast(".traineddata".count))
-            }.sorted()
-        } catch {
-            return []
-        }
-    }
+/// 将 CGImage 转换为 Tesseract 兼容的 RGBA 像素数据。
+struct RGBAData {
+    let data: Data
+    let width: Int
+    let height: Int
+    let bytesPerRow: Int
 }

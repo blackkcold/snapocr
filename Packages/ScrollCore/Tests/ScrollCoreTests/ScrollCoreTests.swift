@@ -66,16 +66,16 @@ struct ScrollCoreTests {
         }
     }
 
-    private func crop(_ image: CGImage, y: Int, height: Int) throws -> CGImage {
-        try #require(image.cropping(to: CGRect(x: 0, y: y, width: image.width, height: height)))
+    private func crop(_ image: CGImage, y yOffset: Int, height: Int) throws -> CGImage {
+        try #require(image.cropping(to: CGRect(x: 0, y: yOffset, width: image.width, height: height)))
     }
 
     private func makePatternedImage(width: Int, height: Int) throws -> CGImage {
         var pixels = [UInt8](repeating: 0, count: width * height)
-        for y in 0..<height {
-            for x in 0..<width {
-                let value = (y * 73 + x * 37 + y * x * 11) % 256
-                pixels[y * width + x] = UInt8(value)
+        for row in 0..<height {
+            for column in 0..<width {
+                let value = (row * 73 + column * 37 + row * column * 11) % 256
+                pixels[row * width + column] = UInt8(value)
             }
         }
 

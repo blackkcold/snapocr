@@ -75,8 +75,8 @@ struct CleanupPolicyTests {
     // MARK: - entriesToEvict
 
     @Test func entriesToEvict_noExpiredEntries() {
-        let entries = (0..<10).map { i in
-            HistoryEntry(textContent: "entry\(i)", ocrConfidence: 0.9, captureMode: "area")
+        let entries = (0..<10).map { index in
+            HistoryEntry(textContent: "entry\(index)", ocrConfidence: 0.9, captureMode: "area")
         }
         let toEvict = policy.entriesToEvict(entries, category: .text)
         #expect(toEvict.isEmpty)

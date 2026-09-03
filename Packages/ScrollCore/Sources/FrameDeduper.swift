@@ -58,9 +58,9 @@ public struct FrameDeduper: Sendable {
         uniqueFrames.reserveCapacity(frames.count)
         uniqueFrames.append(frames[0])
 
-        for i in 1..<frames.count {
-            let previous = uniqueFrames.last!
-            let current = frames[i]
+        for index in 1..<frames.count {
+            guard let previous = uniqueFrames.last else { break }
+            let current = frames[index]
 
             if !isDuplicate(previous.image, current.image) {
                 uniqueFrames.append(current)
@@ -94,33 +94,33 @@ public struct FrameDeduper: Sendable {
     ///   - image2: 第二帧图像。
     /// - Returns: SSIM 值，范围 [0, 1]。
     public func computeFrameSimilarity(_ image1: CGImage, _ image2: CGImage) -> Float {
-        let w1 = CGFloat(image1.width)
-        let h1 = CGFloat(image1.height)
-        let w2 = CGFloat(image2.width)
-        let h2 = CGFloat(image2.height)
+        let width1 = CGFloat(image1.width)
+        let height1 = CGFloat(image1.height)
+        let width2 = CGFloat(image2.width)
+        let height2 = CGFloat(image2.height)
 
-        let widthRatio = w1 / w2
+        let widthRatio = width1 / width2
         if widthRatio < 0.9 || widthRatio > 1.1 {
             return 0
         }
-        let heightRatio = h1 / h2
+        let heightRatio = height1 / height2
         if heightRatio < 0.9 || heightRatio > 1.1 {
             return 0
         }
 
-        let comparisonWidth = Int(min(w1, w2) * 0.6)
-        let comparisonHeight = Int(min(h1, h2) * 0.6)
+        let comparisonWidth = Int(min(width1, width2) * 0.6)
+        let comparisonHeight = Int(min(height1, height2) * 0.6)
         guard comparisonWidth > windowSize, comparisonHeight > windowSize else {
             return 0
         }
 
-        let x1 = Int((w1 - CGFloat(comparisonWidth)) / 2)
-        let y1 = Int((h1 - CGFloat(comparisonHeight)) / 2)
-        let x2 = Int((w2 - CGFloat(comparisonWidth)) / 2)
-        let y2 = Int((h2 - CGFloat(comparisonHeight)) / 2)
+        let originX1 = Int((width1 - CGFloat(comparisonWidth)) / 2)
+        let originY1 = Int((height1 - CGFloat(comparisonHeight)) / 2)
+        let originX2 = Int((width2 - CGFloat(comparisonWidth)) / 2)
+        let originY2 = Int((height2 - CGFloat(comparisonHeight)) / 2)
 
-        let region1 = CGRect(x: x1, y: y1, width: comparisonWidth, height: comparisonHeight)
-        let region2 = CGRect(x: x2, y: y2, width: comparisonWidth, height: comparisonHeight)
+        let region1 = CGRect(x: originX1, y: originY1, width: comparisonWidth, height: comparisonHeight)
+        let region2 = CGRect(x: originX2, y: originY2, width: comparisonWidth, height: comparisonHeight)
 
         guard
             let pixels1 = grayscalePixels(from: image1, region: region1),
@@ -155,28 +155,28 @@ extension FrameDeduper {
         var sumYY: Float = 0
         var sumXY: Float = 0
 
-        for i in 0..<windowCount {
-            let x = pixels1[i]
-            let y = pixels2[i]
-            sumX += x
-            sumY += y
-            sumXX += x * x
-            sumYY += y * y
-            sumXY += x * y
+        for index in 0..<windowCount {
+            let pixel1 = pixels1[index]
+            let pixel2 = pixels2[index]
+            sumX += pixel1
+            sumY += pixel2
+            sumXX += pixel1 * pixel1
+            sumYY += pixel2 * pixel2
+            sumXY += pixel1 * pixel2
         }
 
-        let n = Float(windowCount)
-        let muX = sumX / n
-        let muY = sumY / n
-        let sigmaX2 = max(0, (sumXX / n) - (muX * muX))
-        let sigmaY2 = max(0, (sumYY / n) - (muY * muY))
-        let sigmaXY = (sumXY / n) - (muX * muY)
+        let pixelCount = Float(windowCount)
+        let muX = sumX / pixelCount
+        let muY = sumY / pixelCount
+        let sigmaX2 = max(0, (sumXX / pixelCount) - (muX * muX))
+        let sigmaY2 = max(0, (sumYY / pixelCount) - (muY * muY))
+        let sigmaXY = (sumXY / pixelCount) - (muX * muY)
 
-        let c1: Float = 0.01 * 0.01
-        let c2: Float = 0.03 * 0.03
+        let constant1: Float = 0.01 * 0.01
+        let constant2: Float = 0.03 * 0.03
 
-        let numerator = (2 * muX * muY + c1) * (2 * sigmaXY + c2)
-        let denominator = (muX * muX + muY * muY + c1) * (sigmaX2 + sigmaY2 + c2)
+        let numerator = (2 * muX * muY + constant1) * (2 * sigmaXY + constant2)
+        let denominator = (muX * muX + muY * muY + constant1) * (sigmaX2 + sigmaY2 + constant2)
 
         guard denominator > 0 else { return 0 }
         let ssim = numerator / denominator

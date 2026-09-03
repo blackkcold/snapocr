@@ -77,7 +77,7 @@ public struct MemoryGuard: Sendable {
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceThumbnailMaxPixelSize: max(targetWidth, targetHeight),
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true
+            kCGImageSourceShouldCacheImmediately: true,
         ]
 
         return CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions as CFDictionary)

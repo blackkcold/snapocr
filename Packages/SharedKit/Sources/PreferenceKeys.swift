@@ -15,6 +15,7 @@ public enum PreferenceKeys {
     public static let captureHighResolution = "capture_highResolution"
     public static let captureImageFormat = "capture_imageFormat"
     public static let captureJPEGQuality = "capture_jpegQuality"
+    public static let pickerDominantColorCount = "capture_pickerDominantColorCount"
 
     public static let ocrLanguagePriority = "ocr_languagePriority"
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"
@@ -27,6 +28,8 @@ public enum PreferenceKeys {
     public static let historyStorageSize = "history_storageSize"
     public static let historyAutoSave = "history_autoSave"
     public static let historySaveFullText = "history_saveFullText"
+    public static let colorHistoryEnabled = "history_colorHistoryEnabled"
+    public static let colorHistoryMaxItems = "history_colorHistoryMaxItems"
 
     public static let developerMode = "dev_devMode"
     public static let engineComparison = "dev_engineComparison"
@@ -48,6 +51,7 @@ public enum PreferenceDefaults {
     public static let captureHighResolution = true
     public static let captureImageFormat = "png"
     public static let captureJPEGQuality = 0.9
+    public static let pickerDominantColorCount = 5
 
     public static let ocrLanguagePriority = "auto"
     public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]
@@ -60,6 +64,8 @@ public enum PreferenceDefaults {
     public static let historyStorageSize = 1.0
     public static let historyAutoSave = true
     public static let historySaveFullText = false
+    public static let colorHistoryEnabled = true
+    public static let colorHistoryMaxItems = 100
 
     public static let developerMode = false
     public static let engineComparison = false

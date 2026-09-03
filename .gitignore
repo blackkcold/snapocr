@@ -64,3 +64,6 @@ release/*/*.app/
 release/*/.DS_Store
 release/.DS_Store
 release/manual-*/
+
+# 本地实验打包产物（--experimental 模式，release/exp-*/），不入库
+release/exp-*/

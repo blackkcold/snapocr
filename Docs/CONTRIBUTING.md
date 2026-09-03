@@ -79,7 +79,25 @@ type_body_length:
   warning: 400
 identifier_name:
   min_length: 3
-  excluded: [id, URL, key, tag]
+  excluded: [id, URL, key, tag, qr]
+
+# 与 swift-format 的 multiElementCollectionTrailingCommas 对齐：
+# 多行集合字面量必须保留尾逗号（SE-0084 / SE-0439 官方规范）。
+trailing_comma:
+  mandatory_comma: true
+
+# 排除所有 .build 目录（第三方依赖与派生测试 runner）。
+# 注意：SwiftLint 的 excluded 不支持 glob 通配，必须显式列出每个嵌套 .build。
+excluded:
+  - .build
+  - Packages/SharedKit/.build
+  - Packages/ScrollCore/.build
+  - Packages/BarcodeCore/.build
+  - Packages/AutomationCore/.build
+  - Packages/CaptureCore/.build
+  - Packages/OCRCore/.build
+  - Packages/AnnotationCore/.build
+  - Packages/HistoryCore/.build
 ```
 
 ---

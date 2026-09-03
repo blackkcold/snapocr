@@ -79,7 +79,10 @@ echo "▸ Creating branded DMG"
     "SnapGlass" \
     "$DMG_PATH"
 
-shasum -a 256 "$DMG_PATH" > "$CHECKSUM_PATH"
+(
+    cd "$OUTPUT_DIR"
+    shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$CHECKSUM_PATH")"
+)
 
 echo "✅ DMG packaged: $DMG_PATH"
 echo "✅ SHA-256:      $CHECKSUM_PATH"

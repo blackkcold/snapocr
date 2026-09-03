@@ -330,3 +330,28 @@
 "File not found: %@" = "File not found: %@";
 "No barcode detected in the image" = "No barcode detected in the image";
 "Failed to save screenshot: %@" = "Failed to save screenshot: %@";
+"Color Picker" = "Color Picker";
+"Color %@ copied" = "Color %@ copied";
+"Number of dominant colors" = "Number of dominant colors";
+"Click to copy a single color. Drag to sample a region." = "Click to copy a single color. Drag to sample a region.";
+"Hover" = "Hover";
+"Average" = "Average";
+"Dominant colors" = "Dominant colors";
+"Click a swatch to copy its hex value." = "Click a swatch to copy its hex value.";
+
+/* Color history */
+"Screenshots" = "Screenshots";
+"Colors" = "Colors";
+"Search colors…" = "Search colors…";
+"No colors captured yet" = "No colors captured yet";
+"No matching colors" = "No matching colors";
+"Clear Colors" = "Clear Colors";
+"Clear Color History?" = "Clear Color History?";
+"This will permanently delete all %d color entries." = "This will permanently delete all %d color entries.";
+"This will permanently delete all color entries." = "This will permanently delete all color entries.";
+"Area" = "Area";
+"Editor" = "Editor";
+"Color History" = "Color History";
+"Record picked colors" = "Record picked colors";
+"Maximum color entries" = "Maximum color entries";
+"Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here.";

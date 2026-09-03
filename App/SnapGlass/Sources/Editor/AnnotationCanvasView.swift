@@ -110,11 +110,11 @@ final class AnnotationCanvasNSView: NSView {
         case .arrow:
             dragCurrentPoints = [normalizedPoint(dragStartPoint), norm]
         case .rect, .highlight, .blur, .crop:
-            let a = normalizedPoint(dragStartPoint)
-            let b = norm
+            let startNorm = normalizedPoint(dragStartPoint)
+            let endNorm = norm
             dragCurrentRect = CGRect(
-                x: min(a.x, b.x), y: min(a.y, b.y),
-                width: abs(b.x - a.x), height: abs(b.y - a.y)
+                x: min(startNorm.x, endNorm.x), y: min(startNorm.y, endNorm.y),
+                width: abs(endNorm.x - startNorm.x), height: abs(endNorm.y - startNorm.y)
             )
         case .text:
             dragCurrentPoints = [norm]
@@ -156,31 +156,31 @@ final class AnnotationCanvasNSView: NSView {
             )
 
         case .rect:
-            let r = normalizedRect(from: startPoint, to: endPoint)
+            let rect = normalizedRect(from: startPoint, to: endPoint)
             return AnnotationNode(
                 tool: .rect, color: currentColor,
-                lineWidth: currentLineWidth, normalizedRect: r
+                lineWidth: currentLineWidth, normalizedRect: rect
             )
 
         case .highlight:
-            let r = normalizedRect(from: startPoint, to: endPoint)
+            let rect = normalizedRect(from: startPoint, to: endPoint)
             return AnnotationNode(
                 tool: .highlight, color: currentColor,
-                lineWidth: currentLineWidth, opacity: 0.3, normalizedRect: r
+                lineWidth: currentLineWidth, opacity: 0.3, normalizedRect: rect
             )
 
         case .blur:
-            let r = normalizedRect(from: startPoint, to: endPoint)
+            let rect = normalizedRect(from: startPoint, to: endPoint)
             return AnnotationNode(
                 tool: .blur, lineWidth: currentLineWidth,
-                normalizedRect: r
+                normalizedRect: rect
             )
 
         case .crop:
-            let r = normalizedRect(from: startPoint, to: endPoint)
+            let rect = normalizedRect(from: startPoint, to: endPoint)
             return AnnotationNode(
                 tool: .crop, lineWidth: currentLineWidth,
-                normalizedRect: r
+                normalizedRect: rect
             )
 
         case .text:
@@ -202,31 +202,31 @@ final class AnnotationCanvasNSView: NSView {
             guard dragCurrentPoints.count >= 2 else { break }
             context.beginPath()
             context.move(to: viewPoint(from: dragCurrentPoints[0]))
-            for i in 1..<dragCurrentPoints.count {
-                context.addLine(to: viewPoint(from: dragCurrentPoints[i]))
+            for index in 1..<dragCurrentPoints.count {
+                context.addLine(to: viewPoint(from: dragCurrentPoints[index]))
             }
             context.strokePath()
 
         case .arrow:
             guard dragCurrentPoints.count >= 2 else { break }
-            let p0 = viewPoint(from: dragCurrentPoints[0])
-            let p1 = viewPoint(from: dragCurrentPoints[1])
-            context.move(to: p0)
-            context.addLine(to: p1)
+            let startPoint = viewPoint(from: dragCurrentPoints[0])
+            let endPoint = viewPoint(from: dragCurrentPoints[1])
+            context.move(to: startPoint)
+            context.addLine(to: endPoint)
             context.strokePath()
-            drawArrowhead(at: p1, from: p0, in: context)
+            drawArrowhead(at: endPoint, from: startPoint, in: context)
 
         case .rect, .highlight, .blur, .crop:
             guard dragCurrentRect != .zero else { break }
-            let r = viewRect(from: dragCurrentRect)
+            let rect = viewRect(from: dragCurrentRect)
             if currentTool == .highlight {
                 context.setFillColor(currentColor.copy(alpha: 0.3) ?? currentColor)
-                context.fill(r)
+                context.fill(rect)
             } else if currentTool == .blur {
                 context.setFillColor(CGColor(gray: 0.5, alpha: 0.2))
-                context.fill(r)
+                context.fill(rect)
             }
-            context.stroke(r)
+            context.stroke(rect)
 
         case .text:
             break
@@ -240,13 +240,13 @@ final class AnnotationCanvasNSView: NSView {
         let len = previewLineWidth * 5
         let spread: CGFloat = .pi / 7
 
-        let p1 = CGPoint(x: tip.x - len * cos(angle - spread), y: tip.y - len * sin(angle - spread))
-        let p2 = CGPoint(x: tip.x - len * cos(angle + spread), y: tip.y - len * sin(angle + spread))
+        let leftPoint = CGPoint(x: tip.x - len * cos(angle - spread), y: tip.y - len * sin(angle - spread))
+        let rightPoint = CGPoint(x: tip.x - len * cos(angle + spread), y: tip.y - len * sin(angle + spread))
 
         context.move(to: tip)
-        context.addLine(to: p1)
+        context.addLine(to: leftPoint)
         context.move(to: tip)
-        context.addLine(to: p2)
+        context.addLine(to: rightPoint)
         context.strokePath()
     }
 
@@ -261,11 +261,11 @@ final class AnnotationCanvasNSView: NSView {
     }
 
     private func normalizedRect(from start: CGPoint, to end: CGPoint) -> CGRect {
-        let a = normalizedPoint(start)
-        let b = normalizedPoint(end)
+        let startNorm = normalizedPoint(start)
+        let endNorm = normalizedPoint(end)
         return CGRect(
-            x: min(a.x, b.x), y: min(a.y, b.y),
-            width: abs(b.x - a.x), height: abs(b.y - a.y)
+            x: min(startNorm.x, endNorm.x), y: min(startNorm.y, endNorm.y),
+            width: abs(endNorm.x - startNorm.x), height: abs(endNorm.y - startNorm.y)
         )
     }
 
@@ -277,9 +277,9 @@ final class AnnotationCanvasNSView: NSView {
     }
 
     private func viewRect(from normalized: CGRect) -> CGRect {
-        let o = viewPoint(from: normalized.origin)
+        let origin = viewPoint(from: normalized.origin)
         return CGRect(
-            x: o.x, y: o.y,
+            x: origin.x, y: origin.y,
             width: normalized.width * imageDisplayRect.width,
             height: normalized.height * imageDisplayRect.height
         )
@@ -288,12 +288,12 @@ final class AnnotationCanvasNSView: NSView {
     private func aspectFitRect(imageSize: CGSize, in bounds: CGRect) -> CGRect {
         guard imageSize.width > 0, imageSize.height > 0 else { return bounds }
         let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
-        let w = imageSize.width * scale
-        let h = imageSize.height * scale
+        let scaledWidth = imageSize.width * scale
+        let scaledHeight = imageSize.height * scale
         return CGRect(
-            x: bounds.midX - w / 2,
-            y: bounds.midY - h / 2,
-            width: w, height: h
+            x: bounds.midX - scaledWidth / 2,
+            y: bounds.midY - scaledHeight / 2,
+            width: scaledWidth, height: scaledHeight
         )
     }
 
