@@ -94,8 +94,7 @@ struct EditorView: View {
 
                 if editorVM.selectedNode != nil
                     || editorVM.selectedTool.annotationTool != nil
-                    || editorVM.selectedTool == .picker
-                {
+                    || editorVM.selectedTool == .picker {
                     AnnotationInspectorView(viewModel: editorVM)
                 }
             }

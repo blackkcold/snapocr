@@ -79,8 +79,8 @@ struct ToolPickerView: View {
                 .frame(height: 22)
 
             Picker("Width", selection: $strokeWidth) {
-                ForEach([1, 2, 3, 5, 8], id: \.self) { w in
-                    Text("\(w) px").tag(CGFloat(w))
+                ForEach([1, 2, 3, 5, 8], id: \.self) { width in
+                    Text("\(width) px").tag(CGFloat(width))
                 }
             }
             .pickerStyle(.menu)

@@ -22,8 +22,18 @@ struct AnnotationInspectorView: View {
             HStack {
                 Label(
                     isEditingSelection
-                        ? LocalizedStringKey(String(format: String(localized: "Edit %@"), currentTool?.rawValue.capitalized ?? String(localized: "Annotation")))
-                        : LocalizedStringKey(String(format: String(localized: "New %@"), currentTool?.rawValue.capitalized ?? String(localized: "Annotation"))),
+                        ? LocalizedStringKey(
+                            String(
+                                format: String(localized: "Edit %@"),
+                                currentTool?.rawValue.capitalized ?? String(localized: "Annotation")
+                            )
+                        )
+                        : LocalizedStringKey(
+                            String(
+                                format: String(localized: "New %@"),
+                                currentTool?.rawValue.capitalized ?? String(localized: "Annotation")
+                            )
+                        ),
                     systemImage: "slider.horizontal.3"
                 )
                     .font(.headline)
@@ -170,13 +180,13 @@ struct AnnotationInspectorView: View {
                         Label("Duplicate", systemImage: "plus.square.on.square")
                     }
                     Spacer()
-                    Button(action: { viewModel.moveSelectedNodeInLayer(by: -1) }) {
+                    Button(action: { viewModel.moveSelectedNodeInLayer(by: -1) }, label: {
                         Image(systemName: "square.2.layers.3d.bottom.filled")
-                    }
+                    })
                     .help("Send backward")
-                    Button(action: { viewModel.moveSelectedNodeInLayer(by: 1) }) {
+                    Button(action: { viewModel.moveSelectedNodeInLayer(by: 1) }, label: {
                         Image(systemName: "square.2.layers.3d.top.filled")
-                    }
+                    })
                     .help("Bring forward")
                 }
             }
