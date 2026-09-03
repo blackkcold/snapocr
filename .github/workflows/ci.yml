@@ -39,9 +39,20 @@ jobs:
 
   unit-test:
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - run: |
           for pkg in SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore AutomationCore; do
-            swift test --package-path "Packages/$pkg" || exit 1
+            echo "=== $pkg ==="
+            if [ "$pkg" = "OCRCore" ]; then
+              # 跳过依赖真实 Vision OCR 的集成测试：无头 CI runner 上 Vision 首次初始化可能挂起。
+              # 本地仍完整运行这些测试（见 scripts/test.sh）。详见 Docs/CI.md。
+              swift test --package-path "Packages/$pkg" \
+                --skip VisionIntegrationTests \
+                --skip pipelineFallsBackToVisionWhenTesseractDataIsMissing || exit 1
+            else
+              swift test --package-path "Packages/$pkg" || exit 1
+            fi
           done
+        timeout-minutes: 10

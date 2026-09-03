@@ -29,12 +29,10 @@
 
 ### unit-test
 - 对所有 Packages 执行 `swift test`：
-  - SharedKit / CaptureCore / OCRCore / BarcodeCore / AnnotationCore / ScrollCore / HistoryCore
+  - SharedKit / CaptureCore / OCRCore / BarcodeCore / AnnotationCore / ScrollCore / HistoryCore / AutomationCore
 - 任一 Package 测试失败则 job 失败
-
-### ui-smoke（仅 main push）
-- 运行 UITests（需 self-hosted runner，有屏幕录制权限）
-- 当前为可选 job，无 self-hosted runner 时自动跳过
+- job 与 step 均设置 `timeout-minutes`，避免单个 Package 挂起导致无限等待
+- OCRCore 在 CI 上跳过依赖真实 Vision OCR 的集成测试（`VisionIntegrationTests` 与 `pipelineFallsBackToVisionWhenTesseractDataIsMissing`）：无头 CI runner 上 Vision 首次初始化可能挂起。本地仍完整运行这些测试（见 `scripts/test.sh`）
 
 ---
 
@@ -85,7 +83,6 @@ shasum -a 256 SnapGlass-vX.Y.Z.dmg
 | Job | Runner | 说明 |
 |-----|--------|------|
 | lint / build / unit-test | `macos-latest` | GitHub 托管的 macOS runner |
-| ui-smoke | `self-hosted` | 需屏幕录制权限（可选） |
 | release | `macos-latest` | GitHub 托管 |
 
 ---
@@ -107,4 +104,4 @@ xcodebuild -project SnapGlass.xcodeproj -scheme SnapGlass -configuration Release
 
 ---
 
-*最后更新: 2026-07-31*
+*最后更新: 2026-09-03*

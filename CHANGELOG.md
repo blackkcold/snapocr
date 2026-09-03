@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - 代码规范：全量清理 SwiftLint 债务（295 → 0 违规），拆分超长文件为扩展/新文件，统一命名与行宽，`.swiftlint.yml` 显式排除各包 `.build` 目录并启用 `trailing_comma: mandatory_comma`，与 swift-format 对齐
 
+### Fixed
+- CI unit-test 卡住：为 job 与 step 增加 `timeout-minutes`，避免单个 Package 挂起导致无限等待；OCRCore 在 CI 上跳过依赖真实 Vision OCR 的集成测试（无头 runner 上 Vision 首次初始化可能挂起），本地仍完整运行（`scripts/test.sh`）
+
 ## [0.6.1] - 2026-09-02
 
 ### Added
