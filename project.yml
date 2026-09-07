@@ -87,7 +87,7 @@ targets:
         basedOnDependencyAnalysis: false
         script: |
           if which swiftlint > /dev/null; then
-            swiftlint lint --config "${SRCROOT}/.swiftlint.yml" --path "${SRCROOT}/App/SnapGlass"
+            swiftlint lint --config "${SRCROOT}/.swiftlint.yml" "${SRCROOT}/App/SnapGlass"
           else
             echo "warning: SwiftLint not installed"
           fi
