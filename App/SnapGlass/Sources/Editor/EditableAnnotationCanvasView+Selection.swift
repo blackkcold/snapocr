@@ -222,6 +222,7 @@ extension EditableAnnotationCanvasNSView {
     override func layout() {
         super.layout()
         updateOCRTextOverlay()
+        layoutTextEntry()
     }
 
     func previewImage(for image: CGImage) -> CGImage? {

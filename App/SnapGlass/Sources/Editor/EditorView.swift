@@ -80,6 +80,13 @@ struct EditorView: View {
                             editorVM.beginTextEntry(at: point)
                         },
                         onTextEditRequested: editorVM.beginTextEditing,
+                        textEntryID: editorVM.textEntryID,
+                        textEntryNode: editorVM.pendingTextNode,
+                        onTextCommit: { text in
+                            editorVM.textDraft = text
+                            editorVM.commitTextEntry()
+                        },
+                        onTextCancel: editorVM.cancelTextEntry,
                         onOCRLinesCopied: editorVM.copyOCRLines,
                         onOCRTextCopied: editorVM.copyOCRSelection,
                         onOCRLineAsAnnotation: editorVM.addOCRLineAsAnnotation,
@@ -100,6 +107,7 @@ struct EditorView: View {
             }
 
             bottomBar
+                .disabled(editorVM.isEnteringText)
         }
         .frame(minWidth: 640, minHeight: 480)
         .toast(message: $editorVM.toastMessage)
@@ -108,15 +116,7 @@ struct EditorView: View {
                 NSApplication.shared.keyWindow?.close()
             }
         }
-        .alert(editorVM.selectedNode?.tool == .text ? "Edit Text" : "Add Text", isPresented: $editorVM.isEnteringText) {
-            TextField("Text", text: $editorVM.textDraft)
-            Button("Cancel", role: .cancel) {
-                editorVM.cancelTextEntry()
-            }
-            Button("Add") {
-                editorVM.commitTextEntry()
-            }
-        }
+        .onDisappear { editorVM.cancelTextEntry() }
     }
 
     private var bottomBar: some View {

@@ -73,8 +73,9 @@ public final class EditorViewModel: ObservableObject {
     /// Text currently being entered for a pending text annotation.
     @Published public var textDraft = ""
 
-    /// Whether the text entry dialog is visible.
+    /// Whether the in-canvas text editor is active.
     @Published public var isEnteringText = false
+    @Published private(set) var textEntryID = UUID()
 
     /// Whether undo is available.
     public var canUndo: Bool { document?.canUndo == true }
@@ -172,6 +173,7 @@ public final class EditorViewModel: ObservableObject {
     ///
     /// - Parameter image: The captured background image to annotate.
     public func loadImage(_ image: CGImage) {
+        cancelTextEntry()
         cancelBarcodeScan()
         document = interactor.createDocument(from: image)
         selectedNodeID = nil
@@ -183,6 +185,7 @@ public final class EditorViewModel: ObservableObject {
     // MARK: - Annotation Operations
 
     func activateTool(_ tool: EditorTool) {
+        cancelTextEntry()
         isVerticalTrimEnabled = false
         selectedTool = tool
         if tool == .ocr {
@@ -411,6 +414,7 @@ public final class EditorViewModel: ObservableObject {
 
     /// Starts text entry at a normalized image coordinate.
     public func beginTextEntry(at point: CGPoint) {
+        textEntryID = UUID()
         pendingTextPoint = point
         editingTextNodeID = nil
         textDraft = ""
@@ -419,10 +423,24 @@ public final class EditorViewModel: ObservableObject {
 
     public func beginTextEditing(_ node: AnnotationNode) {
         guard node.tool == .text else { return }
+        textEntryID = UUID()
         editingTextNodeID = node.id
         pendingTextPoint = node.points.first ?? node.normalizedRect.origin
         textDraft = node.text ?? ""
         isEnteringText = true
+    }
+
+    /// A draft snapshot; typing never mutates the document until commit.
+    var pendingTextNode: AnnotationNode? {
+        guard isEnteringText, let point = pendingTextPoint else { return nil }
+        if let editingTextNodeID,
+           let node = document?.nodes.first(where: { $0.id == editingTextNodeID }) { return node }
+        return AnnotationNode(
+            tool: .text, color: cgColor, lineWidth: strokeWidth, opacity: annotationOpacity,
+            fillColor: fillEnabled ? NSColor(fillColor).cgColor : nil,
+            points: [point], text: textDraft, fontName: fontName, fontSize: fontSize,
+            textAlignment: textAlignment, normalizedRect: CGRect(origin: point, size: .zero)
+        )
     }
 
     /// Commits the pending text annotation if it contains visible characters.
@@ -434,8 +452,8 @@ public final class EditorViewModel: ObservableObject {
             isEnteringText = false
         }
 
-        let text = textDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let text = textDraft
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         if let editingTextNodeID,
            var node = document?.nodes.first(where: { $0.id == editingTextNodeID }) {
             node.text = text

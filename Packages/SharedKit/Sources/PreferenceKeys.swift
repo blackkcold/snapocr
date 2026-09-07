@@ -2,6 +2,8 @@ import Foundation
 
 /// UserDefaults keys shared by the app and feature modules.
 public enum PreferenceKeys {
+    /// Whether Return inserts a newline instead of committing an annotation.
+    public static let editorEnterInsertsNewline = "editor_enterInsertsNewline"
     public static let launchAtLogin = "general_launchAtLogin"
     public static let appLanguage = "general_appLanguage"
     public static let appearanceMode = "appearance_mode"
@@ -38,6 +40,8 @@ public enum PreferenceKeys {
 
 /// Defaults used when a preference has not been written yet.
 public enum PreferenceDefaults {
+    /// Preserve Return-to-submit as the default text editing behavior.
+    public static let editorEnterInsertsNewline = false
     public static let launchAtLogin = false
     public static let appLanguage = "system"
     public static let appearanceMode = "system"

@@ -91,6 +91,29 @@ targets:
           else
             echo "warning: SwiftLint not installed"
           fi
+  EditorInteractionTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: App/SnapGlass/EditorTests
+      - path: App/SnapGlass/Sources/Editor
+        excludes:
+          - EditorView.swift
+          - AnnotationInspectorView.swift
+          - ToolPickerView.swift
+          - AnnotationCanvasView.swift
+      - path: App/SnapGlass/Sources/MenuBar/ToastMessage.swift
+    dependencies:
+      - package: SharedKit
+      - package: AnnotationCore
+      - package: OCRCore
+      - package: BarcodeCore
+      - package: HistoryCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_MODULE_NAME: EditorInteractionTests
+        PRODUCT_NAME: EditorInteractionTests
   WindowLifecycleStateTests:
     type: bundle.unit-test
     platform: macOS
@@ -106,6 +129,13 @@ targets:
         PRODUCT_MODULE_NAME: WindowLifecycleStateTests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
+  EditorInteractionTests:
+    build:
+      targets:
+        EditorInteractionTests: test
+    test:
+      targets:
+        - EditorInteractionTests
   WindowLifecycleStateTests:
     build:
       targets:
