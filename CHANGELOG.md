@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- 历史截图自适应图片网格：保留原始比例、淡阴影、时间及可切换收藏星标，支持收藏筛选、收藏分组与时间双向排序。
+- 文字标注改为画布内原位多行编辑，新建/双击编辑统一；支持 Enter 与 Shift+Enter 提交/换行互换设置，Esc 或失焦取消。
+
+
 ### Changed
 - 代码规范：全量清理 SwiftLint 债务（295 → 0 违规），拆分超长文件为扩展/新文件，统一命名与行宽，`.swiftlint.yml` 显式排除各包 `.build` 目录并启用 `trailing_comma: mandatory_comma`，与 swift-format 对齐
 
