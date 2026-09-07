@@ -16,19 +16,39 @@ extension HistoryView {
     }
 
     func loadScreenshotEntries() async {
+        let loadID = UUID()
+        screenshotLoadID = loadID
         guard let history else {
             entries = []
             return
         }
 
         do {
-            if searchQuery.isEmpty {
+            let query = searchQuery
+            let loaded: [HistoryEntry]
+            if query.isEmpty {
                 let count = await history.count()
-                entries = try await history.recent(limit: max(count, 1))
+                loaded = try await history.recent(limit: max(count, 1))
             } else {
-                entries = try await history.search(query: searchQuery)
+                loaded = try await history.search(query: query)
             }
+            var sizes: [UUID: CGSize] = [:]
+            for entry in loaded {
+                guard !Task.isCancelled, screenshotLoadID == loadID else { return }
+                if let cached = thumbnailSizes[entry.id] { sizes[entry.id] = cached; continue }
+                if let data = try? await history.thumbnailData(for: entry.id),
+                   let source = CGImageSourceCreateWithData(data as CFData, nil),
+                   let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                   let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+                   let height = properties[kCGImagePropertyPixelHeight] as? NSNumber {
+                    sizes[entry.id] = CGSize(width: width.doubleValue, height: height.doubleValue)
+                }
+            }
+            guard !Task.isCancelled, query == searchQuery, screenshotLoadID == loadID else { return }
+            thumbnailSizes = sizes
+            entries = loaded
         } catch {
+            guard screenshotLoadID == loadID else { return }
             entries = []
             errorMessage = error.localizedDescription
         }
@@ -55,6 +75,21 @@ extension HistoryView {
         do {
             try await history.delete(id: entry.id)
             await loadEntries()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func toggleFavourite(_ entry: HistoryEntry) async {
+        guard let history, !updatingFavourites.contains(entry.id) else { return }
+        updatingFavourites.insert(entry.id)
+        defer { updatingFavourites.remove(entry.id) }
+        do {
+            if let updated = try await history.setFavourite(id: entry.id, isFavourite: !entry.isFavourite),
+               let index = entries.firstIndex(where: { $0.id == entry.id }) {
+                entries[index] = updated
+            }
+            await loadScreenshotEntries()
         } catch {
             errorMessage = error.localizedDescription
         }

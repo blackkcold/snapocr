@@ -8,6 +8,10 @@ import SwiftUI
 
 extension EditableAnnotationCanvasNSView {
     override func mouseDown(with event: NSEvent) {
+        if let editor = canvasTextEditor {
+            editor.onCancel?()
+            return
+        }
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
         guard imageDisplayRect.contains(point) else { return }

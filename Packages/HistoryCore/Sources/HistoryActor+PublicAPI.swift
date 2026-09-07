@@ -3,6 +3,18 @@ import Foundation
 // MARK: - HistoryActor Additional Public API
 
 extension HistoryActor {
+    /// Atomically updates favourite metadata without rewriting screenshot data.
+    /// Returns nil if the entry was deleted before the update.
+    public func setFavourite(id: UUID, isFavourite: Bool) throws -> HistoryEntry? {
+        guard var entry = entries[id] ?? loadEntryFromDiskSync(id: id) else { return nil }
+        entry.isFavourite = isFavourite
+        try persistEntry(entry)
+        entries[id] = entry
+        // Preserve other cold entries: this cache is a snapshot, not a lazy loader.
+        diskCache[id] = entry
+        return entry
+    }
+
     /// 获取所有内存缓存的条目
     ///
     /// 不触发磁盘读取，仅返回当前在内存中的条目。

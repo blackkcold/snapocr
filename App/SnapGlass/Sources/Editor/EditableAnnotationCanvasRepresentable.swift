@@ -31,6 +31,10 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     var onDeleteSelection: () -> Void
     var onTextRequested: (CGPoint) -> Void
     var onTextEditRequested: (AnnotationNode) -> Void
+    let textEntryID: UUID
+    let textEntryNode: AnnotationNode?
+    var onTextCommit: (String) -> Void
+    var onTextCancel: () -> Void
     var onOCRLinesCopied: ([OCRLine]) -> Void
     var onOCRTextCopied: (String) -> Void
     var onOCRLineAsAnnotation: (OCRLine) -> Void
@@ -41,7 +45,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
 
     func updateNSView(_ view: EditableAnnotationCanvasNSView, context: Context) {
         view.image = image
-        view.nodes = nodes
+        view.nodes = nodes.filter { $0.id != textEntryNode?.id }
         view.verticalCropOnly = verticalCropOnly
         view.currentTool = tool
         view.currentColor = color
@@ -56,7 +60,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.currentTextAlignment = textAlignment
         view.currentBlurMode = blurMode
         view.currentBlurIntensity = blurIntensity
-        view.selectedNodeID = selectedNodeID
+        view.selectedNodeID = textEntryNode == nil ? selectedNodeID : nil
         view.ocrLines = ocrLines
         view.showsOCROverlay = showsOCROverlay
         view.onNodeCreated = onNodeCreated
@@ -65,6 +69,8 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.onDeleteSelection = onDeleteSelection
         view.onTextRequested = onTextRequested
         view.onTextEditRequested = onTextEditRequested
+        view.updateTextEntry(id: textEntryID, node: textEntryNode,
+                             onCommit: onTextCommit, onCancel: onTextCancel)
         view.onOCRLinesCopied = onOCRLinesCopied
         view.onOCRTextCopied = onOCRTextCopied
         view.onOCRLineAsAnnotation = onOCRLineAsAnnotation
@@ -74,5 +80,9 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.invalidateRenderedPreview()
         view.updateOCRTextOverlay()
         view.needsDisplay = true
+    }
+
+    static func dismantleNSView(_ view: EditableAnnotationCanvasNSView, coordinator: ()) {
+        view.endTextEntry()
     }
 }

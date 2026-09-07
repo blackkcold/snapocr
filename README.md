@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.6.1-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.7.0-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 

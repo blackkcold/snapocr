@@ -282,9 +282,9 @@ struct CapturePreferencesView: View {
             )
 
             Toggle("Open annotation editor", isOn: $openEditor)
+            TextEntryPreferencesView()
             Toggle("Copy image to clipboard", isOn: $copyToClipboard)
             Toggle("Run OCR automatically", isOn: $autoOCR)
-
             Toggle("Replace clipboard with recognized text", isOn: $copyOCRText)
                 .disabled(!autoOCR)
                 .help("When enabled, recognized text is copied automatically after capture.")

@@ -20,6 +20,12 @@ struct HistoryView: View {
     @State private var isClearing = false
     @State private var isClearingColors = false
     @State private var selectedEntryID: HistoryEntry.ID?
+    @State private var favouriteFilter: HistoryPresentation.Filter = .all
+    @State private var favouriteOrder: HistoryPresentation.FavouriteOrder = .first
+    @State private var newestFirst = true
+    @State var thumbnailSizes: [UUID: CGSize] = [:]
+    @State var updatingFavourites: Set<UUID> = []
+    @State var screenshotLoadID = UUID()
     @State var errorMessage: String?
     @State private var searchTask: Task<Void, Never>?
     @State var toastMessage: ToastMessage?
@@ -46,7 +52,8 @@ struct HistoryView: View {
             switch segment {
             case .screenshots:
                 searchBar
-                if entries.isEmpty {
+                historyFilters
+                if visibleEntries.isEmpty {
                     emptyState
                 } else {
                     entryList
@@ -133,7 +140,7 @@ struct HistoryView: View {
         if history == nil {
             return "History unavailable"
         }
-        return searchQuery.isEmpty ? "No captures yet" : "No results found"
+        return searchQuery.isEmpty && favouriteFilter == .all ? "No captures yet" : "No results found"
     }
 
     private var emptyState: some View {
@@ -192,21 +199,61 @@ struct HistoryView: View {
     // MARK: - Entry List
 
     private var entryList: some View {
-        List(entries, selection: $selectedEntryID) { entry in
-            HistoryRow(entry: entry)
-                .onTapGesture(count: 2) {
-                    Task { await openInEditor(entry) }
-                }
-                .contextMenu { contextMenu(for: entry) }
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        Task { await deleteEntry(entry) }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+        GeometryReader { geometry in
+            let count = HistoryPresentation.columnCount(for: geometry.size.width - 32)
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16, alignment: .top), count: count),
+                          alignment: .leading, spacing: 20) {
+                    ForEach(visibleEntries) { entry in
+                        HistoryScreenshotCard(
+                            entry: entry, imageSize: thumbnailSizes[entry.id],
+                            isSelected: selectedEntryID == entry.id,
+                            isUpdatingFavourite: updatingFavourites.contains(entry.id),
+                            onSelect: { selectedEntryID = entry.id },
+                            onOpen: {
+                                selectedEntryID = entry.id
+                                Task { await openInEditor(entry) }
+                            },
+                            onFavourite: { Task { await toggleFavourite(entry) } }
+                        )
+                        .contextMenu { contextMenu(for: entry) }
                     }
                 }
+                .padding(16)
+            }
         }
-        .listStyle(.plain)
+    }
+
+    private var visibleEntries: [HistoryEntry] {
+        HistoryPresentation.entries(entries, filter: favouriteFilter,
+                                    favouriteOrder: favouriteOrder, newestFirst: newestFirst)
+    }
+
+    private var historyFilters: some View {
+        HStack {
+            Menu {
+                Picker("Show", selection: $favouriteFilter) {
+                    Text("All screenshots").tag(HistoryPresentation.Filter.all)
+                    Text("Favourites only").tag(HistoryPresentation.Filter.favourites)
+                    Text("Unfavourited only").tag(HistoryPresentation.Filter.unfavourited)
+                }
+                Picker("Favourite order", selection: $favouriteOrder) {
+                    Text("Favourites first").tag(HistoryPresentation.FavouriteOrder.first)
+                    Text("Favourites last").tag(HistoryPresentation.FavouriteOrder.last)
+                }
+                Picker("Time order", selection: $newestFirst) {
+                    Text("Newest first").tag(true)
+                    Text("Oldest first").tag(false)
+                }
+            } label: {
+                Label("Filter and sort", systemImage: "line.3.horizontal.decrease.circle")
+            }
+            .fixedSize()
+            Spacer()
+            Text("\(visibleEntries.count)").foregroundStyle(.secondary).monospacedDigit()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     // MARK: - Color Grid
@@ -239,6 +286,14 @@ struct HistoryView: View {
 
     @ViewBuilder
     private func contextMenu(for entry: HistoryEntry) -> some View {
+        Button {
+            Task { await toggleFavourite(entry) }
+        } label: {
+            Label(entry.isFavourite ? "Remove favourite" : "Add favourite",
+                  systemImage: entry.isFavourite ? "star.slash" : "star")
+        }
+        .disabled(updatingFavourites.contains(entry.id))
+
         Button {
             Task { await openInEditor(entry) }
         } label: {

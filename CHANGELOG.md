@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-07
+
+### Added
+- 历史截图自适应图片网格：保留原始比例、淡阴影、时间及可切换收藏星标，支持收藏筛选、收藏分组与时间双向排序。
+- 文字标注改为画布内原位多行编辑，新建/双击编辑统一；支持 Enter 与 Shift+Enter 提交/换行互换设置，Esc 或失焦取消。
+
+
 ### Changed
 - 代码规范：全量清理 SwiftLint 债务（295 → 0 违规），拆分超长文件为扩展/新文件，统一命名与行宽，`.swiftlint.yml` 显式排除各包 `.build` 目录并启用 `trailing_comma: mandatory_comma`，与 swift-format 对齐
 
@@ -186,7 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/blackkcold/snapocr/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/blackkcold/snapocr/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/blackkcold/snapocr/compare/v0.5.6...v0.6.0
 [0.5.6]: https://github.com/blackkcold/snapocr/compare/v0.5.5...v0.5.6

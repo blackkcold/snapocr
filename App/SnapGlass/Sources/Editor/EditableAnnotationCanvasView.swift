@@ -101,6 +101,9 @@ final class EditableAnnotationCanvasNSView: NSView {
     var pickerHoverColor: SampledColor?
     var pickerRegionRect: CGRect = .zero
     var dominantColorCount = 5
+    var canvasTextEditor: CanvasTextEditor?
+    var canvasTextEntryID: UUID?
+
 
     override var acceptsFirstResponder: Bool { true }
 
