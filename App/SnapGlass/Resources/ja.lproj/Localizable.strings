@@ -40,6 +40,10 @@
 "Selection style" = "選択スタイル";
 "Rectangle" = "矩形";
 "Freeform" = "自由選択";
+"Overlay preview" = "オーバーレイプレビュー";
+"Live screen" = "ライブ画面";
+"Static snapshot" = "静止スナップショット";
+"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "静止スナップショットは選択開始時の画面を固定し、取得できない画面は黒く表示します。";
 "Saved image format" = "保存形式";
 "PNG (lossless)" = "PNG（ロスレス）";
 "JPEG (smaller)" = "JPEG（より小さい）";

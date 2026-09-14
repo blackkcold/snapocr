@@ -40,6 +40,10 @@
 "Selection style" = "선택 스타일";
 "Rectangle" = "사각형";
 "Freeform" = "자유 선택";
+"Overlay preview" = "오버레이 미리보기";
+"Live screen" = "실시간 화면";
+"Static snapshot" = "정적 스냅샷";
+"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "정적 스냅샷은 선택을 시작할 때 화면을 고정하며, 캡처할 수 없는 화면은 검게 표시됩니다.";
 "Saved image format" = "저장 형식";
 "PNG (lossless)" = "PNG(무손실)";
 "JPEG (smaller)" = "JPEG(더 작은 용량)";

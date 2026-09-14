@@ -40,6 +40,10 @@
 "Selection style" = "选区样式";
 "Rectangle" = "矩形";
 "Freeform" = "自由选区";
+"Overlay preview" = "覆盖层预览";
+"Live screen" = "实时画面";
+"Static snapshot" = "静态快照";
+"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "静态快照会在开始选择时冻结画面；无法捕获的屏幕将显示为黑色。";
 "Saved image format" = "保存格式";
 "PNG (lossless)" = "PNG（无损）";
 "JPEG (smaller)" = "JPEG（体积更小）";

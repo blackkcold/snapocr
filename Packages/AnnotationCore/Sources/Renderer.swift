@@ -65,8 +65,8 @@ public struct Renderer: Sendable {
         let blurAndCropNodes = document.nodes.filter { $0.tool == .blur || $0.tool == .crop }
         let drawingNodes = document.nodes.filter { $0.tool != .blur && $0.tool != .crop }
 
-        renderNodes(blurAndCropNodes, in: context, imageSize: workingSize, styleScale: styleScale)
-        renderNodes(drawingNodes, in: context, imageSize: workingSize, styleScale: styleScale)
+        renderNodes(blurAndCropNodes, in: context, imageSize: workingSize, originalSize: imageSize, styleScale: styleScale)
+        renderNodes(drawingNodes, in: context, imageSize: workingSize, originalSize: imageSize, styleScale: styleScale)
 
         guard let result = context.makeImage() else {
             throw AnnotationError.renderFailed(reason: "CGContext.makeImage() 返回 nil")
@@ -81,6 +81,7 @@ public struct Renderer: Sendable {
         _ nodes: [AnnotationNode],
         in context: CGContext,
         imageSize: CGSize,
+        originalSize: CGSize,
         styleScale: CGFloat
     ) {
         for node in nodes {
@@ -89,6 +90,7 @@ public struct Renderer: Sendable {
                     node,
                     in: context,
                     imageSize: imageSize,
+                    originalSize: originalSize,
                     styleScale: styleScale
                 )
             }
@@ -100,8 +102,19 @@ public struct Renderer: Sendable {
         _ node: AnnotationNode,
         in context: CGContext,
         imageSize: CGSize,
+        originalSize: CGSize,
         styleScale: CGFloat
     ) {
+        if node.tool == .text {
+            // Layout in source pixels: scaling the font but not TextTool's padding
+            // can leave too little height for even one Core Text line in previews.
+            context.saveGState()
+            context.scaleBy(x: imageSize.width / originalSize.width,
+                            y: imageSize.height / originalSize.height)
+            TextTool().render(node: node, in: context, imageSize: originalSize)
+            context.restoreGState()
+            return
+        }
         var scaledNode = node
         scaledNode.lineWidth = max(node.lineWidth * styleScale, 0.5)
         scaledNode.cornerRadius = node.cornerRadius * styleScale
