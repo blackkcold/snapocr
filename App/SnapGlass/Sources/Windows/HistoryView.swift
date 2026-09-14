@@ -300,6 +300,14 @@ struct HistoryView: View {
             Label("Open in Editor", systemImage: "pencil.and.outline")
         }
 
+        if entry.canRestoreOriginal {
+            Button {
+                Task { await restoreOriginal(entry) }
+            } label: {
+                Label("Restore Original Image", systemImage: "arrow.uturn.backward.circle")
+            }
+        }
+
         Divider()
 
         Button {

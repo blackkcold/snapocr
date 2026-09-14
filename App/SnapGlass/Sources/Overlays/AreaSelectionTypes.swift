@@ -25,6 +25,7 @@ private final class AreaSelectionSession {
 
     static func show(
         style: CaptureSelectionStyle,
+        overlayMode: CaptureOverlayMode = .live,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
         onColorPicked: ((SampledColor) -> Void)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
@@ -37,7 +38,12 @@ private final class AreaSelectionSession {
         let session = AreaSelectionSession(onComplete: onComplete)
         session.capturedFrames = capturedFrames
         retainedSessions.append(session)
-        session.present(on: screens, style: style, onColorPicked: onColorPicked)
+        session.present(
+            on: screens,
+            style: style,
+            overlayMode: overlayMode,
+            onColorPicked: onColorPicked
+        )
     }
 
     private init(onComplete: @escaping (AreaSelectionResult?) -> Void) {
@@ -47,12 +53,14 @@ private final class AreaSelectionSession {
     private func present(
         on screens: [NSScreen],
         style: CaptureSelectionStyle,
+        overlayMode: CaptureOverlayMode,
         onColorPicked: ((SampledColor) -> Void)?
     ) {
         panels = screens.map { screen in
             AreaSelectionPanel(
                 screen: screen,
                 style: style,
+                overlayMode: overlayMode,
                 capturedFrames: capturedFrames,
                 onColorPicked: onColorPicked
             ) { [weak self] result in
@@ -85,12 +93,14 @@ final class AreaSelectionPanel: NSPanel {
 
     static func show(
         style: CaptureSelectionStyle,
+        overlayMode: CaptureOverlayMode = .live,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
         onColorPicked: ((SampledColor) -> Void)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         AreaSelectionSession.show(
             style: style,
+            overlayMode: overlayMode,
             capturedFrames: capturedFrames,
             onColorPicked: onColorPicked,
             onComplete: onComplete
@@ -100,6 +110,7 @@ final class AreaSelectionPanel: NSPanel {
     fileprivate init(
         screen: NSScreen,
         style: CaptureSelectionStyle,
+        overlayMode: CaptureOverlayMode,
         capturedFrames: [CGDirectDisplayID: CGImage],
         onColorPicked: ((SampledColor) -> Void)?,
         onComplete: @escaping (AreaSelectionResult?) -> Void
@@ -108,6 +119,7 @@ final class AreaSelectionPanel: NSPanel {
         let trackingView = AreaTrackingView(
             frame: CGRect(origin: .zero, size: contentSize),
             style: style,
+            overlayMode: overlayMode,
             screen: screen,
             capturedFrames: capturedFrames,
             onColorPicked: onColorPicked
