@@ -14,6 +14,7 @@ public enum PreferenceKeys {
     public static let captureAutoOCR = "capture_autoOCR"
     public static let captureCopyOCRText = "capture_copyOCRText"
     public static let captureSelectionStyle = "capture_selectionStyle"
+    public static let captureOverlayMode = "capture_overlayMode"
     public static let captureHighResolution = "capture_highResolution"
     public static let captureImageFormat = "capture_imageFormat"
     public static let captureJPEGQuality = "capture_jpegQuality"
@@ -52,6 +53,7 @@ public enum PreferenceDefaults {
     public static let captureAutoOCR = false
     public static let captureCopyOCRText = false
     public static let captureSelectionStyle = CaptureSelectionStyle.rectangle.rawValue
+    public static let captureOverlayMode = CaptureOverlayMode.live.rawValue
     public static let captureHighResolution = true
     public static let captureImageFormat = "png"
     public static let captureJPEGQuality = 0.9
@@ -82,4 +84,12 @@ public enum CaptureSelectionStyle: String, CaseIterable, Sendable {
     case rectangle
     /// Freehand closed path that produces a transparent PNG.
     case freeform
+}
+
+/// Background behavior used while selecting an area to capture.
+public enum CaptureOverlayMode: String, CaseIterable, Sendable {
+    /// Keep the overlay transparent so the current desktop remains visible.
+    case live
+    /// Display the frame captured immediately before the overlay appeared.
+    case snapshot
 }

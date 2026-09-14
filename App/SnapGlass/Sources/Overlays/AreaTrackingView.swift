@@ -155,6 +155,7 @@ final class AreaTrackingView: NSView {
     }
 
     let style: CaptureSelectionStyle
+    let overlayMode: CaptureOverlayMode
     let screen: NSScreen
     let capturedFrames: [CGDirectDisplayID: CGImage]
     private let onColorPicked: ((SampledColor) -> Void)?
@@ -171,11 +172,13 @@ final class AreaTrackingView: NSView {
     init(
         frame frameRect: NSRect,
         style: CaptureSelectionStyle,
+        overlayMode: CaptureOverlayMode,
         screen: NSScreen,
         capturedFrames: [CGDirectDisplayID: CGImage],
         onColorPicked: ((SampledColor) -> Void)?
     ) {
         self.style = style
+        self.overlayMode = overlayMode
         self.screen = screen
         self.capturedFrames = capturedFrames
         self.onColorPicked = onColorPicked

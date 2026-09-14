@@ -142,7 +142,11 @@ extension HistoryView {
                 errorMessage = String(localized: "The stored screenshot could not be decoded.")
                 return
             }
-            captureViewModel.openEditor(with: image, captureMode: entry.captureMode)
+            captureViewModel.openEditor(
+                with: image,
+                captureMode: entry.captureMode,
+                sourceEntryID: entry.id
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -170,6 +174,27 @@ extension HistoryView {
         do {
             try await colorHistory.clear()
             colorEntries = []
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func restoreOriginal(_ entry: HistoryEntry) async {
+        guard let history else { return }
+        do {
+            try await history.restoreOriginal(id: entry.id)
+            await loadEntries()
+            let toast = ToastMessage(
+                message: String(localized: "Original image restored"),
+                type: .success
+            )
+            toastMessage = toast
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                if toastMessage?.id == toast.id {
+                    toastMessage = nil
+                }
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

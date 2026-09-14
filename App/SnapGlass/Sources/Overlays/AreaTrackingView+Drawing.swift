@@ -12,27 +12,14 @@ extension AreaTrackingView {
         super.draw(dirtyRect)
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        context.setFillColor(NSColor.black.withAlphaComponent(0.32).cgColor)
-        context.fill(bounds)
-
-        if style == .freeform, freeformPoints.count >= 2 {
-            let path = freeformPath()
-            context.saveGState()
-            context.addPath(path)
-            context.clip()
-            context.clear(bounds)
-            context.restoreGState()
-            context.setStrokeColor(NSColor.white.cgColor)
-            context.setLineWidth(2)
-            context.addPath(path)
-            context.strokePath()
-        } else if !selectionRect.isEmpty {
-            context.clear(selectionRect)
-            context.setStrokeColor(NSColor.white.cgColor)
-            context.setLineWidth(2)
-            context.stroke(selectionRect.insetBy(dx: -1, dy: -1))
-            if phase == .adjusting { drawHandles() }
+        switch overlayMode {
+        case .live:
+            drawLiveBackground(in: context)
+        case .snapshot:
+            drawSnapshotBackground(in: context)
         }
+
+        drawSelectionOutline(in: context)
 
         if !selectionRect.isEmpty {
             drawSizeLabel(for: selectionRect)
@@ -41,6 +28,100 @@ extension AreaTrackingView {
         if phase != .choosingAction {
             drawCrosshair(at: hoverPoint)
             if let hoverColor { drawHoverColorLabel(for: hoverColor, near: hoverPoint) }
+        }
+    }
+
+    private func drawLiveBackground(in context: CGContext) {
+        context.setFillColor(NSColor.black.withAlphaComponent(0.32).cgColor)
+        context.fill(bounds)
+
+        context.saveGState()
+        guard clipToSelection(in: context) else {
+            context.restoreGState()
+            return
+        }
+        context.clear(bounds)
+        context.restoreGState()
+    }
+
+    private func drawSnapshotBackground(in context: CGContext) {
+        guard let snapshotFrame else {
+            context.setFillColor(NSColor.black.cgColor)
+            context.fill(bounds)
+            return
+        }
+
+        draw(snapshotFrame, in: context)
+        context.setFillColor(NSColor.black.withAlphaComponent(0.32).cgColor)
+        context.fill(bounds)
+
+        context.saveGState()
+        guard clipToSelection(in: context) else {
+            context.restoreGState()
+            return
+        }
+        draw(snapshotFrame, in: context)
+        context.restoreGState()
+    }
+
+    private var snapshotFrame: CGImage? {
+        guard bounds.width > 0, bounds.height > 0,
+              let displayID = screen.deviceDescription[
+                  NSDeviceDescriptionKey("NSScreenNumber")
+              ] as? CGDirectDisplayID,
+              let frame = capturedFrames[displayID]
+        else { return nil }
+
+        let viewAspectRatio = bounds.width / bounds.height
+        let frameAspectRatio = CGFloat(frame.width) / CGFloat(frame.height)
+        let relativeDifference = abs(frameAspectRatio - viewAspectRatio) / viewAspectRatio
+        return relativeDifference <= 0.02 ? frame : nil
+    }
+
+    private func draw(_ image: CGImage, in context: CGContext) {
+        context.saveGState()
+        context.setBlendMode(.copy)
+        context.interpolationQuality = .none
+        context.translateBy(x: bounds.minX, y: bounds.minY)
+        context.scaleBy(
+            x: bounds.width / CGFloat(image.width),
+            y: bounds.height / CGFloat(image.height)
+        )
+        context.draw(
+            image,
+            in: CGRect(
+                x: 0,
+                y: 0,
+                width: CGFloat(image.width),
+                height: CGFloat(image.height)
+            )
+        )
+        context.restoreGState()
+    }
+
+    private func clipToSelection(in context: CGContext) -> Bool {
+        if style == .freeform, freeformPoints.count >= 2 {
+            context.addPath(freeformPath())
+            context.clip()
+            return true
+        }
+        guard !selectionRect.isEmpty else { return false }
+        context.clip(to: selectionRect)
+        return true
+    }
+
+    private func drawSelectionOutline(in context: CGContext) {
+        if style == .freeform, freeformPoints.count >= 2 {
+            let path = freeformPath()
+            context.setStrokeColor(NSColor.white.cgColor)
+            context.setLineWidth(2)
+            context.addPath(path)
+            context.strokePath()
+        } else if !selectionRect.isEmpty {
+            context.setStrokeColor(NSColor.white.cgColor)
+            context.setLineWidth(2)
+            context.stroke(selectionRect.insetBy(dx: -1, dy: -1))
+            if phase == .adjusting { drawHandles() }
         }
     }
 
