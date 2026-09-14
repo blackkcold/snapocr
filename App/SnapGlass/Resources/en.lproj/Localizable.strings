@@ -40,6 +40,10 @@
 "Selection style" = "Selection style";
 "Rectangle" = "Rectangle";
 "Freeform" = "Freeform";
+"Overlay preview" = "Overlay preview";
+"Live screen" = "Live screen";
+"Static snapshot" = "Static snapshot";
+"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "Static snapshot freezes the screen when selection starts; unavailable screens appear black.";
 "Saved image format" = "Saved image format";
 "PNG (lossless)" = "PNG (lossless)";
 "JPEG (smaller)" = "JPEG (smaller)";

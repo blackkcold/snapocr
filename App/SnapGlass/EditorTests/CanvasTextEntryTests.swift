@@ -4,14 +4,14 @@ import Testing
 
 @MainActor
 struct CanvasTextEntryTests {
-  private func image() throws -> CGImage {
+  private func image(width: Int = 800, height: Int = 600) throws -> CGImage {
     let context = try #require(
       CGContext(
-        data: nil, width: 800, height: 600, bitsPerComponent: 8,
+        data: nil, width: width, height: height, bitsPerComponent: 8,
         bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
     context.setFillColor(NSColor.white.cgColor)
-    context.fill(CGRect(x: 0, y: 0, width: 800, height: 600))
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
     return try #require(context.makeImage())
   }
 
@@ -100,6 +100,113 @@ struct CanvasTextEntryTests {
     editor.onCommit?(editor.string)
     #expect(result == "draft")
     #expect(canvas.canvasTextEditor == nil)
+  }
+
+  @Test func activeCanvasEditorAppliesStyleUpdatesWithoutReplacingDraft() throws {
+    let canvas = EditableAnnotationCanvasNSView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
+    canvas.image = try image()
+    let session = UUID()
+    let node = AnnotationNode(
+      tool: .text, color: NSColor.red.cgColor,
+      points: [CGPoint(x: 0.2, y: 0.3)], text: "Original", fontSize: 24)
+    canvas.updateTextEntry(id: session, node: node, onCommit: { _ in }, onCancel: {})
+    let editor = try #require(canvas.canvasTextEditor)
+    editor.string = "Live draft"
+    editor.setSelectedRange(NSRange(location: 4, length: 0))
+
+    var updated = node
+    updated.color = NSColor.blue.cgColor
+    updated.fillColor = NSColor.black.withAlphaComponent(0.4).cgColor
+    updated.opacity = 0.6
+    updated.fontName = "Menlo"
+    updated.fontSize = 48
+    updated.textAlignment = .trailing
+    canvas.updateTextEntry(id: session, node: updated, onCommit: { _ in }, onCancel: {})
+
+    #expect(canvas.canvasTextEditor === editor)
+    #expect(editor.string == "Live draft")
+    #expect(editor.selectedRange() == NSRange(location: 4, length: 0))
+    #expect(editor.sourceNode?.fontSize == 48)
+    #expect(editor.font?.pointSize == 48)
+    #expect(editor.font?.familyName == NSFont(name: "Menlo", size: 48)?.familyName)
+    #expect(editor.alignment == .right)
+    #expect(editor.drawsBackground)
+    #expect(editor.textColor?.usingColorSpace(.sRGB)?.blueComponent ?? 0 > 0.8)
+  }
+
+  @Test func editedTextStyleIsDraftedUntilCommitAndCancelRestoresInspector() throws {
+    let model = try model()
+    model.beginTextEntry(at: CGPoint(x: 0.2, y: 0.3))
+    model.textDraft = "Original"
+    model.commitTextEntry()
+    let original = try #require(model.document?.nodes.first)
+    model.beginTextEditing(original)
+
+    model.fontName = "Menlo"
+    model.fontSize = 48
+    model.textAlignment = .trailing
+    model.annotationOpacity = 0.6
+    model.fillEnabled = true
+    model.fillColor = .black
+    model.updateSelectedStyle()
+
+    let draft = try #require(model.pendingTextNode)
+    #expect(draft.fontName == "Menlo")
+    #expect(draft.fontSize == 48)
+    #expect(draft.textAlignment == .trailing)
+    #expect(draft.opacity == 0.6)
+    #expect(draft.fillColor != nil)
+    #expect(model.document?.nodes.first?.fontSize == 24)
+
+    model.cancelTextEntry()
+    #expect(model.document?.nodes.first?.fontSize == 24)
+    #expect(model.fontSize == 24)
+
+    model.beginTextEditing(original)
+    model.textDraft = "Updated"
+    model.fontName = "Menlo"
+    model.fontSize = 48
+    model.textAlignment = .trailing
+    model.commitTextEntry()
+    #expect(model.document?.nodes.first?.text == "Updated")
+    #expect(model.document?.nodes.first?.fontName == "Menlo")
+    #expect(model.document?.nodes.first?.fontSize == 48)
+    #expect(model.document?.nodes.first?.textAlignment == .trailing)
+
+    model.undo()
+    #expect(model.document?.nodes.first?.text == "Original")
+    #expect(model.document?.nodes.first?.fontSize == 24)
+  }
+
+  @Test func fittedLongTextAccountsForWrappingAtImageWidth() throws {
+    let model = EditorViewModel()
+    let narrowImage = try image(width: 160, height: 600)
+    model.document = model.interactor.createDocument(from: narrowImage)
+    model.beginTextEntry(at: .zero)
+    model.fontSize = 24
+    model.textDraft = Array(repeating: "wrapping", count: 12).joined(separator: " ")
+    model.commitTextEntry()
+
+    let node = try #require(model.document?.nodes.first)
+    #expect(node.normalizedRect.width <= 1)
+    #expect(node.normalizedRect.height > 0.2)
+  }
+
+  @Test func smallTextContainerIncludesAllLaidOutGlyphs() throws {
+    let canvas = EditableAnnotationCanvasNSView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
+    canvas.image = try image()
+    let node = AnnotationNode(
+      tool: .text, color: NSColor.red.cgColor,
+      points: [CGPoint(x: 0.2, y: 0.3)], text: "Small 中文", fontSize: 24)
+    canvas.updateTextEntry(id: UUID(), node: node, onCommit: { _ in }, onCancel: {})
+    let editor = try #require(canvas.canvasTextEditor)
+    let container = try #require(editor.textContainer)
+    let layoutManager = try #require(editor.layoutManager)
+    layoutManager.ensureLayout(for: container)
+    let usedHeight = layoutManager.usedRect(for: container).height
+
+    #expect(container.containerSize.height >= ceil(usedHeight) + 1)
+    #expect(editor.bounds.height >= ceil(usedHeight) + editor.textContainerInset.height * 2 + 1)
   }
 
   @Test func nativeReturnModesAndEscape() throws {
