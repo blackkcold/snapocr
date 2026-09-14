@@ -31,7 +31,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     /// OCR 置信度 (0.0–1.0)
     ///
     /// 低于 0.7 时引擎会展示降级提示。
-    public let ocrConfidence: Float
+    public var ocrConfidence: Float
 
     /// 截图模式
     ///
@@ -73,6 +73,11 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     ///
     /// 支持多标签分类，标签名不区分大小写。
     public var tags: [String]
+
+    /// Optional so existing v2 records remain readable. The canonical image is
+    /// never overwritten; this points to an immutable edited image/thumbnail pair.
+    public var imageRevision: UUID?
+    public var canRestoreOriginal: Bool { imageRevision != nil && imagePath != nil }
 
     // MARK: - Initialization
 
@@ -122,5 +127,6 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         case id, timestamp, textContent, ocrConfidence, captureMode
         case sourceType, sourceAppName, sourceWindowTitle
         case imagePath, thumbnailPath, isFavourite, tags
+        case imageRevision
     }
 }

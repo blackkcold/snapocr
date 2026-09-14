@@ -136,6 +136,7 @@ extension HistoryActor {
     ///   - sourceType: Source type for the history entry.
     ///   - sourceAppName: Optional source application name.
     ///   - sourceWindowTitle: Optional source window title.
+    @discardableResult
     public func saveCapture(
         image: CGImage,
         textContent: String,
@@ -144,7 +145,7 @@ extension HistoryActor {
         sourceType: HistorySourceType = .screenshot,
         sourceAppName: String? = nil,
         sourceWindowTitle: String? = nil
-    ) async throws {
+    ) async throws -> UUID {
         try tempDir.ensureDirectoryExists()
 
         let tempID = UUID()
@@ -180,6 +181,7 @@ extension HistoryActor {
         )
 
         try await save(entry)
+        return entry.id
     }
 
     public func load(id: UUID) async throws -> HistoryEntry? {
@@ -217,11 +219,7 @@ extension HistoryActor {
     public func delete(id: UUID) async throws {
         let transactionDir = tempDir.appendingPathComponent("delete-\(UUID().uuidString)")
         try transactionDir.ensureDirectoryExists()
-        let files = [
-            entryFileURL(for: id),
-            imageFileURL(for: id),
-            thumbnailFileURL(for: id),
-        ]
+        let files = [entryFileURL(for: id)] + (try mediaFiles(for: id))
         var staged: [(original: URL, staged: URL)] = []
 
         do {
