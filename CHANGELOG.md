@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-14
+
+### Added
+- 编辑图写入历史：标注编辑器新增「存入历史」，可选择新建记录或覆盖原图记录；覆盖后原图加密件永久保留，历史中可通过「还原原图」恢复（重启后仍有效）。
+- 区域截图新增实时画面与静态快照覆盖层模式；静态模式会冻结选区背景，屏幕预捕获不可用时使用纯黑回退。
+
+### Fixed
+- 修复静态快照覆盖层画面上下翻转的问题，并改用全分辨率预捕获帧作为预览背景，选区背景清晰度与最终截图一致。
+- 修复画布内文本编辑时 Inspector 样式不实时更新、取消编辑未恢复原样式，以及窄图长文本未按可用宽度换行导致的裁剪问题。
+- 修复文字标注在缩小预览下整行不绘制的问题（预览渲染改为按原图尺寸排版再整体缩放，保证编辑态与导出文本一致）。
+
 ## [0.7.0] - 2026-09-07
 
 ### Added
@@ -193,7 +204,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/blackkcold/snapocr/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/blackkcold/snapocr/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/blackkcold/snapocr/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/blackkcold/snapocr/compare/v0.5.6...v0.6.0
