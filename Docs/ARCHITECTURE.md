@@ -199,6 +199,41 @@ Struct (无状态工具)
 
 ---
 
+## 本地化
+
+界面语言由设置中的「应用语言」决定（`PreferenceKeys.appLanguage`，默认 `system`），支持 `en` / `zh-Hans` / `ja` / `ko`。文案以 `.lproj/Localizable.strings` 存储于 `App/SnapGlass/Resources/`。
+
+Cocoa 存在两条互不相通的解析路径，两条都必须覆盖：
+
+| 路径 | 解析依据 | 适用场景 |
+|------|----------|----------|
+| SwiftUI `Text` / `LocalizedStringKey` | 视图环境 `\.locale` | 视图树内的文本，随应用语言即时切换 |
+| `AppLocalization.string(_:)` | `AppLanguage.resourceIdentifier` 定位 `.lproj` | 视图环境之外的 Foundation 文本：toast、`NSAlert`、`NSMenu`、AppKit 面板、画布绘制 |
+
+`App.swift` 逐窗口注入 `.environment(\.locale, locale)`；`Window` 场景标题与 `.commands` 菜单项不在视图环境内，因此额外使用 `.navigationTitle(Text(...))` 与 `AppLocalization`。
+
+禁止在界面代码中直接使用 `NSLocalizedString` / `String(localized:)`——它们跟随系统语言而非应用语言，会导致设置窗口内语言不一致。界面代码中的文本应为字符串字面量（`LocalizedStringKey`）或经由 `AppLocalization`；`scripts/check-localization.sh` 会校验四语言键一致、占位符一致、无冲突重复键，且源码引用的键均已存在。
+
+历史记录的 `captureMode`（`area` / `window` / `fullscreen` / `scroll`）是持久化数据标识而非界面文案，不参与本地化，以保证 CSV 导出与存储语义稳定。
+
+---
+
+## 激活策略生命周期（accessory ↔ regular）
+
+`LSUIElement=true` 使应用默认以 `.accessory` 启动（无 Dock 图标、无应用菜单）。打开 Preferences / History / Editor / Permission 窗口时经 `AppWindowPresenter.present` 切到 `.regular` 以获得 Dock 图标与应用菜单；关闭最后一个窗口后须回退 `.accessory`。所有窗口打开路径均经 `present()`，因此降级门只依赖在途的 `pendingPresentations`。
+
+关键约束（易回归点）：
+
+| 约束 | 原因 |
+|------|------|
+| 降级门**不得**依赖 `registeredWindowIDs` | SwiftUI 关闭 `Window` 场景后仍保留其 `NSWindow`，`register()` 可能在 `willClose` 之后重登记，使集合永久非空而永久阻塞降级 |
+| 降级时在 `setActivationPolicy(.accessory)` 成功后显式 `deactivate()` | 应用仍 active 时切换到 `.accessory` 常不能立即移除 Dock 图标（Apple 未文档化行为） |
+| 重算触发面仅 `willClose` / `didBecomeKey` / `didMiniaturize` / `didDeminiaturize` | 不观察 `didOrderOffScreen` / `didHide` / `didResignActive`，避免隐藏、切 Space、全屏时误降级 |
+| `willClose` 后延后一个 runloop tick（合并去抖）再重算 | `willClose` 触发时窗口仍 `isVisible`，需等 `orderOut` 完成 |
+| `didBecomeKey` 补齐晋升 `.regular` | 与降级对称，避免应用卡在 accessory |
+
+---
+
 ## 技术选型
 
 | 域 | 选择 |
