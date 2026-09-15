@@ -33,7 +33,17 @@ struct WindowLifecycleStateTests {
         #expect(state.pendingPresentations.count == 1)
     }
 
-    @Test("Closing one window cannot downgrade while another presentation is pending")
+    @Test("Registered windows alone cannot block accessory policy")
+    func registeredWindowsDoNotBlockAccessoryPolicy() {
+        var state = WindowLifecycleState()
+
+        state.registerWindow(id: "history")
+        state.registerWindow(id: "preferences")
+
+        #expect(state.shouldUseAccessoryPolicy)
+    }
+
+    @Test("A pending presentation prevents accessory downgrade until it completes")
     func pendingPresentationPreventsAccessoryDowngrade() {
         var state = WindowLifecycleState()
 
@@ -45,7 +55,7 @@ struct WindowLifecycleStateTests {
 
         state.registerWindow(id: "preferences")
         state.completePresentation(id: "preferences")
-        #expect(!state.shouldUseAccessoryPolicy)
+        #expect(state.shouldUseAccessoryPolicy)
     }
 
     @Test("A stale timeout cannot clear a newer presentation")
