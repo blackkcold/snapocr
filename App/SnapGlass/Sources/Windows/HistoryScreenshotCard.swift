@@ -45,8 +45,10 @@ struct HistoryScreenshotCard: View {
         .buttonStyle(.plain)
         .padding(6)
         .disabled(isUpdatingFavourite)
-        .help(entry.isFavourite ? "Remove favourite" : "Add favourite")
-        .accessibilityLabel(entry.isFavourite ? "Remove favourite" : "Add favourite")
+        .help(Text(entry.isFavourite ? LocalizedStringKey("Remove favourite") : LocalizedStringKey("Add favourite")))
+        .accessibilityLabel(
+            Text(entry.isFavourite ? LocalizedStringKey("Remove favourite") : LocalizedStringKey("Add favourite"))
+        )
       }
       Text(entry.timestamp, format: .dateTime.year().month().day().hour().minute())
         .font(.caption)

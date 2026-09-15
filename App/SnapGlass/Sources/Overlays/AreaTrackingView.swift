@@ -46,46 +46,34 @@ private final class CaptureActionBarView: NSVisualEffectView {
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel(
-            NSLocalizedString("Screenshot Actions", comment: "Capture action bar accessibility label")
+            AppLocalization.string("Screenshot Actions")
         )
     }
 
     private func configureActionButtons() {
         configure(
             backButton,
-            title: NSLocalizedString("Back", comment: "Return from capture actions to selection adjustment"),
+            title: AppLocalization.string("Back"),
             symbol: "chevron.backward",
-            toolTip: NSLocalizedString(
-                "Return to selection adjustments",
-                comment: "Capture action bar back button help"
-            ),
+            toolTip: AppLocalization.string("Return to selection adjustments"),
             action: #selector(back)
         )
         backButton.keyEquivalent = "\u{1b}"
 
         configure(
             copyButton,
-            title: NSLocalizedString("Copy Image", comment: "Capture action that copies the selected area"),
+            title: AppLocalization.string("Copy Image"),
             symbol: "doc.on.doc",
-            toolTip: NSLocalizedString(
-                "Copy the screenshot to the clipboard",
-                comment: "Capture action bar copy button help"
-            ),
+            toolTip: AppLocalization.string("Copy the screenshot to the clipboard"),
             action: #selector(copyImage)
         )
         copyButton.keyEquivalent = "\r"
 
         configure(
             editButton,
-            title: NSLocalizedString(
-                "Edit Screenshot",
-                comment: "Capture action that opens the selected area in the editor"
-            ),
+            title: AppLocalization.string("Edit Screenshot"),
             symbol: "pencil.and.outline",
-            toolTip: NSLocalizedString(
-                "Open the screenshot in the annotation editor",
-                comment: "Capture action bar edit button help"
-            ),
+            toolTip: AppLocalization.string("Open the screenshot in the annotation editor"),
             action: #selector(editScreenshot)
         )
         editButton.keyEquivalent = "e"

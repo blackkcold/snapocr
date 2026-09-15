@@ -232,10 +232,7 @@ extension AreaTrackingView {
     }
 
     private func drawActionHint(for rect: CGRect) {
-        let text = NSLocalizedString(
-            "Return / double-click to choose an action",
-            comment: "Area capture selection confirmation hint"
-        )
+        let text = AppLocalization.string("Return / double-click to choose an action")
         drawLabel(text, at: CGPoint(x: rect.midX, y: rect.minY - 18))
     }
 

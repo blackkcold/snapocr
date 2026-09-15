@@ -375,3 +375,44 @@
 "Record picked colors" = "ピックしたカラーを記録";
 "Maximum color entries" = "カラー履歴の最大件数";
 "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "カラーはこの Mac にのみ暗号化して保存されます。ピッカーでコピーするとここに記録されます。";
+
+/* Settings gaps */
+"Developer Mode" = "開発者モード";
+"Diagnostics" = "診断";
+"Disable languages you rarely use to prevent visually similar characters (such as Japanese kanji and Chinese hanzi) from being misrecognized." = "使用頻度の低い言語を無効にすると、字形が似た文字（日本語の漢字や中国語の漢字など）の誤認識を防げます。";
+"History segment" = "履歴セグメント";
+"Record colors copied with the area or editor color picker" = "領域撮影またはエディタのカラーピッカーでコピーしたカラーを記録";
+"History unavailable" = "履歴を利用できません";
+"No captures yet" = "まだ撮影がありません";
+
+/* Editor history */
+"Save to History" = "履歴に保存";
+"Save as New Record" = "新規レコードとして保存";
+"Overwrite Original Record" = "元のレコードを上書き";
+"Save the annotated image into history" = "注釈付き画像を履歴に保存";
+"Saved to history" = "履歴に保存しました";
+"History updated; original kept for restore" = "履歴を更新しました。元の画像は復元用に保持されます";
+"No original record to overwrite; save as a new record instead" = "上書きできる元のレコードがないため、新規レコードとして保存します";
+"Restore Original Image" = "元の画像を復元";
+"Original image restored" = "元の画像を復元しました";
+"Copy Line" = "行をコピー";
+"Add as Text Annotation" = "テキスト注釈として追加";
+
+/* Toasts */
+"No text found" = "テキストが検出されませんでした";
+"Text copied to clipboard" = "テキストをクリップボードにコピーしました";
+"OCR completed" = "文字認識が完了しました";
+"Copied OCR text" = "認識したテキストをコピーしました";
+"Copied to clipboard" = "クリップボードにコピーしました";
+"No image found in clipboard" = "クリップボードに画像が見つかりません";
+"Scrolling capture cancelled" = "スクロール撮影をキャンセルしました";
+"Scroll the window, then capture the next frame" = "ウィンドウをスクロールして、次のフレームを撮影してください";
+"No visual change detected; scroll and try again" = "画面に変化がありません。スクロールして再試行してください";
+"Frame %d captured" = "%d フレーム目を撮影しました";
+"Saved to %@" = "%@ に保存しました";
+"Capture failed: %@" = "撮影に失敗しました：%@";
+"OCR failed: %@" = "文字認識に失敗しました：%@";
+"History save failed: %@" = "履歴の保存に失敗しました：%@";
+"Scroll frame failed: %@" = "スクロールフレームの撮影に失敗しました：%@";
+"Save failed: %@" = "保存に失敗しました：%@";
+"Copy failed: %@" = "コピーに失敗しました：%@";

@@ -39,7 +39,7 @@ extension EditorViewModel {
         guard !Task.isCancelled, generation == ocrGeneration else { return }
         ocrLines = []
         isOCRRunning = false
-        showToast(message: "OCR failed: \(error.localizedDescription)", type: .error)
+        showToast(message: AppLocalization.string("OCR failed: %@", error.localizedDescription), type: .error)
       }
     }
   }
@@ -130,7 +130,7 @@ extension EditorViewModel {
     guard !text.isEmpty else { return }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
-    showToast(message: "Copied OCR text", type: .success)
+    showToast(message: AppLocalization.string("Copied OCR text"), type: .success)
   }
 
   /// Handles a single-point color pick from the canvas.
@@ -172,13 +172,7 @@ extension EditorViewModel {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(color.hexString, forType: .string)
     showToast(
-      message: String(
-        format: NSLocalizedString(
-          "Color %@ copied",
-          comment: "Editor color picker copy success"
-        ),
-        color.hexString
-      ),
+      message: AppLocalization.string("Color %@ copied", color.hexString),
       type: .success
     )
     recordColorHistory(color)
@@ -227,13 +221,7 @@ extension EditorViewModel {
         guard !Task.isCancelled, generation == barcodeGeneration else { return }
         isBarcodeScanning = false
         showToast(
-          message: String(
-            format: NSLocalizedString(
-              "Barcode scan failed: %@",
-              comment: "Editor barcode scan failure"
-            ),
-            error.localizedDescription
-          ),
+          message: AppLocalization.string("Barcode scan failed: %@", error.localizedDescription),
           type: .error
         )
       }
@@ -247,7 +235,7 @@ extension EditorViewModel {
     }
     guard !payloads.isEmpty else {
       showToast(
-        message: NSLocalizedString("No barcode found", comment: "Editor barcode scan empty result"),
+        message: AppLocalization.string("No barcode found"),
         type: .info
       )
       return
@@ -257,21 +245,12 @@ extension EditorViewModel {
     NSPasteboard.general.setString(payloads.joined(separator: "\n"), forType: .string)
     if payloads.count == 1 {
       showToast(
-        message: NSLocalizedString(
-          "Barcode copied to clipboard",
-          comment: "Editor barcode copy success"
-        ),
+        message: AppLocalization.string("Barcode copied to clipboard"),
         type: .success
       )
     } else {
       showToast(
-        message: String(
-          format: NSLocalizedString(
-            "%d barcodes copied to clipboard",
-            comment: "Editor multiple barcode copy success"
-          ),
-          payloads.count
-        ),
+        message: AppLocalization.string("%d barcodes copied to clipboard", payloads.count),
         type: .success
       )
     }

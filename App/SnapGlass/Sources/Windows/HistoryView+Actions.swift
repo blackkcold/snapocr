@@ -110,13 +110,7 @@ extension HistoryView {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(entry.hexString, forType: .string)
         let toast = ToastMessage(
-            message: String(
-                format: NSLocalizedString(
-                    "Color %@ copied",
-                    comment: "History color copy success"
-                ),
-                entry.hexString
-            ),
+            message: AppLocalization.string("Color %@ copied", entry.hexString),
             type: .success
         )
         toastMessage = toast
@@ -132,14 +126,15 @@ extension HistoryView {
         guard let history else { return }
         do {
             guard let data = try await history.imageData(for: entry.id) else {
-                errorMessage = "The original screenshot is no longer available. "
-                    + "It may have been removed by the retention policy."
+                errorMessage = AppLocalization.string(
+                    "The original screenshot is no longer available. It may have been removed by the retention policy."
+                )
                 return
             }
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
             else {
-                errorMessage = String(localized: "The stored screenshot could not be decoded.")
+                errorMessage = AppLocalization.string("The stored screenshot could not be decoded.")
                 return
             }
             captureViewModel.openEditor(
@@ -185,7 +180,7 @@ extension HistoryView {
             try await history.restoreOriginal(id: entry.id)
             await loadEntries()
             let toast = ToastMessage(
-                message: String(localized: "Original image restored"),
+                message: AppLocalization.string("Original image restored"),
                 type: .success
             )
             toastMessage = toast

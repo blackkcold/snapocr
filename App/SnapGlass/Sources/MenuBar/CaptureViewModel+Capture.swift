@@ -114,13 +114,7 @@ extension CaptureViewModel {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(color.hexString, forType: .string)
         showToast(
-            message: String(
-                format: NSLocalizedString(
-                    "Color %@ copied",
-                    comment: "Area color picker copy success"
-                ),
-                color.hexString
-            ),
+            message: AppLocalization.string("Color %@ copied", color.hexString),
             type: .success
         )
         recordColorHistory(color, source: .area)
@@ -210,7 +204,7 @@ extension CaptureViewModel {
                 options: nil
             )?.first as? NSImage,
                   let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-                showToast(message: "No image found in clipboard", type: .error)
+                showToast(message: AppLocalization.string("No image found in clipboard"), type: .error)
                 return
             }
 
@@ -277,7 +271,7 @@ extension CaptureViewModel {
         } catch CaptureError.permissionDenied {
             openWindow?("permission")
         } catch {
-            showToast(message: "Capture failed: \(error.localizedDescription)", type: .error)
+            showToast(message: AppLocalization.string("Capture failed: %@", error.localizedDescription), type: .error)
         }
     }
 
@@ -421,18 +415,15 @@ extension CaptureViewModel {
         // (when copying was requested) is still surfaced as an error toast.
         if !imageCopySucceeded {
             showToast(
-                message: NSLocalizedString("Unable to copy image", comment: "Capture copy failure"),
+                message: AppLocalization.string("Unable to copy image"),
                 type: .error
             )
         } else if !shouldOpenEditor {
             let completionMessage: String
             if destination == .clipboardOnly {
-                completionMessage = NSLocalizedString(
-                    "Screenshot copied to clipboard",
-                    comment: "Direct capture copy success"
-                )
+                completionMessage = AppLocalization.string("Screenshot copied to clipboard")
             } else {
-                completionMessage = NSLocalizedString("Capture successful", comment: "Capture completion")
+                completionMessage = AppLocalization.string("Capture successful")
             }
             showToast(
                 message: completionMessage,
@@ -454,7 +445,7 @@ extension CaptureViewModel {
         let confidence = ocrResult?.confidence ?? 0
         guard let history = HistoryActor.shared else {
             logger.error("HistoryActor unavailable, save skipped")
-            showToast(message: "History unavailable; capture not saved", type: .error)
+            showToast(message: AppLocalization.string("History unavailable; capture not saved"), type: .error)
             return nil
         }
         do {
@@ -469,7 +460,7 @@ extension CaptureViewModel {
             )
         } catch {
             logger.error("History save failed: \(error.localizedDescription)")
-            showToast(message: "History save failed", type: .error)
+            showToast(message: AppLocalization.string("History save failed"), type: .error)
             return nil
         }
     }
@@ -486,7 +477,10 @@ extension CaptureViewModel {
             guard let history = HistoryActor.shared else {
                 logger.error("HistoryActor unavailable, save skipped")
                 await MainActor.run {
-                    self?.showToast(message: "History unavailable; capture not saved", type: .error)
+                    self?.showToast(
+                        message: AppLocalization.string("History unavailable; capture not saved"),
+                        type: .error
+                    )
                 }
                 return
             }
@@ -503,7 +497,7 @@ extension CaptureViewModel {
             } catch {
                 logger.error("History save failed: \(error.localizedDescription)")
                 await MainActor.run {
-                    self?.showToast(message: "History save failed", type: .error)
+                    self?.showToast(message: AppLocalization.string("History save failed"), type: .error)
                 }
             }
         }
