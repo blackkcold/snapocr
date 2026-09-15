@@ -65,8 +65,20 @@ public struct Renderer: Sendable {
         let blurAndCropNodes = document.nodes.filter { $0.tool == .blur || $0.tool == .crop }
         let drawingNodes = document.nodes.filter { $0.tool != .blur && $0.tool != .crop }
 
-        renderNodes(blurAndCropNodes, in: context, imageSize: workingSize, originalSize: imageSize, styleScale: styleScale)
-        renderNodes(drawingNodes, in: context, imageSize: workingSize, originalSize: imageSize, styleScale: styleScale)
+        renderNodes(
+            blurAndCropNodes,
+            in: context,
+            imageSize: workingSize,
+            originalSize: imageSize,
+            styleScale: styleScale
+        )
+        renderNodes(
+            drawingNodes,
+            in: context,
+            imageSize: workingSize,
+            originalSize: imageSize,
+            styleScale: styleScale
+        )
 
         guard let result = context.makeImage() else {
             throw AnnotationError.renderFailed(reason: "CGContext.makeImage() 返回 nil")
