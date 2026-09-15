@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-15
+
+### Fixed
+- 关闭最后一个窗口后 Dock 图标常驻：激活策略降级门不再被 SwiftUI 保留的已注册 `NSWindow` 钉死；降级时显式 `deactivate()` 以移除 active 状态下的 Dock 图标；窗口成为 key 时补齐晋升到 regular 的对称路径。
+- 设置窗口语言不一致：设置内所有文本（含历史/取色卡片、开发者页、窗口标题与应用菜单）统一跟随应用内语言，不再部分跟随系统语言。
+- 补齐四语言（en / zh-Hans / ja / ko）界面文案：开发者模式、诊断、存入历史、还原原图、滚动截图与 OCR 提示等此前缺失的键，消除英文残留。
+- toast / 弹窗 / 窗口选择面板 / 截图操作条中硬编码的英文文案改为本地化调用。
+
+### Changed
+- 新增 `AppLocalization` 与 `AppLanguage.resourceIdentifier`：为 SwiftUI 环境之外的 Foundation 文本（toast、NSAlert、NSMenu、AppKit 面板、画布绘制）按应用语言解析 `.lproj`。
+- 新增 `scripts/check-localization.sh`：校验四语言键一致、占位符一致、无冲突重复键、源码引用键均存在。
+
 ## [0.8.0] - 2026-09-14
 
 ### Added
@@ -204,7 +216,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/blackkcold/snapocr/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/blackkcold/snapocr/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/blackkcold/snapocr/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/blackkcold/snapocr/compare/v0.6.0...v0.6.1
