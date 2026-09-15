@@ -42,6 +42,24 @@ struct WindowPresentationCoordinatorTests {
 
         #expect(activationController.policyChanges == [.regular, .accessory])
         #expect(activationController.activationPolicy == .accessory)
+        #expect(activationController.deactivateCount == 1)
+    }
+
+    @Test("Downgrading to accessory deactivates the app to drop the Dock icon")
+    func accessoryDowngradeDeactivatesApp() async throws {
+        let activationController = ActivationControllerSpy(
+            activationPolicy: .accessory,
+            hasVisibleUserFacingWindow: false
+        )
+        let coordinator = WindowPresentationCoordinator(
+            activationController: activationController,
+            presentationTimeout: .milliseconds(10)
+        )
+
+        coordinator.present(id: "editor") {}
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(activationController.deactivateCount == 1)
     }
 
     @Test("A deferred downgrade is retried after the visible window disappears")
@@ -71,6 +89,7 @@ private final class ActivationControllerSpy: ApplicationActivationControlling {
     var isActive = false
     var hasVisibleUserFacingWindow: Bool
     private(set) var policyChanges: [NSApplication.ActivationPolicy] = []
+    private(set) var deactivateCount = 0
 
     init(
         activationPolicy: NSApplication.ActivationPolicy,
@@ -88,5 +107,10 @@ private final class ActivationControllerSpy: ApplicationActivationControlling {
 
     func requestActivation() {
         isActive = true
+    }
+
+    func deactivate() {
+        isActive = false
+        deactivateCount += 1
     }
 }

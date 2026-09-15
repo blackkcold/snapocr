@@ -123,13 +123,21 @@ extension EditableAnnotationCanvasNSView {
 
         let menu = NSMenu()
         let copySelection = menu.addItem(
-            withTitle: "Copy",
+            withTitle: AppLocalization.string("Copy"),
             action: #selector(copyContextualOCRSelection),
             keyEquivalent: ""
         )
         copySelection.isEnabled = ocrTextSelection?.isEmpty == false
-        menu.addItem(withTitle: "Copy Line", action: #selector(copyContextualOCRLine), keyEquivalent: "")
-        menu.addItem(withTitle: "Add as Text Annotation", action: #selector(addContextualOCRLine), keyEquivalent: "")
+        menu.addItem(
+            withTitle: AppLocalization.string("Copy Line"),
+            action: #selector(copyContextualOCRLine),
+            keyEquivalent: ""
+        )
+        menu.addItem(
+            withTitle: AppLocalization.string("Add as Text Annotation"),
+            action: #selector(addContextualOCRLine),
+            keyEquivalent: ""
+        )
         menu.items.forEach { $0.target = self }
         return menu
     }

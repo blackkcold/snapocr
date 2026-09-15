@@ -23,6 +23,7 @@ protocol ApplicationActivationControlling: AnyObject {
 
     func setActivationPolicy(_ policy: NSApplication.ActivationPolicy) -> Bool
     func requestActivation()
+    func deactivate()
 }
 
 @MainActor
@@ -54,6 +55,10 @@ final class SystemApplicationActivationController: ApplicationActivationControll
             NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         }
     }
+
+    func deactivate() {
+        NSApplication.shared.deactivate()
+    }
 }
 
 @MainActor
@@ -75,6 +80,8 @@ final class WindowPresentationCoordinator {
     private struct WindowObservers {
         let didBecomeKey: NSObjectProtocol
         let willClose: NSObjectProtocol
+        let didMiniaturize: NSObjectProtocol
+        let didDeminiaturize: NSObjectProtocol
     }
 
     private let activationController: ApplicationActivationControlling
@@ -88,6 +95,7 @@ final class WindowPresentationCoordinator {
     private var windows: [String: WindowReference] = [:]
     private var observedWindows: [ObjectIdentifier: WindowObservers] = [:]
     private var timeoutTasks: [String: Task<Void, Never>] = [:]
+    private var reevaluateTask: Task<Void, Never>?
 
     init(
         activationController: ApplicationActivationControlling,
@@ -218,9 +226,31 @@ final class WindowPresentationCoordinator {
             }
         }
 
+        let didMiniaturize = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMiniaturizeNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scheduleReevaluate()
+            }
+        }
+
+        let didDeminiaturize = NotificationCenter.default.addObserver(
+            forName: NSWindow.didDeminiaturizeNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scheduleReevaluate()
+            }
+        }
+
         observedWindows[token] = WindowObservers(
             didBecomeKey: didBecomeKey,
-            willClose: willClose
+            willClose: willClose,
+            didMiniaturize: didMiniaturize,
+            didDeminiaturize: didDeminiaturize
         )
     }
 
@@ -231,6 +261,8 @@ final class WindowPresentationCoordinator {
         }
         lifecycleState.completePresentation(id: id)
         cancelTimeout(id: id)
+        // 窗口成为 key 即用户可见，补齐晋升到 regular 的对称路径。
+        _ = ensureRegularPolicy()
         logger.info("window.key id=\(id) \(lifecycleSummary)")
     }
 
@@ -247,10 +279,19 @@ final class WindowPresentationCoordinator {
             logger.debug("window.close.ignored id=\(id) reason=stale")
         }
 
-        Task { @MainActor [weak self] in
+        scheduleReevaluate()
+    }
+
+    /// 合并同一 runloop tick 内的多次重算请求：`willClose` 触发时窗口仍 `isVisible`，
+    /// 让出一个 tick 等待 `orderOut` 完成后只重算一次。
+    private func scheduleReevaluate() {
+        guard reevaluateTask == nil else { return }
+        reevaluateTask = Task { @MainActor [weak self] in
             await Task.yield()
-            self?.purgeStaleWindows()
-            self?.reevaluateActivationPolicy()
+            guard let self else { return }
+            self.reevaluateTask = nil
+            self.purgeStaleWindows()
+            self.reevaluateActivationPolicy()
         }
     }
 
@@ -307,6 +348,8 @@ final class WindowPresentationCoordinator {
         guard let observers = observedWindows.removeValue(forKey: token) else { return }
         NotificationCenter.default.removeObserver(observers.didBecomeKey)
         NotificationCenter.default.removeObserver(observers.willClose)
+        NotificationCenter.default.removeObserver(observers.didMiniaturize)
+        NotificationCenter.default.removeObserver(observers.didDeminiaturize)
     }
 
     private func reevaluateActivationPolicy() {
@@ -318,13 +361,15 @@ final class WindowPresentationCoordinator {
             logger.info("policy.accessory.defer reason=visible-window \(lifecycleSummary)")
             return
         }
-        if activationController.activationPolicy != .accessory {
-            let result = activationController.setActivationPolicy(.accessory)
-            if result {
-                logger.info("policy.accessory result=true")
-            } else {
-                logger.warning("policy.accessory result=false")
-            }
+        guard activationController.activationPolicy != .accessory else { return }
+        let result = activationController.setActivationPolicy(.accessory)
+        if result {
+            // 应用仍处于 active 时切换 .accessory 常不能立即移除 Dock 图标，
+            // 需显式 deactivate 才会生效。
+            activationController.deactivate()
+            logger.info("policy.accessory result=true")
+        } else {
+            logger.warning("policy.accessory result=false")
         }
     }
 

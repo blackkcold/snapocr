@@ -1,5 +1,6 @@
 import AppKit
 import AnnotationCore
+import HistoryCore
 import SharedKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -7,6 +8,50 @@ import UniformTypeIdentifiers
 // MARK: - EditorViewModel Save / Copy / Cancel / Toast
 
 extension EditorViewModel {
+    static let defaultHistorySaver:
+        @Sendable (CGImage, EditorHistorySaveMode, UUID?) async throws -> Void = { image, mode, sourceEntryID in
+        let history = try HistoryActor.sharedResult().get()
+        switch mode {
+        case .newRecord:
+            try await history.saveCapture(
+                image: image, textContent: "", ocrConfidence: 0,
+                captureMode: "edited"
+            )
+        case .overwriteOriginal:
+            guard let sourceEntryID else {
+                throw HistoryError.entryNotFound(id: UUID())
+            }
+            try await history.replaceImage(id: sourceEntryID, image: image)
+        }
+    }
+
+    /// Writes the annotated image to history as a new record or as an
+    /// overwrite of the originating capture.
+    public func saveToHistory(mode: EditorHistorySaveMode) async {
+        guard let doc = document else { return }
+        if mode == .overwriteOriginal && sourceEntryID == nil {
+            showToast(
+                message: AppLocalization.string("No original record to overwrite; save as a new record instead"),
+                type: .error
+            )
+            return
+        }
+        do {
+            let image = try interactor.render(doc)
+            try await historySaver(image, mode, sourceEntryID)
+            let message: String = switch mode {
+            case .newRecord: AppLocalization.string("Saved to history")
+            case .overwriteOriginal: AppLocalization.string("History updated; original kept for restore")
+            }
+            showToast(message: message, type: .success)
+            logger.info("Editor image saved to history (mode: \(mode))")
+        } catch {
+            showToast(
+                message: AppLocalization.string("History save failed: %@", error.localizedDescription),
+                type: .error
+            )
+        }
+    }
     /// Saves the annotated image to a user-chosen file location.
     public func save() {
         guard let doc = document else { return }
@@ -27,10 +72,13 @@ extension EditorViewModel {
                     ? PreferenceDefaults.captureJPEGQuality
                     : UserDefaults.standard.double(forKey: PreferenceKeys.captureJPEGQuality)
                 try ImageEncoder.write(image, to: url, format: format, jpegQuality: quality)
-                self.showToast(message: "Saved to \(url.lastPathComponent)", type: .success)
+                self.showToast(message: AppLocalization.string("Saved to %@", url.lastPathComponent), type: .success)
                 self.logger.info("Saved annotated image to \(url.path())")
             } catch {
-                self.showToast(message: "Save failed: \(error.localizedDescription)", type: .error)
+                self.showToast(
+                    message: AppLocalization.string("Save failed: %@", error.localizedDescription),
+                    type: .error
+                )
             }
         }
     }
@@ -46,10 +94,10 @@ extension EditorViewModel {
             )
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([nsImage])
-            showToast(message: "Copied to clipboard", type: .success)
+            showToast(message: AppLocalization.string("Copied to clipboard"), type: .success)
             logger.info("Copied annotated image to clipboard")
         } catch {
-            showToast(message: "Copy failed: \(error.localizedDescription)", type: .error)
+            showToast(message: AppLocalization.string("Copy failed: %@", error.localizedDescription), type: .error)
         }
     }
 

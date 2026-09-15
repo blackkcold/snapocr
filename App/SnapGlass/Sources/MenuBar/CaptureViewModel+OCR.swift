@@ -15,17 +15,17 @@ extension CaptureViewModel {
             let options = Self.currentOCROptions()
             let result = try await ocrPipeline.recognize(image, options: options)
             if result.text.isEmpty {
-                showToast(message: "No text found", type: .info)
+                showToast(message: AppLocalization.string("No text found"), type: .info)
             } else if copyToClipboard {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(result.text, forType: .string)
-                showToast(message: "Text copied to clipboard", type: .success)
+                showToast(message: AppLocalization.string("Text copied to clipboard"), type: .success)
             } else {
-                showToast(message: "OCR completed", type: .success)
+                showToast(message: AppLocalization.string("OCR completed"), type: .success)
             }
             return result
         } catch {
-            showToast(message: "OCR failed: \(error.localizedDescription)", type: .error)
+            showToast(message: AppLocalization.string("OCR failed: %@", error.localizedDescription), type: .error)
             return nil
         }
     }
@@ -50,9 +50,9 @@ extension CaptureViewModel {
 
     func showBarcodeCopySuggestion(payload: String) {
         showToast(
-            message: NSLocalizedString("One barcode detected", comment: "Single barcode hint"),
+            message: AppLocalization.string("One barcode detected"),
             type: .info,
-            actionLabel: NSLocalizedString("Copy Content", comment: "Barcode copy action")
+            actionLabel: AppLocalization.string("Copy Content")
         ) { [weak self] in
             self?.copyBarcodePayload(payload)
         }
@@ -62,7 +62,7 @@ extension CaptureViewModel {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(payload, forType: .string)
         showToast(
-            message: NSLocalizedString("Barcode copied to clipboard", comment: "Barcode copy success"),
+            message: AppLocalization.string("Barcode copied to clipboard"),
             type: .success
         )
     }

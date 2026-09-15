@@ -15,6 +15,7 @@ struct PreferenceKeysTests {
             PreferenceKeys.captureAutoOCR,
             PreferenceKeys.captureCopyOCRText,
             PreferenceKeys.captureSelectionStyle,
+            PreferenceKeys.captureOverlayMode,
             PreferenceKeys.captureHighResolution,
             PreferenceKeys.captureImageFormat,
             PreferenceKeys.captureJPEGQuality,
@@ -43,6 +44,7 @@ struct PreferenceKeysTests {
         #expect(!PreferenceDefaults.captureAutoOCR)
         #expect(!PreferenceDefaults.captureCopyOCRText)
         #expect(PreferenceDefaults.captureSelectionStyle == CaptureSelectionStyle.rectangle.rawValue)
+        #expect(PreferenceDefaults.captureOverlayMode == CaptureOverlayMode.live.rawValue)
         #expect(PreferenceDefaults.captureHighResolution)
         #expect(!PreferenceDefaults.historySaveFullText)
         #expect(!PreferenceDefaults.forceUpdateAvailable)
@@ -54,6 +56,13 @@ struct PreferenceKeysTests {
         #expect(AppearanceMode.allCases.map(\.rawValue) == ["system", "light", "dark"])
         for mode in AppearanceMode.allCases {
             #expect(AppearanceMode(rawValue: mode.rawValue)?.rawValue == mode.rawValue)
+        }
+    }
+
+    @Test func captureOverlayModesHaveStablePersistedValues() {
+        #expect(CaptureOverlayMode.allCases.map(\.rawValue) == ["live", "snapshot"])
+        for mode in CaptureOverlayMode.allCases {
+            #expect(CaptureOverlayMode(rawValue: mode.rawValue)?.rawValue == mode.rawValue)
         }
     }
 }

@@ -8,8 +8,11 @@ struct WindowLifecycleState: Equatable {
     private(set) var pendingPresentations: [String: Int] = [:]
     private var nextGeneration = 0
 
+    /// 刻意只看 `pendingPresentations`：SwiftUI 关闭 `Window` 后会保留其 `NSWindow`，
+    /// `register()` 可能在 `willClose` 之后重登记，若把 `registeredWindowIDs` 纳入此门
+    /// 会永久阻塞降级（Dock 图标常驻）。所有打开路径均经 `present()`，pending 足以防误降级。
     var shouldUseAccessoryPolicy: Bool {
-        registeredWindowIDs.isEmpty && pendingPresentations.isEmpty
+        pendingPresentations.isEmpty
     }
 
     mutating func beginPresentation(id: String) -> PresentationStart {

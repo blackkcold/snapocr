@@ -26,6 +26,7 @@ extension CaptureViewModel {
                         defaultValue: PreferenceDefaults.captureSelectionStyle
                     )
                 ) ?? .rectangle
+            let overlayMode = Self.currentCaptureOverlayMode()
 
             let capturedFrames = await preCaptureAllScreens()
 
@@ -34,6 +35,7 @@ extension CaptureViewModel {
                 Task { @MainActor in
                     AreaSelectionPanel.show(
                         style: selectionStyle,
+                        overlayMode: overlayMode,
                         capturedFrames: capturedFrames,
                         onColorPicked: { [weak self] color in
                             self?.copyHexToClipboard(color)
@@ -63,6 +65,15 @@ extension CaptureViewModel {
         }
     }
 
+    private static func currentCaptureOverlayMode() -> CaptureOverlayMode {
+        CaptureOverlayMode(
+            rawValue: stringPreference(
+                forKey: PreferenceKeys.captureOverlayMode,
+                defaultValue: PreferenceDefaults.captureOverlayMode
+            )
+        ) ?? .live
+    }
+
     /// Pre-captures each screen's full frame before the overlay appears so the
     /// frames contain no overlay windows, no cursor, and a stable sample source
     /// for hover/click color picking. The area rect must use Quartz global
@@ -71,13 +82,12 @@ extension CaptureViewModel {
     /// and the selection path below (selection.screenRect is already a Quartz
     /// rect). AppKit screen.frame coordinates can diverge from Quartz bounds
     /// on secondary displays arranged above/left of the main screen. Sampling
-    /// only needs non-hiDPI frames, so we reuse the default 1x capture options.
+    /// and snapshot previews share these full-resolution frames.
     private func preCaptureAllScreens() async -> [CGDirectDisplayID: CGImage] {
         var capturedFrames: [CGDirectDisplayID: CGImage] = [:]
         let captureOptions = CaptureOptions(
             includeCursor: false,
-            highResolution: false,
-            preferredScaleFactor: 1
+            highResolution: true
         )
         for screen in NSScreen.screens {
             guard
@@ -104,13 +114,7 @@ extension CaptureViewModel {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(color.hexString, forType: .string)
         showToast(
-            message: String(
-                format: NSLocalizedString(
-                    "Color %@ copied",
-                    comment: "Area color picker copy success"
-                ),
-                color.hexString
-            ),
+            message: AppLocalization.string("Color %@ copied", color.hexString),
             type: .success
         )
         recordColorHistory(color, source: .area)
@@ -200,7 +204,7 @@ extension CaptureViewModel {
                 options: nil
             )?.first as? NSImage,
                   let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-                showToast(message: "No image found in clipboard", type: .error)
+                showToast(message: AppLocalization.string("No image found in clipboard"), type: .error)
                 return
             }
 
@@ -209,9 +213,17 @@ extension CaptureViewModel {
     }
 
     /// Opens a fresh annotation editor session for an image.
-    public func openEditor(with image: CGImage, captureMode: String? = nil) {
+    public func openEditor(
+        with image: CGImage,
+        captureMode: String? = nil,
+        sourceEntryID: UUID? = nil
+    ) {
         editorImage = image
-        editorContext = EditorCaptureContext(image: image, captureMode: captureMode)
+        editorContext = EditorCaptureContext.capture(
+            image: image,
+            captureMode: captureMode,
+            sourceEntryID: sourceEntryID
+        )
         editorSessionID = UUID()
         openWindow?("editor")
     }
@@ -259,7 +271,7 @@ extension CaptureViewModel {
         } catch CaptureError.permissionDenied {
             openWindow?("permission")
         } catch {
-            showToast(message: "Capture failed: \(error.localizedDescription)", type: .error)
+            showToast(message: AppLocalization.string("Capture failed: %@", error.localizedDescription), type: .error)
         }
     }
 
@@ -273,10 +285,6 @@ extension CaptureViewModel {
     ) async {
         let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
         let (shouldOpenEditor, shouldCopyImage) = resolveDestination(destination)
-
-        if shouldOpenEditor {
-            openEditor(with: image, captureMode: modeDescription)
-        }
 
         let imageCopySucceeded = !shouldCopyImage || writeImageToClipboard(image)
         presentCopyFeedback(
@@ -305,8 +313,11 @@ extension CaptureViewModel {
         case .clipboardOnly: imageCopySucceeded
         case .editorOnly: true
         }
+        // Save before opening the editor so the editor knows which record the
+        // image belongs to and can offer a reversible overwrite.
+        var historyEntryID: UUID?
         if shouldSaveToHistory {
-            saveToHistory(
+            historyEntryID = await saveToHistoryAndWait(
                 image: image,
                 ocrResult: ocrResult,
                 saveFullText: saveFullText,
@@ -315,6 +326,14 @@ extension CaptureViewModel {
                     appName: sourceAppName,
                     windowTitle: sourceWindowTitle
                 )
+            )
+        }
+
+        if shouldOpenEditor {
+            openEditor(
+                with: image,
+                captureMode: modeDescription,
+                sourceEntryID: historyEntryID
             )
         }
     }
@@ -343,25 +362,6 @@ extension CaptureViewModel {
             showBarcodeCopySuggestion(payload: payload)
         }
         return ocrResult
-    }
-
-    /// 将截图与 OCR 结果保存到历史记录。
-    private func saveToHistory(
-        image: CGImage,
-        ocrResult: OCRResult?,
-        saveFullText: Bool,
-        captureMode: String,
-        source: CaptureSourceInfo
-    ) {
-        let textToStore = saveFullText ? (ocrResult?.text ?? "") : ""
-        let confidence = ocrResult?.confidence ?? 0
-        scheduleHistorySave(
-            image: image,
-            textContent: textToStore,
-            confidence: confidence,
-            captureMode: captureMode,
-            source: source
-        )
     }
 
     /// 根据目标解析是否打开编辑器与是否复制图片。
@@ -396,58 +396,20 @@ extension CaptureViewModel {
         // (when copying was requested) is still surfaced as an error toast.
         if !imageCopySucceeded {
             showToast(
-                message: NSLocalizedString("Unable to copy image", comment: "Capture copy failure"),
+                message: AppLocalization.string("Unable to copy image"),
                 type: .error
             )
         } else if !shouldOpenEditor {
             let completionMessage: String
             if destination == .clipboardOnly {
-                completionMessage = NSLocalizedString(
-                    "Screenshot copied to clipboard",
-                    comment: "Direct capture copy success"
-                )
+                completionMessage = AppLocalization.string("Screenshot copied to clipboard")
             } else {
-                completionMessage = NSLocalizedString("Capture successful", comment: "Capture completion")
+                completionMessage = AppLocalization.string("Capture successful")
             }
             showToast(
                 message: completionMessage,
                 type: .success
             )
-        }
-    }
-
-    private func scheduleHistorySave(
-        image: CGImage,
-        textContent: String,
-        confidence: Float,
-        captureMode: String,
-        source: CaptureSourceInfo
-    ) {
-        Task.detached(priority: .utility) { [weak self] in
-            let logger = Logger(category: "capture")
-            guard let history = HistoryActor.shared else {
-                logger.error("HistoryActor unavailable, save skipped")
-                await MainActor.run {
-                    self?.showToast(message: "History unavailable; capture not saved", type: .error)
-                }
-                return
-            }
-            do {
-                try await history.saveCapture(
-                    image: image,
-                    textContent: textContent,
-                    ocrConfidence: confidence,
-                    captureMode: captureMode,
-                    sourceType: .screenshot,
-                    sourceAppName: source.appName,
-                    sourceWindowTitle: source.windowTitle
-                )
-            } catch {
-                logger.error("History save failed: \(error.localizedDescription)")
-                await MainActor.run {
-                    self?.showToast(message: "History save failed", type: .error)
-                }
-            }
         }
     }
 

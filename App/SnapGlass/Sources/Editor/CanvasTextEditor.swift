@@ -99,7 +99,11 @@ extension EditableAnnotationCanvasNSView {
       endTextEntry()
       return
     }
-    if canvasTextEntryID == id { return }
+    if canvasTextEntryID == id, let editor = canvasTextEditor {
+      applyTextStyle(node, to: editor)
+      layoutTextEntry()
+      return
+    }
     endTextEntry()
     canvasTextEntryID = id
     let editor = makeTextEditor(for: node)
@@ -126,7 +130,6 @@ extension EditableAnnotationCanvasNSView {
 
   private func makeTextEditor(for node: AnnotationNode) -> CanvasTextEditor {
     let editor = CanvasTextEditor(frame: .zero)
-    editor.sourceNode = node
     editor.isRichText = false
     editor.importsGraphics = false
     editor.allowsUndo = true
@@ -135,10 +138,24 @@ extension EditableAnnotationCanvasNSView {
     editor.textContainer?.widthTracksTextView = false
     editor.textContainer?.heightTracksTextView = false
     editor.textContainer?.lineFragmentPadding = 0
-    editor.textContainerInset = CGSize(width: 4 / node.textHorizontalScale, height: 4)
-    editor.font = NSFont(name: node.fontName, size: node.fontSize) ?? NSFont.systemFont(ofSize: node.fontSize)
-    editor.textColor = NSColor(cgColor: node.color ?? NSColor.red.cgColor)?.withAlphaComponent(node.opacity)
     editor.insertionPointColor = .controlAccentColor
+    editor.string = node.text ?? ""
+    applyTextStyle(node, to: editor)
+    editor.setAccessibilityLabel(String(localized: "Edit Text"))
+    editor.wantsLayer = true
+    editor.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.65).cgColor
+    editor.layer?.borderWidth = 1
+    return editor
+  }
+
+  private func applyTextStyle(_ node: AnnotationNode, to editor: CanvasTextEditor) {
+    let selection = editor.selectedRange()
+    let horizontalScale = max(node.textHorizontalScale, 0.1)
+    editor.sourceNode = node
+    editor.textContainerInset = CGSize(width: 4 / horizontalScale, height: 4)
+    editor.font =
+      NSFont(name: node.fontName, size: node.fontSize) ?? NSFont.systemFont(ofSize: node.fontSize)
+    editor.textColor = NSColor(cgColor: node.color ?? NSColor.red.cgColor)?.withAlphaComponent(node.opacity)
     editor.drawsBackground = node.fillColor != nil
     editor.backgroundColor = NSColor(cgColor: node.fillColor ?? NSColor.clear.cgColor) ?? .clear
     editor.alignment =
@@ -147,12 +164,10 @@ extension EditableAnnotationCanvasNSView {
       case .center: .center
       case .trailing: .right
       }
-    editor.string = node.text ?? ""
-    editor.setAccessibilityLabel(String(localized: "Edit Text"))
-    editor.wantsLayer = true
-    editor.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.65).cgColor
-    editor.layer?.borderWidth = 1
-    return editor
+    let textLength = editor.string.utf16.count
+    let location = min(selection.location, textLength)
+    editor.setSelectedRange(
+      NSRange(location: location, length: min(selection.length, textLength - location)))
   }
 
   func endTextEntry() {
@@ -168,19 +183,34 @@ extension EditableAnnotationCanvasNSView {
     guard let editor = canvasTextEditor, var node = editor.sourceNode, let image else { return }
     let display = aspectFitRect(imageSize: CGSize(width: image.width, height: image.height), in: bounds)
     node.text = editor.string.isEmpty ? " " : editor.string
-    let measured = TextTool().suggestedSize(for: node)
-    let width = min(max(measured.width, CGFloat(image.width) * 0.01), CGFloat(image.width))
-    let height = min(max(measured.height, CGFloat(image.height) * 0.01), CGFloat(image.height))
     let origin = node.normalizedRect == .zero ? (node.points.first ?? .zero) : node.normalizedRect.origin
+    let imageWidth = CGFloat(image.width)
+    let imageHeight = CGFloat(image.height)
+    let maximumWidth = max(imageWidth * (1 - min(max(origin.x, 0), 1)), 1)
+    let measured = TextTool().suggestedSize(for: node, maximumWidth: maximumWidth)
+    let width = min(max(measured.width, imageWidth * 0.01), imageWidth)
+    let horizontalScale = max(node.textHorizontalScale, 0.1)
+    let contentWidth = max((width - 8) / horizontalScale, 1)
+    let textKitHeight: CGFloat
+    if let textContainer = editor.textContainer, let layoutManager = editor.layoutManager {
+      textContainer.containerSize = CGSize(width: contentWidth, height: max(imageHeight - 8, 1))
+      layoutManager.ensureLayout(for: textContainer)
+      textKitHeight =
+        ceil(layoutManager.usedRect(for: textContainer).height)
+        + editor.textContainerInset.height * 2 + 1
+    } else {
+      textKitHeight = 0
+    }
+    let height = min(max(measured.height, textKitHeight, imageHeight * 0.01), imageHeight)
     let originX = min(max(origin.x, 0), 1 - width / CGFloat(image.width))
     let originY = min(max(origin.y, 0), 1 - height / CGFloat(image.height))
     editor.frame = CGRect(
       x: display.minX + originX * display.width, y: display.minY + originY * display.height,
       width: width / CGFloat(image.width) * display.width,
       height: height / CGFloat(image.height) * display.height)
-    editor.bounds = CGRect(x: 0, y: 0, width: width / node.textHorizontalScale, height: height)
+    editor.bounds = CGRect(x: 0, y: 0, width: width / horizontalScale, height: height)
     editor.textContainer?.containerSize = CGSize(
-      width: max((width - 8) / node.textHorizontalScale, 1), height: max(height - 8, 1)
+      width: contentWidth, height: max(height - editor.textContainerInset.height * 2, 1)
     )
   }
 }

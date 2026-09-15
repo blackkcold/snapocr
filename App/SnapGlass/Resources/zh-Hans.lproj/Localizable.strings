@@ -40,6 +40,10 @@
 "Selection style" = "选区样式";
 "Rectangle" = "矩形";
 "Freeform" = "自由选区";
+"Overlay preview" = "覆盖层预览";
+"Live screen" = "实时画面";
+"Static snapshot" = "静态快照";
+"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "静态快照会在开始选择时冻结画面；无法捕获的屏幕将显示为黑色。";
 "Saved image format" = "保存格式";
 "PNG (lossless)" = "PNG（无损）";
 "JPEG (smaller)" = "JPEG（体积更小）";
@@ -371,3 +375,44 @@
 "Record picked colors" = "记录取色的颜色";
 "Maximum color entries" = "颜色历史上限";
 "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "颜色仅加密存储在本机。使用取色器复制颜色时会记录到此处。";
+
+/* Settings gaps */
+"Developer Mode" = "开发者模式";
+"Diagnostics" = "诊断";
+"Disable languages you rarely use to prevent visually similar characters (such as Japanese kanji and Chinese hanzi) from being misrecognized." = "关闭不常用的语言，可避免字形相近的文字（例如日文汉字与中文汉字）被误识别。";
+"History segment" = "历史记录分段";
+"Record colors copied with the area or editor color picker" = "记录使用区域截图或编辑器取色器复制的颜色";
+"History unavailable" = "历史记录不可用";
+"No captures yet" = "暂无截图";
+
+/* Editor history */
+"Save to History" = "存入历史";
+"Save as New Record" = "存为新记录";
+"Overwrite Original Record" = "覆盖原记录";
+"Save the annotated image into history" = "将标注后的图片存入历史记录";
+"Saved to history" = "已存入历史记录";
+"History updated; original kept for restore" = "历史记录已更新，原图已保留以便还原";
+"No original record to overwrite; save as a new record instead" = "没有可覆盖的原记录，将改为新建记录";
+"Restore Original Image" = "还原原图";
+"Original image restored" = "已还原原图";
+"Copy Line" = "复制整行";
+"Add as Text Annotation" = "添加为文字标注";
+
+/* Toasts */
+"No text found" = "未检测到文字";
+"Text copied to clipboard" = "文字已复制到剪贴板";
+"OCR completed" = "文字识别完成";
+"Copied OCR text" = "已复制识别文字";
+"Copied to clipboard" = "已复制到剪贴板";
+"No image found in clipboard" = "剪贴板中未找到图片";
+"Scrolling capture cancelled" = "已取消滚动截图";
+"Scroll the window, then capture the next frame" = "请滚动窗口，然后截取下一帧";
+"No visual change detected; scroll and try again" = "画面没有变化，请滚动后重试";
+"Frame %d captured" = "已截取第 %d 帧";
+"Saved to %@" = "已保存至 %@";
+"Capture failed: %@" = "截图失败：%@";
+"OCR failed: %@" = "文字识别失败：%@";
+"History save failed: %@" = "历史记录保存失败：%@";
+"Scroll frame failed: %@" = "滚动帧截取失败：%@";
+"Save failed: %@" = "保存失败：%@";
+"Copy failed: %@" = "复制失败：%@";

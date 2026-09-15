@@ -155,6 +155,22 @@ struct EditorView: View {
             .toggleStyle(.button)
             .help("Show or hide recognized text regions")
 
+            Menu {
+                Button("Save as New Record") {
+                    Task { await editorVM.saveToHistory(mode: .newRecord) }
+                }
+                if editorVM.canOverwriteOriginal {
+                    Button("Overwrite Original Record") {
+                        Task { await editorVM.saveToHistory(mode: .overwriteOriginal) }
+                    }
+                }
+            } label: {
+                Label("Save to History", systemImage: "square.and.arrow.down.on.square")
+            }
+            .keyboardShortcut("h", modifiers: [.command])
+            .help("Save the annotated image into history")
+            .disabled(editorVM.isEnteringText)
+
             Button("Copy") {
                 editorVM.copyToClipboard()
             }

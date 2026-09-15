@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.7.0-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.8.1-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -79,6 +79,7 @@
 - 矩形区域 / 自由圈选 / 窗口 / 全屏 / 滚动截图
 - 支持多显示器与混合缩放环境
 - 实时十字准线，释放后二次调整选区
+- 区域选取支持实时画面与静态快照预览；快照不可用时使用纯黑背景
 - 默认 Retina 像素，可切换标准 1x
 - 支持 PNG/JPEG 编码与 JPEG 质量设置
 

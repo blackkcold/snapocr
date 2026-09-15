@@ -151,15 +151,12 @@ final class WindowSelectionPanel: NSPanel {
         container.state = .active
 
         let titleLabel = makeLabel(
-            NSLocalizedString("Choose a window to capture", comment: "Window picker heading"),
+            AppLocalization.string("Choose a window to capture"),
             font: .systemFont(ofSize: 14, weight: .semibold),
             color: .labelColor
         )
         let subtitleLabel = makeLabel(
-            NSLocalizedString(
-                "Select a preview, then choose a still or scrolling capture.",
-                comment: "Window picker instruction"
-            ),
+            AppLocalization.string("Select a preview, then choose a still or scrolling capture."),
             font: .systemFont(ofSize: 11),
             color: .secondaryLabelColor
         )
@@ -249,7 +246,7 @@ final class WindowSelectionPanel: NSPanel {
     private func configureActionButtons() {
         configure(
             captureButton,
-            title: NSLocalizedString("Capture Window", comment: "Still window capture action"),
+            title: AppLocalization.string("Capture Window"),
             symbol: "macwindow",
             action: #selector(captureStillWindow)
         )
@@ -257,7 +254,7 @@ final class WindowSelectionPanel: NSPanel {
 
         configure(
             scrollCaptureButton,
-            title: NSLocalizedString("Scrolling Capture", comment: "Scrolling window capture action"),
+            title: AppLocalization.string("Scrolling Capture"),
             symbol: "arrow.up.arrow.down",
             action: #selector(captureScrollingWindow)
         )

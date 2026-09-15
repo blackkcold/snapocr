@@ -115,6 +115,21 @@ Platform Adapter (macOS: Vision, SCK, NSPasteboard)
 - 直接 push 到 `main` 分支
 - 修改 `.xcodeproj`（由 XcodeGen 生成，禁止手动编辑）
 - 使用 `output/` 目录存放构建产物（统一归档到 `release/vX.Y.Z/`）
+- 在界面代码中使用 `NSLocalizedString` / `String(localized:)`（跟随系统语言，会破坏应用内语言一致性）
+- 新增界面文案而不补四语言键
+
+---
+
+## 本地化约定
+
+界面语言由设置中的「应用语言」决定，文案存于 `App/SnapGlass/Resources/<lang>.lproj/Localizable.strings`（`en` / `zh-Hans` / `ja` / `ko`）。
+
+- 视图树内文本用字符串字面量（`LocalizedStringKey`），跟随注入的 `\.locale`。
+- 视图环境之外的文本（toast、`NSAlert`、`NSMenu`、AppKit 面板、画布绘制）用 `AppLocalization.string(_:)`。
+- 新增或修改文案必须同步四个 `.lproj`，保持键与占位符（`%@` / `%d`）一致。
+- 提交前运行 `bash scripts/check-localization.sh`。
+- `Scene` 标题与 `.commands` 菜单项不在视图环境内，需 `.navigationTitle(Text(...))` 或 `AppLocalization`。
+- 持久化数据标识（如历史 `captureMode`）不本地化。详见 [ARCHITECTURE.md](./ARCHITECTURE.md#本地化)。
 
 ---
 
@@ -125,6 +140,7 @@ Platform Adapter (macOS: Vision, SCK, NSPasteboard)
 - [ ] CHANGELOG.md 已更新
 - [ ] 对应 package 测试通过
 - [ ] lint 通过（swift-format + swiftlint）
+- [ ] 涉及界面文案：四语言键齐全且 `scripts/check-localization.sh` 通过
 - [ ] 涉及权限：在 PR 描述中说明权限影响
 ```
 

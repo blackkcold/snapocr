@@ -54,7 +54,10 @@ extension HistoryActor {
         }
 
         let transactionDir = tempDir.appendingPathComponent("strip-\(UUID().uuidString)")
-        let staged = try stageFile(for: category, id: id, in: transactionDir)
+        try transactionDir.ensureDirectoryExists()
+        let staged = try stageMediaFiles(
+            for: id, thumbnail: category == .thumbnail, in: transactionDir
+        )
 
         switch category {
         case .image:
@@ -72,17 +75,38 @@ extension HistoryActor {
             }
             invalidateDiskCache()
         } catch {
-            rollbackStagedFile(staged)
+            for item in staged.reversed() { rollbackStagedFile(item) }
             throw error
         }
 
-        if staged != nil {
+        if !staged.isEmpty {
             do {
                 try FileManager.default.removeItem(at: transactionDir)
             } catch {
                 logger.warning("分层清理已提交，但临时文件清理失败: \(transactionDir.lastPathComponent)")
             }
         }
+    }
+
+    /// Moves all media files of the given kind into the transaction directory,
+    /// rolling back what was moved so far on failure.
+    private func stageMediaFiles(
+        for id: UUID,
+        thumbnail: Bool,
+        in transactionDir: URL
+    ) throws -> [(sourceURL: URL, stagedURL: URL)] {
+        var staged: [(sourceURL: URL, stagedURL: URL)] = []
+        do {
+            for file in try mediaFiles(for: id, thumbnail: thumbnail) {
+                let destination = transactionDir.appendingPathComponent(file.lastPathComponent)
+                try FileManager.default.moveItem(at: file, to: destination)
+                staged.append((file, destination))
+            }
+        } catch {
+            for item in staged.reversed() { rollbackStagedFile(item) }
+            throw error
+        }
+        return staged
     }
 
     /// 将暂存文件恢复到原位置。
@@ -129,7 +153,7 @@ extension HistoryActor {
     }
 
     func storedSize(for id: UUID) -> UInt64 {
-        let files = [entryFileURL(for: id), imageFileURL(for: id), thumbnailFileURL(for: id)]
+        let files = [entryFileURL(for: id)] + ((try? mediaFiles(for: id)) ?? [])
         return files.reduce(into: 0) { total, file in
             guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
                   let size = values.fileSize,
@@ -146,12 +170,14 @@ extension HistoryActor {
 
     /// 获取加密图片文件路径
     func imageFileURL(for id: UUID) -> URL {
-        imagesDir.appendingPathComponent("\(id.uuidString).enc")
+        let revision = (entries[id] ?? diskCache[id] ?? loadEntryFromDiskSync(id: id))?.imageRevision
+        return mediaURL(for: id, revision: revision, thumbnail: false)
     }
 
     /// 获取缩略图文件路径
     func thumbnailFileURL(for id: UUID) -> URL {
-        thumbsDir.appendingPathComponent("\(id.uuidString).png")
+        let revision = (entries[id] ?? diskCache[id] ?? loadEntryFromDiskSync(id: id))?.imageRevision
+        return mediaURL(for: id, revision: revision, thumbnail: true)
     }
 
     /// 同步加载所有磁盘条目到内存
