@@ -375,3 +375,44 @@
 "Record picked colors" = "복사한 색상 기록";
 "Maximum color entries" = "최대 색상 항목 수";
 "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "색상은 이 Mac에만 암호화되어 저장됩니다. 피커로 색상을 복사하면 여기에 기록됩니다.";
+
+/* Settings gaps */
+"Developer Mode" = "개발자 모드";
+"Diagnostics" = "진단";
+"Disable languages you rarely use to prevent visually similar characters (such as Japanese kanji and Chinese hanzi) from being misrecognized." = "자주 사용하지 않는 언어를 비활성화하면 글자가 비슷한 문자(일본어 한자, 중국어 한자 등)가 잘못 인식되는 것을 방지할 수 있습니다.";
+"History segment" = "기록 구분";
+"Record colors copied with the area or editor color picker" = "영역 캡처 또는 편집기 색상 선택기로 복사한 색상 기록";
+"History unavailable" = "기록을 사용할 수 없습니다";
+"No captures yet" = "아직 캡처가 없습니다";
+
+/* Editor history */
+"Save to History" = "기록에 저장";
+"Save as New Record" = "새 항목으로 저장";
+"Overwrite Original Record" = "원본 항목 덮어쓰기";
+"Save the annotated image into history" = "주석이 달린 이미지를 기록에 저장";
+"Saved to history" = "기록에 저장했습니다";
+"History updated; original kept for restore" = "기록을 업데이트했습니다. 원본은 복원용으로 보관됩니다";
+"No original record to overwrite; save as a new record instead" = "덮어쓸 원본 항목이 없어 새 항목으로 저장합니다";
+"Restore Original Image" = "원본 이미지 복원";
+"Original image restored" = "원본 이미지를 복원했습니다";
+"Copy Line" = "줄 복사";
+"Add as Text Annotation" = "텍스트 주석으로 추가";
+
+/* Toasts */
+"No text found" = "텍스트를 찾을 수 없습니다";
+"Text copied to clipboard" = "텍스트를 클립보드에 복사했습니다";
+"OCR completed" = "텍스트 인식 완료";
+"Copied OCR text" = "인식된 텍스트를 복사했습니다";
+"Copied to clipboard" = "클립보드에 복사했습니다";
+"No image found in clipboard" = "클립보드에서 이미지를 찾을 수 없습니다";
+"Scrolling capture cancelled" = "스크롤 캡처를 취소했습니다";
+"Scroll the window, then capture the next frame" = "창을 스크롤한 다음 다음 프레임을 캡처하세요";
+"No visual change detected; scroll and try again" = "화면 변화가 감지되지 않았습니다. 스크롤 후 다시 시도하세요";
+"Frame %d captured" = "%d번째 프레임을 캡처했습니다";
+"Saved to %@" = "%@에 저장했습니다";
+"Capture failed: %@" = "캡처 실패: %@";
+"OCR failed: %@" = "텍스트 인식 실패: %@";
+"History save failed: %@" = "기록 저장 실패: %@";
+"Scroll frame failed: %@" = "스크롤 프레임 캡처 실패: %@";
+"Save failed: %@" = "저장 실패: %@";
+"Copy failed: %@" = "복사 실패: %@";

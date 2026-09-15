@@ -5,7 +5,7 @@ import SwiftUI
 /// retention count and days settings.
 struct TriValueControl: View {
     let title: LocalizedStringKey
-    let unit: String
+    let unit: LocalizedStringKey
     let presets: [Int]
     let range: ClosedRange<Int>
     let value: Int
@@ -17,10 +17,13 @@ struct TriValueControl: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             LabeledContent(title) {
-                Text("\(value.formatted()) \(unit)")
-                    .font(.body.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
+                HStack(spacing: 4) {
+                    Text(value.formatted())
+                        .font(.body.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                    Text(unit)
+                }
             }
 
             HStack(spacing: 6) {
@@ -49,7 +52,7 @@ struct TriValueControl: View {
                             .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
                     }
                     .buttonStyle(.plain)
-                    .help("\(preset.formatted()) \(unit)")
+                    .help(Text(preset.formatted()) + Text(" ") + Text(unit))
                 }
             }
 

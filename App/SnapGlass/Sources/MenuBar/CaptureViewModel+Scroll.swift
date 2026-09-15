@@ -27,7 +27,7 @@ extension CaptureViewModel {
             scrollSourceWindowTitle = selectedWindow.windowTitle
             scrollCapturedFrameCount = 1
             isScrollCaptureActive = true
-            showToast(message: "Scroll the window, then capture the next frame", type: .info)
+            showToast(message: AppLocalization.string("Scroll the window, then capture the next frame"), type: .info)
         } catch CaptureError.permissionDenied {
             if let startedSession {
                 await scrollEngine.cancelCapture(session: startedSession)
@@ -60,7 +60,10 @@ extension CaptureViewModel {
                     FrameDeduper().isDuplicate(previousFrame.image, result.image)
                 }.value
                 guard !isDuplicate else {
-                    showToast(message: "No visual change detected; scroll and try again", type: .info)
+                    showToast(
+                        message: AppLocalization.string("No visual change detected; scroll and try again"),
+                        type: .info
+                    )
                     return
                 }
 
@@ -70,11 +73,17 @@ extension CaptureViewModel {
                     timestamp: result.timestamp
                 ))
                 scrollCapturedFrameCount = scrollFrames.count
-                showToast(message: "Frame \(scrollCapturedFrameCount) captured", type: .success)
+                showToast(
+                    message: AppLocalization.string("Frame %d captured", scrollCapturedFrameCount),
+                    type: .success
+                )
             } catch CaptureError.permissionDenied {
                 openWindow?("permission")
             } catch {
-                showToast(message: "Scroll frame failed: \(error.localizedDescription)", type: .error)
+                showToast(
+                    message: AppLocalization.string("Scroll frame failed: %@", error.localizedDescription),
+                    type: .error
+                )
             }
         }
     }
@@ -113,6 +122,6 @@ extension CaptureViewModel {
                 await scrollEngine.cancelCapture(session: session)
             }
         }
-        showToast(message: "Scrolling capture cancelled", type: .info)
+        showToast(message: AppLocalization.string("Scrolling capture cancelled"), type: .info)
     }
 }

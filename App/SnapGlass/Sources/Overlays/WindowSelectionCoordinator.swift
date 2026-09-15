@@ -14,11 +14,11 @@ struct SelectableWindow {
 
     var displayName: String {
         let app = appName?.isEmpty == false
-            ? appName ?? String(localized: "Unknown App")
-            : String(localized: "Unknown App")
+            ? appName ?? AppLocalization.string("Unknown App")
+            : AppLocalization.string("Unknown App")
         let title = windowTitle?.isEmpty == false
-            ? windowTitle ?? String(localized: "Untitled")
-            : String(localized: "Untitled")
+            ? windowTitle ?? AppLocalization.string("Untitled")
+            : AppLocalization.string("Untitled")
         return "\(app) — \(title)"
     }
 

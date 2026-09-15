@@ -375,3 +375,44 @@
 "Record picked colors" = "Record picked colors";
 "Maximum color entries" = "Maximum color entries";
 "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here." = "Colors are stored encrypted on this Mac only. Copying a color with the picker records it here.";
+
+/* Settings gaps */
+"Developer Mode" = "Developer Mode";
+"Diagnostics" = "Diagnostics";
+"Disable languages you rarely use to prevent visually similar characters (such as Japanese kanji and Chinese hanzi) from being misrecognized." = "Disable languages you rarely use to prevent visually similar characters (such as Japanese kanji and Chinese hanzi) from being misrecognized.";
+"History segment" = "History segment";
+"Record colors copied with the area or editor color picker" = "Record colors copied with the area or editor color picker";
+"History unavailable" = "History unavailable";
+"No captures yet" = "No captures yet";
+
+/* Editor history */
+"Save to History" = "Save to History";
+"Save as New Record" = "Save as New Record";
+"Overwrite Original Record" = "Overwrite Original Record";
+"Save the annotated image into history" = "Save the annotated image into history";
+"Saved to history" = "Saved to history";
+"History updated; original kept for restore" = "History updated; original kept for restore";
+"No original record to overwrite; save as a new record instead" = "No original record to overwrite; save as a new record instead";
+"Restore Original Image" = "Restore Original Image";
+"Original image restored" = "Original image restored";
+"Copy Line" = "Copy Line";
+"Add as Text Annotation" = "Add as Text Annotation";
+
+/* Toasts */
+"No text found" = "No text found";
+"Text copied to clipboard" = "Text copied to clipboard";
+"OCR completed" = "OCR completed";
+"Copied OCR text" = "Copied OCR text";
+"Copied to clipboard" = "Copied to clipboard";
+"No image found in clipboard" = "No image found in clipboard";
+"Scrolling capture cancelled" = "Scrolling capture cancelled";
+"Scroll the window, then capture the next frame" = "Scroll the window, then capture the next frame";
+"No visual change detected; scroll and try again" = "No visual change detected; scroll and try again";
+"Frame %d captured" = "Frame %d captured";
+"Saved to %@" = "Saved to %@";
+"Capture failed: %@" = "Capture failed: %@";
+"OCR failed: %@" = "OCR failed: %@";
+"History save failed: %@" = "History save failed: %@";
+"Scroll frame failed: %@" = "Scroll frame failed: %@";
+"Save failed: %@" = "Save failed: %@";
+"Copy failed: %@" = "Copy failed: %@";

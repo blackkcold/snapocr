@@ -31,9 +31,7 @@ extension EditorViewModel {
         guard let doc = document else { return }
         if mode == .overwriteOriginal && sourceEntryID == nil {
             showToast(
-                message: String(
-                    localized: "No original record to overwrite; save as a new record instead"
-                ),
+                message: AppLocalization.string("No original record to overwrite; save as a new record instead"),
                 type: .error
             )
             return
@@ -42,13 +40,16 @@ extension EditorViewModel {
             let image = try interactor.render(doc)
             try await historySaver(image, mode, sourceEntryID)
             let message: String = switch mode {
-            case .newRecord: String(localized: "Saved to history")
-            case .overwriteOriginal: String(localized: "History updated; original kept for restore")
+            case .newRecord: AppLocalization.string("Saved to history")
+            case .overwriteOriginal: AppLocalization.string("History updated; original kept for restore")
             }
             showToast(message: message, type: .success)
             logger.info("Editor image saved to history (mode: \(mode))")
         } catch {
-            showToast(message: "History save failed: \(error.localizedDescription)", type: .error)
+            showToast(
+                message: AppLocalization.string("History save failed: %@", error.localizedDescription),
+                type: .error
+            )
         }
     }
     /// Saves the annotated image to a user-chosen file location.
@@ -71,10 +72,13 @@ extension EditorViewModel {
                     ? PreferenceDefaults.captureJPEGQuality
                     : UserDefaults.standard.double(forKey: PreferenceKeys.captureJPEGQuality)
                 try ImageEncoder.write(image, to: url, format: format, jpegQuality: quality)
-                self.showToast(message: "Saved to \(url.lastPathComponent)", type: .success)
+                self.showToast(message: AppLocalization.string("Saved to %@", url.lastPathComponent), type: .success)
                 self.logger.info("Saved annotated image to \(url.path())")
             } catch {
-                self.showToast(message: "Save failed: \(error.localizedDescription)", type: .error)
+                self.showToast(
+                    message: AppLocalization.string("Save failed: %@", error.localizedDescription),
+                    type: .error
+                )
             }
         }
     }
@@ -90,10 +94,10 @@ extension EditorViewModel {
             )
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([nsImage])
-            showToast(message: "Copied to clipboard", type: .success)
+            showToast(message: AppLocalization.string("Copied to clipboard"), type: .success)
             logger.info("Copied annotated image to clipboard")
         } catch {
-            showToast(message: "Copy failed: \(error.localizedDescription)", type: .error)
+            showToast(message: AppLocalization.string("Copy failed: %@", error.localizedDescription), type: .error)
         }
     }
 

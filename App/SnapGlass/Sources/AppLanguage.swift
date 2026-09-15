@@ -23,4 +23,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             Locale(identifier: "ko")
         }
     }
+
+    /// The `.lproj` identifier, or `nil` when the OS should choose.
+    var resourceIdentifier: String? {
+        switch self {
+        case .system: nil
+        case .english: "en"
+        case .simplifiedChinese: "zh-Hans"
+        case .japanese: "ja"
+        case .korean: "ko"
+        }
+    }
 }

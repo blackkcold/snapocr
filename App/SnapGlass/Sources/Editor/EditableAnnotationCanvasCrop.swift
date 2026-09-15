@@ -123,14 +123,8 @@ extension EditableAnnotationCanvasNSView {
 
     private func drawCropConfirmationHint(for rect: CGRect) {
         let hint = verticalCropOnly
-            ? NSLocalizedString(
-                "Drag the top or bottom edge, then press Return",
-                comment: "Long screenshot endpoint trim hint"
-            )
-            : NSLocalizedString(
-                "Return / double-click to crop",
-                comment: "Crop confirmation hint"
-            )
+            ? AppLocalization.string("Drag the top or bottom edge, then press Return")
+            : AppLocalization.string("Return / double-click to crop")
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.white,

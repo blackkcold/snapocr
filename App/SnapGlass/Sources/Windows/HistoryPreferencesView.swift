@@ -80,7 +80,7 @@ struct HistoryPreferencesView: View {
 
             TriValueControl(
                 title: "Maximum screenshots",
-                unit: String(localized: "items"),
+                unit: "items",
                 presets: [50, 100, 200, 500, 1000],
                 range: 10...5_000,
                 value: maxItems
@@ -93,7 +93,7 @@ struct HistoryPreferencesView: View {
             if !keepIndefinitely {
                 TriValueControl(
                     title: "Retention period",
-                    unit: String(localized: "days"),
+                    unit: "days",
                     presets: [7, 30, 90, 365],
                     range: 1...3_650,
                     value: retentionDays
@@ -154,7 +154,7 @@ struct HistoryPreferencesView: View {
             if colorHistoryEnabled {
                 TriValueControl(
                     title: "Maximum color entries",
-                    unit: String(localized: "items"),
+                    unit: "items",
                     presets: [50, 100, 200, 500],
                     range: 10...5_000,
                     value: colorHistoryMaxItems

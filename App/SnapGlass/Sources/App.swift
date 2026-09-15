@@ -41,6 +41,7 @@ struct SnapGlassApp: App {
 
         Window("Preferences", id: "preferences") {
             PreferencesView()
+                .navigationTitle(Text("Preferences"))
                 .environmentObject(router)
                 .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environmentObject(viewModel)
@@ -52,13 +53,13 @@ struct SnapGlassApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About SnapGlass") {
+                Button(AppLocalization.string("About SnapGlass")) {
                     router.presentAbout()
                 }
             }
 
             CommandGroup(replacing: .appSettings) {
-                Button("Preferences...") {
+                Button(AppLocalization.string("Preferences...")) {
                     router.presentSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)
@@ -67,6 +68,7 @@ struct SnapGlassApp: App {
 
         Window("History", id: "history") {
             HistoryView()
+                .navigationTitle(Text("History"))
                 .environmentObject(viewModel)
                 .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environment(\.locale, locale)
@@ -85,11 +87,13 @@ struct SnapGlassApp: App {
                         .preferredColorScheme(preferredColorScheme)
                 }
             }
+            .navigationTitle(Text("Annotation Editor"))
             .background(AppWindowRegistrationView(id: "editor"))
         }
         
         Window("Permission Required", id: "permission") {
             PermissionGuideView()
+                .navigationTitle(Text("Permission Required"))
                 .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)

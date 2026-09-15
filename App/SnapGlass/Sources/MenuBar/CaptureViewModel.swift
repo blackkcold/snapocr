@@ -141,12 +141,9 @@ public final class CaptureViewModel: ObservableObject {
                 switch result {
                 case .upToDate(let latestVersion):
                     presentInformationAlert(
-                        title: NSLocalizedString("SnapGlass is Up to Date", comment: "Update status title"),
-                        message: String(
-                            format: NSLocalizedString(
-                                "You are running the latest version (%@).",
-                                comment: "Latest version message"
-                            ),
+                        title: AppLocalization.string("SnapGlass is Up to Date"),
+                        message: AppLocalization.string(
+                            "You are running the latest version (%@).",
                             latestVersion.description
                         )
                     )
@@ -155,7 +152,7 @@ public final class CaptureViewModel: ObservableObject {
                 }
             } catch {
                 presentInformationAlert(
-                    title: NSLocalizedString("Unable to Check for Updates", comment: "Update error title"),
+                    title: AppLocalization.string("Unable to Check for Updates"),
                     message: error.localizedDescription,
                     style: .warning
                 )
