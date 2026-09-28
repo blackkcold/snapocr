@@ -183,7 +183,8 @@ private enum SensitiveDataType: Sendable, CaseIterable {
                 imagePath: nil,
                 thumbnailPath: nil,
                 isFavourite: entry.isFavourite,
-                tags: entry.tags.map { anonymize($0, level: level) }
+                tags: entry.tags.map { anonymize($0, level: level) },
+                isProtected: entry.isProtected
             )
         }
     }

@@ -140,6 +140,16 @@
 "Copy the screenshot to the clipboard" = "スクリーンショットをクリップボードにコピー";
 "Edit Screenshot" = "スクリーンショットを編集";
 "Open the screenshot in the annotation editor" = "注釈エディタでスクリーンショットを開く";
+"Pin Image" = "画像をピン留め";
+"Pin the screenshot as a floating panel" = "スクリーンショットをフローティングパネルとしてピン留め";
+"Copy Text (OCR)" = "テキストをコピー（OCR）";
+"Scale" = "元のサイズに戻す";
+"Zoom" = "ズーム";
+"Fit to Screen" = "画面に合わせる";
+"Pinned Image Toolbar" = "ピン留め画像ツールバー";
+"Close All Pinned Images" = "ピン留めした画像をすべて閉じる";
+"Recognizing text…" = "テキストを認識しています…";
+"History storage is full of protected records" = "履歴は保護された記録でいっぱいです";
 "Unable to copy image" = "画像をコピーできません";
 "Area captures ask whether to copy or edit when you confirm the selection. These settings apply to window, fullscreen, and scrolling captures." = "領域撮影では、選択を確定するときにコピーするか編集するかを尋ねます。これらの設定はウィンドウ、全画面、スクロール撮影に適用されます。";
 "When enabled, recognized text is copied automatically after capture." = "有効にすると、撮影後に認識した文字が自動的にコピーされます。";
@@ -304,6 +314,15 @@
 "items" = "件";
 "Global Shortcuts" = "グローバルショートカット";
 "Reset All" = "すべてリセット";
+
+
+// MARK: - Pin Shortcut
+
+"During Area Selection" = "範囲選択中";
+"Only applies while the area-selection overlay is active." = "範囲選択オーバーレイの表示中のみ有効です。";
+"Reset" = "リセット";
+"Click to record" = "クリックして記録";
+"Press shortcut…" = "ショートカットを押してください…";
 "Enabled Languages" = "有効な言語";
 "Japanese" = "日本語";
 "Korean" = "韓国語";

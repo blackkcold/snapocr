@@ -38,6 +38,7 @@ SnapGlass 是一款**离线优先**的开源截图与 OCR 工具，遵循以下�
 | 截图原图 | `~/Library/Application Support/SnapGlass/History/v2/images/` | AES-256-GCM | 7天 / 100条 | 可在偏好设置中修改策略 |
 | OCR 文本 | `~/Library/Application Support/SnapGlass/History/v2/entries/` | AES-256-GCM | 30天 / 500条 | 可在偏好设置中开启或禁用全文保存 |
 | 缩略图 | `~/Library/Application Support/SnapGlass/History/v2/thumbs/` | 无加密 | 90天 / 1000条 | 可在偏好设置中修改 |
+| 置顶面板 | 仅内存（`NSPanel`），不落盘 | — | 关闭即释放 | 双击 / Esc / ⌘W / 右键关闭 |
 | 取色历史 | `~/Library/Application Support/SnapGlass/History/v2/colors/` | AES-256-GCM | 100条 | 可在偏好设置中关闭、调整上限或清空；清空截图历史时一并清空 |
 | 历史密钥 | `~/Library/Application Support/SnapGlass/Security/history-v2.key` | 本地 0600 权限文件 | 持久 | 随应用支持目录管理 |
 | 崩溃日志 | `~/Library/Logs/SnapGlass/` | 无加密 | 30天 | 手动删除 |
@@ -51,6 +52,17 @@ SnapGlass 是一款**离线优先**的开源截图与 OCR 工具，遵循以下�
 - 默认仅持久化元数据与截图，完整 OCR 文本可在偏好设置中开启保存（默认关闭）
 - 全文保存关闭时，历史条目的文本字段写入空字符串，OCR 文本仅用于剪贴板与当前会话
 - 导出历史数据时支持脱敏处理，自动替换邮箱、电话号码、身份证号等模式
+
+---
+
+## 置顶面板
+
+- 置顶面板设置 `sharingType = .none`，不会出现在第三方录屏、系统截屏或 SnapGlass 后续截图中
+- 置顶不写入剪贴板；「复制文字 (OCR)」为右键菜单中的显式动作
+- 置顶产生的历史条目带 `isProtected` 标记，自动清理（时限 / 数量 / 磁盘配额 / 分层剥图）不会淘汰或剥离其数据；用户手动删除与清空仍然生效
+- 置顶条目不执行自动 OCR，因此其中的文字不可被历史文本搜索命中（设计取舍）
+- 面板本身仅存在于内存，不新增任何落盘数据
+- 缩略图目录 `History/v2/thumbs/` 历史上即为明文存储（非本次引入），其内容可能反映截图信息
 
 ---
 

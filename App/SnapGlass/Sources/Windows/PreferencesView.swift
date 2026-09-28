@@ -330,51 +330,105 @@ struct OCRPreferencesView: View {
     }
 }
 
-struct ShortcutsPreferencesView: View {    var body: some View {
+struct ShortcutsPreferencesView: View {
+    @State private var pinShortcut = PinSelectionShortcut.current
+
+    var body: some View {
         ScrollView {
             PreferencesCardGrid {
-                PreferencesCard {
-                    PreferencesCardHeader(systemImage: "keyboard", title: "Global Shortcuts") {
-                        Button("Reset All") {
-                            KeyboardShortcuts.reset(.captureArea)
-                            KeyboardShortcuts.reset(.captureWindow)
-                            KeyboardShortcuts.reset(.captureFullscreen)
-                            KeyboardShortcuts.reset(.ocrFromClipboard)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-
-                    VStack(spacing: 0) {
-                        shortcutRow(
-                            title: "Area Capture",
-                            systemImage: "viewfinder",
-                            name: .captureArea
-                        )
-                        Divider()
-
-                        shortcutRow(
-                            title: "Window Capture",
-                            systemImage: "macwindow",
-                            name: .captureWindow
-                        )
-                        Divider()
-
-                        shortcutRow(
-                            title: "Fullscreen Capture",
-                            systemImage: "rectangle.inset.filled",
-                            name: .captureFullscreen
-                        )
-                        Divider()
-
-                        shortcutRow(
-                            title: "OCR from Clipboard",
-                            systemImage: "text.viewfinder",
-                            name: .ocrFromClipboard
-                        )
-                    }
-                }
+                globalShortcutsCard
+                areaSelectionCard
             }
+        }
+    }
+
+    private var globalShortcutsCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "keyboard", title: "Global Shortcuts") {
+                Button("Reset All") {
+                    KeyboardShortcuts.reset(.captureArea)
+                    KeyboardShortcuts.reset(.captureWindow)
+                    KeyboardShortcuts.reset(.captureFullscreen)
+                    KeyboardShortcuts.reset(.ocrFromClipboard)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            VStack(spacing: 0) {
+                shortcutRow(
+                    title: "Area Capture",
+                    systemImage: "viewfinder",
+                    name: .captureArea
+                )
+                Divider()
+
+                shortcutRow(
+                    title: "Window Capture",
+                    systemImage: "macwindow",
+                    name: .captureWindow
+                )
+                Divider()
+
+                shortcutRow(
+                    title: "Fullscreen Capture",
+                    systemImage: "rectangle.inset.filled",
+                    name: .captureFullscreen
+                )
+                Divider()
+
+                shortcutRow(
+                    title: "OCR from Clipboard",
+                    systemImage: "text.viewfinder",
+                    name: .ocrFromClipboard
+                )
+            }
+        }
+    }
+
+    private var areaSelectionCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "viewfinder.circle", title: "During Area Selection") {
+                Button("Reset") {
+                    PinSelectionShortcut.resetToDefault()
+                    pinShortcut = PinSelectionShortcut.current
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            HStack(spacing: 12) {
+                Label {
+                    Text("Pin Image")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "pin")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 18)
+                }
+                .frame(width: 200, alignment: .leading)
+
+                Spacer(minLength: 0)
+
+                ShortcutRecorderView(
+                    shortcut: pinShortcut,
+                    onRecord: { shortcut in
+                        PinSelectionShortcut.set(shortcut)
+                        pinShortcut = shortcut
+                    },
+                    onClear: {
+                        PinSelectionShortcut.clear()
+                        pinShortcut = nil
+                    }
+                )
+                .fixedSize()
+            }
+            .padding(.vertical, 6)
+
+            PreferencesCardCaption(
+                text: "Only applies while the area-selection overlay is active.")
         }
     }
 

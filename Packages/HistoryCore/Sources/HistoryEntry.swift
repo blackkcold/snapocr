@@ -69,6 +69,13 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     /// 收藏的条目在清理时享有更高保留优先级。
     public var isFavourite: Bool
 
+    /// 是否为受保护条目
+    ///
+    /// 置顶（⌘P）产生的条目置为 `true`，自动清理不会淘汰或剥离其数据。
+    /// 用户手动删除（`delete(id:)` / `clear()`）仍然生效。
+    /// 该字段为后加字段，旧记录解码时缺失，默认回退为 `false`。
+    public var isProtected: Bool
+
     /// 用户自定义标签
     ///
     /// 支持多标签分类，标签名不区分大小写。
@@ -93,6 +100,9 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     ///   - sourceWindowTitle: 来源窗口标题，可选
     ///   - imagePath: 加密截图路径，可选
     ///   - thumbnailPath: 缩略图路径，可选
+    ///   - isFavourite: 是否收藏
+    ///   - tags: 用户自定义标签
+    ///   - isProtected: 是否为受保护条目（自动清理不淘汰）
     public init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
@@ -105,7 +115,8 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         imagePath: URL? = nil,
         thumbnailPath: URL? = nil,
         isFavourite: Bool = false,
-        tags: [String] = []
+        tags: [String] = [],
+        isProtected: Bool = false
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -119,6 +130,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         self.thumbnailPath = thumbnailPath
         self.isFavourite = isFavourite
         self.tags = tags
+        self.isProtected = isProtected
     }
 
     // MARK: - Codable
@@ -127,6 +139,29 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         case id, timestamp, textContent, ocrConfidence, captureMode
         case sourceType, sourceAppName, sourceWindowTitle
         case imagePath, thumbnailPath, isFavourite, tags
-        case imageRevision
+        case imageRevision, isProtected
+    }
+
+    /// 自定义解码以兼容不含 `isProtected` 键的旧记录。
+    ///
+    /// 合成的 `Codable` 实现要求所有非可选字段存在，新增的 `isProtected`
+    /// 会令全部既有历史记录解码失败。此处显式解码并以 `false` 兜底。
+    /// 编码仍使用合成实现。
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        textContent = try container.decode(String.self, forKey: .textContent)
+        ocrConfidence = try container.decode(Float.self, forKey: .ocrConfidence)
+        captureMode = try container.decode(String.self, forKey: .captureMode)
+        sourceType = try container.decode(HistorySourceType.self, forKey: .sourceType)
+        sourceAppName = try container.decodeIfPresent(String.self, forKey: .sourceAppName)
+        sourceWindowTitle = try container.decodeIfPresent(String.self, forKey: .sourceWindowTitle)
+        imagePath = try container.decodeIfPresent(URL.self, forKey: .imagePath)
+        thumbnailPath = try container.decodeIfPresent(URL.self, forKey: .thumbnailPath)
+        isFavourite = try container.decode(Bool.self, forKey: .isFavourite)
+        tags = try container.decode([String].self, forKey: .tags)
+        imageRevision = try container.decodeIfPresent(UUID.self, forKey: .imageRevision)
+        isProtected = try container.decodeIfPresent(Bool.self, forKey: .isProtected) ?? false
     }
 }

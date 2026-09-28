@@ -19,6 +19,8 @@ public enum PreferenceKeys {
     public static let captureImageFormat = "capture_imageFormat"
     public static let captureJPEGQuality = "capture_jpegQuality"
     public static let pickerDominantColorCount = "capture_pickerDominantColorCount"
+    /// Pin shortcut override; absent means "use the code-level default".
+    public static let pinSelectionShortcut = "capture_pinSelectionShortcut"
 
     public static let ocrLanguagePriority = "ocr_languagePriority"
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"

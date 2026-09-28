@@ -132,4 +132,117 @@ struct HistoryStorageV2Tests {
     #expect(loadedExpired == nil)
     #expect(count == 0)
   }
+
+  @Test func protectedEntrySurvivesAgeCleanup() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("snapglass-history-protected-age-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let policy = CleanupPolicy(
+      maxEntries: 10,
+      retentionDays: [.image: 7, .text: 7, .thumbnail: 7],
+      maxCount: [.image: 10, .text: 10, .thumbnail: 10]
+    )
+    let history = try HistoryActor(cleanupPolicy: policy, baseURL: root)
+    let pinned = HistoryEntry(
+      timestamp: Date().addingTimeInterval(-30 * 86_400),
+      textContent: "pinned",
+      ocrConfidence: 1,
+      captureMode: "area",
+      isProtected: true
+    )
+
+    try await history.save(pinned)
+
+    let loaded = try await history.load(id: pinned.id)
+    #expect(loaded != nil)
+    #expect(loaded?.isProtected == true)
+    let count = await history.count()
+    #expect(count == 1)
+  }
+
+  @Test func protectedEntrySurvivesCountCleanup() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("snapglass-history-protected-count-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let policy = CleanupPolicy(
+      maxEntries: 3,
+      retentionDays: [.image: 30, .text: 30, .thumbnail: 30],
+      maxCount: [.image: 3, .text: 3, .thumbnail: 3]
+    )
+    let history = try HistoryActor(cleanupPolicy: policy, baseURL: root)
+    let pinned = HistoryEntry(
+      timestamp: Date().addingTimeInterval(-500),
+      textContent: "pinned",
+      ocrConfidence: 1,
+      captureMode: "area",
+      isProtected: true
+    )
+
+    try await history.save(pinned)
+    for index in 0..<4 {
+      let older = HistoryEntry(
+        timestamp: Date().addingTimeInterval(Double(-400 + index)),
+        textContent: "older-\(index)",
+        ocrConfidence: 1,
+        captureMode: "area"
+      )
+      try await history.save(older)
+    }
+
+    let loadedPinned = try await history.load(id: pinned.id)
+    #expect(loadedPinned != nil)
+    #expect(loadedPinned?.isProtected == true)
+  }
+
+  @Test func protectedEntrySurvivesEntriesToEvict() {
+    let policy = CleanupPolicy(
+      maxEntries: 100,
+      retentionDays: [.image: 30, .text: 30, .thumbnail: 30],
+      maxCount: [.image: 2, .text: 2, .thumbnail: 2]
+    )
+    let pinned = HistoryEntry(
+      timestamp: Date().addingTimeInterval(-900),
+      textContent: "pinned",
+      ocrConfidence: 1,
+      captureMode: "area",
+      isProtected: true
+    )
+    let older = HistoryEntry(
+      timestamp: Date().addingTimeInterval(-800),
+      textContent: "older",
+      ocrConfidence: 1,
+      captureMode: "area"
+    )
+    let newest = HistoryEntry(
+      timestamp: Date(),
+      textContent: "newest",
+      ocrConfidence: 1,
+      captureMode: "area"
+    )
+
+    let evicted = policy.entriesToEvict([pinned, older, newest], category: .image)
+    let evictedIDs = Set(evicted.map(\.id))
+
+    #expect(!evictedIDs.contains(pinned.id))
+    #expect(evictedIDs.contains(older.id))
+  }
+
+  @Test func manualDeleteStillRemovesProtectedEntry() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("snapglass-history-protected-delete-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let history = try HistoryActor(cleanupPolicy: CleanupPolicy(), baseURL: root)
+    let pinned = HistoryEntry(
+      textContent: "pinned",
+      ocrConfidence: 1,
+      captureMode: "area",
+      isProtected: true
+    )
+
+    try await history.save(pinned)
+    try await history.delete(id: pinned.id)
+
+    let loaded = try await history.load(id: pinned.id)
+    #expect(loaded == nil)
+  }
 }

@@ -69,6 +69,7 @@ public final class CaptureViewModel: ObservableObject {
         case configured
         case clipboardOnly
         case editorOnly
+        case pinOnly
     }
 
     /// Initializes a new CaptureViewModel.
@@ -89,8 +90,11 @@ public final class CaptureViewModel: ObservableObject {
         self.barcodeEngine = barcodeEngine
         self.scrollEngine = scrollEngine
         self.updateService = updateService
-        
+
         setupHotKeys()
+        PinnedWindowManager.shared.setToastHandler { [weak self] message, type in
+            self?.showToast(message: message, type: type)
+        }
     }
     
     /// Sets up the global hotkeys using HotKeyManager.
@@ -193,6 +197,13 @@ public final class CaptureViewModel: ObservableObject {
 
 /// 截图来源应用信息，用于历史记录保存。
 struct CaptureSourceInfo {
+    let appName: String?
+    let windowTitle: String?
+}
+
+/// 历史保存所需的捕获元数据，避免单个函数参数过多。
+struct HistorySaveContext {
+    let modeDescription: String
     let appName: String?
     let windowTitle: String?
 }

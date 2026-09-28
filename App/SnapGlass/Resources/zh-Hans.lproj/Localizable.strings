@@ -140,6 +140,16 @@
 "Copy the screenshot to the clipboard" = "将截图复制到剪贴板";
 "Edit Screenshot" = "编辑截图";
 "Open the screenshot in the annotation editor" = "在标注编辑器中打开截图";
+"Pin Image" = "置顶图片";
+"Pin the screenshot as a floating panel" = "将截图置顶为浮动面板";
+"Copy Text (OCR)" = "复制文字（OCR）";
+"Scale" = "缩放到原始尺寸";
+"Zoom" = "缩放";
+"Fit to Screen" = "适应屏幕";
+"Pinned Image Toolbar" = "置顶图片工具条";
+"Close All Pinned Images" = "关闭全部置顶图片";
+"Recognizing text…" = "正在识别文字…";
+"History storage is full of protected records" = "历史记录已被受保护条目占满";
 "Unable to copy image" = "无法复制图片";
 "Area captures ask whether to copy or edit when you confirm the selection. These settings apply to window, fullscreen, and scrolling captures." = "区域截图会在确认选区时询问复制或编辑；这些设置用于窗口、全屏和滚动截图。";
 "When enabled, recognized text is copied automatically after capture." = "启用后，截图完成时会自动复制识别文字。";
@@ -304,6 +314,15 @@
 "items" = "条";
 "Global Shortcuts" = "全局快捷键";
 "Reset All" = "全部重置";
+
+
+// MARK: - Pin Shortcut
+
+"During Area Selection" = "区域选择期间";
+"Only applies while the area-selection overlay is active." = "仅在区域选择遮罩激活时生效。";
+"Reset" = "重置";
+"Click to record" = "点击录制";
+"Press shortcut…" = "请按下快捷键…";
 "Enabled Languages" = "已启用的语言";
 "Japanese" = "日语";
 "Korean" = "韩语";
