@@ -163,16 +163,10 @@ extension AreaTrackingView {
         guard bounds.contains(point) else { return }
         let hexLabel = color.hexString
         let rgbLabel = color.rgbString
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let secondaryAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.7),
-        ]
-        let hexSize = (hexLabel as NSString).size(withAttributes: attributes)
-        let rgbSize = (rgbLabel as NSString).size(withAttributes: secondaryAttributes)
+        let attributes = AreaHoverLabelMetrics.primaryAttributes
+        let secondaryAttributes = AreaHoverLabelMetrics.secondaryAttributes
+        let hexSize = AreaHoverLabelMetrics.hexSize(for: hexLabel)
+        let rgbSize = AreaHoverLabelMetrics.rgbSize(for: rgbLabel)
         let swatchSize: CGFloat = 10
         let swatchPadding: CGFloat = 5
         let textPadding: CGFloat = 6

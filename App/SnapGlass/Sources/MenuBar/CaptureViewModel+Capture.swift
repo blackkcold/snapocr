@@ -54,12 +54,14 @@ extension CaptureViewModel {
                 switch selection.action {
                 case .copy: .clipboardOnly
                 case .edit: .editorOnly
+                case .pin: .pinOnly
                 }
             await performCapture(
                 mode: CaptureCore.CaptureMode.area(selection.screenRect),
                 normalizedMaskPath: selection.normalizedPath,
                 historyModeOverride: selection.isFreeform ? "freeform" : nil,
                 destination: destination,
+                pinRect: selection.appKitRect,
                 managesCaptureState: false
             )
         }
@@ -238,6 +240,7 @@ extension CaptureViewModel {
         normalizedMaskPath: [CGPoint]? = nil,
         historyModeOverride: String? = nil,
         destination: CaptureDestination = .configured,
+        pinRect: CGRect? = nil,
         managesCaptureState: Bool = true
     ) async {
         if managesCaptureState {
@@ -266,7 +269,8 @@ extension CaptureViewModel {
                 sourceAppName: sourceAppName,
                 sourceWindowTitle: sourceWindowTitle,
                 historyModeOverride: historyModeOverride,
-                destination: destination
+                destination: destination,
+                pinRect: pinRect
             )
         } catch CaptureError.permissionDenied {
             openWindow?("permission")
@@ -281,10 +285,15 @@ extension CaptureViewModel {
         sourceAppName: String? = nil,
         sourceWindowTitle: String? = nil,
         historyModeOverride: String? = nil,
-        destination: CaptureDestination = .configured
+        destination: CaptureDestination = .configured,
+        pinRect: CGRect? = nil
     ) async {
         let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
         let (shouldOpenEditor, shouldCopyImage) = resolveDestination(destination)
+
+        if destination == .pinOnly, let pinRect {
+            presentPinnedImage(image, pinRect: pinRect)
+        }
 
         let imageCopySucceeded = !shouldCopyImage || writeImageToClipboard(image)
         presentCopyFeedback(
@@ -299,35 +308,19 @@ extension CaptureViewModel {
             destination: destination
         )
 
-        let autoSave = Self.boolPreference(
-            forKey: PreferenceKeys.historyAutoSave,
-            defaultValue: PreferenceDefaults.historyAutoSave
-        )
-        let saveFullText = Self.boolPreference(
-            forKey: PreferenceKeys.historySaveFullText,
-            defaultValue: PreferenceDefaults.historySaveFullText
-        )
-
-        let shouldSaveToHistory = switch destination {
-        case .configured: autoSave
-        case .clipboardOnly: imageCopySucceeded
-        case .editorOnly: true
-        }
         // Save before opening the editor so the editor knows which record the
         // image belongs to and can offer a reversible overwrite.
-        var historyEntryID: UUID?
-        if shouldSaveToHistory {
-            historyEntryID = await saveToHistoryAndWait(
-                image: image,
-                ocrResult: ocrResult,
-                saveFullText: saveFullText,
-                captureMode: modeDescription,
-                source: CaptureSourceInfo(
-                    appName: sourceAppName,
-                    windowTitle: sourceWindowTitle
-                )
+        let historyEntryID = await saveIfNeeded(
+            image: image,
+            ocrResult: ocrResult,
+            destination: destination,
+            imageCopySucceeded: imageCopySucceeded,
+            context: HistorySaveContext(
+                modeDescription: modeDescription,
+                appName: sourceAppName,
+                windowTitle: sourceWindowTitle
             )
-        }
+        )
 
         if shouldOpenEditor {
             openEditor(
@@ -338,12 +331,61 @@ extension CaptureViewModel {
         }
     }
 
+    /// 按真实缩放倍率创建置顶面板（同步，先于历史写入）。
+    private func presentPinnedImage(_ image: CGImage, pinRect: CGRect) {
+        let displayScale = PinnedImageGeometry.displayScale(
+            imagePixelWidth: CGFloat(image.width),
+            pointWidth: pinRect.width
+        )
+        PinnedWindowManager.shared.pin(
+            image: image,
+            displayScale: displayScale,
+            pinRect: pinRect
+        )
+    }
+
+    private func saveIfNeeded(
+        image: CGImage,
+        ocrResult: OCRResult?,
+        destination: CaptureDestination,
+        imageCopySucceeded: Bool,
+        context: HistorySaveContext
+    ) async -> UUID? {
+        let autoSave = Self.boolPreference(
+            forKey: PreferenceKeys.historyAutoSave,
+            defaultValue: PreferenceDefaults.historyAutoSave
+        )
+        let saveFullText = Self.boolPreference(
+            forKey: PreferenceKeys.historySaveFullText,
+            defaultValue: PreferenceDefaults.historySaveFullText
+        )
+        let shouldSaveToHistory = switch destination {
+        case .configured: autoSave
+        case .clipboardOnly: imageCopySucceeded
+        case .editorOnly: true
+        case .pinOnly: true
+        }
+        guard shouldSaveToHistory else { return nil }
+        return await saveToHistoryAndWait(
+            image: image,
+            ocrResult: ocrResult,
+            saveFullText: saveFullText,
+            captureMode: context.modeDescription,
+            source: CaptureSourceInfo(
+                appName: context.appName,
+                windowTitle: context.windowTitle
+            ),
+            isProtected: destination == .pinOnly
+        )
+    }
+
     /// 运行 OCR 并展示条码复制建议，返回 OCR 结果。
     private func runOCRAndSuggestions(
         on image: CGImage,
         shouldOpenEditor: Bool,
         destination: CaptureDestination
     ) async -> OCRResult? {
+        guard destination != .pinOnly else { return nil }
         let barcodeResults = shouldOpenEditor ? await detectBarcodesForSuggestion(in: image) : []
 
         let shouldRunOCR = Self.boolPreference(
@@ -382,6 +424,8 @@ extension CaptureViewModel {
             return (false, true)
         case .editorOnly:
             return (true, false)
+        case .pinOnly:
+            return (false, false)
         }
     }
 
@@ -391,6 +435,7 @@ extension CaptureViewModel {
         shouldOpenEditor: Bool,
         destination: CaptureDestination
     ) {
+        guard destination != .pinOnly else { return }
         // Opening the editor is itself the success feedback, so suppress the
         // success toast to avoid it overlapping the editor UI. Failure to copy
         // (when copying was requested) is still surfaced as an error toast.

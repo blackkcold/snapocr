@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-09-28
+
+### Added
+- 区域截图新增 ⌘P 置顶：选区确认阶段按 ⌘P（或点击操作条「置顶图片」）即可把截图钉成无边框浮动面板，支持拖动、右下角等比缩放、滚轮/捏合缩放、⌥+滚轮调透明度、右键菜单（复制图片 / 复制文字 OCR / 缩放 / 适应屏幕 / 关闭全部）、双击或 Esc、⌘W 关闭。
+- 置顶面板以 AppKit 点坐标原位原尺寸呈现，缩放倍率取真实裁剪像素宽，兼容 Retina 与多显示器混合缩放。
+- 置顶内容默认不写入剪贴板；「复制文字 (OCR)」为右键显式动作。
+- 置顶生成的历史条目标记为受保护（`isProtected`），不会被任何自动清理路径（时限、数量、磁盘配额、分层剥图）淘汰；手动删除与清空仍生效。
+- 置顶面板设置 `sharingType = .none`，不会出现在第三方录屏、系统截屏或 SnapGlass 后续截图中。
+- 置顶快捷键可配置（默认 ⌘P）：设置 → 快捷键新增「区域选择期间」卡片，可录制任意组合键或清空。该快捷键复用 `KeyboardShortcuts.Shortcut` 仅作数据类型，独立存储于应用自有 `UserDefaults`，**不经过全局注册路径**，因此永远是选区上下文快捷键、绝不会变成全局热键，也不会抢占四个全局截图热键。录制时会拒绝与全局热键（⌘⇧1/2/3/O）及操作条保留键（⌘E / Return / Esc）冲突的组合；归一化 Caps Lock / 小键盘 / Fn 干扰。
+- 置顶面板新增悬浮编辑工具条：鼠标悬停时自动显示，可直接拖动不透明度与缩放（对数映射，兼顾 10%–800% 全区间），并显示实时百分比读数、1:1 与「适应屏幕」按钮，无需再依赖滚轮与修饰键。工具条为独立无边框子窗口，显式设置 `sharingType = .none` / `level` / `collectionBehavior`，因此不进入录屏与系统截屏，也不受面板透明度影响。
+
+### Fixed
+- 修复置顶工具条**高度不足导致内容上下被裁切**：外边距约束的 `trailing` / `bottom` 与锚点同向，`apply(layout:)` 却给四个约束统一写入**正值**，约束退化为负高度，`fittingSize` 因而吃掉上下边距（实测 `stack.frame.y = −marginV`），窗口比内容矮 2×`marginVertical`，被圆角所需的 `masksToBounds` 裁掉上下边缘。现按方向写入带符号常量，并把高度下限改为由「内容高 + 上下边距」推导（`PinnedToolbarLayout.minimumHeight`，`regular` 36 / `compact` 30），新增回归单测守住该不变量。40pt 硬编码年代因高度不读测量值而掩盖了此缺陷。
+- 修复置顶工具条**贴底遮图**：竖直候选顺序改为**面板下外侧 → 面板上外侧 → 面板底部内侧**。面板贴近屏幕底部时工具条翻到上侧，不再压住截图内容；上下都放不下才回退到面板底部内侧。
+
+### Changed
+- 置顶面板的悬浮工具条改为**响应式两档布局**：宽度由「固定件 + 两根滑杆」算出，滑杆在同一档位内吸收全部剩余宽度（`regular` / `compact` 两档，均可连续伸缩）；可用宽度不足 `regular` 最小宽度时自动降为紧凑档，省略前导图标并收紧间距与控件尺寸。两个按钮改为**纯图标**（语义交给 toolTip 与无障碍标签），整体明显更紧凑。
+- 置顶工具条尺寸不再硬编码：高度按内容测量并以「内容高 + 上下边距」为下限，宽度按档位固定件加两根滑杆算出；两者均向上取整到整数点以消除亚像素错位。圆角 10 → 8，且外边距不小于圆角半径使控件避开圆角裁切区。
+- 置顶缩放改用**单一真源**：倍率由面板 frame 宽度反推，不再缓存可变副本。修复了「适应屏幕」或拖拽右下角手柄改变尺寸后倍率失真、随后滚轮缩放出现跳变的问题；工具条读数与画面始终一致。
+- 区域截图的取色悬停标签复用等宽字体与有界文本尺寸，减少鼠标移动重绘时重复创建字体和调用 CoreText 测量；保留原布局与取色、十字线行为。偶发崩溃仍需后续实机观察。
+
 ## [0.8.1] - 2026-09-15
 
 ### Fixed
@@ -216,7 +237,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.5...HEAD
+[0.8.5]: https://github.com/blackkcold/snapocr/compare/v0.8.1...v0.8.5
 [0.8.1]: https://github.com/blackkcold/snapocr/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/blackkcold/snapocr/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/blackkcold/snapocr/compare/v0.6.1...v0.7.0

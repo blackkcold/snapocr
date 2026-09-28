@@ -9,9 +9,9 @@ extension HistoryActor {
         let sorted = persistedEntries.values.sorted { $0.timestamp < $1.timestamp }
         guard let oldest = sorted.first else { return }
 
-        if oldest.isFavourite {
-            // 尝试找非收藏的最旧条目
-            guard let nonFavourite = sorted.first(where: { !$0.isFavourite }) else {
+        if oldest.isFavourite || oldest.isProtected {
+            // 尝试找非收藏且非保护的最旧条目
+            guard let nonFavourite = sorted.first(where: { !$0.isFavourite && !$0.isProtected }) else {
                 throw HistoryError.storageFull(current: entries.count, max: maxEntries)
             }
             try await delete(id: nonFavourite.id)
@@ -42,7 +42,7 @@ extension HistoryActor {
         if persistedEntries.count > maxEntries {
             let excess = persistedEntries.values
                 .sorted { $0.timestamp < $1.timestamp }
-                .filter { !$0.isFavourite }
+                .filter { !$0.isFavourite && !$0.isProtected }
                 .prefix(persistedEntries.count - maxEntries)
             for entry in excess {
                 try await delete(id: entry.id)
@@ -62,7 +62,7 @@ extension HistoryActor {
         let retentionDays = cleanupPolicy.retentionDays(for: .image)
         let sorted = allPersistedEntries().values.sorted { $0.timestamp > $1.timestamp }
         let expired = sorted.filter { entry in
-            guard !entry.isFavourite, retentionDays != Int.max else { return false }
+            guard !entry.isFavourite, !entry.isProtected, retentionDays != Int.max else { return false }
             return Date().timeIntervalSince(entry.timestamp) / 86_400 > Double(retentionDays)
         }
         for entry in expired {
@@ -72,7 +72,7 @@ extension HistoryActor {
         let survivors = allPersistedEntries().values.sorted { $0.timestamp > $1.timestamp }
         let overflow = max(0, survivors.count - maxEntries)
         guard overflow > 0 else { return }
-        for entry in survivors.reversed().filter({ !$0.isFavourite }).prefix(overflow) {
+        for entry in survivors.reversed().filter({ !$0.isFavourite && !$0.isProtected }).prefix(overflow) {
             try await delete(id: entry.id)
         }
     }
@@ -99,7 +99,7 @@ extension HistoryActor {
             logger.warning("磁盘用量超过限制: \(totalSize) > \(cleanupPolicy.maxTotalSizeBytes)")
             // 清理最旧的条目直到低于限制
             let sorted = allPersistedEntries().values.sorted { $0.timestamp < $1.timestamp }
-            for entry in sorted where !entry.isFavourite {
+            for entry in sorted where !entry.isFavourite && !entry.isProtected {
                 guard totalSize > cleanupPolicy.maxTotalSizeBytes else { break }
                 let entrySize = storedSize(for: entry.id)
                 try await delete(id: entry.id)

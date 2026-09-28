@@ -5,10 +5,12 @@ import SharedKit
 enum AreaCaptureAction {
     case copy
     case edit
+    case pin
 }
 
 struct AreaSelectionResult {
     let screenRect: CGRect
+    let appKitRect: CGRect
     let normalizedPath: [CGPoint]?
     let action: AreaCaptureAction
 

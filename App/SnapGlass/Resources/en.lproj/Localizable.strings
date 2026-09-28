@@ -140,6 +140,16 @@
 "Copy the screenshot to the clipboard" = "Copy the screenshot to the clipboard";
 "Edit Screenshot" = "Edit Screenshot";
 "Open the screenshot in the annotation editor" = "Open the screenshot in the annotation editor";
+"Pin Image" = "Pin Image";
+"Pin the screenshot as a floating panel" = "Pin the screenshot as a floating panel";
+"Copy Text (OCR)" = "Copy Text (OCR)";
+"Scale" = "Scale";
+"Zoom" = "Zoom";
+"Fit to Screen" = "Fit to Screen";
+"Pinned Image Toolbar" = "Pinned Image Toolbar";
+"Close All Pinned Images" = "Close All Pinned Images";
+"Recognizing text…" = "Recognizing text…";
+"History storage is full of protected records" = "History storage is full of protected records";
 "Unable to copy image" = "Unable to copy image";
 "Area captures ask whether to copy or edit when you confirm the selection. These settings apply to window, fullscreen, and scrolling captures." = "Area captures ask whether to copy or edit when you confirm the selection. These settings apply to window, fullscreen, and scrolling captures.";
 "When enabled, recognized text is copied automatically after capture." = "When enabled, recognized text is copied automatically after capture.";
@@ -304,6 +314,15 @@
 "items" = "items";
 "Global Shortcuts" = "Global Shortcuts";
 "Reset All" = "Reset All";
+
+
+// MARK: - Pin Shortcut
+
+"During Area Selection" = "During Area Selection";
+"Only applies while the area-selection overlay is active." = "Only applies while the area-selection overlay is active.";
+"Reset" = "Reset";
+"Click to record" = "Click to record";
+"Press shortcut…" = "Press shortcut…";
 "Enabled Languages" = "Enabled Languages";
 "Japanese" = "Japanese";
 "Korean" = "Korean";

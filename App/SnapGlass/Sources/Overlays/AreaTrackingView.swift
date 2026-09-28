@@ -7,129 +7,6 @@ import SwiftUI
 
 // MARK: - AreaTrackingView
 
-private final class CaptureActionBarView: NSVisualEffectView {
-    var onBack: (() -> Void)?
-    var onCopy: (() -> Void)?
-    var onEdit: (() -> Void)?
-
-    private let backButton = NSButton()
-    private let copyButton = NSButton()
-    private let editButton = NSButton()
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-
-        material = .hudWindow
-        blendingMode = .withinWindow
-        state = .active
-        wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.masksToBounds = true
-
-        configureActionButtons()
-
-        let stack = NSStackView(views: [backButton, copyButton, editButton])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.distribution = .fill
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-        ])
-
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(
-            AppLocalization.string("Screenshot Actions")
-        )
-    }
-
-    private func configureActionButtons() {
-        configure(
-            backButton,
-            title: AppLocalization.string("Back"),
-            symbol: "chevron.backward",
-            toolTip: AppLocalization.string("Return to selection adjustments"),
-            action: #selector(back)
-        )
-        backButton.keyEquivalent = "\u{1b}"
-
-        configure(
-            copyButton,
-            title: AppLocalization.string("Copy Image"),
-            symbol: "doc.on.doc",
-            toolTip: AppLocalization.string("Copy the screenshot to the clipboard"),
-            action: #selector(copyImage)
-        )
-        copyButton.keyEquivalent = "\r"
-
-        configure(
-            editButton,
-            title: AppLocalization.string("Edit Screenshot"),
-            symbol: "pencil.and.outline",
-            toolTip: AppLocalization.string("Open the screenshot in the annotation editor"),
-            action: #selector(editScreenshot)
-        )
-        editButton.keyEquivalent = "e"
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        for button in [backButton, copyButton, editButton]
-        where button.convert(button.bounds, to: self).contains(point) {
-            return button
-        }
-        return super.hitTest(point)
-    }
-
-    func focusDefaultAction() {
-        window?.makeFirstResponder(copyButton)
-    }
-
-    func performAction(at point: NSPoint) -> Bool {
-        let actions: [(NSButton, () -> Void)] = [
-            (backButton, { [weak self] in self?.onBack?() }),
-            (copyButton, { [weak self] in self?.onCopy?() }),
-            (editButton, { [weak self] in self?.onEdit?() }),
-        ]
-        guard let action = actions.first(where: { button, _ in
-            button.convert(button.bounds, to: self).contains(point)
-        })?.1 else {
-            return false
-        }
-        action()
-        return true
-    }
-
-    private func configure(
-        _ button: NSButton,
-        title: String,
-        symbol: String,
-        toolTip: String,
-        action: Selector
-    ) {
-        button.title = title
-        button.bezelStyle = .rounded
-        button.target = self
-        button.action = action
-        button.toolTip = toolTip
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        button.imagePosition = .imageLeading
-    }
-
-    @objc private func back() { onBack?() }
-    @objc private func copyImage() { onCopy?() }
-    @objc private func editScreenshot() { onEdit?() }
-}
-
 final class AreaTrackingView: NSView {
     var onSelectionComplete: ((AreaSelectionResult?) -> Void)?
 
@@ -155,7 +32,7 @@ final class AreaTrackingView: NSView {
     var hoverPoint: CGPoint = .zero
     var hoverColor: SampledColor?
     private var trackingAreaReference: NSTrackingArea?
-    private let actionBar = CaptureActionBarView(frame: .zero)
+    let actionBar = CaptureActionBarView(frame: .zero)
 
     init(
         frame frameRect: NSRect,
@@ -176,6 +53,7 @@ final class AreaTrackingView: NSView {
         actionBar.onBack = { [weak self] in self?.hideActionChooser() }
         actionBar.onCopy = { [weak self] in self?.completeSelection(action: .copy) }
         actionBar.onEdit = { [weak self] in self?.completeSelection(action: .edit) }
+        actionBar.onPin = { [weak self] in self?.completeSelection(action: .pin) }
         addSubview(actionBar)
     }
 
@@ -311,6 +189,16 @@ final class AreaTrackingView: NSView {
         onSelectionComplete?(nil)
     }
 
+    /// Catches the pin shortcut when the event carries key-equivalent modifiers
+    /// (⌘ / ⌃ / ⌥), which AppKit resolves before dispatching `keyDown`.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard PinSelectionShortcut.matches(event: event), isPinShortcutPhase else {
+            return super.performKeyEquivalent(with: event)
+        }
+        performPinShortcut()
+        return true
+    }
+
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 53:
@@ -326,7 +214,11 @@ final class AreaTrackingView: NSView {
                 showActionChooser()
             }
         default:
-            super.keyDown(with: event)
+            if PinSelectionShortcut.matches(event: event), isPinShortcutPhase {
+                performPinShortcut()
+            } else {
+                super.keyDown(with: event)
+            }
         }
     }
 
@@ -334,6 +226,7 @@ final class AreaTrackingView: NSView {
         guard phase == .adjusting, selectionRect.width > 5, selectionRect.height > 5 else { return }
         phase = .choosingAction
         actionBar.isHidden = false
+        actionBar.updatePinShortcutHint()
         positionActionBar()
         actionBar.focusDefaultAction()
         needsDisplay = true
@@ -347,8 +240,13 @@ final class AreaTrackingView: NSView {
         needsDisplay = true
     }
 
-    private func completeSelection(action: AreaCaptureAction) {
+    func completeSelection(action: AreaCaptureAction) {
         guard phase == .choosingAction, selectionRect.width > 5, selectionRect.height > 5 else { return }
+        onSelectionComplete?(makeSelectionResult(action: action))
+    }
+
+    /// 同时产出 Quartz 选区矩形（截图用）与 AppKit 点矩形（置顶面板用）。
+    func makeSelectionResult(action: AreaCaptureAction) -> AreaSelectionResult {
         let normalizedPath: [CGPoint]?
         if style == .freeform {
             normalizedPath = freeformPoints.map {
@@ -360,18 +258,20 @@ final class AreaTrackingView: NSView {
         } else {
             normalizedPath = nil
         }
-        onSelectionComplete?(AreaSelectionResult(
-            screenRect: quartzScreenRect(from: selectionRect),
+        let rects = selectionRects()
+        return AreaSelectionResult(
+            screenRect: rects.quartz,
+            appKitRect: rects.appKit,
             normalizedPath: normalizedPath,
             action: action
-        ))
+        )
     }
 
     private func positionActionBar() {
         guard !actionBar.isHidden, !selectionRect.isEmpty else { return }
 
         let fittingSize = actionBar.fittingSize
-        let size = CGSize(width: max(fittingSize.width, 320), height: max(fittingSize.height, 44))
+        let size = CGSize(width: max(fittingSize.width, 400), height: max(fittingSize.height, 44))
         let margin: CGFloat = 12
         let horizontalInset: CGFloat = 8
         let proposedX = selectionRect.midX - size.width / 2
@@ -398,23 +298,28 @@ final class AreaTrackingView: NSView {
         freeformPoints = []
     }
 
-    private func quartzScreenRect(from viewRect: CGRect) -> CGRect {
-        guard let window else { return viewRect }
-        let windowRect = convert(viewRect, to: nil)
+    /// 将当前选区同时映射为 AppKit 全局点矩形与 Quartz 全局矩形。
+    ///
+    /// AppKit 矩形直接透传用于置顶面板（面板 frame 即 AppKit 点坐标），
+    /// Quartz 矩形仅用于截图裁剪路径。
+    func selectionRects() -> (appKit: CGRect, quartz: CGRect) {
+        guard let window else { return (selectionRect, selectionRect) }
+        let windowRect = convert(selectionRect, to: nil)
         let appKitRect = window.convertToScreen(windowRect)
         let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }),
               let displayID = screen.deviceDescription[
                   NSDeviceDescriptionKey("NSScreenNumber")
               ] as? CGDirectDisplayID else {
-            return appKitRect
+            return (appKitRect, appKitRect)
         }
 
-        return ScreenCoordinateGeometry.quartzRect(
+        let quartz = ScreenCoordinateGeometry.quartzRect(
             from: appKitRect,
             appKitScreenFrame: screen.frame,
             quartzScreenFrame: CGDisplayBounds(displayID)
         ) ?? appKitRect
+        return (appKitRect, quartz)
     }
 
     func freeformPath() -> CGPath {

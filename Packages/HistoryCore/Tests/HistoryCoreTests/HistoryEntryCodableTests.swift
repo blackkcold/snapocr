@@ -122,4 +122,44 @@ struct HistoryEntryCodableTests {
 
         #expect(decoded.sourceType == .urlScheme)
     }
+
+    @Test func codable_legacyRecordWithoutIsProtectedKeyDecodes() throws {
+        let legacyJSON = """
+        {
+          "id": "3F2504E0-4F89-11D3-9A0C-0305E82C3301",
+          "timestamp": 762134400,
+          "textContent": "legacy",
+          "ocrConfidence": 0.8,
+          "captureMode": "area",
+          "sourceType": "screenshot",
+          "isFavourite": false,
+          "tags": []
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(HistoryEntry.self, from: Data(legacyJSON.utf8))
+
+        #expect(decoded.textContent == "legacy")
+        #expect(decoded.isProtected == false)
+    }
+
+    @Test func codable_isProtectedRoundTrip() throws {
+        let entry = HistoryEntry(
+            textContent: "pinned",
+            ocrConfidence: 0.9,
+            captureMode: "area",
+            isProtected: true
+        )
+
+        let data = try JSONEncoder().encode(entry)
+        let decoded = try JSONDecoder().decode(HistoryEntry.self, from: data)
+
+        #expect(decoded.isProtected)
+    }
+
+    @Test func initializer_defaultsIsProtectedToFalse() {
+        let entry = HistoryEntry(textContent: "x", ocrConfidence: 0.1, captureMode: "area")
+
+        #expect(!entry.isProtected)
+    }
 }

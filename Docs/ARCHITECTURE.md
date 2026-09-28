@@ -234,6 +234,61 @@ Cocoa 存在两条互不相通的解析路径，两条都必须覆盖：
 
 ---
 
+## 置顶面板（Pinned NSPanel）
+
+区域截图选区确认阶段按 ⌘P（或点击操作条 pin 按钮）会创建置顶面板。面板同样受上述激活策略约束：
+
+> 置顶快捷键（默认 ⌘P）可通过 `PinSelectionShortcut` 自定义。它复用 `KeyboardShortcuts.Shortcut` 仅作为数据类型，配置存于 `PreferenceKeys.pinSelectionShortcut`（应用自有 `UserDefaults`），**从不调用** `KeyboardShortcuts.setShortcut` / `Recorder` / `reset`，因此永远不会注册为全局热键。匹配分两条路径：带 ⌘/⌃/⌥ 的事件走 `performKeyEquivalent(with:)`（见下方约束表），其余走 `keyDown`；两阶段（`.adjusting` / `.choosingAction`）分别走 `onSelectionComplete` 与 `completeSelection`。录制侧拒绝与全局热键及操作条保留键冲突的组合。
+
+| 属性 | 取值 | 原因 |
+|------|------|------|
+| 窗口类型 | `NSPanel`（`[.borderless, .nonactivatingPanel]`） | 无边框、不抢焦点；`hasVisibleUserFacingWindow` 显式排除 `NSPanel`，因此置顶不会把应用钉在 `.regular` |
+| `level` | `.floating` | 保持在普通窗口之上 |
+| `hidesOnDeactivate` | `false` | 应用失活时置顶内容不消失 |
+| `sharingType` | `.none` | 置顶内容不进入录屏 / 系统截屏 / 后续 SnapGlass 截图 |
+| `collectionBehavior` | `[.canJoinAllSpaces, .fullScreenAuxiliary]` | 跨 Space 与全屏辅助显示 |
+| `canBecomeKey` / `canBecomeMain` | `true` / `false` | 可接收键盘（Esc / ⌘W），不成为主窗口 |
+
+关键约束（易回归点）：
+
+| 约束 | 原因 |
+|------|------|
+| ⌘W 必须 override `performKeyEquivalent(with:)` | Command 组合键在无边框面板中先走 key equivalent 分发，`keyDown` 不可靠 |
+| `closeAll()` 只遍历管理器自有数组 | 选区面板与窗口选择面板同样是 `NSPanel`，扫描 `NSApp.windows` 按类型过滤会误关它们 |
+| 面板需被强引用持有至 `willClose` | `NSPanel` 默认 `isReleasedWhenClosed`，否则会提前释放 |
+| 缩放倍率取 `image.width / pinRect.width` | 混合缩放多显示器下各屏倍率不同，`backingScaleFactor` 不可靠 |
+| 缩放倍率由面板 frame 宽度反推，不缓存可变副本 | `fitToScreen()` 与拖拽右下角手柄只改 frame，缓存倍率会与画面失同步（工具条读数随之失真、滚轮缩放跳变） |
+
+### 悬浮工具条（PinnedToolbarWindow / PinnedToolbarView）
+
+悬停置顶面板时显示编辑工具条（不透明度、缩放、1:1、适应屏幕）。位置**默认在面板底部外侧**，面板贴近屏幕底部（下方放不下）时**翻到面板上侧**，上下都放不下（面板几乎占满屏高）才回退到面板底部内侧——避免工具条压住截图内容。工具条是**独立无边框子窗口**而非面板内子视图，原因有二：
+
+1. 面板可被拖拽缩放到 `minimumResizeWidth`（40pt），子视图会被窗口裁剪而装不下工具条；
+2. 面板透明度由窗口级 `alphaValue` 实现，子视图在 20% 不透明度下会一并变淡而无法操作，独立窗口可完全避开该实现。
+
+| 约束 | 原因 |
+|------|------|
+| 工具条窗口必须显式设置 `sharingType = .none` | `sharingType` 是**逐窗口**属性、不被父窗口继承；SnapGlass 自身截图不排除本应用窗口，漏设即会入镜 |
+| 工具条窗口必须显式设置 `level` 与 `collectionBehavior` | 二者同样不继承；漏设会导致切换 Space 或进入全屏时工具条消失 |
+| `orderFront` 之后需重新确认 `sharingType` | 排序操作可能重置该属性 |
+| 工具条窗口必须保持 `.borderless`（不得为带标题的普通 `NSWindow`） | 否则会命中 `hasVisibleUserFacingWindow`，使应用被永久钉在 `.regular`（Dock 图标常驻） |
+| 工具条由管理器自有字典持有，并在 `willClose` / `closeAll` 一并回收 | 与面板同源：禁止扫描 `NSApp.windows`，且须避免子窗口泄漏成幽灵窗口 |
+| 显隐时序收敛到 `PinnedToolbarVisibility` 纯值类型 | 工具条与面板是两个窗口，鼠标移向工具条必然触发面板 `mouseExited`，隐藏必须延迟并由工具条进入事件取消；纯类型可在 CaptureCore 下单测 |
+| 工具条尺寸由**内容测量**得出，不得硬编码高/宽 | 旧实现把高度写死为 40pt 且只测宽度，窗口比内容矮，控件被圆角裁切而显示不全 |
+| 外边距约束**必须带符号**（`trailing` / `bottom` 为负），且高度下限 = 内容高 + 2×`marginVertical` | 二者同向时若给正值，约束退化为负高度，`fittingSize` 会吃掉上下边距（实测 `stack.frame.y = −marginV`），窗口比内容矮即被 `masksToBounds` 裁切——这正是「工具条高度不够、显示不全」的根因 |
+| 宽度 = 档位固定件 + 两根滑杆，滑杆在档位区间内吸收剩余宽度 | 「响应式」的落点：同一档位内滑杆随可用宽度连续伸缩；宽度由 `toolbarLayout` / `toolbarWidth` / `clampedToolbarWidth` 纯函数算出（`PinnedToolbarLayout` 提供档位度量），窗口与内容恒等宽 |
+| 两个滑杆用 `>=min` / `<=max` 区间约束，不用固定宽度 | 固定宽度不会随可用空间伸缩；下限用优先级 750，极端窄屏时允许静默让步而非约束冲突 |
+| 布局分 `regular` / `compact` 两档，两档都可响应式伸缩 | 可用宽度不足 `regular` 最小宽度时降档：省略前导图标、收紧间距与控件尺寸、收窄滑杆区间；百分比读数两档都保留 |
+| 图标按钮 `title = ""` + `imagePosition = .imageOnly`，语义交给 `toolTip` 与无障碍标签 | 中文标题使工具条过宽；图标化后仍可被 VoiceOver 读出 |
+| 竖直候选必须**完整**放得下才采用，不得靠钳制硬挤 | 否则面板几乎占满屏高时工具条会被推到屏幕边缘、远离光标且仍遮住画面 |
+| 外边距 ≥ 圆角半径，圆角取 8pt | `masksToBounds` 为圆角所必需，边距不足会把控件圆角区裁掉 |
+| 工具条尺寸向上取整到整数点（`integralToolbarSize`） | 滑杆宽度常出现半点，取整消除亚像素错位且不会让内容超出窗口 |
+| `controlSize` 改变后需 `needsLayout` 再读 `fittingSize` | 否则外部测到的是切换前的陈旧固有尺寸 |
+
+置顶历史条目的 `isProtected` 语义：自动清理的四类路径（时限淘汰、数量上限、磁盘配额、分层剥图）均跳过受保护条目；但 `delete(id:)` / `clear()` 等用户显式操作不受影响。置顶路径不运行自动 OCR，故条目文本为空、不可被文本搜索命中——这是「置顶不静默改写剪贴板、OCR 仅在右键显式触发」这一隐私取舍的直接结果。
+
+---
+
 ## 技术选型
 
 | 域 | 选择 |

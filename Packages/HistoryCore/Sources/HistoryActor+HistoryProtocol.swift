@@ -136,6 +136,7 @@ extension HistoryActor {
     ///   - sourceType: Source type for the history entry.
     ///   - sourceAppName: Optional source application name.
     ///   - sourceWindowTitle: Optional source window title.
+    ///   - isProtected: Marks the entry as protected from automatic cleanup.
     @discardableResult
     public func saveCapture(
         image: CGImage,
@@ -144,7 +145,8 @@ extension HistoryActor {
         captureMode: String,
         sourceType: HistorySourceType = .screenshot,
         sourceAppName: String? = nil,
-        sourceWindowTitle: String? = nil
+        sourceWindowTitle: String? = nil,
+        isProtected: Bool = false
     ) async throws -> UUID {
         try tempDir.ensureDirectoryExists()
 
@@ -177,7 +179,8 @@ extension HistoryActor {
             sourceAppName: sourceAppName,
             sourceWindowTitle: sourceWindowTitle,
             imagePath: imageURL,
-            thumbnailPath: thumbnailURL
+            thumbnailPath: thumbnailURL,
+            isProtected: isProtected
         )
 
         try await save(entry)

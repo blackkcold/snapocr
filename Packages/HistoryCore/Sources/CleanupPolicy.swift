@@ -188,12 +188,12 @@ public struct CleanupPolicy: Sendable {
         let limit = maxCount(for: category)
         let sorted = entries.sorted { $0.timestamp > $1.timestamp }
         let expired = sorted.filter {
-            !$0.isFavourite && shouldEvict($0, category: category)
+            !$0.isFavourite && !$0.isProtected && shouldEvict($0, category: category)
         }
         let expiredIDs = Set(expired.map(\.id))
         let survivors = sorted.filter { !expiredIDs.contains($0.id) }
         let overflow = max(0, survivors.count - limit)
-        let oldestNonFavourites = survivors.reversed().filter { !$0.isFavourite }
+        let oldestNonFavourites = survivors.reversed().filter { !$0.isFavourite && !$0.isProtected }
         return expired + Array(oldestNonFavourites.prefix(overflow))
     }
 

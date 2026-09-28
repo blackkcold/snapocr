@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.8.1-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.8.5-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -82,6 +82,17 @@
 - 区域选取支持实时画面与静态快照预览；快照不可用时使用纯黑背景
 - 默认 Retina 像素，可切换标准 1x
 - 支持 PNG/JPEG 编码与 JPEG 质量设置
+
+### 置顶（⌘P，可配置）
+
+- 选区确认阶段按 <kbd>⌘</kbd>+<kbd>P</kbd>，或点击操作条「置顶图片」
+- 拖动移动；右下角拖拽等比缩放；滚轮 / 捏合缩放；<kbd>⌥</kbd>+滚轮调透明度
+- 鼠标悬停出现编辑工具条：不透明度滑杆、缩放滑杆（对数映射，10%–800%）与实时百分比读数，另有 1:1 与「适应屏幕」按钮
+- 右键菜单：复制图片 / 复制文字 (OCR) / 缩放 / 适应屏幕 / 关闭全部置顶图片
+- 双击、<kbd>Esc</kbd> 或 <kbd>⌘</kbd>+<kbd>W</kbd> 关闭
+- 快捷键可在 设置 → 快捷键 → 「区域选择期间」中自定义（录制或清空）
+- 该快捷键是选区上下文快捷键，**永不注册为全局热键**；录制时会拒绝与全局截图热键冲突的组合
+- 置顶不写入剪贴板（OCR 文字需右键显式复制），且不会出现在录屏或后续截图中
 
 ### OCR
 
