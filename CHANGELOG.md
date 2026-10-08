@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-10-08
+
+### Added
+- 历史记录截图网格新增右键「复制图片」：解密当前最新版原图并按像素 1:1 写入剪贴板，Preview / 微信 / 飞书可直接粘贴；点击菜单前先同步为选中项。截图段聚焦时 `⌘C` 复制当前选中（view-local 快捷键，仅历史窗口生效，不污染全局文本框）；成功 toast `Screenshot copied to clipboard`，失败走历史页 `errorMessage` 弹窗（`Unable to copy image`）。四语言文案已齐，无需新增键。
+
 ## [0.8.5] - 2026-09-28
 
 ### Added
@@ -237,7 +242,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.5...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.6...HEAD
+[0.8.6]: https://github.com/blackkcold/snapocr/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/blackkcold/snapocr/compare/v0.8.1...v0.8.5
 [0.8.1]: https://github.com/blackkcold/snapocr/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/blackkcold/snapocr/compare/v0.7.0...v0.8.0

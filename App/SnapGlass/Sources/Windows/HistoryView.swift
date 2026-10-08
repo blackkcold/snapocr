@@ -221,6 +221,19 @@ struct HistoryView: View {
                 }
                 .padding(16)
             }
+            .background(
+                Button {
+                    guard let id = selectedEntryID,
+                          let selected = visibleEntries.first(where: { $0.id == id })
+                    else { return }
+                    Task { await copyImage(selected) }
+                } label: {
+                    EmptyView()
+                }
+                .keyboardShortcut("c", modifiers: .command)
+                .hidden()
+                .disabled(selectedEntryID == nil)
+            )
         }
     }
 
@@ -309,6 +322,13 @@ struct HistoryView: View {
         }
 
         Divider()
+
+        Button {
+            selectedEntryID = entry.id
+            Task { await copyImage(entry) }
+        } label: {
+            Label(AppLocalization.string("Copy Image"), systemImage: "photo.on.rectangle")
+        }
 
         Button {
             NSPasteboard.general.clearContents()
