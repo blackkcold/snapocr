@@ -122,6 +122,41 @@ extension HistoryView {
         }
     }
 
+    func copyImage(_ entry: HistoryEntry) async {
+        guard let history else { return }
+        do {
+            guard let data = try await history.imageData(for: entry.id),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else {
+                errorMessage = AppLocalization.string("Unable to copy image")
+                return
+            }
+            let nsImage = NSImage(
+                cgImage: cgImage,
+                size: NSSize(width: cgImage.width, height: cgImage.height)
+            )
+            NSPasteboard.general.clearContents()
+            guard NSPasteboard.general.writeObjects([nsImage]) else {
+                errorMessage = AppLocalization.string("Unable to copy image")
+                return
+            }
+            let toast = ToastMessage(
+                message: AppLocalization.string("Screenshot copied to clipboard"),
+                type: .success
+            )
+            toastMessage = toast
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                if toastMessage?.id == toast.id {
+                    toastMessage = nil
+                }
+            }
+        } catch {
+            errorMessage = AppLocalization.string("Unable to copy image")
+        }
+    }
+
     func openInEditor(_ entry: HistoryEntry) async {
         guard let history else { return }
         do {
