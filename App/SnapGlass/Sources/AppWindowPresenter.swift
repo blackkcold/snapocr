@@ -63,9 +63,13 @@ final class SystemApplicationActivationController: ApplicationActivationControll
 
 @MainActor
 final class WindowPresentationCoordinator {
-    static let shared = WindowPresentationCoordinator(
-        activationController: SystemApplicationActivationController()
-    )
+    static let shared: WindowPresentationCoordinator = {
+        let activationController = SystemApplicationActivationController()
+        return WindowPresentationCoordinator(
+            activationController: activationController,
+            focuser: SystemWindowFocuser(activation: activationController)
+        )
+    }()
 
     private final class WindowReference {
         weak var value: NSWindow?
@@ -86,6 +90,7 @@ final class WindowPresentationCoordinator {
 
     private let activationController: ApplicationActivationControlling
     private let presentationTimeout: Duration
+    private let focuser: WindowFocusing
     #if DEBUG
     private let logger = Logger(category: "window-lifecycle", logLevel: .debug)
     #else
@@ -99,10 +104,12 @@ final class WindowPresentationCoordinator {
 
     init(
         activationController: ApplicationActivationControlling,
-        presentationTimeout: Duration = .seconds(3)
+        presentationTimeout: Duration = .seconds(3),
+        focuser: WindowFocusing? = nil
     ) {
         self.activationController = activationController
         self.presentationTimeout = presentationTimeout
+        self.focuser = focuser ?? SystemWindowFocuser(activation: activationController)
     }
 
     func present(id: String, open: () -> Void) {
@@ -114,7 +121,8 @@ final class WindowPresentationCoordinator {
 
         if let window = registeredWindow(id: id),
            window.isVisible,
-           window.isKeyWindow {
+           window.isKeyWindow,
+           activationController.isActive {
             logger.info("present.noop id=\(id) reason=already-key")
             return
         }
@@ -124,20 +132,36 @@ final class WindowPresentationCoordinator {
         if !policyChanged {
             logger.warning("policy.regular.failed id=\(id)")
         }
-        activationController.requestActivation()
-        logger.info(
-            "present.activate id=\(id) generation=\(presentation.generation) "
-                + "new=\(presentation.isNew) policyReady=\(policyChanged)"
-        )
 
-        if let window = registeredWindow(id: id) {
-            logger.info("present.front id=\(id) generation=\(presentation.generation) source=registered")
-            bringToFront(window)
-        } else if presentation.isNew {
-            logger.info("present.open id=\(id) generation=\(presentation.generation)")
-            open()
+        if let window = registeredWindow(id: id), window.isVisible || window.isMiniaturized {
+            // 已注册且仍存活的窗口：事件驱动聚焦，等应用真正 active 后再前置，
+            // 不与异步激活在同一 runloop tick 竞争（第二次点击丢焦点的根因）。
+            logger.info("present.focus id=\(id) generation=\(presentation.generation) source=registered")
+            focuser.focus(window)
         } else {
-            logger.info("present.wait id=\(id) generation=\(presentation.generation) reason=open-in-flight")
+            activationController.requestActivation()
+            logger.info(
+                "present.activate id=\(id) generation=\(presentation.generation) "
+                    + "new=\(presentation.isNew) policyReady=\(policyChanged)"
+            )
+
+            if presentation.isNew {
+                if windows[id] != nil {
+                    // 注册过但不可见也未最小化 → 关闭后残留的僵尸窗口：
+                    // 移除引用并重走 open()，避免把死窗口顶到前台。
+                    logger.info(
+                        "present.remove-stale id=\(id) generation=\(presentation.generation)"
+                    )
+                    removeStaleWindow(id: id)
+                }
+                logger.info("present.open id=\(id) generation=\(presentation.generation)")
+                open()
+            } else {
+                logger.info(
+                    "present.wait id=\(id) generation=\(presentation.generation) "
+                        + "reason=open-in-flight"
+                )
+            }
         }
 
         scheduleTimeoutIfNeeded(id: id, generation: presentation.generation)
@@ -169,12 +193,8 @@ final class WindowPresentationCoordinator {
 
         if lifecycleState.isPresentationPending(id: id) {
             _ = ensureRegularPolicy()
-            if !activationController.isActive {
-                activationController.requestActivation()
-                logger.info("window.activate id=\(id) source=registration")
-            }
-            logger.info("window.front id=\(id) source=registration")
-            bringToFront(window)
+            logger.info("window.focus id=\(id) source=registration")
+            focuser.focus(window)
         }
     }
 
@@ -193,14 +213,6 @@ final class WindowPresentationCoordinator {
         let result = activationController.setActivationPolicy(.regular)
         logger.info("policy.regular result=\(result)")
         return result
-    }
-
-    private func bringToFront(_ window: NSWindow) {
-        if window.isMiniaturized {
-            window.deminiaturize(nil)
-        }
-        window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
     }
 
     private func observeWindow(_ window: NSWindow, id: String, token: ObjectIdentifier) {
