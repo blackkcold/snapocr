@@ -81,6 +81,99 @@ struct WindowPresentationCoordinatorTests {
         #expect(activationController.policyChanges == [.regular, .accessory])
         #expect(activationController.activationPolicy == .accessory)
     }
+
+    @Test("An open window without a registered window is opened once")
+    func noWindowOpensOnce() {
+        let activation = ActivationControllerSpy(activationPolicy: .regular, hasVisibleUserFacingWindow: true)
+        let focuser = FocuserSpy()
+        let coordinator = WindowPresentationCoordinator(
+            activationController: activation,
+            presentationTimeout: .milliseconds(10),
+            focuser: focuser
+        )
+        var openCount = 0
+
+        coordinator.present(id: "editor") { openCount += 1 }
+
+        #expect(openCount == 1)
+        #expect(focuser.focusedWindows.isEmpty)
+    }
+
+    @Test("A second present while opening in flight does not open again")
+    func inFlightPresentationDoesNotReopen() {
+        let activation = ActivationControllerSpy(activationPolicy: .regular, hasVisibleUserFacingWindow: true)
+        let focuser = FocuserSpy()
+        let coordinator = WindowPresentationCoordinator(
+            activationController: activation,
+            presentationTimeout: .milliseconds(10),
+            focuser: focuser
+        )
+        var openCount = 0
+
+        coordinator.present(id: "editor") { openCount += 1 }
+        coordinator.present(id: "editor") { openCount += 1 }
+
+        #expect(openCount == 1)
+    }
+
+    @Test("A live registered window is focused instead of reopened")
+    func liveWindowIsFocused() {
+        let activation = ActivationControllerSpy(activationPolicy: .regular, hasVisibleUserFacingWindow: true)
+        activation.isActive = true
+        let focuser = FocuserSpy()
+        let coordinator = WindowPresentationCoordinator(
+            activationController: activation,
+            presentationTimeout: .milliseconds(10),
+            focuser: focuser
+        )
+        let window = makeCoordinatorWindow()
+        window.orderFront(nil)
+        coordinator.register(window, id: "history")
+        var openCount = 0
+
+        coordinator.present(id: "history") { openCount += 1 }
+
+        #expect(openCount == 0)
+        #expect(focuser.focusedWindows == [ObjectIdentifier(window)])
+    }
+
+    @Test("A registered but hidden window is stale and reopened")
+    func hiddenWindowIsStaleAndReopened() {
+        let activation = ActivationControllerSpy(activationPolicy: .regular, hasVisibleUserFacingWindow: true)
+        let focuser = FocuserSpy()
+        let coordinator = WindowPresentationCoordinator(
+            activationController: activation,
+            presentationTimeout: .milliseconds(10),
+            focuser: focuser
+        )
+        let window = makeCoordinatorWindow()
+        coordinator.register(window, id: "history")
+        var openCount = 0
+
+        coordinator.present(id: "history") { openCount += 1 }
+
+        #expect(openCount == 1)
+        #expect(focuser.focusedWindows.isEmpty)
+    }
+}
+
+@MainActor
+private func makeCoordinatorWindow() -> NSWindow {
+    NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+        styleMask: [.titled],
+        backing: .buffered,
+        defer: false
+    )
+}
+
+@MainActor
+private final class FocuserSpy: WindowFocusing {
+    private(set) var focusedWindows: [ObjectIdentifier] = []
+
+    func focus(_ window: NSWindow) {
+        focusedWindows.append(ObjectIdentifier(window))
+    }
 }
 
 @MainActor

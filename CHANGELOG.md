@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-10-16
+
+### Fixed
+- 修复从菜单栏再次打开窗口时窗口未前置、无法立即键入：聚焦改为**事件驱动**——先请求激活并订阅 `didBecomeActive`，待应用真正 active 后再 `makeKeyAndOrderFront`，不再与异步 `activate()` 在同一 runloop tick 竞争（macOS 14+ 的 `activate()` 只是「请求」，系统可能延迟或拒绝；首次打开因 SwiftUI 建窗天然异步而偶然躲过竞态，第二次全同步即必输）。新增 `SystemWindowFocuser`（`App/SnapGlass/Sources/AppWindowFocusing.swift`）承载该策略，并在激活被拒时以 `orderFrontRegardless` 兜底「至少可见」。
+- 修复应用退到后台、窗口仍开着时点击菜单「无反应」：`present()` 的幂等守卫补齐 `isActive` 判断，不再把「窗口可见且为 key 但应用未激活」误判为无需处理。
+- 修复 SwiftUI 关闭窗口后残留的僵尸 `NSWindow` 被顶到前台：`present()` 对「已注册但既不可见也未最小化」的窗口移除引用并重走 `open()`。
+- 移除 `bringToFront`（与激活同 tick 竞争）：其职责并入 `SystemWindowFocuser`，`orderFrontRegardless` 仅保留在兜底路径。
+
 ## [0.8.6] - 2026-10-08
 
 ### Added
@@ -242,7 +250,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.6...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.7...HEAD
+[0.8.7]: https://github.com/blackkcold/snapocr/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/blackkcold/snapocr/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/blackkcold/snapocr/compare/v0.8.1...v0.8.5
 [0.8.1]: https://github.com/blackkcold/snapocr/compare/v0.8.0...v0.8.1

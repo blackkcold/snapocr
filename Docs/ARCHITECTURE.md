@@ -231,6 +231,9 @@ Cocoa 存在两条互不相通的解析路径，两条都必须覆盖：
 | 重算触发面仅 `willClose` / `didBecomeKey` / `didMiniaturize` / `didDeminiaturize` | 不观察 `didOrderOffScreen` / `didHide` / `didResignActive`，避免隐藏、切 Space、全屏时误降级 |
 | `willClose` 后延后一个 runloop tick（合并去抖）再重算 | `willClose` 触发时窗口仍 `isVisible`，需等 `orderOut` 完成 |
 | `didBecomeKey` 补齐晋升 `.regular` | 与降级对称，避免应用卡在 accessory |
+| `present()` 幂等守卫必须同时要求 `isActive` | 窗口仍可见且为 key、但应用已退到后台时，缺此判断会直接 return，表现为「点历史没反应」 |
+| 聚焦**不得**与 `activate()` 同一 runloop tick 竞争 | macOS 14+ `activate()` 只是异步「请求」且可能被拒；同 tick `makeKeyAndOrderFront` 会输给稍后的激活，表现为「第二次打开窗口丢焦点」。须先订阅 `didBecomeActive` 再请求激活，激活后前置（`SystemWindowFocuser`）；激活被拒时以 `orderFrontRegardless` 兜底「至少可见」 |
+| 已注册但既不 `isVisible` 也未 `isMiniaturized` 的窗口视为僵尸，移除引用并重走 `open()` | SwiftUI 关闭 `Window` 后可能保留并重登记其 `NSWindow`；直接 `makeKeyAndOrderFront` 会把死窗口顶到前台 |
 
 ---
 
