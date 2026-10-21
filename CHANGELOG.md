@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-10-21
+
+### Fixed
+- 修复同一应用实例内反复打开、关闭 SwiftUI 窗口后，最后一扇窗口关闭时偶尔不降级为 `.accessory`（Dock 图标残留）：窗口关闭与成为 key 的监听从「逐窗口安装、关闭时移除」改为协调器生命周期内安装一次的应用级监听，并以 `ObjectIdentifier` → 逻辑窗口 ID 的弱引用身份表跨关闭保留实例身份。SwiftUI 复用同一 `NSWindow` 重开且不再调用 `register()` 时，第二次及之后的关闭仍能触发降级重算；`register()` 不再是关闭事件的必要前提。协调器拆到 `App/SnapGlass/Sources/WindowPresentationCoordinator.swift`。
+- 旧窗口实例迟到的关闭通知不再清除同一逻辑 ID 上已替换的新窗口映射；重复的 key / close 通知不会重复登记、重复降级或重复 `deactivate()`；关闭后弱身份记录与逐窗口观察不随每轮开关累积。
+- 修复同时向多个窗口发起聚焦时，后一次请求丢弃前一次待前置窗口：`SystemWindowFocuser` 改为每个窗口各自排队，激活后按请求顺序前置；激活超时已 `orderFrontRegardless` 兜底的窗口，在宽限期内遇到迟到激活且键盘焦点仍空时才补一次正常前置，不会抢走用户已开始使用窗口的焦点。
+
 ## [0.8.7] - 2026-10-16
 
 ### Fixed
@@ -250,7 +257,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.7...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.8...HEAD
+[0.8.8]: https://github.com/blackkcold/snapocr/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/blackkcold/snapocr/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/blackkcold/snapocr/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/blackkcold/snapocr/compare/v0.8.1...v0.8.5
