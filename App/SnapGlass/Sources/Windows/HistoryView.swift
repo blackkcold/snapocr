@@ -19,7 +19,7 @@ struct HistoryView: View {
     @State private var colorFilter = ""
     @State private var isClearing = false
     @State private var isClearingColors = false
-    @State private var selectedEntryID: HistoryEntry.ID?
+    @State var selectedEntryID: HistoryEntry.ID?
     @State private var favouriteFilter: HistoryPresentation.Filter = .all
     @State private var favouriteOrder: HistoryPresentation.FavouriteOrder = .first
     @State private var newestFirst = true
@@ -28,6 +28,7 @@ struct HistoryView: View {
     @State var screenshotLoadID = UUID()
     @State var errorMessage: String?
     @State private var searchTask: Task<Void, Never>?
+    @State var visibleColumnCount = 4
     @State var toastMessage: ToastMessage?
 
     let history = HistoryActor.shared
@@ -69,16 +70,27 @@ struct HistoryView: View {
         }
         .toolbar { toolbarContent }
         .task { await loadEntries() }
+        .onReceive(NotificationCenter.default.publisher(for: HistoryActor.imagesDidChange)) { _ in
+            // Captures, edits and restores land here so an open history window
+            // never shows stale thumbnails.
+            Task { await loadEntries() }
+        }
+        .onChange(of: errorMessage) { message in
+            guard let message, !message.isEmpty else { return }
+            errorMessage = nil
+            showToast(
+                message,
+                type: .error,
+                actionLabel: AppLocalization.string("Retry"),
+                action: { Task { await loadEntries() } },
+                duration: 6
+            )
+        }
         .onChange(of: segment) { _ in
             searchTask?.cancel()
             Task { await loadEntries() }
         }
         .background(.ultraThinMaterial)
-        .alert("History Error", isPresented: errorAlertBinding) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? String(localized: "Unknown error"))
-        }
         .toast(message: $toastMessage, edge: .bottom)
     }
 
@@ -221,6 +233,18 @@ struct HistoryView: View {
                 }
                 .padding(16)
             }
+            .onAppear { visibleColumnCount = count }
+            .onChange(of: count) { visibleColumnCount = $0 }
+            .focusable()
+            .onDeleteCommand {
+                guard let id = selectedEntryID,
+                      let selected = visibleEntries.first(where: { $0.id == id })
+                else { return }
+                Task { await deleteEntry(selected) }
+            }
+            .onMoveCommand { direction in
+                moveSelection(direction)
+            }
             .background(
                 Button {
                     guard let id = selectedEntryID,
@@ -237,7 +261,7 @@ struct HistoryView: View {
         }
     }
 
-    private var visibleEntries: [HistoryEntry] {
+    var visibleEntries: [HistoryEntry] {
         HistoryPresentation.entries(entries, filter: favouriteFilter,
                                     favouriteOrder: favouriteOrder, newestFirst: newestFirst)
     }
@@ -348,6 +372,24 @@ struct HistoryView: View {
 
     // MARK: - Toolbar
 
+    /// Spells out what "Clear All" really removes: every screenshot, not just
+    /// the filtered rows on screen, and never the separate color history.
+    private var clearAllConfirmationMessage: Text {
+        let hidden = entries.count - visibleEntries.count
+        if hidden > 0 {
+            return Text(
+                """
+                This permanently deletes all \(entries.count) screenshots, \
+                including \(hidden) hidden by the current filter. \
+                Color history is not affected.
+                """
+            )
+        }
+        return Text(
+            "This permanently deletes all \(entries.count) screenshots. Color history is not affected."
+        )
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
@@ -380,12 +422,7 @@ struct HistoryView: View {
                                 Task { await clearAll() }
                             }
                         } message: {
-                            Text(
-                                String(
-                                    format: String(localized: "This will permanently delete all %d history entries."),
-                                    entries.count
-                                )
-                            )
+                            clearAllConfirmationMessage
                         }
                     }
                 }
@@ -402,12 +439,7 @@ struct HistoryView: View {
                             Task { await clearColors() }
                         }
                     } message: {
-                        Text(
-                            String(
-                                format: String(localized: "This will permanently delete all %d color entries."),
-                                colorEntries.count
-                            )
-                        )
+                        Text("This permanently deletes all \(colorEntries.count) colors.")
                     }
                 }
             }

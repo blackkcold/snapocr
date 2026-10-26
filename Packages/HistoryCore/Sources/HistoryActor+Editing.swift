@@ -30,6 +30,8 @@ extension HistoryActor {
             entry.thumbnailPath = thumbURL
             entry.textContent = ""
             entry.ocrConfidence = 0
+            entry.pixelWidth = image.width
+            entry.pixelHeight = image.height
             try persistEntry(entry)
         } catch {
             for url in [imageURL, thumbURL] {

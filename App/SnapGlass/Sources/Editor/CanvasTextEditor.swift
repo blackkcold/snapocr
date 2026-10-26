@@ -141,7 +141,7 @@ extension EditableAnnotationCanvasNSView {
     editor.insertionPointColor = .controlAccentColor
     editor.string = node.text ?? ""
     applyTextStyle(node, to: editor)
-    editor.setAccessibilityLabel(String(localized: "Edit Text"))
+    editor.setAccessibilityLabel(AppLocalization.string("Edit Text"))
     editor.wantsLayer = true
     editor.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.65).cgColor
     editor.layer?.borderWidth = 1

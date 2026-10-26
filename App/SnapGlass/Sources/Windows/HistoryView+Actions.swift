@@ -6,6 +6,38 @@ import SwiftUI
 // MARK: - HistoryView Data Loading & Actions
 
 extension HistoryView {
+    /// Single place that presents a toast and schedules its dismissal, so every
+    /// history action looks and expires the same way.
+    ///
+    /// - Parameters:
+    ///   - message: Localized text to show.
+    ///   - type: Success, error or informational styling.
+    ///   - actionLabel: Optional button title, e.g. "Undo".
+    ///   - action: Invoked when the user presses the button.
+    ///   - duration: Seconds the toast stays on screen. Destructive actions get
+    ///     longer so the undo button is reachable.
+    func showToast(
+        _ message: String,
+        type: ToastType = .success,
+        actionLabel: String? = nil,
+        action: (@MainActor () -> Void)? = nil,
+        duration: TimeInterval = 3
+    ) {
+        let toast = ToastMessage(
+            message: message,
+            type: type,
+            actionLabel: actionLabel,
+            action: action
+        )
+        toastMessage = toast
+        Task {
+            try? await Task.sleep(for: .seconds(duration))
+            if toastMessage?.id == toast.id {
+                toastMessage = nil
+            }
+        }
+    }
+
     func loadEntries() async {
         switch segment {
         case .screenshots:
@@ -35,6 +67,12 @@ extension HistoryView {
             var sizes: [UUID: CGSize] = [:]
             for entry in loaded {
                 guard !Task.isCancelled, screenshotLoadID == loadID else { return }
+                // New records carry their pixel size, so the grid lays out
+                // without touching the thumbnail files at all.
+                if let size = entry.imagePixelSize {
+                    sizes[entry.id] = size
+                    continue
+                }
                 if let cached = thumbnailSizes[entry.id] { sizes[entry.id] = cached; continue }
                 if let data = try? await history.thumbnailData(for: entry.id),
                    let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -60,20 +98,41 @@ extension HistoryView {
             return
         }
 
-        do {
-            let count = await colorHistory.count()
-            colorEntries = try await colorHistory.recent(limit: max(count, 1))
-        } catch {
-            colorEntries = []
-            errorMessage = error.localizedDescription
-        }
+        let count = await colorHistory.count()
+        colorEntries = await colorHistory.recent(limit: max(count, 1))
     }
 
     func deleteEntry(_ entry: HistoryEntry) async {
         guard let history else { return }
 
         do {
+            // Keep the bytes so the deletion can be undone from the toast.
+            let imageData = try await history.imageData(for: entry.id)
+            let thumbnailData = try await history.thumbnailData(for: entry.id)
             try await history.delete(id: entry.id)
+            await loadEntries()
+            showToast(
+                AppLocalization.string("Screenshot deleted"),
+                type: .info,
+                actionLabel: AppLocalization.string("Undo"),
+                action: {
+                    Task { await restoreDeletedEntry(entry, imageData: imageData, thumbnailData: thumbnailData) }
+                },
+                duration: 6
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func restoreDeletedEntry(
+        _ entry: HistoryEntry,
+        imageData: Data?,
+        thumbnailData: Data?
+    ) async {
+        guard let history else { return }
+        do {
+            try await history.restore(entry, imageData: imageData, thumbnailData: thumbnailData)
             await loadEntries()
         } catch {
             errorMessage = error.localizedDescription
@@ -109,17 +168,7 @@ extension HistoryView {
     func copyColor(_ entry: ColorHistoryEntry) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(entry.hexString, forType: .string)
-        let toast = ToastMessage(
-            message: AppLocalization.string("Color %@ copied", entry.hexString),
-            type: .success
-        )
-        toastMessage = toast
-        Task {
-            try? await Task.sleep(for: .seconds(3))
-            if toastMessage?.id == toast.id {
-                toastMessage = nil
-            }
-        }
+        showToast(AppLocalization.string("Color %@ copied", entry.hexString))
     }
 
     func copyImage(_ entry: HistoryEntry) async {
@@ -141,17 +190,7 @@ extension HistoryView {
                 errorMessage = AppLocalization.string("Unable to copy image")
                 return
             }
-            let toast = ToastMessage(
-                message: AppLocalization.string("Screenshot copied to clipboard"),
-                type: .success
-            )
-            toastMessage = toast
-            Task {
-                try? await Task.sleep(for: .seconds(3))
-                if toastMessage?.id == toast.id {
-                    toastMessage = nil
-                }
-            }
+            showToast(AppLocalization.string("Screenshot copied to clipboard"))
         } catch {
             errorMessage = AppLocalization.string("Unable to copy image")
         }
@@ -188,11 +227,8 @@ extension HistoryView {
         do {
             try await history.clear()
             entries = []
-            // 清空截图历史时同步清空取色历史，避免 colors/ 目录残留。
-            if let colorHistory {
-                try? await colorHistory.clear()
-                colorEntries = []
-            }
+            // Color history is a separate dataset with its own "Clear Colors"
+            // action; wiping screenshots must not take it down silently.
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -214,17 +250,7 @@ extension HistoryView {
         do {
             try await history.restoreOriginal(id: entry.id)
             await loadEntries()
-            let toast = ToastMessage(
-                message: AppLocalization.string("Original image restored"),
-                type: .success
-            )
-            toastMessage = toast
-            Task {
-                try? await Task.sleep(for: .seconds(3))
-                if toastMessage?.id == toast.id {
-                    toastMessage = nil
-                }
-            }
+            showToast(AppLocalization.string("Original image restored"))
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -236,6 +262,10 @@ extension HistoryView {
 
     func exportHistory(format: ExportFormat) async {
         guard let history else { return }
+
+        // Export what the user is looking at, not the whole archive.
+        let ids = visibleEntries.map(\.id)
+        guard !ids.isEmpty else { return }
 
         let panel = NSSavePanel()
 
@@ -264,21 +294,37 @@ extension HistoryView {
                 historyFormat = .plainText
             }
 
-            let data = try await history.export(ids: [], format: historyFormat)
+            let data = try await history.export(ids: ids, format: historyFormat)
             try data.write(to: url, options: .atomic)
+            showToast(AppLocalization.string("Exported %d entries to %@", ids.count, url.lastPathComponent))
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    var errorAlertBinding: Binding<Bool> {
-        Binding(
-            get: { errorMessage != nil },
-            set: { isPresented in
-                if !isPresented {
-                    errorMessage = nil
-                }
-            }
-        )
+    /// Moves the grid selection with the arrow keys, skipping a row at a time
+    /// for up and down.
+    func moveSelection(_ direction: MoveCommandDirection) {
+        guard !visibleEntries.isEmpty else { return }
+        let entries = visibleEntries
+        let currentIndex = selectedEntryID.flatMap { id in
+            entries.firstIndex(where: { $0.id == id })
+        }
+
+        let targetIndex: Int
+        switch direction {
+        case .left:
+            targetIndex = max(0, (currentIndex ?? 1) - 1)
+        case .right:
+            targetIndex = min(entries.count - 1, (currentIndex ?? -1) + 1)
+        case .up:
+            targetIndex = max(0, (currentIndex ?? visibleColumnCount) - visibleColumnCount)
+        case .down:
+            targetIndex = min(entries.count - 1, (currentIndex ?? -1) + visibleColumnCount)
+        @unknown default:
+            return
+        }
+
+        selectedEntryID = entries[targetIndex].id
     }
 }

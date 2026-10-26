@@ -1,4 +1,5 @@
 import AppKit
+import BarcodeCore
 import CaptureCore
 import SharedKit
 import SwiftUI
@@ -24,6 +25,8 @@ final class AreaTrackingView: NSView {
     let screen: NSScreen
     let capturedFrames: [CGDirectDisplayID: CGImage]
     private let onColorPicked: ((SampledColor) -> Void)?
+    /// 重新截取选区（动作栏「重新识别」用）；`nil` 时只能读预截原图。
+    let onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)?
     var phase: Phase = .idle
     private var startPoint: CGPoint?
     var selectionRect: CGRect = .zero
@@ -34,27 +37,52 @@ final class AreaTrackingView: NSView {
     private var trackingAreaReference: NSTrackingArea?
     let actionBar = CaptureActionBarView(frame: .zero)
 
+    /// 选区条码识别的状态；变化时同步动作栏按钮与结果浮层。
+    var scanState: ScanState = .idle {
+        didSet {
+            actionBar.setScanning(scanState.isScanning)
+            refreshBarcodePanel()
+        }
+    }
+    let barcodePanel = BarcodeResultPanel(frame: .zero)
+    let barcodeEngine = VisionBarcodeEngine()
+    var scanTask: Task<Void, Never>?
+    var scanGeneration = 0
+
     init(
         frame frameRect: NSRect,
         style: CaptureSelectionStyle,
         overlayMode: CaptureOverlayMode,
         screen: NSScreen,
         capturedFrames: [CGDirectDisplayID: CGImage],
-        onColorPicked: ((SampledColor) -> Void)?
+        onColorPicked: ((SampledColor) -> Void)?,
+        onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)? = nil
     ) {
         self.style = style
         self.overlayMode = overlayMode
         self.screen = screen
         self.capturedFrames = capturedFrames
         self.onColorPicked = onColorPicked
+        self.onRecaptureRegion = onRecaptureRegion
         super.init(frame: frameRect)
 
         actionBar.isHidden = true
-        actionBar.onBack = { [weak self] in self?.hideActionChooser() }
-        actionBar.onCopy = { [weak self] in self?.completeSelection(action: .copy) }
+        // 浮层打开时 esc 只关浮层、↵ 复制识别内容；第二次 esc 才收动作栏。
+        actionBar.onBack = { [weak self] in
+            guard let self else { return }
+            if self.dismissBarcodePanel() { return }
+            self.hideActionChooser()
+        }
+        actionBar.onCopy = { [weak self] in
+            guard let self else { return }
+            if self.copyFirstScanPayload() { return }
+            self.completeSelection(action: .copy)
+        }
         actionBar.onEdit = { [weak self] in self?.completeSelection(action: .edit) }
         actionBar.onPin = { [weak self] in self?.completeSelection(action: .pin) }
+        actionBar.onScan = { [weak self] in self?.scanSelectedRegion() }
         addSubview(actionBar)
+        configureBarcodePanel()
     }
 
     @available(*, unavailable)
@@ -65,6 +93,7 @@ final class AreaTrackingView: NSView {
     override func layout() {
         super.layout()
         positionActionBar()
+        positionBarcodePanel()
     }
 
     override func viewDidMoveToWindow() {
@@ -105,9 +134,14 @@ final class AreaTrackingView: NSView {
         hoverPoint = point
         if phase == .choosingAction {
             let actionPoint = actionBar.convert(point, from: self)
-            if !actionBar.performAction(at: actionPoint) {
+            if actionBar.performAction(at: actionPoint) { return }
+            // 点空白先收浮层，动作栏留在原处。
+            if dismissBarcodePanel() {
                 actionBar.focusDefaultAction()
+                needsDisplay = true
+                return
             }
+            actionBar.focusDefaultAction()
             return
         }
         if event.clickCount == 2, phase == .adjusting {
@@ -202,6 +236,7 @@ final class AreaTrackingView: NSView {
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 53:
+            if dismissBarcodePanel() { return }
             if phase == .choosingAction {
                 hideActionChooser()
             } else {
@@ -209,11 +244,13 @@ final class AreaTrackingView: NSView {
             }
         case 36, 76:
             if phase == .choosingAction {
+                if copyFirstScanPayload() { return }
                 completeSelection(action: .copy)
             } else {
                 showActionChooser()
             }
         default:
+            if handleScanShortcut(event) { return }
             if PinSelectionShortcut.matches(event: event), isPinShortcutPhase {
                 performPinShortcut()
             } else {
@@ -234,6 +271,7 @@ final class AreaTrackingView: NSView {
 
     private func hideActionChooser() {
         guard phase == .choosingAction else { return }
+        dismissBarcodePanel()
         actionBar.isHidden = true
         phase = .adjusting
         window?.makeFirstResponder(self)
@@ -242,6 +280,7 @@ final class AreaTrackingView: NSView {
 
     func completeSelection(action: AreaCaptureAction) {
         guard phase == .choosingAction, selectionRect.width > 5, selectionRect.height > 5 else { return }
+        dismissBarcodePanel()
         onSelectionComplete?(makeSelectionResult(action: action))
     }
 
@@ -292,6 +331,7 @@ final class AreaTrackingView: NSView {
     }
 
     private func resetSelection() {
+        dismissBarcodePanel()
         actionBar.isHidden = true
         phase = .idle
         selectionRect = .zero

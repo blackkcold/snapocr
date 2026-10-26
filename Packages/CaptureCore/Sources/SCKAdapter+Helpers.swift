@@ -25,28 +25,20 @@ extension SCKAdapter {
         return CGFloat(imageWidth) / displayFrame.width
     }
 
+    /// 选区 → 像素裁剪矩形。
+    ///
+    /// 数学部分已下沉到 `RegionPixelMapping`（public），供 App 层直接复用：
+    /// 动作栏的条码识别要用同一套换算裁剪预截原图。
     static func pixelCropRect(
         areaRect: CGRect,
         displayFrame: CGRect,
         imageSize: CGSize
     ) -> CGRect? {
-        guard displayFrame.contains(areaRect), imageSize.width > 0, imageSize.height > 0 else {
-            return nil
-        }
-
-        let scaleX = imageSize.width / displayFrame.width
-        let scaleY = imageSize.height / displayFrame.height
-        let localX = areaRect.minX - displayFrame.minX
-        let localY = areaRect.minY - displayFrame.minY
-        let cropRect = CGRect(
-            x: localX * scaleX,
-            y: localY * scaleY,
-            width: areaRect.width * scaleX,
-            height: areaRect.height * scaleY
-        ).integral
-        let imageBounds = CGRect(origin: .zero, size: imageSize)
-        let clamped = cropRect.intersection(imageBounds)
-        return clamped.isEmpty ? nil : clamped
+        RegionPixelMapping.pixelCropRect(
+            areaRect: areaRect,
+            displayFrame: displayFrame,
+            imageSize: imageSize
+        )
     }
 
     /// 从 `SCDisplay` 构造 `CaptureDisplayInfo`

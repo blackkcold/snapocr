@@ -98,6 +98,24 @@ public final class EditorViewModel: ObservableObject {
   /// The current toast message to display.
   @Published public var toastMessage: ToastMessage?
 
+  /// Whether the document holds annotations that were never written to a file
+  /// or to history. Drives the close confirmation.
+  public var hasUnsavedChanges: Bool {
+    guard changeCount != savedChangeCount else { return false }
+    // Drawing and then undoing back to an empty canvas counts as clean.
+    if savedChangeCount == 0, document?.nodes.isEmpty == true { return false }
+    return true
+  }
+
+  /// Increments on every document mutation; compared against `savedChangeCount`.
+  @Published var changeCount = 0
+
+  /// Set once the user has accepted losing the changes, so the window may close.
+  @Published var hasAcceptedClose = false
+
+  /// Whether the close confirmation sheet is on screen.
+  @Published public var showsCloseConfirmation = false
+
   /// Number of dominant colors reported for region picks (3–6).
   public var dominantColorCount: Int {
     let stored = UserDefaults.standard.integer(forKey: PreferenceKeys.pickerDominantColorCount)
@@ -107,8 +125,16 @@ public final class EditorViewModel: ObservableObject {
     return min(max(stored, 3), 6)
   }
 
+  /// Zoom and pan state shared with the toolbar.
+  let canvasZoom = CanvasZoomController()
+
   /// Called when the user cancels editing to close the editor window.
   public var onClose: (() -> Void)?
+
+  /// Closes the editor window even though it still has unsaved annotations.
+  public var onForceClose: (() -> Void)?
+
+  var savedChangeCount = 0
 
   let logger = Logger(category: "editor")
   let recognizeImage: @Sendable (CGImage, OCROptions) async throws -> OCRResult
@@ -223,6 +249,7 @@ public final class EditorViewModel: ObservableObject {
     do {
       try interactor.apply(node.tool, to: &doc, node: node)
       document = doc
+      markChanged()
       selectedNodeID = node.tool == .crop ? nil : node.id
       if node.tool == .crop {
         restartOCRForCurrentImage()
@@ -245,6 +272,7 @@ public final class EditorViewModel: ObservableObject {
     guard var doc = document else { return }
     doc.updateNode(node)
     document = doc
+    markChanged()
     selectNode(node.id)
   }
 
@@ -252,6 +280,7 @@ public final class EditorViewModel: ObservableObject {
     guard let selectedNodeID, var doc = document else { return }
     doc.removeNode(by: selectedNodeID)
     document = doc
+    markChanged()
     self.selectedNodeID = nil
   }
 
@@ -320,52 +349,6 @@ public final class EditorViewModel: ObservableObject {
     }
   }
 
-  public func duplicateSelectedNode() {
-    guard var node = selectedNode else { return }
-    let offset = CGPoint(x: 0.02, y: 0.02)
-    node = AnnotationNode(
-      tool: node.tool,
-      color: node.color,
-      lineWidth: node.lineWidth,
-      opacity: node.opacity,
-      fillColor: node.fillColor,
-      strokeStyle: node.strokeStyle,
-      cornerRadius: node.cornerRadius,
-      arrowStyle: node.arrowStyle,
-      points: node.points.map { CGPoint(x: min($0.x + offset.x, 1), y: min($0.y + offset.y, 1)) },
-      text: node.text,
-      fontName: node.fontName,
-      fontSize: node.fontSize,
-      textHorizontalScale: node.textHorizontalScale,
-      textAlignment: node.textAlignment,
-      blurMode: node.blurMode,
-      blurIntensity: node.blurIntensity,
-      normalizedRect: node.normalizedRect == .zero
-        ? .zero
-        : node.normalizedRect.offsetBy(dx: offset.x, dy: offset.y)
-    )
-    addNode(node)
-  }
-
-  public func moveSelectedNodeInLayer(by offset: Int) {
-    guard let selectedNodeID, var doc = document else { return }
-    doc.moveNode(by: selectedNodeID, offset: offset)
-    document = doc
-  }
-
-  public func nudgeSelectedNode(dx deltaX: CGFloat, dy deltaY: CGFloat) {
-    guard var node = selectedNode else { return }
-    node.points = node.points.map {
-      CGPoint(x: min(max($0.x + deltaX, 0), 1), y: min(max($0.y + deltaY, 0), 1))
-    }
-    if node.normalizedRect != .zero {
-      let moved = node.normalizedRect.offsetBy(dx: deltaX, dy: deltaY)
-      node.normalizedRect.origin.x = min(max(moved.origin.x, 0), 1 - moved.width)
-      node.normalizedRect.origin.y = min(max(moved.origin.y, 0), 1 - moved.height)
-    }
-    updateNode(node)
-  }
-
   /// Undoes the last annotation operation.
   public func undo() {
     guard var doc = document else { return }
@@ -373,6 +356,7 @@ public final class EditorViewModel: ObservableObject {
     do {
       try interactor.undo(&doc)
       document = doc
+      markChanged()
       if previousImage !== doc.baseImage {
         restartOCRForCurrentImage()
       }
@@ -388,6 +372,7 @@ public final class EditorViewModel: ObservableObject {
     do {
       try interactor.redo(&doc)
       document = doc
+      markChanged()
       if previousImage !== doc.baseImage {
         restartOCRForCurrentImage()
       }

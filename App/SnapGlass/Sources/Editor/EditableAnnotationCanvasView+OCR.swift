@@ -153,9 +153,8 @@ extension EditableAnnotationCanvasNSView {
 
     func updateOCRTextOverlay() {
         if let image, bounds.width > 0, bounds.height > 0 {
-            imageDisplayRect = aspectFitRect(
-                imageSize: CGSize(width: image.width, height: image.height),
-                in: bounds
+            imageDisplayRect = imageRect(
+                for: CGSize(width: image.width, height: image.height)
             )
         }
         let newContentSignature = ocrLines.map {

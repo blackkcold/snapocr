@@ -205,3 +205,13 @@ extension EditableAnnotationCanvasNSView {
         return true
     }
 }
+
+extension EditableAnnotationCanvasNSView {
+    /// Copies the current OCR text selection, reporting whether there was one.
+    ///
+    /// Used by the toolbar's ⌘C so an OCR selection keeps winning over the
+    /// image copy.
+    func copySelectedOCRTextIfPossible() -> Bool {
+        copySelectedOCRText()
+    }
+}

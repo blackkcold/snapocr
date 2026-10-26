@@ -21,11 +21,9 @@ extension EditorViewModel {
     ocrTask = Task { [weak self] in
       guard let self else { return }
       do {
-        let options = OCROptions(
-          languages: ["zh-Hans", "en-US"],
-          minConfidence: 0.1,
-          preserveLayout: true
-        )
+        // Same language / threshold / engine selection as the capture pipeline,
+        // so turning a language off here actually takes effect.
+        let options = OCRSettings.current()
         let result = try await recognizeImage(image, options)
         guard !Task.isCancelled, generation == ocrGeneration else { return }
         ocrLines = result.observations

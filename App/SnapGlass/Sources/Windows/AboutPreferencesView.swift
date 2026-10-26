@@ -50,7 +50,7 @@ struct AboutPreferencesView: View {
                             .monospacedDigit()
                     }
 
-                    PreferencesCardCaption(text: LocalizedStringKey(copyright))
+                    PreferencesCardCaption(text: copyright)
                 }
             }
         }
@@ -64,8 +64,8 @@ struct AboutPreferencesView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
     }
 
-    private var copyright: String {
-        String(localized: "Copyright © SnapGlass Contributors. Released under the MIT License.")
+    private var copyright: LocalizedStringKey {
+        "Copyright © SnapGlass Contributors. Released under the MIT License."
     }
 
     private func openGitHub() {

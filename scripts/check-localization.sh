@@ -95,6 +95,19 @@ then
     FAILED=1
 fi
 
+echo "=== View code must not bypass the app language ==="
+# 界面语言由应用设置决定；String(localized:)/NSLocalizedString 跟随系统语言，
+# 会让同一窗口里混出两种语言。Routing/ 保留源码且不进产品构建，故排除。
+violations=$(grep -rn -E 'String\(localized:|NSLocalizedString\(' "$SOURCES" \
+    --include='*.swift' | grep -v '/Routing/' | grep -v '^[^:]*:[0-9]*: *//' || true)
+if [ -n "$violations" ]; then
+    echo "  ❌ use LocalizedStringKey inside views, AppLocalization.string() outside them:"
+    echo "$violations" | sed 's/^/     /'
+    FAILED=1
+else
+    echo "  ✅ no view-level String(localized:)"
+fi
+
 echo ""
 if [ "$FAILED" -gt 0 ]; then
     echo "❌ Localization check failed"

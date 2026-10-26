@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "0.8.8"
+    MARKETING_VERSION: "0.8.9"
     CURRENT_PROJECT_VERSION: "1"
   configs:
     Debug:
@@ -104,7 +104,9 @@ targets:
           - AnnotationInspectorView.swift
           - ToolPickerView.swift
           - AnnotationCanvasView.swift
+          - EditorWindowCloseGuard.swift
       - path: App/SnapGlass/Sources/MenuBar/ToastMessage.swift
+      - path: App/SnapGlass/Sources/MenuBar/OCRSettings.swift
     dependencies:
       - package: SharedKit
       - package: AnnotationCore

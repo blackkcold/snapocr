@@ -16,6 +16,16 @@ struct PermissionGuideView: View {
 
     private let permissionService = PermissionService()
 
+    /// Closes the guide. `dismiss` does not reliably close a `Window` scene, so
+    /// prefer the registered NSWindow and keep `dismiss` only as a fallback.
+    private func closeGuide() {
+        if let window = AppWindowPresenter.window(id: "permission") {
+            window.performClose(nil)
+        } else {
+            dismiss()
+        }
+    }
+
     var body: some View {
         Group {
             if permissionState.needsGuide {
@@ -23,7 +33,7 @@ struct PermissionGuideView: View {
             } else {
                 Text("Permission granted")
                     .onAppear {
-                        dismiss()
+                        closeGuide()
                     }
             }
         }
@@ -58,7 +68,7 @@ struct PermissionGuideView: View {
                 permissionState = granted ? .granted : .denied
                 isChecking = false
                 if granted {
-                    dismiss()
+                    closeGuide()
                 }
             }
         }
@@ -120,7 +130,7 @@ struct PermissionGuideView: View {
             .controlSize(.large)
 
             Button(action: {
-                dismiss()
+                closeGuide()
             }, label: {
                 Text("Remind Later")
                     .frame(maxWidth: .infinity)
@@ -163,7 +173,7 @@ struct PermissionGuideView: View {
             .frame(maxWidth: 260)
 
             Button(action: {
-                dismiss()
+                closeGuide()
             }, label: {
                 Text("Remind Later")
             })

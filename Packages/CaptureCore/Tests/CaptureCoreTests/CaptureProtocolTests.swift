@@ -75,7 +75,7 @@ struct CaptureProtocolTests {
         let display = CGRect(x: 100, y: 50, width: 1000, height: 800)
         let area = CGRect(x: 200, y: 150, width: 300, height: 200)
 
-        let crop = SCKAdapter.pixelCropRect(
+        let crop = RegionPixelMapping.pixelCropRect(
             areaRect: area,
             displayFrame: display,
             imageSize: CGSize(width: 2000, height: 1600)
@@ -88,7 +88,7 @@ struct CaptureProtocolTests {
         let display = CGRect(x: 0, y: -900, width: 1440, height: 900)
         let area = CGRect(x: 120, y: -700, width: 400, height: 250)
 
-        let crop = SCKAdapter.pixelCropRect(
+        let crop = RegionPixelMapping.pixelCropRect(
             areaRect: area,
             displayFrame: display,
             imageSize: CGSize(width: 2880, height: 1800)
@@ -101,7 +101,7 @@ struct CaptureProtocolTests {
         let display = CGRect(x: 0, y: 1080, width: 1920, height: 1080)
         let area = CGRect(x: 320, y: 1320, width: 640, height: 360)
 
-        let crop = SCKAdapter.pixelCropRect(
+        let crop = RegionPixelMapping.pixelCropRect(
             areaRect: area,
             displayFrame: display,
             imageSize: CGSize(width: 1920, height: 1080)
@@ -114,7 +114,7 @@ struct CaptureProtocolTests {
         let display = CGRect(x: -1280, y: 0, width: 1280, height: 1024)
         let area = CGRect(x: -1180, y: 100, width: 500, height: 300)
 
-        let crop = SCKAdapter.pixelCropRect(
+        let crop = RegionPixelMapping.pixelCropRect(
             areaRect: area,
             displayFrame: display,
             imageSize: CGSize(width: 1280, height: 1024)
@@ -157,13 +157,41 @@ struct CaptureProtocolTests {
         let display = CGRect(x: 0, y: 0, width: 1000, height: 800)
         let crossingArea = CGRect(x: 900, y: 100, width: 200, height: 200)
 
-        let crop = SCKAdapter.pixelCropRect(
+        let crop = RegionPixelMapping.pixelCropRect(
             areaRect: crossingArea,
             displayFrame: display,
             imageSize: CGSize(width: 2000, height: 1600)
         )
 
         #expect(crop == nil)
+    }
+
+    @Test func pixelCropRect_handlesRetinaSecondaryDisplayAboveMain() {
+        // 2x 副屏挂在主屏上方：Quartz 边界 Y 为负，图像是点位尺寸的两倍。
+        let display = CGRect(x: 0, y: -1080, width: 1920, height: 1080)
+        let area = CGRect(x: 200, y: -1000, width: 400, height: 300)
+
+        let crop = RegionPixelMapping.pixelCropRect(
+            areaRect: area,
+            displayFrame: display,
+            imageSize: CGSize(width: 3840, height: 2160)
+        )
+
+        #expect(crop == CGRect(x: 400, y: 160, width: 800, height: 600))
+    }
+
+    @Test func pixelCropRect_toleratesSubPointOvershootAtScreenEdge() {
+        // 选区贴住屏幕边缘时浮点换算会溢出不到 1 点，应夹取后成功裁剪。
+        let display = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let area = CGRect(x: 1600, y: 900, width: 320.0000001, height: 180.0000001)
+
+        let crop = RegionPixelMapping.pixelCropRect(
+            areaRect: area,
+            displayFrame: display,
+            imageSize: CGSize(width: 1920, height: 1080)
+        )
+
+        #expect(crop == CGRect(x: 1600, y: 900, width: 320, height: 180))
     }
 
     @Test func windowCrop_clipsPartiallyOffscreenWindowToVisibleBounds() {
@@ -174,7 +202,7 @@ struct CaptureProtocolTests {
         let visible = window.intersection(display)
         #expect(visible == CGRect(x: 1600, y: 100, width: 320, height: 400))
 
-        let crop = SCKAdapter.pixelCropRect(
+        let crop = RegionPixelMapping.pixelCropRect(
             areaRect: visible,
             displayFrame: display,
             imageSize: CGSize(width: 3840, height: 2160)
@@ -190,7 +218,7 @@ struct CaptureProtocolTests {
         let visible = window.intersection(display)
         #expect(visible == window)
 
-        let crop = SCKAdapter.pixelCropRect(
+        let crop = RegionPixelMapping.pixelCropRect(
             areaRect: visible,
             displayFrame: display,
             imageSize: CGSize(width: 2880, height: 1800)

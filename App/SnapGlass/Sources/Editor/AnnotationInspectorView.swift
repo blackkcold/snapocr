@@ -9,6 +9,21 @@ struct AnnotationInspectorView: View {
         viewModel.selectedNode?.tool ?? viewModel.selectedTool.annotationTool
     }
 
+    /// Localized tool name used in the inspector title. The raw enum value would
+    /// show English identifiers inside every other language.
+    private var toolDisplayName: LocalizedStringKey {
+        switch currentTool {
+        case .arrow: "Arrow"
+        case .rect: "Rectangle"
+        case .text: "Text"
+        case .pen: "Pen"
+        case .highlight: "Highlight"
+        case .blur: "Blur"
+        case .crop: "Crop"
+        case .none: "Annotation"
+        }
+    }
+
     private var isEditingSelection: Bool {
         viewModel.selectedNode != nil
     }
@@ -20,22 +35,15 @@ struct AnnotationInspectorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label(
-                    isEditingSelection
-                        ? LocalizedStringKey(
-                            String(
-                                format: String(localized: "Edit %@"),
-                                currentTool?.rawValue.capitalized ?? String(localized: "Annotation")
-                            )
-                        )
-                        : LocalizedStringKey(
-                            String(
-                                format: String(localized: "New %@"),
-                                currentTool?.rawValue.capitalized ?? String(localized: "Annotation")
-                            )
-                        ),
-                    systemImage: "slider.horizontal.3"
-                )
+                Label {
+                    if isEditingSelection {
+                        Text("Edit \(Text(toolDisplayName))")
+                    } else {
+                        Text("New \(Text(toolDisplayName))")
+                    }
+                } icon: {
+                    Image(systemName: "slider.horizontal.3")
+                }
                     .font(.headline)
                 Spacer()
                 if isEditingSelection {

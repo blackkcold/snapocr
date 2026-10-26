@@ -14,6 +14,12 @@ extension EditableAnnotationCanvasNSView {
         }
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
+        if isSpacePanning {
+            interaction = .panning
+            dragStartPoint = point
+            NSCursor.closedHand.set()
+            return
+        }
         guard imageDisplayRect.contains(point) else { return }
         dragStartPoint = point
 
@@ -52,6 +58,19 @@ extension EditableAnnotationCanvasNSView {
     override func mouseDragged(with event: NSEvent) {
         let point = clampedViewPoint(convert(event.locationInWindow, from: nil))
         switch interaction {
+        case .panning:
+            // No clamping here: a pan may legitimately drag past the image edge.
+            let raw = convert(event.locationInWindow, from: nil)
+            panOffset = clampedPan(
+                CGSize(
+                    width: panOffset.width + (raw.x - dragStartPoint.x),
+                    height: panOffset.height + (raw.y - dragStartPoint.y)
+                ),
+                for: fitImageRect,
+                zoom: zoomScale
+            )
+            dragStartPoint = raw
+            needsDisplay = true
         case .drawing:
             if currentTool == .picker {
                 pickerRegionRect = CGRect(spanning: dragStartPoint, and: clampedViewPoint(point))
@@ -101,6 +120,8 @@ extension EditableAnnotationCanvasNSView {
         }
 
         switch interaction {
+        case .panning:
+            NSCursor.openHand.set()
         case .drawing:
             keepsPendingCrop = completeDrawing(at: point)
         case .moving, .resizing:
@@ -150,17 +171,9 @@ extension EditableAnnotationCanvasNSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if currentTool == .crop, !pendingCropRect.isEmpty {
-            switch event.keyCode {
-            case 36, 76:
-                confirmPendingCrop()
-            case 53:
-                cancelPendingCrop()
-            default:
-                super.keyDown(with: event)
-            }
-            return
-        }
+        if handleZoomKeyDown(event) { return }
+        if handleToolKeyDown(event) { return }
+        if handleCropKeyDown(event) { return }
         if currentTool == .ocr || ocrTextSelection != nil {
             if handleOCRKeyDown(event) {
                 return
@@ -175,6 +188,32 @@ extension EditableAnnotationCanvasNSView {
             nudgeSelection(keyCode: event.keyCode, multiplier: event.modifierFlags.contains(.shift) ? 10 : 1)
         default:
             super.keyDown(with: event)
+        }
+    }
+
+    override func keyUp(with event: NSEvent) {
+        if event.keyCode == 49 {
+            isSpacePanning = false
+            NSCursor.arrow.set()
+            return
+        }
+        super.keyUp(with: event)
+    }
+
+    /// Handles Enter/Esc while a crop rectangle is waiting for confirmation.
+    ///
+    /// - Returns: `true` when the event was consumed.
+    func handleCropKeyDown(_ event: NSEvent) -> Bool {
+        guard currentTool == .crop, !pendingCropRect.isEmpty else { return false }
+        switch event.keyCode {
+        case 36, 76:
+            confirmPendingCrop()
+            return true
+        case 53:
+            cancelPendingCrop()
+            return true
+        default:
+            return false
         }
     }
 }

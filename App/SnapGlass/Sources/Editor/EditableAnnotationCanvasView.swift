@@ -74,6 +74,7 @@ final class EditableAnnotationCanvasNSView: NSView {
         case adjustingCrop
         case movingCrop
         case resizingCrop(ResizeHandle)
+        case panning
     }
 
     enum ResizeHandle: CaseIterable, Equatable {
@@ -83,6 +84,19 @@ final class EditableAnnotationCanvasNSView: NSView {
     }
 
     var imageDisplayRect: CGRect = .zero
+    /// Zoom relative to the fit-to-window size; 1 shows the whole image.
+    var zoomScale: CGFloat = 1
+    /// Pan offset in view points, applied after zoom.
+    var panOffset: CGSize = .zero
+    /// Fit rect and image size from the last layout, used by the zoom math.
+    var fitImageRect: CGRect = .zero
+    var lastImageSize: CGSize = .zero
+    /// True while the space bar is held for drag-to-pan.
+    var isSpacePanning = false
+    /// Reports (zoom relative to fit, scale relative to image pixels).
+    var onZoomChanged: ((CGFloat, CGFloat) -> Void)?
+    /// Invoked when the user presses a single-key tool shortcut.
+    var onToolShortcut: ((EditorTool) -> Void)?
     var interaction: Interaction = .none
     var dragStartPoint: CGPoint = .zero
     var dragCurrentPoints: [CGPoint] = []
@@ -186,10 +200,9 @@ final class EditableAnnotationCanvasNSView: NSView {
 
         if let image {
             let displayImage = previewImage(for: image) ?? image
-            imageDisplayRect = aspectFitRect(
-                imageSize: CGSize(width: displayImage.width, height: displayImage.height),
-                in: bounds
-            )
+            let imageSize = CGSize(width: displayImage.width, height: displayImage.height)
+            lastImageSize = imageSize
+            imageDisplayRect = imageRect(for: imageSize)
             context.draw(displayImage, in: imageDisplayRect)
         } else {
             imageDisplayRect = bounds

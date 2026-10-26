@@ -25,6 +25,8 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     let showsOCROverlay: Bool
     let verticalCropOnly: Bool
     let dominantColorCount: Int
+    let zoomController: CanvasZoomController
+    var onToolShortcut: (EditorTool) -> Void
     var onNodeCreated: (AnnotationNode) -> Void
     var onNodeUpdated: (AnnotationNode) -> Void
     var onSelectionChanged: (UUID?) -> Void
@@ -41,9 +43,22 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     var onColorPicked: (SampledColor) -> Void
     var onRegionColorsPicked: ([SampledColor]) -> Void
 
-    func makeNSView(context: Context) -> EditableAnnotationCanvasNSView { EditableAnnotationCanvasNSView() }
+    func makeNSView(context: Context) -> EditableAnnotationCanvasNSView {
+        let view = EditableAnnotationCanvasNSView()
+        zoomController.attach(view)
+        view.onZoomChanged = { [weak zoomController] scale, pixelScale in
+            zoomController?.canvasDidChangeZoom(scale: scale, pixelScale: pixelScale)
+        }
+        return view
+    }
 
     func updateNSView(_ view: EditableAnnotationCanvasNSView, context: Context) {
+        if view.image !== image {
+            // A new base image (first load or a crop) starts at fit-to-window.
+            view.zoomScale = 1
+            view.panOffset = .zero
+        }
+        zoomController.attach(view)
         view.image = image
         view.nodes = nodes.filter { $0.id != textEntryNode?.id }
         view.verticalCropOnly = verticalCropOnly
@@ -76,6 +91,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.onOCRLineAsAnnotation = onOCRLineAsAnnotation
         view.onColorPicked = onColorPicked
         view.onRegionColorsPicked = onRegionColorsPicked
+        view.onToolShortcut = onToolShortcut
         view.dominantColorCount = dominantColorCount
         view.invalidateRenderedPreview()
         view.updateOCRTextOverlay()

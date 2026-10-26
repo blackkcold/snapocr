@@ -937,6 +937,8 @@ struct CaptureToolbar: View {
 }
 ```
 
+> **落地说明（区域截图动作栏）**：上面的 `CaptureToolbar` 是未来 SwiftUI 工具栏的草图；当前区域截图的动作栏是 AppKit 的 `CaptureActionBarView`（`NSVisualEffectView`，`.hudWindow`），其动作已含 `条码`——对应「识别」（`S`）。识别走「选区 → `ScreenCoordinateGeometry.quartzRect` → `RegionPixelMapping.pixelCropRect` → 预截原图裁剪 → `VisionBarcodeEngine`」，不经过编辑器、不写历史，结果浮层是 `AreaTrackingView` 的子视图（不额外开窗，因此不会被自己截进去）。
+
 #### Liquid Glass 适配矩阵
 
 | 组件 | macOS 26+ | macOS 13-25 | Reduce Transparency |

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-10-26
+
+### Fixed
+- 历史保留策略滑杆改为松手才生效，并在真正删除前显示「将删除 N 条」并要求确认；此前拖动滑杆的每个中间值都会立即触发清理并永久删除截图。生效前不再提前写入 `UserDefaults`，取消即回到原值。
+- 「清空历史」不再连带清空取色历史；确认框写明删除总数、被当前筛选隐藏的条数，并明确颜色历史不受影响。
+- 历史单条删除改为可撤销：删除后 6 秒内可点 toast 上的「撤销」恢复，保留原 `id`、时间戳、收藏与标签（`HistoryActor.restore`）。
+- 编辑器关闭时若存在未保存标注，改为「保存 / 不保存 / 取消」三选一；Esc 与红灯关闭按钮同样拦截，不再静默丢弃标注。脏判定用文档变更计数，撤销回空白画布不算脏。
+- 窗口选择面板的超时兜底不再丢弃用户已选的窗口：面板自身的完成路径（按钮 / Esc / 关闭 / 失焦）负责收尾，长超时只在面板完全没有出现时关闭面板并提示重试。
+- 编辑器中 `⌘H` 归还系统「隐藏」，「保存到历史」改为 `⇧⌘S`；`⌘C` 现在复制标注图，选中 OCR 文本时仍优先复制文字。
+- 编辑器 OCR 改为读取与截图一致的 OCR 设置（语言优先级、启用语言、引擎、置信度阈值），此前硬编码 `zh-Hans`/`en-US` 与 `0.1`。
+- 覆盖原记录、恢复原图与新增截图后，已打开的历史窗口会自动刷新缩略图（`imagesDidChange` 终于有观察者）。
+- 历史导出遵循当前搜索与筛选结果（此前固定导出全部），并在成功后给出反馈。
+- 历史列表不再为每条记录串行预读缩略图：新记录把像素尺寸写进加密元数据，旧记录按需回退到读取缩略图头。
+- 编辑器保存面板可切换 PNG / JPEG，转 JPEG 时先合成白底，并记住上次保存目录。
+- 历史加载失败从模态弹窗改为带「重试」的 toast；历史网格支持 Delete 删除选中项、方向键移动选中。
+- 修复应用语言与系统语言不一致时局部文案混杂：视图内 10 处 `String(localized:)` 改回 `LocalizedStringKey`，`scripts/check-localization.sh` 新增拦截规则（`Routing/` 不在产品构建内，排除）。
+- 权限引导的「稍后再说」改用 `performClose` 关闭，不再依赖对 `Window` 场景不可靠的 `dismiss`。
+- 编辑器检查器标题显示本地化工具名，不再出现 `Rect` 这类原始标识符。
+- 编辑器窗口的 capture 级 toast 改到底部，与编辑器自身 toast 不再重叠。
+
+### Added
+- 区域截图的动作栏新增「识别」（`S`）：直接在选区内识别二维码/条码，结果浮层贴在动作栏外侧，可复制单条、全部复制、打开 http(s) 链接，`R` 重新截屏识别（动画码可用）。识别是只读的——不进编辑器、不写历史、不自动覆盖剪贴板；浮层打开时 `Esc` 先关浮层、`↵` 改为复制识别内容。裁剪数学下沉到 `CaptureCore.RegionPixelMapping`（`SCKAdapter` 转发），payload 判定下沉到 `BarcodeCore.BarcodePayloadFormatter`。
+- 编辑器支持缩放与平移：滚轮/捏合缩放（`⌘` 或 `⌥` + 滚轮）、空格拖拽平移、`⌘0` 适合窗口、`⌘1` 实际大小；工具栏显示当前百分比。
+- 工具快捷键 `V/A/R/T/P/H/B/C/I`；工具栏所有纯图标按钮补齐无障碍标签；窄窗口下次要操作折叠进溢出菜单。
+- `scripts/test.sh` 现在同时运行 `EditorInteractionTests` 与 `WindowLifecycleStateTests`，并在某个 scheme 实际跑 0 条测试时报失败。
+
+### Changed
+- OCR 设置读取收敛到 `OCRSettings`，截图与编辑器共用同一份解析逻辑。
+
 ## [0.8.8] - 2026-10-21
 
 ### Fixed
@@ -257,7 +286,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.8...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.9...HEAD
+[0.8.9]: https://github.com/blackkcold/snapocr/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/blackkcold/snapocr/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/blackkcold/snapocr/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/blackkcold/snapocr/compare/v0.8.5...v0.8.6
