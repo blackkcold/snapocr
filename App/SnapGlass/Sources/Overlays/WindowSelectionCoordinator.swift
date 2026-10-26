@@ -69,6 +69,9 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
     }
 
     private func refreshVisibleThumbnails() {
+        // Do not burn GPU/CPU on live previews while the picker is in the
+        // background or another app/window is key.
+        guard let panel, panel.isVisible, panel.isKeyWindow else { return }
         guard let tableView, let scrollView = tableView.enclosingScrollView else { return }
         let visibleRect = scrollView.contentView.bounds
         let visibleRange = tableView.rows(in: visibleRect)

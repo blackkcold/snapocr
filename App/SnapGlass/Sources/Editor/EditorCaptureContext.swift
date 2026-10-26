@@ -6,7 +6,7 @@ public struct EditorCaptureContext: Equatable, Sendable {
     let captureMode: String?
     let supportsVerticalTrim: Bool
     let startsInVerticalTrim: Bool
-    let sourceEntryID: UUID?
+    var sourceEntryID: UUID?
 
     public static let standard = EditorCaptureContext(
         captureMode: nil,

@@ -33,7 +33,12 @@ struct SnapGlassApp: App {
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
         } label: {
-            Label("SnapGlass", systemImage: "camera.viewfinder")
+            Label(
+                "SnapGlass",
+                systemImage: viewModel.isCapturing
+                    ? "camera.viewfinder.circle.fill"
+                    : "camera.viewfinder"
+            )
                 .background {
                     AppLifecycleBridge(viewModel: viewModel, router: router)
                 }

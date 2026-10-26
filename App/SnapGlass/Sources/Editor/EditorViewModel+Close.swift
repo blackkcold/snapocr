@@ -10,7 +10,15 @@ extension EditorViewModel {
 
     /// 记录当前文档已写入磁盘或历史。
     func markSaved() {
+        resetSavedSnapshot()
+    }
+
+    /// Captures the current document as the clean baseline.
+    func resetSavedSnapshot() {
+        savedDocumentNodes = document?.nodes ?? []
+        savedBaseImage = document?.baseImage
         savedChangeCount = changeCount
+        hasSavedSnapshot = document != nil
     }
 
     /// 关闭编辑器；有未保存标注时先询问，而不是直接丢弃。

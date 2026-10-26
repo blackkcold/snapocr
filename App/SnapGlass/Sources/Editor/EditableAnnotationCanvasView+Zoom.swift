@@ -44,6 +44,7 @@ extension EditableAnnotationCanvasNSView {
         zoomScale = 1
         panOffset = .zero
         notifyZoomChanged()
+        refreshTextEntryLayout()
         needsDisplay = true
     }
 
@@ -87,7 +88,15 @@ extension EditableAnnotationCanvasNSView {
         )
         panOffset = clampedPan(proposed, for: fitImageRect, zoom: clamped)
         notifyZoomChanged()
+        refreshTextEntryLayout()
         needsDisplay = true
+    }
+
+    /// Keeps the inline text field aligned after a zoom or pan.
+    func refreshTextEntryLayout() {
+        guard canvasTextEditor != nil, lastImageSize != .zero else { return }
+        imageDisplayRect = imageRect(for: lastImageSize)
+        layoutTextEntry()
     }
 
     private func notifyZoomChanged() {
@@ -157,6 +166,7 @@ extension EditableAnnotationCanvasNSView {
             for: fitImageRect,
             zoom: zoomScale
         )
+        refreshTextEntryLayout()
         needsDisplay = true
     }
 }

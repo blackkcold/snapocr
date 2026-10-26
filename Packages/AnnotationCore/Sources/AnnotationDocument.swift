@@ -78,11 +78,22 @@ public struct AnnotationDocument: Sendable {
 
     /// 更新指定标注节点。
     ///
-    /// 自动将当前状态保存到撤销栈。
+    /// 自动将当前状态保存到撤销栈。连续手势（如拖拽滑杆）应改用
+    /// `replaceNode(_:)`，并在手势开始时只记录一次撤销快照。
     /// - Parameter node: 更新后的节点
     public mutating func updateNode(_ node: AnnotationNode) {
-        guard let index = nodes.firstIndex(where: { $0.id == node.id }) else { return }
+        guard nodes.contains(where: { $0.id == node.id }) else { return }
         pushUndoState()
+        replaceNode(node)
+    }
+
+    /// 替换指定标注节点，但不写入撤销栈。
+    ///
+    /// 用于连续手势中的中间状态；调用方负责在合适时机调用
+    /// `pushUndoState()`，避免一次拖动产生几十条撤销记录。
+    /// - Parameter node: 更新后的节点
+    public mutating func replaceNode(_ node: AnnotationNode) {
+        guard let index = nodes.firstIndex(where: { $0.id == node.id }) else { return }
         nodes[index] = node
     }
 

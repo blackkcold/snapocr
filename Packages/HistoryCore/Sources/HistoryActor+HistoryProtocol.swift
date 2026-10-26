@@ -172,7 +172,7 @@ extension HistoryActor {
         }
 
         try ImageEncoder.write(image, to: imageURL, format: format, jpegQuality: jpegQuality)
-        try Self.writeThumbnail(from: imageURL, to: thumbnailURL, maxPixelSize: 200)
+        try Self.writeThumbnail(from: image, to: thumbnailURL, maxPixelSize: 200)
 
         let entry = HistoryEntry(
             textContent: textContent,

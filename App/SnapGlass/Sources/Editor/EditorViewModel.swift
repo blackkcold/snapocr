@@ -95,19 +95,43 @@ public final class EditorViewModel: ObservableObject {
   /// Whether a reversible overwrite of the originating history record exists.
   public var canOverwriteOriginal: Bool { sourceEntryID != nil }
 
+  /// Links the history record that finished writing after the editor opened.
+  public func attachSourceEntry(_ id: UUID) {
+    guard sourceEntryID == nil else { return }
+    sourceEntryID = id
+  }
+
   /// The current toast message to display.
   @Published public var toastMessage: ToastMessage?
 
   /// Whether the document holds annotations that were never written to a file
   /// or to history. Drives the close confirmation.
+  ///
+  /// Compares content rather than a mutation counter, so undoing every change
+  /// back to the saved state counts as clean again.
   public var hasUnsavedChanges: Bool {
-    guard changeCount != savedChangeCount else { return false }
-    // Drawing and then undoing back to an empty canvas counts as clean.
-    if savedChangeCount == 0, document?.nodes.isEmpty == true { return false }
-    return true
+    if isEnteringText {
+      let trimmed = textDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !trimmed.isEmpty {
+        // Opening an existing text node and leaving it unchanged is not dirty.
+        let unchangedExistingDraft =
+          editingTextNodeID.flatMap { id in document?.nodes.first(where: { $0.id == id }) }
+          .map { $0.text == textDraft } ?? false
+        if !unchangedExistingDraft { return true }
+      }
+    }
+    guard let document else { return false }
+    guard hasSavedSnapshot else { return true }
+    if savedBaseImage !== document.baseImage { return true }
+    return document.nodes != savedDocumentNodes
   }
 
-  /// Increments on every document mutation; compared against `savedChangeCount`.
+  /// Set while a full-size render/encode is running, so the toolbar cannot
+  /// start a second save or copy before the first one finishes.
+  @Published var isWritingImage = false
+
+  /// Increments on every document mutation; kept for change notifications and
+  /// diagnostics. Dirty tracking itself compares document content.
   @Published var changeCount = 0
 
   /// Set once the user has accepted losing the changes, so the window may close.
@@ -134,13 +158,22 @@ public final class EditorViewModel: ObservableObject {
   /// Closes the editor window even though it still has unsaved annotations.
   public var onForceClose: (() -> Void)?
 
+  /// Snapshot of the document as last written to disk or history.
+  var savedDocumentNodes: [AnnotationNode] = []
+  var savedBaseImage: CGImage?
+  var hasSavedSnapshot = false
+
   var savedChangeCount = 0
 
   let logger = Logger(category: "editor")
   let recognizeImage: @Sendable (CGImage, OCROptions) async throws -> OCRResult
   let detectBarcodes: @Sendable (CGImage, [BarcodeType]) async throws -> [BarcodeResult]
   let historySaver: @Sendable (CGImage, EditorHistorySaveMode, UUID?) async throws -> Void
-  let sourceEntryID: UUID?
+  /// The history record this image was saved as.
+  ///
+  /// Capture opens the editor before the (slower) history write finishes, so
+  /// this is filled in later via `attachSourceEntry(_:)`.
+  @Published public private(set) var sourceEntryID: UUID?
   private var pendingTextPoint: CGPoint?
   private var editingTextNodeID: UUID?
   var ocrTask: Task<Void, Never>?
@@ -177,6 +210,7 @@ public final class EditorViewModel: ObservableObject {
       }
       startOCR()
     }
+    resetSavedSnapshot()
   }
 
   deinit {
@@ -198,6 +232,7 @@ public final class EditorViewModel: ObservableObject {
     document = interactor.createDocument(from: image)
     selectedNodeID = nil
     ocrLines = []
+    resetSavedSnapshot()
     startOCR()
     logger.info("Editor loaded image: \(image.width)×\(image.height)")
   }
@@ -230,15 +265,6 @@ public final class EditorViewModel: ObservableObject {
     selectNode(nil)
   }
 
-  func setSelectedColor(_ color: Color) {
-    selectedColor = color
-    selectedPreset = .custom
-    if selectedNode != nil {
-      updateSelectedStyle()
-    } else if fillEnabled {
-      fillColor = color
-    }
-  }
 
   /// Adds a new annotation node to the document.
   ///
@@ -284,70 +310,59 @@ public final class EditorViewModel: ObservableObject {
     self.selectedNodeID = nil
   }
 
-  public func selectNode(_ id: UUID?) {
-    selectedNodeID = id
-    guard let node = selectedNode else { return }
-    selectedColor = Color(nsColor: NSColor(cgColor: node.color ?? cgColor) ?? .red)
-    strokeWidth = node.lineWidth
-    annotationOpacity = node.opacity
-    fillEnabled = node.fillColor != nil
-    if let fill = node.fillColor, let nsFill = NSColor(cgColor: fill) {
-      fillColor = Color(nsColor: nsFill)
-    }
-    strokeStyle = node.strokeStyle
-    cornerRadius = node.cornerRadius
-    arrowStyle = node.arrowStyle
-    fontName = node.fontName
-    fontSize = node.fontSize
-    textAlignment = node.textAlignment
-    blurMode = node.blurMode
-    blurIntensity = node.blurIntensity
-  }
 
   public var selectedNode: AnnotationNode? {
     guard let selectedNodeID else { return nil }
     return document?.nodes.first { $0.id == selectedNodeID }
   }
 
+  /// True while a continuous style control (a slider) is being dragged.
+  private var isCoalescingStyleEdit = false
+  /// Whether the pre-drag snapshot was already pushed for this gesture.
+  private var styleEditRecordedUndo = false
+  /// Published so the canvas can exclude the node being restyled from its
+  /// cached preview and draw only that node live.
+  @Published private(set) var isAdjustingStyle = false
+
+  /// Starts one undoable style gesture.
+  ///
+  /// A slider fires its binding dozens of times per drag. Without coalescing
+  /// every tick became its own undo step, so ⌘Z had to be pressed dozens of
+  /// times to get back to the previous annotation.
+  func beginStyleEdit() {
+    isCoalescingStyleEdit = true
+    styleEditRecordedUndo = false
+    isAdjustingStyle = true
+  }
+
+  /// Ends the style gesture; the next change records a fresh undo step.
+  func endStyleEdit() {
+    isCoalescingStyleEdit = false
+    styleEditRecordedUndo = false
+    isAdjustingStyle = false
+  }
+
   public func updateSelectedStyle() {
     guard !isEnteringText else { return }
-    guard var node = selectedNode else { return }
+    guard var node = selectedNode, var doc = document else { return }
     node = applyingCurrentStyle(to: node)
     if node.tool == .text {
       node = fittedTextNode(node)
     }
-    updateNode(node)
+    guard isCoalescingStyleEdit else {
+      updateNode(node)
+      return
+    }
+    if !styleEditRecordedUndo {
+      doc.pushUndoState()
+      styleEditRecordedUndo = true
+    }
+    doc.replaceNode(node)
+    document = doc
+    markChanged()
+    selectNode(node.id)
   }
 
-  func applyPreset(_ preset: AnnotationStylePreset) {
-    selectedPreset = preset
-    guard preset != .custom else { return }
-    selectedColor = preset.color
-    strokeWidth = preset.lineWidth
-    annotationOpacity = preset.opacity
-    fontSize = preset.fontSize
-    switch preset {
-    case .emphasis:
-      fillEnabled = false
-      strokeStyle = .solid
-    case .note:
-      fillEnabled = true
-      fillColor = .black.opacity(0.75)
-      strokeStyle = .solid
-    case .subtle:
-      fillEnabled = false
-      strokeStyle = .dashed
-    case .monochrome:
-      fillEnabled = true
-      fillColor = .black.opacity(0.65)
-      strokeStyle = .solid
-    case .custom:
-      break
-    }
-    if selectedNode != nil {
-      updateSelectedStyle()
-    }
-  }
 
   /// Undoes the last annotation operation.
   public func undo() {

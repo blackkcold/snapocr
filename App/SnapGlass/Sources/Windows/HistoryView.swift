@@ -16,11 +16,11 @@ struct HistoryView: View {
     @State var entries: [HistoryEntry] = []
     @State var colorEntries: [ColorHistoryEntry] = []
     @State var searchQuery = ""
-    @State private var colorFilter = ""
+    @State var colorFilter = ""
     @State private var isClearing = false
     @State private var isClearingColors = false
     @State var selectedEntryID: HistoryEntry.ID?
-    @State private var favouriteFilter: HistoryPresentation.Filter = .all
+    @State var favouriteFilter: HistoryPresentation.Filter = .all
     @State private var favouriteOrder: HistoryPresentation.FavouriteOrder = .first
     @State private var newestFirst = true
     @State var thumbnailSizes: [UUID: CGSize] = [:]
@@ -30,9 +30,17 @@ struct HistoryView: View {
     @State private var searchTask: Task<Void, Never>?
     @State var visibleColumnCount = 4
     @State var toastMessage: ToastMessage?
+    /// True while the first/refresh load is running; prevents the empty state
+    /// from flashing before the actor has finished its lazy disk scan.
+    @State var isLoadingScreenshots = true
+    @State var isLoadingColors = true
+    /// A failed history read, kept separate from transient action errors.
+    @State var loadError: String?
 
-    let history = HistoryActor.shared
     let colorHistory = ColorHistoryStore.shared
+    /// Kept in state so a failed `HistoryActor.shared` initialization can be
+    /// retried from the unavailable screen instead of requiring an app restart.
+    @State var history: HistoryActor? = HistoryActor.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,14 +62,20 @@ struct HistoryView: View {
             case .screenshots:
                 searchBar
                 historyFilters
-                if visibleEntries.isEmpty {
+                if isLoadingScreenshots, entries.isEmpty {
+                    loadingState
+                } else if history == nil || loadError != nil {
+                    unavailableState
+                } else if visibleEntries.isEmpty {
                     emptyState
                 } else {
                     entryList
                 }
             case .colors:
                 colorFilterBar
-                if filteredColorEntries.isEmpty {
+                if isLoadingColors, colorEntries.isEmpty {
+                    loadingState
+                } else if filteredColorEntries.isEmpty {
                     colorEmptyState
                 } else {
                     colorGrid
@@ -119,6 +133,7 @@ struct HistoryView: View {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear")
             }
         }
         .padding(8)
@@ -140,72 +155,11 @@ struct HistoryView: View {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear")
             }
         }
         .padding(8)
         .background(Color(nsColor: .controlBackgroundColor))
-    }
-
-    // MARK: - Empty State
-
-    private var emptyStateTitle: LocalizedStringKey {
-        if history == nil {
-            return "History unavailable"
-        }
-        return searchQuery.isEmpty && favouriteFilter == .all ? "No captures yet" : "No results found"
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 40))
-                .foregroundColor(.secondary)
-
-            Text(emptyStateTitle)
-                .font(.title3)
-                .foregroundColor(.secondary)
-
-            if history == nil {
-                Text("Check the application support folder permissions")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else if !searchQuery.isEmpty {
-                Text("Try a different search term")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var colorEmptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "paintpalette")
-                .font(.system(size: 40))
-                .foregroundColor(.secondary)
-
-            Text(colorEmptyStateTitle)
-                .font(.title3)
-                .foregroundColor(.secondary)
-
-            if colorHistory == nil {
-                Text("Check the application support folder permissions")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else if !colorFilter.isEmpty {
-                Text("Try a different search term")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var colorEmptyStateTitle: LocalizedStringKey {
-        if colorHistory == nil {
-            return "History unavailable"
-        }
-        return colorFilter.isEmpty ? "No colors captured yet" : "No matching colors"
     }
 
     // MARK: - Entry List

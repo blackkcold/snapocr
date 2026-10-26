@@ -7,6 +7,11 @@ struct MenuBarView: View {
     @EnvironmentObject private var viewModel: CaptureViewModel
     
     var body: some View {
+        if viewModel.isCapturing {
+            Text("Capturing…")
+            Divider()
+        }
+
         Button("Area Capture") {
             viewModel.captureArea()
         }

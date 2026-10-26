@@ -20,48 +20,90 @@ extension CaptureViewModel {
             defer { isCapturing = false }
 
             let (selectionStyle, overlayMode) = Self.areaCapturePreferences()
+            let setup = await preCaptureSetup(for: overlayMode)
+            let selection = await awaitAreaSelection(
+                style: selectionStyle,
+                overlayMode: overlayMode,
+                capturedFrames: setup.frames,
+                preCaptureTask: setup.task
+            )
+            setup.task?.cancel()
+            guard let selection else { return }
+            await performAreaSelection(selection)
+        }
+    }
 
-            let capturedFrames = await preCaptureAllScreens()
+    /// Snapshot mode paints the frozen desktop inside the overlay, so it must
+    /// wait for the frames. Live mode presents first and hands them over when
+    /// ready; color picking simply has no sample until then.
+    private func preCaptureSetup(
+        for overlayMode: CaptureOverlayMode
+    ) async -> (
+        frames: [CGDirectDisplayID: CGImage],
+        task: Task<[CGDirectDisplayID: CGImage], Never>?
+    ) {
+        guard overlayMode == .snapshot else {
+            let task = Task<[CGDirectDisplayID: CGImage], Never> { [weak self] in
+                guard let self else { return [:] }
+                return await self.preCaptureAllScreens()
+            }
+            return ([:], task)
+        }
+        return (await preCaptureAllScreens(), nil)
+    }
 
-            let selection: AreaSelectionResult? = await withCheckedContinuation { continuation in
-                var didResume = false
-                Task { @MainActor in
-                    AreaSelectionPanel.show(
-                        style: selectionStyle,
-                        overlayMode: overlayMode,
-                        capturedFrames: capturedFrames,
-                        onColorPicked: { [weak self] color in
-                            self?.copyHexToClipboard(color)
-                        },
-                        onRecaptureRegion: { [weak self] quartzRect in
-                            guard let self else { return nil }
-                            return await self.recaptureRegionForBarcodeScan(quartzRect)
-                        },
-                        onComplete: { result in
-                            guard !didResume else { return }
-                            didResume = true
-                            continuation.resume(returning: result)
-                        }
-                    )
+    private func awaitAreaSelection(
+        style: CaptureSelectionStyle,
+        overlayMode: CaptureOverlayMode,
+        capturedFrames: [CGDirectDisplayID: CGImage],
+        preCaptureTask: Task<[CGDirectDisplayID: CGImage], Never>?
+    ) async -> AreaSelectionResult? {
+        await withCheckedContinuation { continuation in
+            var didResume = false
+            Task { @MainActor in
+                AreaSelectionPanel.show(
+                    style: style,
+                    overlayMode: overlayMode,
+                    capturedFrames: capturedFrames,
+                    onColorPicked: { [weak self] color in
+                        self?.copyHexToClipboard(color)
+                    },
+                    onRecaptureRegion: { [weak self] quartzRect in
+                        guard let self else { return nil }
+                        return await self.recaptureRegionForBarcodeScan(quartzRect)
+                    },
+                    onComplete: { result in
+                        guard !didResume else { return }
+                        didResume = true
+                        continuation.resume(returning: result)
+                    }
+                )
+
+                if let preCaptureTask {
+                    Task { @MainActor in
+                        let frames = await preCaptureTask.value
+                        AreaSelectionPanel.updateCapturedFrames(frames)
+                    }
                 }
             }
-
-            guard let selection else { return }
-            let destination: CaptureDestination =
-                switch selection.action {
-                case .copy: .clipboardOnly
-                case .edit: .editorOnly
-                case .pin: .pinOnly
-                }
-            await performCapture(
-                mode: CaptureCore.CaptureMode.area(selection.screenRect),
-                normalizedMaskPath: selection.normalizedPath,
-                historyModeOverride: selection.isFreeform ? "freeform" : nil,
-                destination: destination,
-                pinRect: selection.appKitRect,
-                managesCaptureState: false
-            )
         }
+    }
+
+    private func performAreaSelection(_ selection: AreaSelectionResult) async {
+        let destination: CaptureDestination =
+            switch selection.action {
+            case .copy: .clipboardOnly
+            case .edit: .editorOnly
+            case .pin: .pinOnly
+            }
+        await performCapture(
+            mode: CaptureCore.CaptureMode.area(selection.screenRect),
+            normalizedMaskPath: selection.normalizedPath,
+            historyModeOverride: selection.isFreeform ? "freeform" : nil,
+            destination: destination,
+            pinRect: selection.appKitRect,
+            managesCaptureState: false
+        )
     }
 
     /// 区域截图的样式与遮罩模式偏好。
@@ -95,30 +137,51 @@ extension CaptureViewModel {
     /// on secondary displays arranged above/left of the main screen. Sampling
     /// and snapshot previews share these full-resolution frames.
     private func preCaptureAllScreens() async -> [CGDirectDisplayID: CGImage] {
-        var capturedFrames: [CGDirectDisplayID: CGImage] = [:]
         let captureOptions = CaptureOptions(
             includeCursor: false,
             highResolution: true
         )
-        for screen in NSScreen.screens {
+        let displays: [(id: CGDirectDisplayID, bounds: CGRect)] = NSScreen.screens.compactMap { screen in
             guard
                 let displayID = screen.deviceDescription[
                     NSDeviceDescriptionKey("NSScreenNumber")
                 ] as? CGDirectDisplayID
-            else { continue }
-            do {
-                let result = try await captureOrchestrator.capture(
-                    mode: CaptureCore.CaptureMode.area(CGDisplayBounds(displayID)),
-                    options: captureOptions
-                )
-                capturedFrames[displayID] = result.image
-            } catch {
-                logger.warning(
-                    "Pre-capture failed for display \(displayID): \(error.localizedDescription)"
-                )
-            }
+            else { return nil }
+            return (displayID, CGDisplayBounds(displayID))
         }
-        return capturedFrames
+        guard !displays.isEmpty else { return [:] }
+
+        let orchestrator = captureOrchestrator
+        return await withTaskGroup(
+            of: (id: CGDirectDisplayID, image: CGImage?, failure: String?).self,
+            returning: [CGDirectDisplayID: CGImage].self
+        ) { group in
+            for display in displays {
+                group.addTask {
+                    do {
+                        let result = try await orchestrator.capture(
+                            mode: CaptureCore.CaptureMode.area(display.bounds),
+                            options: captureOptions
+                        )
+                        return (display.id, result.image, nil)
+                    } catch {
+                        return (display.id, nil, error.localizedDescription)
+                    }
+                }
+            }
+
+            var capturedFrames: [CGDirectDisplayID: CGImage] = [:]
+            for await result in group {
+                if let image = result.image {
+                    capturedFrames[result.id] = image
+                } else if let failure = result.failure {
+                    logger.warning(
+                        "Pre-capture failed for display \(result.id): \(failure)"
+                    )
+                }
+            }
+            return capturedFrames
+        }
     }
 
     private func copyHexToClipboard(_ color: SampledColor) {
@@ -285,185 +348,6 @@ extension CaptureViewModel {
             openWindow?("permission")
         } catch {
             showToast(message: AppLocalization.string("Capture failed: %@", error.localizedDescription), type: .error)
-        }
-    }
-
-    func processCapturedImage(
-        _ image: CGImage,
-        captureMode: CaptureCore.CaptureMode,
-        sourceAppName: String? = nil,
-        sourceWindowTitle: String? = nil,
-        historyModeOverride: String? = nil,
-        destination: CaptureDestination = .configured,
-        pinRect: CGRect? = nil
-    ) async {
-        let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
-        let (shouldOpenEditor, shouldCopyImage) = resolveDestination(destination)
-
-        if destination == .pinOnly, let pinRect {
-            presentPinnedImage(image, pinRect: pinRect)
-        }
-
-        let imageCopySucceeded = !shouldCopyImage || writeImageToClipboard(image)
-        presentCopyFeedback(
-            imageCopySucceeded: imageCopySucceeded,
-            shouldOpenEditor: shouldOpenEditor,
-            destination: destination
-        )
-
-        let ocrResult = await runOCRAndSuggestions(
-            on: image,
-            shouldOpenEditor: shouldOpenEditor,
-            destination: destination
-        )
-
-        // Save before opening the editor so the editor knows which record the
-        // image belongs to and can offer a reversible overwrite.
-        let historyEntryID = await saveIfNeeded(
-            image: image,
-            ocrResult: ocrResult,
-            destination: destination,
-            imageCopySucceeded: imageCopySucceeded,
-            context: HistorySaveContext(
-                modeDescription: modeDescription,
-                appName: sourceAppName,
-                windowTitle: sourceWindowTitle
-            )
-        )
-
-        if shouldOpenEditor {
-            openEditor(
-                with: image,
-                captureMode: modeDescription,
-                sourceEntryID: historyEntryID
-            )
-        }
-    }
-
-    /// 按真实缩放倍率创建置顶面板（同步，先于历史写入）。
-    private func presentPinnedImage(_ image: CGImage, pinRect: CGRect) {
-        let displayScale = PinnedImageGeometry.displayScale(
-            imagePixelWidth: CGFloat(image.width),
-            pointWidth: pinRect.width
-        )
-        PinnedWindowManager.shared.pin(
-            image: image,
-            displayScale: displayScale,
-            pinRect: pinRect
-        )
-    }
-
-    private func saveIfNeeded(
-        image: CGImage,
-        ocrResult: OCRResult?,
-        destination: CaptureDestination,
-        imageCopySucceeded: Bool,
-        context: HistorySaveContext
-    ) async -> UUID? {
-        let autoSave = Self.boolPreference(
-            forKey: PreferenceKeys.historyAutoSave,
-            defaultValue: PreferenceDefaults.historyAutoSave
-        )
-        let saveFullText = Self.boolPreference(
-            forKey: PreferenceKeys.historySaveFullText,
-            defaultValue: PreferenceDefaults.historySaveFullText
-        )
-        let shouldSaveToHistory = switch destination {
-        case .configured: autoSave
-        case .clipboardOnly: imageCopySucceeded
-        case .editorOnly: true
-        case .pinOnly: true
-        }
-        guard shouldSaveToHistory else { return nil }
-        return await saveToHistoryAndWait(
-            image: image,
-            ocrResult: ocrResult,
-            saveFullText: saveFullText,
-            captureMode: context.modeDescription,
-            source: CaptureSourceInfo(
-                appName: context.appName,
-                windowTitle: context.windowTitle
-            ),
-            isProtected: destination == .pinOnly
-        )
-    }
-
-    /// 运行 OCR 并展示条码复制建议，返回 OCR 结果。
-    private func runOCRAndSuggestions(
-        on image: CGImage,
-        shouldOpenEditor: Bool,
-        destination: CaptureDestination
-    ) async -> OCRResult? {
-        guard destination != .pinOnly else { return nil }
-        let barcodeResults = shouldOpenEditor ? await detectBarcodesForSuggestion(in: image) : []
-
-        let shouldRunOCR = Self.boolPreference(
-            forKey: PreferenceKeys.captureAutoOCR,
-            defaultValue: PreferenceDefaults.captureAutoOCR
-        )
-        let shouldCopyOCRText = destination != .clipboardOnly && Self.boolPreference(
-            forKey: PreferenceKeys.captureCopyOCRText,
-            defaultValue: PreferenceDefaults.captureCopyOCRText
-        )
-        let ocrResult = shouldRunOCR
-            ? await performOCR(on: image, copyToClipboard: shouldCopyOCRText)
-            : nil
-
-        if let payload = BarcodeCopyCandidate.singlePayload(from: barcodeResults) {
-            showBarcodeCopySuggestion(payload: payload)
-        }
-        return ocrResult
-    }
-
-    /// 根据目标解析是否打开编辑器与是否复制图片。
-    private func resolveDestination(_ destination: CaptureDestination) -> (openEditor: Bool, copyImage: Bool) {
-        switch destination {
-        case .configured:
-            return (
-                Self.boolPreference(
-                    forKey: PreferenceKeys.captureOpenEditor,
-                    defaultValue: PreferenceDefaults.captureOpenEditor
-                ),
-                Self.boolPreference(
-                    forKey: PreferenceKeys.captureCopyToClipboard,
-                    defaultValue: PreferenceDefaults.captureCopyToClipboard
-                )
-            )
-        case .clipboardOnly:
-            return (false, true)
-        case .editorOnly:
-            return (true, false)
-        case .pinOnly:
-            return (false, false)
-        }
-    }
-
-    /// Presents the copy/editor success or failure toast after a capture.
-    private func presentCopyFeedback(
-        imageCopySucceeded: Bool,
-        shouldOpenEditor: Bool,
-        destination: CaptureDestination
-    ) {
-        guard destination != .pinOnly else { return }
-        // Opening the editor is itself the success feedback, so suppress the
-        // success toast to avoid it overlapping the editor UI. Failure to copy
-        // (when copying was requested) is still surfaced as an error toast.
-        if !imageCopySucceeded {
-            showToast(
-                message: AppLocalization.string("Unable to copy image"),
-                type: .error
-            )
-        } else if !shouldOpenEditor {
-            let completionMessage: String
-            if destination == .clipboardOnly {
-                completionMessage = AppLocalization.string("Screenshot copied to clipboard")
-            } else {
-                completionMessage = AppLocalization.string("Capture successful")
-            }
-            showToast(
-                message: completionMessage,
-                type: .success
-            )
         }
     }
 

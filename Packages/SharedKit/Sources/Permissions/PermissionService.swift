@@ -20,6 +20,14 @@ import OSLog
 public struct PermissionService: Sendable {
     private let logger: Logger
 
+    /// A successful screen-capture check is reused for a couple of seconds.
+    ///
+    /// Window capture runs a permission check, a window-list enumeration and the
+    /// actual capture back to back. Without this cache the permission check pays
+    /// for its own `SCShareableContent` enumeration immediately before the other
+    /// two, adding a full round trip to every window capture.
+    private static let grantedCacheLifetime: TimeInterval = 2
+
     /// 创建权限服务实例
     /// - Parameter logger: 日志实例，默认使用 `"permission"` 分类
     public init(logger: Logger = Logger(category: "permission")) {
@@ -38,6 +46,11 @@ public struct PermissionService: Sendable {
     ///
     /// - Returns: 权限是否已授权
     public func checkScreenCapturePermission() async -> Bool {
+        if await PermissionCheckCache.shared.isGranted(maxAge: Self.grantedCacheLifetime) {
+            logger.debug("Permission check served from short-lived cache")
+            return true
+        }
+
         let preflight = CGPreflightScreenCaptureAccess()
         logger.info("CGPreflightScreenCaptureAccess() = \(preflight)")
 
@@ -45,6 +58,7 @@ public struct PermissionService: Sendable {
             let content = try await SCShareableContent.current
             if !content.displays.isEmpty {
                 logger.info("Permission verified via SCShareableContent (displays: \(content.displays.count))")
+                await PermissionCheckCache.shared.storeGranted()
                 return true
             }
             logger.warning("SCShareableContent returned empty displays")
@@ -59,12 +73,14 @@ public struct PermissionService: Sendable {
             let content = try await SCShareableContent.current
             if !content.displays.isEmpty {
                 logger.info("Permission verified on retry")
+                await PermissionCheckCache.shared.storeGranted()
                 return true
             }
         } catch {
             logger.warning("Retry failed: \(error.localizedDescription)")
         }
 
+        await PermissionCheckCache.shared.clear()
         return false
     }
 
@@ -135,5 +151,28 @@ public struct PermissionService: Sendable {
 
         // 无法确定是 unknown 还是 denied，返回 denied 以触发引导
         return .denied
+    }
+}
+
+/// Serializes the short-lived successful permission cache.
+///
+/// An actor avoids a mutable global while keeping `PermissionService` a
+/// stateless `Sendable` value.
+private actor PermissionCheckCache {
+    static let shared = PermissionCheckCache()
+
+    private var lastGrantedAt: Date?
+
+    func isGranted(maxAge: TimeInterval) -> Bool {
+        guard let lastGrantedAt else { return false }
+        return Date().timeIntervalSince(lastGrantedAt) <= maxAge
+    }
+
+    func storeGranted() {
+        lastGrantedAt = Date()
+    }
+
+    func clear() {
+        lastGrantedAt = nil
     }
 }

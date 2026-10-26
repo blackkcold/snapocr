@@ -449,6 +449,8 @@
 "Copy failed: %@" = "Copy failed: %@";
 "Undo" = "Undo";
 "Retry" = "Retry";
+"Loading history…" = "Loading history…";
+"Open Storage Folder" = "Open Storage Folder";
 "Screenshot deleted" = "Screenshot deleted";
 "Window picker timed out; please try again" = "Window picker timed out; please try again";
 "Exported %d entries to %@" = "Exported %d entries to %@";
@@ -473,3 +475,4 @@
 "This permanently deletes all %lld colors." = "This permanently deletes all %lld colors.";
 "Copy %lld recognized lines" = "Copy %lld recognized lines";
 "Zoom (⌘0 fits the window, ⌘1 shows actual size)" = "Zoom (⌘0 fits the window, ⌘1 shows actual size)";
+"Capturing…" = "Capturing…";
