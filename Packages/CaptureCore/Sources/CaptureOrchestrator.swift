@@ -8,8 +8,9 @@ import SharedKit
 
 /// 截图捕获编排器。
 ///
-/// 协调 `SCKAdapter`（ScreenCaptureKit 主路径）和 `CGCompatAdapter`（CG 兼容降级路径）
-/// 之间的截图请求分发。对外提供统一的截图入口，自动选择最优适配器并处理降级逻辑。
+/// 协调 `SCKAdapter`（ScreenCaptureKit 主路径）和
+/// `CGCompatAdapter`（CG 兼容降级路径）之间的截图请求分发。
+/// 对外提供统一的截图入口，自动选择最优适配器并处理降级逻辑。
 ///
 /// ## 捕获流程
 /// 1. 权限检查 — 通过 `PermissionService` 双重验证屏幕录制权限
@@ -74,10 +75,15 @@ public final class CaptureOrchestrator: Sendable {
         await currentMode.set(mode)
 
         // 主路径 — SCK 截图失败时自动降级到 CG
+        let startedAt = Date()
         do {
             logger.info("Attempting capture via SCKAdapter (mode: \(describe(mode)))")
             let result = try await sckAdapter.capture(mode: mode, options: options)
-            logger.metric("capture.sck", value: Date().timeIntervalSince1970)
+            logger.metric(
+                "capture.sck",
+                value: Date().timeIntervalSince(startedAt) * 1000,
+                unit: "ms"
+            )
             return result
         } catch CaptureError.permissionDenied {
             throw CaptureError.permissionDenied

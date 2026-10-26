@@ -21,6 +21,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     let blurMode: AnnotationBlurMode
     let blurIntensity: CGFloat
     let selectedNodeID: UUID?
+    let isAdjustingStyle: Bool
     let ocrLines: [OCRLine]
     let showsOCROverlay: Bool
     let verticalCropOnly: Bool
@@ -37,6 +38,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     let textEntryNode: AnnotationNode?
     var onTextCommit: (String) -> Void
     var onTextCancel: () -> Void
+    var onTextDraftChanged: (String) -> Void
     var onOCRLinesCopied: ([OCRLine]) -> Void
     var onOCRTextCopied: (String) -> Void
     var onOCRLineAsAnnotation: (OCRLine) -> Void
@@ -76,6 +78,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.currentBlurMode = blurMode
         view.currentBlurIntensity = blurIntensity
         view.selectedNodeID = textEntryNode == nil ? selectedNodeID : nil
+        view.liveStyleNodeID = isAdjustingStyle ? selectedNodeID : nil
         view.ocrLines = ocrLines
         view.showsOCROverlay = showsOCROverlay
         view.onNodeCreated = onNodeCreated
@@ -86,6 +89,7 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.onTextEditRequested = onTextEditRequested
         view.updateTextEntry(id: textEntryID, node: textEntryNode,
                              onCommit: onTextCommit, onCancel: onTextCancel)
+        view.onTextDraftChanged = onTextDraftChanged
         view.onOCRLinesCopied = onOCRLinesCopied
         view.onOCRTextCopied = onOCRTextCopied
         view.onOCRLineAsAnnotation = onOCRLineAsAnnotation
@@ -93,7 +97,6 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.onRegionColorsPicked = onRegionColorsPicked
         view.onToolShortcut = onToolShortcut
         view.dominantColorCount = dominantColorCount
-        view.invalidateRenderedPreview()
         view.updateOCRTextOverlay()
         view.needsDisplay = true
     }

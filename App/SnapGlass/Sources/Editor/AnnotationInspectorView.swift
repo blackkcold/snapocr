@@ -65,14 +65,18 @@ struct AnnotationInspectorView: View {
                     }
                     HStack {
                         Text("Width")
-                        Slider(value: strokeWidthBinding, in: 1...20, step: 1)
+                        Slider(value: strokeWidthBinding, in: 1...20, step: 1) { editing in
+                            if editing { viewModel.beginStyleEdit() } else { viewModel.endStyleEdit() }
+                        }
                         Text("\(Int(viewModel.strokeWidth))")
                             .monospacedDigit()
                             .frame(width: 28, alignment: .trailing)
                     }
                     HStack {
                         Text("Opacity")
-                        Slider(value: opacityBinding, in: 0.1...1, step: 0.05)
+                        Slider(value: opacityBinding, in: 0.1...1, step: 0.05) { editing in
+                            if editing { viewModel.beginStyleEdit() } else { viewModel.endStyleEdit() }
+                        }
                         Text("\(Int(viewModel.annotationOpacity * 100))%")
                             .monospacedDigit()
                             .frame(width: 42, alignment: .trailing)
@@ -94,7 +98,9 @@ struct AnnotationInspectorView: View {
                 GroupBox("Rectangle") {
                     HStack {
                         Text("Corner radius")
-                        Slider(value: cornerRadiusBinding, in: 0...80, step: 2)
+                        Slider(value: cornerRadiusBinding, in: 0...80, step: 2) { editing in
+                            if editing { viewModel.beginStyleEdit() } else { viewModel.endStyleEdit() }
+                        }
                         Text("\(Int(viewModel.cornerRadius))")
                             .frame(width: 28, alignment: .trailing)
                     }
@@ -125,7 +131,9 @@ struct AnnotationInspectorView: View {
                         }
                         HStack {
                             Text("Size")
-                            Slider(value: fontSizeBinding, in: 10...96, step: 1)
+                            Slider(value: fontSizeBinding, in: 10...96, step: 1) { editing in
+                                if editing { viewModel.beginStyleEdit() } else { viewModel.endStyleEdit() }
+                            }
                             Text("\(Int(viewModel.fontSize))")
                                 .frame(width: 28, alignment: .trailing)
                         }
@@ -163,7 +171,9 @@ struct AnnotationInspectorView: View {
 
                         HStack {
                             Text("Intensity")
-                            Slider(value: blurIntensityBinding, in: 0...1, step: 0.05)
+                            Slider(value: blurIntensityBinding, in: 0...1, step: 0.05) { editing in
+                                if editing { viewModel.beginStyleEdit() } else { viewModel.endStyleEdit() }
+                            }
                             Text("\(Int(viewModel.blurIntensity * 100))%")
                                 .monospacedDigit()
                                 .frame(width: 42, alignment: .trailing)
@@ -192,10 +202,12 @@ struct AnnotationInspectorView: View {
                         Image(systemName: "square.2.layers.3d.bottom.filled")
                     })
                     .help("Send backward")
+                    .accessibilityLabel("Send backward")
                     Button(action: { viewModel.moveSelectedNodeInLayer(by: 1) }, label: {
                         Image(systemName: "square.2.layers.3d.top.filled")
                     })
                     .help("Bring forward")
+                    .accessibilityLabel("Bring forward")
                 }
             }
 

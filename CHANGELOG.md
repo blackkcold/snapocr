@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-26
+
+### Fixed
+- 修复简体中文语言包末尾 25 条日文、日语语言包 26 条韩文；四语言 key 重新对齐（438 条）。
+- 编辑器样式滑杆拖动只在手势开始时记录一次撤销；撤销回已保存状态不再判定为未保存。
+- 编辑器保存/复制改为后台渲染、编码与写盘，5K 截图不再阻塞主线程；执行期间禁止重复触发。
+- 编辑器输入中的文字在失焦、切换窗口、点击画布或关闭确认时提交，不再静默丢失；关闭确认会包含未提交草稿。
+- 历史记录首次打开不再在主线程同步解密全部条目；新增加载态、错误态、重试与打开存储目录。
+- 历史收藏切换不再触发全量重新加载；加载失败与空态可区分。
+- 窗口捕获复用 `SCShareableContent` 的显示器列表，删除重复枚举；权限检查增加 2 秒成功缓存。
+- 修复编辑器内联文字框在缩放/平移后位置错位。
+- 修复窗口选择器在后台仍每 3 秒重截可见窗口缩略图。
+- 菜单栏在截图期间显示进行中状态，避免热键无反馈。
+- 历史搜索清除、编辑器撤销/重做/OCR 开关、图层前后移动等图标按钮补充无障碍标签；选区支持方向键 1pt / Shift+方向键 10pt 微调。
+
+### Changed
+- 编辑器优先显示窗口，条码识别、OCR 与历史写入在后台完成，历史记录 id 后补，保留「覆盖原记录」。
+- 区域截图 live 模式先显示遮罩再异步补预截帧；多屏预截改为并行。
+- 历史窗口首次加载使用加载中/空/错误三态，错误态提供重试与打开存储目录。
+- 编辑器预览改为「底图 + 已完成标注」缓存，拖拽节点与拖动样式滑杆只实时绘制当前节点。
+
+### Performance
+- 选区遮罩鼠标移动只失效光标附近的 dirty rect，颜色采样限流 30Hz。
+- 编辑器保存、复制、历史预览合成移出主线程。
+- 历史缩略图直接从 `CGImage` 降采样，省去重新解码主图。
+- macOS 14+ 使用 `SCScreenshotManager` 单帧截图，减少 `SCStream` 启停开销。
+
 ## [0.8.9] - 2026-10-26
 
 ### Fixed
@@ -286,7 +313,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.8.9...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/blackkcold/snapocr/compare/v0.8.9...v0.9.0
 [0.8.9]: https://github.com/blackkcold/snapocr/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/blackkcold/snapocr/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/blackkcold/snapocr/compare/v0.8.6...v0.8.7

@@ -47,9 +47,22 @@ extension HistoryView {
         }
     }
 
+    /// Retries creating the shared history actor after an initialization
+    /// failure (for example, a transient permissions or key-access problem).
+    func retryHistoryInitialization() async {
+        if history == nil {
+            history = try? HistoryActor.sharedResult().get()
+        }
+        await loadEntries()
+    }
+
     func loadScreenshotEntries() async {
         let loadID = UUID()
         screenshotLoadID = loadID
+        isLoadingScreenshots = true
+        defer {
+            if screenshotLoadID == loadID { isLoadingScreenshots = false }
+        }
         guard let history else {
             entries = []
             return
@@ -67,32 +80,25 @@ extension HistoryView {
             var sizes: [UUID: CGSize] = [:]
             for entry in loaded {
                 guard !Task.isCancelled, screenshotLoadID == loadID else { return }
-                // New records carry their pixel size, so the grid lays out
-                // without touching the thumbnail files at all.
-                if let size = entry.imagePixelSize {
+                if let size = await pixelSize(for: entry) {
                     sizes[entry.id] = size
-                    continue
-                }
-                if let cached = thumbnailSizes[entry.id] { sizes[entry.id] = cached; continue }
-                if let data = try? await history.thumbnailData(for: entry.id),
-                   let source = CGImageSourceCreateWithData(data as CFData, nil),
-                   let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-                   let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-                   let height = properties[kCGImagePropertyPixelHeight] as? NSNumber {
-                    sizes[entry.id] = CGSize(width: width.doubleValue, height: height.doubleValue)
                 }
             }
             guard !Task.isCancelled, query == searchQuery, screenshotLoadID == loadID else { return }
             thumbnailSizes = sizes
             entries = loaded
+            loadError = nil
         } catch {
             guard screenshotLoadID == loadID else { return }
             entries = []
+            loadError = error.localizedDescription
             errorMessage = error.localizedDescription
         }
     }
 
     func loadColorEntries() async {
+        isLoadingColors = true
+        defer { isLoadingColors = false }
         guard let colorHistory else {
             colorEntries = []
             return
@@ -100,6 +106,24 @@ extension HistoryView {
 
         let count = await colorHistory.count()
         colorEntries = await colorHistory.recent(limit: max(count, 1))
+    }
+
+    /// Resolves a grid cell's pixel size without touching thumbnail files when
+    /// the entry already carries it.
+    private func pixelSize(for entry: HistoryEntry) async -> CGSize? {
+        if let size = entry.imagePixelSize { return size }
+        if let cached = thumbnailSizes[entry.id] { return cached }
+        guard let history else { return nil }
+        guard let data = try? await history.thumbnailData(for: entry.id) else { return nil }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
+            return nil
+        }
+        guard
+            let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+            let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
+        else { return nil }
+        return CGSize(width: width.doubleValue, height: height.doubleValue)
     }
 
     func deleteEntry(_ entry: HistoryEntry) async {
@@ -148,7 +172,6 @@ extension HistoryView {
                let index = entries.firstIndex(where: { $0.id == entry.id }) {
                 entries[index] = updated
             }
-            await loadScreenshotEntries()
         } catch {
             errorMessage = error.localizedDescription
         }

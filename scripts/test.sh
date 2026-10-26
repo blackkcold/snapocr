@@ -40,7 +40,7 @@ if command -v xcodebuild >/dev/null 2>&1; then
             -scheme "$scheme" \
             -destination 'platform=macOS' 2>&1)" || true
         if echo "$output" | grep -q "Test run with"; then
-            summary=$(echo "$output" | grep -o "Test run with [0-9]* tests.*passed" | head -1)
+            summary=$(echo "$output" | grep -m1 -o "Test run with [0-9]* tests.*passed" || true)
             echo "  ✅ $scheme: $summary"
         else
             # A scheme that builds but runs nothing reports "Executed 0 tests";

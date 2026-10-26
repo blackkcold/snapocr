@@ -211,6 +211,9 @@ extension EditableAnnotationCanvasNSView {
 
     func invalidateRenderedPreview() {
         renderedPreview = nil
+        renderedPreviewNodes = nil
+        renderedPreviewSource = nil
+        renderedPreviewMaxDimension = 0
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -225,15 +228,106 @@ extension EditableAnnotationCanvasNSView {
         layoutTextEntry()
     }
 
+    /// Renders every node except the one currently being dragged or resized.
+    ///
+    /// The dragged node is drawn live on top of this bitmap (see
+    /// `drawInteractiveNode`), so moving a node never re-renders the whole image.
     func previewImage(for image: CGImage) -> CGImage? {
-        if displayNodes.isEmpty { return image }
-        if let renderedPreview { return renderedPreview }
-        var document = AnnotationDocument(baseImage: image)
-        document.nodes = displayNodes
+        // Blur needs the underlying pixels, so it cannot be drawn standalone:
+        // keep it in the rendered preview and let it re-render while dragged.
+        var previewNodes = nodes
+        if let interactiveNode, interactiveNode.tool != .blur {
+            previewNodes.removeAll { $0.id == interactiveNode.id }
+        }
+        if let liveStyleNodeID,
+           let liveStyleNode = nodes.first(where: { $0.id == liveStyleNodeID }),
+           liveStyleNode.tool != .blur {
+            previewNodes.removeAll { $0.id == liveStyleNodeID }
+        }
+        guard !previewNodes.isEmpty else {
+            renderedPreview = nil
+            renderedPreviewNodes = nil
+            renderedPreviewSource = nil
+            return nil
+        }
+
         let backingScale = window?.backingScaleFactor ?? 2
-        let maximumDimension = max(bounds.width, bounds.height) * backingScale
-        renderedPreview = try? Renderer().render(document, maximumDimension: maximumDimension)
-        return renderedPreview
+        let maximumDimension = max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
+        if let renderedPreview,
+           renderedPreviewNodes == previewNodes,
+           renderedPreviewSource === image,
+           abs(renderedPreviewMaxDimension - maximumDimension) <= 1 {
+            return renderedPreview
+        }
+
+        var document = AnnotationDocument(baseImage: image)
+        document.nodes = previewNodes
+        let rendered = try? Renderer().render(document, maximumDimension: maximumDimension)
+        renderedPreview = rendered
+        renderedPreviewNodes = rendered == nil ? nil : previewNodes
+        renderedPreviewSource = image
+        renderedPreviewMaxDimension = maximumDimension
+        return rendered
+    }
+
+    /// Base image resampled once to the current display size.
+    ///
+    /// Without this, every `draw` re-samples the full-resolution 5K screenshot
+    /// even when there is nothing to annotate and nothing on screen changed.
+    func baseDisplayImage(for image: CGImage, targetMaxDimension: CGFloat) -> CGImage {
+        if let baseDisplayCache,
+           baseDisplayCache.source === image,
+           abs(baseDisplayCache.maxDimension - targetMaxDimension) <= 1 {
+            return baseDisplayCache.image
+        }
+
+        let sourceMax = CGFloat(max(image.width, image.height))
+        guard targetMaxDimension > 0, sourceMax > targetMaxDimension else {
+            baseDisplayCache = CanvasBaseDisplayCache(
+                source: image,
+                maxDimension: targetMaxDimension,
+                image: image
+            )
+            return image
+        }
+
+        let scale = targetMaxDimension / sourceMax
+        let width = max(1, Int((CGFloat(image.width) * scale).rounded(.up)))
+        let height = max(1, Int((CGFloat(image.height) * scale).rounded(.up)))
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+            )
+        else { return image }
+
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let downsampled = context.makeImage() else { return image }
+        baseDisplayCache = CanvasBaseDisplayCache(
+            source: image,
+            maxDimension: targetMaxDimension,
+            image: downsampled
+        )
+        return downsampled
+    }
+
+    /// Draws the one node that is changing right now directly into the view.
+    func drawInteractiveNode(_ node: AnnotationNode, in context: CGContext, imageSize: CGSize) {
+        context.saveGState()
+        context.translateBy(x: imageDisplayRect.minX, y: imageDisplayRect.minY)
+        Renderer().renderOverlay(
+            nodes: [node],
+            in: context,
+            canvasSize: imageDisplayRect.size,
+            originalImageSize: imageSize
+        )
+        context.restoreGState()
     }
 
     func normalizedPoint(_ point: CGPoint) -> CGPoint {

@@ -4,8 +4,10 @@ import AnnotationCore
 
 struct EditorView: View {
     @StateObject private var editorVM: EditorViewModel
+    private let context: EditorCaptureContext
 
     init(image: CGImage, context: EditorCaptureContext = .standard) {
+        self.context = context
         self._editorVM = StateObject(wrappedValue: EditorViewModel(image: image, context: context))
     }
 
@@ -67,6 +69,7 @@ struct EditorView: View {
                         blurMode: editorVM.blurMode,
                         blurIntensity: editorVM.blurIntensity,
                         selectedNodeID: editorVM.selectedNodeID,
+                        isAdjustingStyle: editorVM.isAdjustingStyle,
                         ocrLines: editorVM.ocrLines,
                         showsOCROverlay: editorVM.showsOCROverlay,
                         verticalCropOnly: editorVM.isVerticalTrimEnabled,
@@ -92,6 +95,9 @@ struct EditorView: View {
                             editorVM.commitTextEntry()
                         },
                         onTextCancel: editorVM.cancelTextEntry,
+                        onTextDraftChanged: { text in
+                            editorVM.textDraft = text
+                        },
                         onOCRLinesCopied: editorVM.copyOCRLines,
                         onOCRTextCopied: editorVM.copyOCRSelection,
                         onOCRLineAsAnnotation: editorVM.addOCRLineAsAnnotation,
@@ -102,7 +108,7 @@ struct EditorView: View {
                 }
 
                 if editorVM.selectedNode != nil
-                    || editorVM.selectedTool.annotationTool != nil
+                    || (editorVM.selectedTool.annotationTool != nil && editorVM.selectedTool != .crop)
                     || editorVM.selectedTool == .picker {
                     AnnotationInspectorView(viewModel: editorVM)
                 }
@@ -112,6 +118,11 @@ struct EditorView: View {
                 .disabled(editorVM.isEnteringText)
         }
         .frame(minWidth: 640, minHeight: 480)
+        .task(id: context.sourceEntryID) {
+            if let entryID = context.sourceEntryID {
+                editorVM.attachSourceEntry(entryID)
+            }
+        }
         .toast(message: $editorVM.toastMessage)
         .background(
             EditorWindowCloseGuard(
@@ -182,6 +193,7 @@ struct EditorView: View {
             .disabled(!editorVM.canUndo)
             .keyboardShortcut("z", modifiers: .command)
             .help("Undo (⌘Z)")
+            .accessibilityLabel("Undo")
 
             Button {
                 editorVM.redo()
@@ -191,6 +203,7 @@ struct EditorView: View {
             .disabled(!editorVM.canRedo)
             .keyboardShortcut("z", modifiers: [.command, .shift])
             .help("Redo (⇧⌘Z)")
+            .accessibilityLabel("Redo")
 
             Divider()
                 .frame(height: 18)
@@ -200,6 +213,7 @@ struct EditorView: View {
             }
             .toggleStyle(.button)
             .help("Show or hide recognized text regions")
+            .accessibilityLabel("Show or hide recognized text regions")
 
             Menu {
                 Button("Save as New Record") {

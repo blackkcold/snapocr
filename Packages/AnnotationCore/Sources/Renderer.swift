@@ -88,6 +88,34 @@ public struct Renderer: Sendable {
         return result
     }
 
+    /// 把标注直接绘制到已经包含底图的上下文中。
+    ///
+    /// 供编辑器画布在交互期间叠加单个节点使用：底图与其余标注来自缓存位图，
+    /// 只有正在拖动/缩放的节点需要每帧重绘，避免整张截图反复降采样和合成。
+    ///
+    /// - Parameters:
+    ///   - nodes: 需要绘制的节点（归一化坐标）。
+    ///   - context: 已经绘制好底图的上下文；原点应位于图片显示区域左下角。
+    ///   - canvasSize: 当前显示区域尺寸（点或像素，与上下文一致）。
+    ///   - originalImageSize: 底图原始像素尺寸，用于换算线宽与字号。
+    public func renderOverlay(
+        nodes: [AnnotationNode],
+        in context: CGContext,
+        canvasSize: CGSize,
+        originalImageSize: CGSize
+    ) {
+        guard canvasSize.width > 0, canvasSize.height > 0,
+              originalImageSize.width > 0, originalImageSize.height > 0 else { return }
+        let styleScale = canvasSize.width / max(originalImageSize.width, 1)
+        renderNodes(
+            nodes,
+            in: context,
+            imageSize: canvasSize,
+            originalSize: originalImageSize,
+            styleScale: styleScale
+        )
+    }
+
     /// 使用 autoreleasepool 渲染一组节点。
     private func renderNodes(
         _ nodes: [AnnotationNode],

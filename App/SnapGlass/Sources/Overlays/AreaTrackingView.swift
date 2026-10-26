@@ -23,7 +23,7 @@ final class AreaTrackingView: NSView {
     let style: CaptureSelectionStyle
     let overlayMode: CaptureOverlayMode
     let screen: NSScreen
-    let capturedFrames: [CGDirectDisplayID: CGImage]
+    var capturedFrames: [CGDirectDisplayID: CGImage]
     private let onColorPicked: ((SampledColor) -> Void)?
     /// 重新截取选区（动作栏「重新识别」用）；`nil` 时只能读预截原图。
     let onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)?
@@ -34,6 +34,9 @@ final class AreaTrackingView: NSView {
     private var dragAction: DragAction?
     var hoverPoint: CGPoint = .zero
     var hoverColor: SampledColor?
+    /// Throttles per-pixel sampling so moving the pointer across a 5K overlay
+    /// does not allocate a new 1×1 CGContext on every mouse event.
+    private var lastHoverSampleTime: TimeInterval = 0
     private var trackingAreaReference: NSTrackingArea?
     let actionBar = CaptureActionBarView(frame: .zero)
 
@@ -123,10 +126,40 @@ final class AreaTrackingView: NSView {
         }
     }
 
-    override func mouseMoved(with event: NSEvent) {
-        hoverPoint = convert(event.locationInWindow, from: nil)
-        hoverColor = sampleColor(at: hoverPoint)
+    /// Accepts pre-captured frames that finished after the overlay appeared.
+    func updateCapturedFrames(_ frames: [CGDirectDisplayID: CGImage]) {
+        capturedFrames = frames
+        if hoverColor == nil {
+            hoverColor = sampleColor(at: hoverPoint)
+        }
         needsDisplay = true
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let previousPoint = hoverPoint
+        let point = convert(event.locationInWindow, from: nil)
+        hoverPoint = point
+
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastHoverSampleTime >= 1.0 / 30.0 {
+            lastHoverSampleTime = now
+            hoverColor = sampleColor(at: point)
+        }
+
+        // Only the crosshair and the color label follow the pointer. Repainting
+        // just their union keeps AppKit from invalidating the whole 5K overlay.
+        guard phase != .choosingAction else { return }
+        let dirty =
+            hoverInvalidationRect(for: previousPoint)
+            .union(hoverInvalidationRect(for: point))
+        setNeedsDisplay(dirty)
+    }
+
+    /// Bounding box of the pointer decorations: crosshair plus hover label.
+    private func hoverInvalidationRect(for point: CGPoint) -> CGRect {
+        let crosshair = CGRect(x: point.x - 24, y: point.y - 24, width: 48, height: 48)
+        let label = CGRect(x: point.x + 12, y: point.y + 12, width: 260, height: 64)
+        return crosshair.union(label).insetBy(dx: -4, dy: -4)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -236,26 +269,14 @@ final class AreaTrackingView: NSView {
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 53:
-            if dismissBarcodePanel() { return }
-            if phase == .choosingAction {
-                hideActionChooser()
-            } else {
-                onSelectionComplete?(nil)
-            }
+            handleEscapeKey()
         case 36, 76:
-            if phase == .choosingAction {
-                if copyFirstScanPayload() { return }
-                completeSelection(action: .copy)
-            } else {
-                showActionChooser()
-            }
+            handleReturnKey()
+        case 123, 124, 125, 126:
+            if nudgeSelection(with: event) { return }
+            super.keyDown(with: event)
         default:
-            if handleScanShortcut(event) { return }
-            if PinSelectionShortcut.matches(event: event), isPinShortcutPhase {
-                performPinShortcut()
-            } else {
-                super.keyDown(with: event)
-            }
+            handleDefaultKey(event)
         }
     }
 
@@ -416,4 +437,52 @@ final class AreaTrackingView: NSView {
             rect.union(CGRect(origin: point, size: .zero))
         }
     }
+}
+
+extension AreaTrackingView {
+    private func handleEscapeKey() {
+        if dismissBarcodePanel() { return }
+        if phase == .choosingAction {
+            hideActionChooser()
+        } else {
+            onSelectionComplete?(nil)
+        }
+    }
+
+    private func handleReturnKey() {
+        if phase == .choosingAction {
+            if copyFirstScanPayload() { return }
+            completeSelection(action: .copy)
+        } else {
+            showActionChooser()
+        }
+    }
+
+    private func handleDefaultKey(_ event: NSEvent) {
+        if handleScanShortcut(event) { return }
+        if PinSelectionShortcut.matches(event: event), isPinShortcutPhase {
+            performPinShortcut()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    /// Moves the rectangle selection with the arrow keys (1 pt, 10 pt with
+    /// Shift). Returns false when the event should fall through to AppKit.
+    private func nudgeSelection(with event: NSEvent) -> Bool {
+        guard style == .rectangle, phase == .adjusting, !selectionRect.isEmpty else {
+            return false
+        }
+        let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
+        let deltaX: CGFloat = event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0
+        let deltaY: CGFloat = event.keyCode == 125 ? -step : event.keyCode == 126 ? step : 0
+        let maxX = max(bounds.minX, bounds.maxX - selectionRect.width)
+        let maxY = max(bounds.minY, bounds.maxY - selectionRect.height)
+        selectionRect.origin.x = min(max(selectionRect.origin.x + deltaX, bounds.minX), maxX)
+        selectionRect.origin.y = min(max(selectionRect.origin.y + deltaY, bounds.minY), maxY)
+        positionActionBar()
+        needsDisplay = true
+        return true
+    }
+
 }

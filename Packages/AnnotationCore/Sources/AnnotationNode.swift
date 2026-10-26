@@ -31,7 +31,7 @@ public enum AnnotationBlurMode: String, Sendable, CaseIterable, Hashable {
 /// 例如：
 /// - `normalizedRect` 的 origin 和 size 均在 [0, 1] 范围内
 /// - `points` 中的每个 CGPoint 的 x 和 y 也在 [0, 1] 范围内
-public struct AnnotationNode: Sendable, Identifiable {
+public struct AnnotationNode: Sendable, Identifiable, Equatable {
 
     /// 唯一标识符
     public let id: UUID

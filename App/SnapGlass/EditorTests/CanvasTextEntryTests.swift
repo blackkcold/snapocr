@@ -244,19 +244,19 @@ struct CanvasTextEntryTests {
     }
   }
 
-  @Test func clickingCanvasCancelsRatherThanCreatingAnotherText() throws {
+  @Test func clickingCanvasCommitsDraftRatherThanCreatingAnotherText() throws {
     let canvas = EditableAnnotationCanvasNSView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
     canvas.image = try image()
     canvas.currentTool = .text
-    var cancelled = false
+    var committed = ""
     let node = AnnotationNode(tool: .text, points: [.zero], text: "draft")
-    canvas.updateTextEntry(id: UUID(), node: node, onCommit: { _ in }, onCancel: { cancelled = true })
+    canvas.updateTextEntry(id: UUID(), node: node, onCommit: { committed = $0 }, onCancel: {})
     let click = try #require(
       NSEvent.mouseEvent(
         with: .leftMouseDown, location: CGPoint(x: 500, y: 500),
         modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
     canvas.mouseDown(with: click)
-    #expect(cancelled)
+    #expect(committed == "draft")
     #expect(canvas.canvasTextEditor == nil)
   }
 }

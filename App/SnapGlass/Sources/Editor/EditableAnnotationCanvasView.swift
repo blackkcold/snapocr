@@ -5,6 +5,13 @@ import OCRCore
 import SharedKit
 import SwiftUI
 
+/// Base image resampled for the current on-screen size.
+struct CanvasBaseDisplayCache {
+    let source: CGImage
+    let maxDimension: CGFloat
+    let image: CGImage
+}
+
 final class EditableAnnotationCanvasNSView: NSView {
     var image: CGImage? {
         didSet { prepareVerticalCropIfNeeded() }
@@ -17,6 +24,9 @@ final class EditableAnnotationCanvasNSView: NSView {
             }
             if oldValue == .crop, currentTool != .crop {
                 cancelPendingCrop()
+            }
+            if currentTool != .picker {
+                pickerHoverColor = nil
             }
             prepareVerticalCropIfNeeded()
             window?.invalidateCursorRects(for: self)
@@ -105,7 +115,15 @@ final class EditableAnnotationCanvasNSView: NSView {
     var cropInteractionStartRect: CGRect = .zero
     var originalNode: AnnotationNode?
     var interactiveNode: AnnotationNode?
+    /// The node whose style is being dragged in the inspector. It is excluded
+    /// from the cached preview and painted live, so a slider tick never forces
+    /// a full-image recomposite.
+    var liveStyleNodeID: UUID?
     var renderedPreview: CGImage?
+    var renderedPreviewNodes: [AnnotationNode]?
+    var renderedPreviewSource: CGImage?
+    var renderedPreviewMaxDimension: CGFloat = 0
+    var baseDisplayCache: CanvasBaseDisplayCache?
     var contextualOCRLine: OCRLine?
     var ocrTextSelection: OCRTextSelection?
     var ocrContentSignature = ""
@@ -117,6 +135,9 @@ final class EditableAnnotationCanvasNSView: NSView {
     var dominantColorCount = 5
     var canvasTextEditor: CanvasTextEditor?
     var canvasTextEntryID: UUID?
+    /// Mirrors the inline editor's text into the view model so closing the
+    /// window while typing still sees unsaved content.
+    var onTextDraftChanged: ((String) -> Void)?
 
 
     override var acceptsFirstResponder: Bool { true }
@@ -140,7 +161,10 @@ final class EditableAnnotationCanvasNSView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         hoverPoint = convert(event.locationInWindow, from: nil)
-        pickerHoverColor = currentTool == .picker ? sampledColor(at: hoverPoint) : nil
+        // Only the picker paints anything that follows the cursor. Other tools
+        // used to redraw the whole canvas on every mouse move for nothing.
+        guard currentTool == .picker else { return }
+        pickerHoverColor = sampledColor(at: hoverPoint)
         needsDisplay = true
     }
 
@@ -199,11 +223,29 @@ final class EditableAnnotationCanvasNSView: NSView {
         context.fill(bounds)
 
         if let image {
-            let displayImage = previewImage(for: image) ?? image
-            let imageSize = CGSize(width: displayImage.width, height: displayImage.height)
+            let imageSize = CGSize(width: image.width, height: image.height)
             lastImageSize = imageSize
             imageDisplayRect = imageRect(for: imageSize)
+            let backingScale = window?.backingScaleFactor ?? 2
+            let targetMaxDimension = max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
+            let displayImage = previewImage(for: image)
+                ?? baseDisplayImage(for: image, targetMaxDimension: targetMaxDimension)
             context.draw(displayImage, in: imageDisplayRect)
+
+            // The node being dragged or resized is excluded from the cached
+            // preview and drawn live, so a drag never re-renders the whole image.
+            if let interactiveNode, interactiveNode.tool != .blur {
+                drawInteractiveNode(interactiveNode, in: context, imageSize: imageSize)
+            }
+
+            // A style slider behaves the same way: the rest of the document
+            // stays on the cached bitmap while only the edited node is redrawn.
+            if let liveStyleNodeID,
+               let liveStyleNode = nodes.first(where: { $0.id == liveStyleNodeID }),
+               liveStyleNode.tool != .blur,
+               liveStyleNode.id != interactiveNode?.id {
+                drawInteractiveNode(liveStyleNode, in: context, imageSize: imageSize)
+            }
         } else {
             imageDisplayRect = bounds
         }

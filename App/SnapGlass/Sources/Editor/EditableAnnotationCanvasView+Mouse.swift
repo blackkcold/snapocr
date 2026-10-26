@@ -9,7 +9,9 @@ import SwiftUI
 extension EditableAnnotationCanvasNSView {
     override func mouseDown(with event: NSEvent) {
         if let editor = canvasTextEditor {
-            editor.onCancel?()
+            // Clicking elsewhere on the canvas finishes the draft rather than
+            // discarding it. Esc remains the explicit cancel path.
+            editor.onCommit?(editor.string)
             return
         }
         window?.makeFirstResponder(self)

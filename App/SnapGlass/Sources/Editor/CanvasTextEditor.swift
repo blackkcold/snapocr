@@ -8,6 +8,7 @@ final class CanvasTextEditor: NSTextView {
   var sourceNode: AnnotationNode?
   var onCommit: ((String) -> Void)?
   var onCancel: (() -> Void)?
+  var onTextChanged: ((String) -> Void)?
   var onLayoutRequested: (() -> Void)?
   var isFinishing = false
   var enterInsertsNewline: () -> Bool = {
@@ -26,7 +27,9 @@ final class CanvasTextEditor: NSTextView {
   }
 
   @objc private func cancelOnWindowDeactivation(_ notification: Notification) {
-    if !isFinishing { onCancel?() }
+    // Losing key status used to throw the draft away. Commit it instead so
+    // switching apps or opening a panel never silently loses typed text.
+    if !isFinishing { onCommit?(string) }
   }
 
   override func keyDown(with event: NSEvent) {
@@ -75,16 +78,19 @@ final class CanvasTextEditor: NSTextView {
 
   override func didChangeText() {
     super.didChangeText()
+    onTextChanged?(string)
     onLayoutRequested?()
   }
 
   override func resignFirstResponder() -> Bool {
     let resigned = super.resignFirstResponder()
     if resigned, !isFinishing {
-      // Do not publish SwiftUI state from within an AppKit focus update.
+      // Commit on focus loss instead of discarding the draft: clicking the
+      // toolbar or another control must not silently throw away typed text.
+      let text = string
       Task { @MainActor [weak self] in
         guard let self, !self.isFinishing else { return }
-        self.onCancel?()
+        self.onCommit?(text)
       }
     }
     return resigned
@@ -140,6 +146,9 @@ extension EditableAnnotationCanvasNSView {
     editor.textContainer?.lineFragmentPadding = 0
     editor.insertionPointColor = .controlAccentColor
     editor.string = node.text ?? ""
+    editor.onTextChanged = { [weak self] text in
+      self?.onTextDraftChanged?(text)
+    }
     applyTextStyle(node, to: editor)
     editor.setAccessibilityLabel(AppLocalization.string("Edit Text"))
     editor.wantsLayer = true
@@ -181,7 +190,12 @@ extension EditableAnnotationCanvasNSView {
 
   func layoutTextEntry() {
     guard let editor = canvasTextEditor, var node = editor.sourceNode, let image else { return }
-    let display = aspectFitRect(imageSize: CGSize(width: image.width, height: image.height), in: bounds)
+    // Follow the current zoom/pan; `aspectFitRect` is only the fit reference
+    // and would leave the inline field behind once the canvas is zoomed.
+    let display =
+      imageDisplayRect.width > 0 && imageDisplayRect.height > 0
+      ? imageDisplayRect
+      : aspectFitRect(imageSize: CGSize(width: image.width, height: image.height), in: bounds)
     node.text = editor.string.isEmpty ? " " : editor.string
     let origin = node.normalizedRect == .zero ? (node.points.first ?? .zero) : node.normalizedRect.origin
     let imageWidth = CGFloat(image.width)

@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 /// 历史记录存储与管理 Actor
 ///
 /// 使用 actor 模型序列化所有历史记录的读写操作，确保 CLI 与 GUI 并发访问安全（R8）。
-/// 实现 `HistoryProtocol` 中定义的全部接口，提供加密持久化、内存缓存、自动清理和导出功能。
+/// 实现 `HistoryProtocol` 中定义的全部接口，提供加密持久化、内存缓存、
+/// 自动清理和导出功能。
 ///
 /// ## 存储架构
 ///
@@ -44,6 +45,13 @@ public actor HistoryActor: HistoryProtocol {
     /// 将历史操作从 O(n) 磁盘+解密降为 O(1) 内存合并。单进程内保持与磁盘一致；
     /// 跨进程（CLI）写入需重启进程后才会反映到本缓存。
     var diskCache: [UUID: HistoryEntry] = [:]
+
+    /// 是否已把磁盘上的历史条目读入内存。
+    ///
+    /// 不在 `init` 中同步扫描：`HistoryActor.shared` 首次访问通常发生在主线程，
+    /// 历史条目多时会在窗口打开前卡住 UI。改为首次真正的历史操作时由 actor
+    /// 在后台执行，调用方异步等待。
+    var hasLoadedFromDisk = false
 
     /// 加密服务（struct，避免 actor 嵌套死锁 R14）
     let cryptoService: CryptoService
@@ -89,26 +97,8 @@ public actor HistoryActor: HistoryProtocol {
         try thumbsDir.ensureDirectoryExists()
         try tempDir.ensureDirectoryExists()
 
-        // 同步加载磁盘条目（在 init 中内联以避免 actor isolation 问题）
-        var loaded: [UUID: HistoryEntry] = [:]
-        if let files = try? FileManager.default.contentsOfDirectory(
-            at: entriesDir, includingPropertiesForKeys: [.fileSizeKey]
-        ) {
-            let encFiles = files.filter { $0.pathExtension == "enc" }
-            for file in encFiles {
-                do {
-                    let encryptedData = try Data(contentsOf: file)
-                    let jsonData = try cryptoService.decrypt(encryptedData)
-                    let entry = try JSONDecoder().decode(HistoryEntry.self, from: jsonData)
-                    loaded[entry.id] = entry
-                } catch {
-                    logger.error("加载条目失败: \(file.lastPathComponent)", error: error)
-                }
-            }
-        }
-        self.entries = loaded
-        self.diskCache = loaded
-        logger.info("HistoryActor 初始化完成，已加载 \(entries.count) 条记录")
+        // 磁盘条目延迟到首次读取时加载，避免在 init 中阻塞调用线程。
+        logger.info("HistoryActor 初始化完成，等待首次读取时加载磁盘条目")
     }
 
     // MARK: - HistoryProtocol: Save

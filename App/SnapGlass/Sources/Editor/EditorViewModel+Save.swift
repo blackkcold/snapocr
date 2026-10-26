@@ -28,6 +28,7 @@ extension EditorViewModel {
     /// Writes the annotated image to history as a new record or as an
     /// overwrite of the originating capture.
     public func saveToHistory(mode: EditorHistorySaveMode) async {
+        if isEnteringText { commitTextEntry() }
         guard let doc = document else { return }
         if mode == .overwriteOriginal && sourceEntryID == nil {
             showToast(
@@ -36,8 +37,11 @@ extension EditorViewModel {
             )
             return
         }
+        guard !isWritingImage else { return }
+        isWritingImage = true
+        defer { isWritingImage = false }
         do {
-            let image = try interactor.render(doc)
+            let image = try await Self.renderOffMain(doc)
             try await historySaver(image, mode, sourceEntryID)
             let message: String = switch mode {
             case .newRecord: AppLocalization.string("Saved to history")
@@ -59,7 +63,12 @@ extension EditorViewModel {
     ///   `false` when the user cancelled the panel. The close confirmation uses
     ///   it to close only after a successful write.
     public func save(onCompleted: ((Bool) -> Void)? = nil) {
+        if isEnteringText { commitTextEntry() }
         guard let doc = document else {
+            onCompleted?(false)
+            return
+        }
+        guard !isWritingImage else {
             onCompleted?(false)
             return
         }
@@ -76,29 +85,58 @@ extension EditorViewModel {
         panel.nameFieldStringValue = "Snapshot.\(format.fileExtension)"
         panel.directoryURL = Self.lastSaveDirectory
 
+        isWritingImage = true
         panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url, let self else {
+            guard response == .OK, let url = panel.url else {
+                self?.isWritingImage = false
                 onCompleted?(false)
                 return
             }
-            Self.lastSaveDirectory = url.deletingLastPathComponent()
-            let extensionName = url.pathExtension.lowercased()
-            let outputFormat: ImageFileFormat =
-                (extensionName == "jpg" || extensionName == "jpeg") ? .jpeg : .png
+            guard let self else {
+                onCompleted?(false)
+                return
+            }
+            self.finishSaving(document: doc, url: url, onCompleted: onCompleted)
+        }
+    }
+
+    /// Encodes and writes the chosen file in one background pass.
+    ///
+    /// Kept out of `save` so the save-panel completion stays within the
+    /// project's function-length limit.
+    private func finishSaving(
+        document: AnnotationDocument,
+        url: URL,
+        onCompleted: ((Bool) -> Void)?
+    ) {
+        Self.lastSaveDirectory = url.deletingLastPathComponent()
+        let extensionName = url.pathExtension.lowercased()
+        let outputFormat: ImageFileFormat =
+            (extensionName == "jpg" || extensionName == "jpeg") ? .jpeg : .png
+        let quality = UserDefaults.standard.object(forKey: PreferenceKeys.captureJPEGQuality) == nil
+            ? PreferenceDefaults.captureJPEGQuality
+            : UserDefaults.standard.double(forKey: PreferenceKeys.captureJPEGQuality)
+
+        Task { [weak self] in
             do {
-                var image = try self.interactor.render(doc)
-                if outputFormat == .jpeg {
-                    image = Self.flattenedOnWhite(image)
-                }
-                let quality = UserDefaults.standard.object(forKey: PreferenceKeys.captureJPEGQuality) == nil
-                    ? PreferenceDefaults.captureJPEGQuality
-                    : UserDefaults.standard.double(forKey: PreferenceKeys.captureJPEGQuality)
-                try ImageEncoder.write(image, to: url, format: outputFormat, jpegQuality: quality)
-                self.showToast(message: AppLocalization.string("Saved to %@", url.lastPathComponent), type: .success)
+                try await Self.writeRenderedDocument(
+                    document,
+                    to: url,
+                    format: outputFormat,
+                    jpegQuality: quality
+                )
+                guard let self else { return }
+                self.isWritingImage = false
+                self.showToast(
+                    message: AppLocalization.string("Saved to %@", url.lastPathComponent),
+                    type: .success
+                )
                 self.markSaved()
                 self.logger.info("Saved annotated image to \(url.path())")
                 onCompleted?(true)
             } catch {
+                guard let self else { return }
+                self.isWritingImage = false
                 self.showToast(
                     message: AppLocalization.string("Save failed: %@", error.localizedDescription),
                     type: .error
@@ -123,7 +161,7 @@ extension EditorViewModel {
 
     /// JPEG cannot store transparency; flatten onto white so alpha does not
     /// turn into black fringes.
-    static func flattenedOnWhite(_ image: CGImage) -> CGImage {
+    nonisolated static func flattenedOnWhite(_ image: CGImage) -> CGImage {
         guard ImageEncoder.containsTransparency(image) else { return image }
         guard let context = CGContext(
             data: nil,
@@ -141,6 +179,33 @@ extension EditorViewModel {
         return context.makeImage() ?? image
     }
 
+    /// Renders the annotated image on a background thread.
+    ///
+    /// Full-resolution compositing of a 5K capture takes long enough to be
+    /// visible as a main-thread freeze, so callers await this instead of
+    /// calling `interactor.render` directly on the UI actor.
+    nonisolated static func renderOffMain(_ document: AnnotationDocument) async throws -> CGImage {
+        try await Task.detached(priority: .userInitiated) {
+            try AnnotationInteractor().render(document)
+        }.value
+    }
+
+    /// Renders, optionally flattens, encodes and writes in one background pass.
+    nonisolated static func writeRenderedDocument(
+        _ document: AnnotationDocument,
+        to url: URL,
+        format: ImageFileFormat,
+        jpegQuality: Double
+    ) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            var image = try AnnotationInteractor().render(document)
+            if format == .jpeg {
+                image = EditorViewModel.flattenedOnWhite(image)
+            }
+            try ImageEncoder.write(image, to: url, format: format, jpegQuality: jpegQuality)
+        }.value
+    }
+
     /// Renders the annotated image and copies it to the system clipboard.
     ///
     /// An OCR text selection on the canvas wins, so ⌘C keeps behaving like a
@@ -152,19 +217,30 @@ extension EditorViewModel {
 
     /// Renders the annotated image and copies it to the system clipboard.
     public func copyToClipboard() {
-        guard let doc = document else { return }
-        do {
-            let image = try interactor.render(doc)
-            let nsImage = NSImage(
-                cgImage: image,
-                size: NSSize(width: image.width, height: image.height)
-            )
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([nsImage])
-            showToast(message: AppLocalization.string("Copied to clipboard"), type: .success)
-            logger.info("Copied annotated image to clipboard")
-        } catch {
-            showToast(message: AppLocalization.string("Copy failed: %@", error.localizedDescription), type: .error)
+        if isEnteringText { commitTextEntry() }
+        guard let doc = document, !isWritingImage else { return }
+        isWritingImage = true
+        Task { [weak self] in
+            do {
+                let image = try await Self.renderOffMain(doc)
+                guard let self else { return }
+                self.isWritingImage = false
+                let nsImage = NSImage(
+                    cgImage: image,
+                    size: NSSize(width: image.width, height: image.height)
+                )
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects([nsImage])
+                self.showToast(message: AppLocalization.string("Copied to clipboard"), type: .success)
+                self.logger.info("Copied annotated image to clipboard")
+            } catch {
+                guard let self else { return }
+                self.isWritingImage = false
+                self.showToast(
+                    message: AppLocalization.string("Copy failed: %@", error.localizedDescription),
+                    type: .error
+                )
+            }
         }
     }
 

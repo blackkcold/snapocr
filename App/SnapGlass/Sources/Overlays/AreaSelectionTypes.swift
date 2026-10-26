@@ -93,6 +93,25 @@ private final class AreaSelectionSession {
         Self.retainedSessions.removeAll { $0 === self }
         Task { @MainActor in completion(result) }
     }
+
+    /// Hands late pre-captured frames to any session still on screen.
+    ///
+    /// Live mode presents the overlay before the frames exist; color picking
+    /// starts working as soon as this lands.
+    static func updateCapturedFrames(_ frames: [CGDirectDisplayID: CGImage]) {
+        guard !frames.isEmpty else { return }
+        for session in retainedSessions {
+            session.applyCapturedFrames(frames)
+        }
+    }
+
+    private func applyCapturedFrames(_ frames: [CGDirectDisplayID: CGImage]) {
+        guard !didFinish else { return }
+        capturedFrames.merge(frames) { _, new in new }
+        for panel in panels {
+            panel.updateCapturedFrames(capturedFrames)
+        }
+    }
 }
 
 final class AreaSelectionPanel: NSPanel {
@@ -116,6 +135,15 @@ final class AreaSelectionPanel: NSPanel {
             onRecaptureRegion: onRecaptureRegion,
             onComplete: onComplete
         )
+    }
+
+    /// Supplies pre-captured frames that finished after the overlay appeared.
+    static func updateCapturedFrames(_ frames: [CGDirectDisplayID: CGImage]) {
+        AreaSelectionSession.updateCapturedFrames(frames)
+    }
+
+    fileprivate func updateCapturedFrames(_ frames: [CGDirectDisplayID: CGImage]) {
+        trackingView.updateCapturedFrames(frames)
     }
 
     fileprivate init(

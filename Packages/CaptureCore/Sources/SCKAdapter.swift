@@ -116,35 +116,10 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         return false
     }
 
-    func checkPermissionStatus() async -> Bool {
-        let preflight = CGPreflightScreenCaptureAccess()
-        logger.info("SCK: CGPreflightScreenCaptureAccess() = \(preflight)")
-
-        do {
-            let content = try await SCShareableContent.current
-            if !content.displays.isEmpty {
-                logger.info("SCK: Permission verified via SCShareableContent (displays: \(content.displays.count))")
-                return true
-            }
-            logger.warning("SCK: SCShareableContent returned empty displays")
-        } catch {
-            logger.warning("SCK: SCShareableContent failed: \(error.localizedDescription)")
-        }
-
-        // 重试一次（macOS 15+ ad-hoc 签名下 CGPreflight 可能返回 false，因此不依赖它）
-        logger.info("SCK: Retrying permission check...")
-        try? await Task.sleep(for: .milliseconds(500))
-        do {
-            let content = try await SCShareableContent.current
-            if !content.displays.isEmpty {
-                logger.info("SCK: Permission verified on retry")
-                return true
-            }
-        } catch {
-            logger.warning("SCK: Retry failed: \(error.localizedDescription)")
-        }
-
-        return false
+    public func checkPermissionStatus() async -> Bool {
+        // Share the short-lived success cache with the rest of the capture
+        // pipeline instead of enumerating SCShareableContent a second time.
+        await PermissionService(logger: logger).checkScreenCapturePermission()
     }
 
     /// Captures a scaled still image suitable for a window-picker preview.
@@ -194,13 +169,31 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
         configuration.queueDepth = 1
 
-        return try await withThrowingTimeout(
+        return try await captureStillImage(filter: filter, configuration: configuration)
+    }
+
+    /// Captures one still frame with the fastest engine available on this OS.
+    ///
+    /// macOS 14+ uses `SCScreenshotManager`, which produces a still image without
+    /// creating, starting and stopping an `SCStream` for every capture. macOS 13
+    /// keeps the single-frame `SCStream` path.
+    private func captureStillImage(
+        filter: SCContentFilter,
+        configuration: SCStreamConfiguration
+    ) async throws -> CGImage {
+        try await withThrowingTimeout(
             milliseconds: Self.captureTimeoutMs,
             timeoutError: {
-                CaptureError.captureFailed(reason: "SCStream capture timed out")
+                CaptureError.captureFailed(reason: "Screen capture timed out")
             },
             operation: {
-                try await SingleFrameCapture.capture(
+                if #available(macOS 14.0, *) {
+                    return try await SCScreenshotManager.captureImage(
+                        contentFilter: filter,
+                        configuration: configuration
+                    )
+                }
+                return try await SingleFrameCapture.capture(
                     with: filter,
                     configuration: configuration,
                     logger: self.logger
@@ -306,7 +299,11 @@ extension SCKAdapter {
 
         logger.info("Capturing window \(windowID)")
 
-        let image = try await captureWindowImage(window, options: options)
+        let image = try await captureWindowImage(
+            window,
+            displays: content.displays,
+            options: options
+        )
 
         let displayInfo = CaptureDisplayInfo(
             displayID: 0,
@@ -382,15 +379,7 @@ extension SCKAdapter {
         streamConfig.showsCursor = options.includeCursor
         streamConfig.capturesAudio = false
 
-        let image = try await withThrowingTimeout(
-            milliseconds: Self.captureTimeoutMs,
-            timeoutError: {
-                CaptureError.captureFailed(reason: "SCStream capture timed out")
-            },
-            operation: {
-                try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
-            }
-        )
+        let image = try await captureStillImage(filter: filter, configuration: streamConfig)
 
         return image
     }
@@ -401,8 +390,12 @@ extension SCKAdapter {
     /// raw frame is full-screen with the surrounding desktop rendered black. Crop the
     /// output to the window's visible bounds (frame ∩ display) so the result is a clean
     /// high-resolution window image, handling partially-offscreen windows gracefully.
-    private func captureWindowImage(_ window: SCWindow, options: CaptureOptions) async throws -> CGImage {
-        let display = window.frame.width > 0 ? await currentDisplay(for: window) : nil
+    private func captureWindowImage(
+        _ window: SCWindow,
+        displays: [SCDisplay],
+        options: CaptureOptions
+    ) async throws -> CGImage {
+        let display = window.frame.width > 0 ? display(containing: window, from: displays) : nil
         guard let targetDisplay = display else {
             throw CaptureError.displayUnavailable
         }
@@ -415,15 +408,7 @@ extension SCKAdapter {
         streamConfig.showsCursor = options.includeCursor
         streamConfig.capturesAudio = false
 
-        let image = try await withThrowingTimeout(
-            milliseconds: Self.captureTimeoutMs,
-            timeoutError: {
-                CaptureError.captureFailed(reason: "SCStream capture timed out")
-            },
-            operation: {
-                try await SingleFrameCapture.capture(with: filter, configuration: streamConfig, logger: self.logger)
-            }
-        )
+        let image = try await captureStillImage(filter: filter, configuration: streamConfig)
 
         let visibleBounds = window.frame.intersection(targetDisplay.frame)
         guard !visibleBounds.isEmpty else {
@@ -443,18 +428,6 @@ extension SCKAdapter {
         }
 
         return cropped
-    }
-
-    /// 获取窗口所在的显示器
-    private func currentDisplay(for window: SCWindow) async -> SCDisplay? {
-        do {
-            let content = try await SCShareableContent.current
-            let windowCenter = CGPoint(x: window.frame.midX, y: window.frame.midY)
-            return content.displays.first { $0.frame.contains(windowCenter) }
-                ?? content.displays.first
-        } catch {
-            return nil
-        }
     }
 
     private func display(containing window: SCWindow, from displays: [SCDisplay]) -> SCDisplay? {

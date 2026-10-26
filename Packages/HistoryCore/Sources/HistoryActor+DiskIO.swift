@@ -6,9 +6,42 @@ import SharedKit
 // MARK: - HistoryActor Disk I/O
 
 extension HistoryActor {
+    /// Loads every on-disk entry exactly once, inside the actor's executor.
+    ///
+    /// The scan used to run synchronously inside `HistoryActor.init`, which is
+    /// evaluated on whichever thread first touches `HistoryActor.shared` —
+    /// usually the main thread. Moving it here keeps the UI responsive; the
+    /// first history query simply awaits this background pass.
+    func loadFromDiskIfNeeded() {
+        guard !hasLoadedFromDisk else { return }
+        hasLoadedFromDisk = true
+
+        var loaded: [UUID: HistoryEntry] = [:]
+        if let files = try? FileManager.default.contentsOfDirectory(
+            at: entriesDir, includingPropertiesForKeys: [.fileSizeKey]
+        ) {
+            for file in files where file.pathExtension == "enc" {
+                do {
+                    let encryptedData = try Data(contentsOf: file)
+                    let jsonData = try cryptoService.decrypt(encryptedData)
+                    let entry = try JSONDecoder().decode(HistoryEntry.self, from: jsonData)
+                    loaded[entry.id] = entry
+                } catch {
+                    logger.error("加载条目失败: \(file.lastPathComponent)", error: error)
+                }
+            }
+        }
+
+        // Entries written while the scan was pending win over the disk copy.
+        entries.merge(loaded) { current, _ in current }
+        diskCache = loaded.merging(diskCache) { _, cached in cached }
+        logger.info("HistoryActor 磁盘条目延迟加载完成: \(loaded.count) 条")
+    }
+
     /// Merges the disk snapshot with the in-memory cache. Cached entries win because
     /// they may contain a more recent metadata update.
     func allPersistedEntries() -> [UUID: HistoryEntry] {
+        loadFromDiskIfNeeded()
         var merged = diskCache
         for (id, entry) in entries {
             merged[id] = entry
@@ -83,7 +116,9 @@ extension HistoryActor {
             do {
                 try FileManager.default.removeItem(at: transactionDir)
             } catch {
-                logger.warning("分层清理已提交，但临时文件清理失败: \(transactionDir.lastPathComponent)")
+                logger.warning(
+                    "分层清理已提交，但临时文件清理失败: \(transactionDir.lastPathComponent)"
+                )
             }
         }
     }
@@ -203,22 +238,37 @@ extension HistoryActor {
         return loadEntryFromFileSync(fileURL)
     }
 
-    /// Generates a PNG thumbnail from an image file.
-    static func writeThumbnail(from imageURL: URL, to thumbnailURL: URL, maxPixelSize: Int) throws {
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, sourceOptions) else {
-            throw HistoryError.fileIOError(path: imageURL.path)
+    /// Generates a PNG thumbnail from an in-memory image.
+    ///
+    /// Downsampling straight from the decoded `CGImage` avoids writing a large
+    /// PNG and then decoding it again just to build a 200px preview.
+    static func writeThumbnail(from image: CGImage, to thumbnailURL: URL, maxPixelSize: Int) throws {
+        let maxDimension = CGFloat(max(image.width, image.height))
+        guard maxDimension > 0, maxPixelSize > 0 else {
+            throw HistoryError.fileIOError(path: thumbnailURL.path)
         }
 
-        let thumbnailOptions: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-        ]
+        let scale = min(1, CGFloat(maxPixelSize) / maxDimension)
+        let width = max(1, Int((CGFloat(image.width) * scale).rounded()))
+        let height = max(1, Int((CGFloat(image.height) * scale).rounded()))
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+            )
+        else {
+            throw HistoryError.fileIOError(path: thumbnailURL.path)
+        }
 
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary) else {
-            throw HistoryError.fileIOError(path: imageURL.path)
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let thumbnail = context.makeImage() else {
+            throw HistoryError.fileIOError(path: thumbnailURL.path)
         }
 
         try ImageEncoder.write(thumbnail, to: thumbnailURL, format: .png)

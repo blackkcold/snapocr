@@ -67,7 +67,6 @@ extension EditableAnnotationCanvasNSView {
             node.normalizedRect = node.normalizedRect.offsetBy(dx: safeDX, dy: safeDY)
         }
         interactiveNode = node
-        invalidateRenderedPreview()
     }
 
     func updateResize(
@@ -92,7 +91,6 @@ extension EditableAnnotationCanvasNSView {
                     allowsFreeformScaling: allowsFreeformTextScaling
                 )
                 interactiveNode = node
-                invalidateRenderedPreview()
                 return
             }
             if node.normalizedRect != .zero {
@@ -102,7 +100,6 @@ extension EditableAnnotationCanvasNSView {
             }
         }
         interactiveNode = node
-        invalidateRenderedPreview()
     }
 
     func resizedTextNode(
