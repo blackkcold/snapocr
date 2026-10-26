@@ -82,7 +82,9 @@ struct SnapGlassApp: App {
                     EditorView(image: image, context: viewModel.editorContext)
                         .id(viewModel.editorSessionID)
                         .frame(minWidth: 800, minHeight: 600)
-                        .toast(message: $viewModel.toastMessage)
+                        // Capture-level toasts sit at the bottom so they cannot
+                        // overlap the editor's own toast at the top.
+                        .toast(message: $viewModel.toastMessage, edge: .bottom)
                         .environment(\.locale, locale)
                         .preferredColorScheme(preferredColorScheme)
                 }

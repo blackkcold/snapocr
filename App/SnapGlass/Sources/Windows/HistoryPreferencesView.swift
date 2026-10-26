@@ -28,6 +28,9 @@ struct HistoryPreferencesView: View {
     @State private var storageSize = PreferenceDefaults.historyStorageSize
     @State private var colorHistoryMaxItems = PreferenceDefaults.colorHistoryMaxItems
     @State private var isClearingColors = false
+    @State private var pendingCleanupCount = 0
+    @State private var showsCleanupConfirmation = false
+    @State private var policyRequestGeneration = 0
 
     private let logger = Logger(category: "preferences")
 
@@ -52,8 +55,23 @@ struct HistoryPreferencesView: View {
                 : storedRetentionDays
             retentionDays = lastFiniteRetentionDays
             maxItems = storedMaxItems
-            storageSize = storedStorageSize
+            storageSize =
+                UserDefaults.standard.object(forKey: PreferenceKeys.historyStorageSize) == nil
+                ? PreferenceDefaults.historyStorageSize
+                : storedStorageSize
             colorHistoryMaxItems = storedColorHistoryMaxItems
+        }
+        .alert("Apply New Retention Limits?", isPresented: $showsCleanupConfirmation) {
+            Button("Cancel", role: .cancel) {
+                revertPendingPolicyChange()
+            }
+            Button("Delete and Apply", role: .destructive) {
+                commitPolicyChange()
+            }
+        } message: {
+            Text(
+                "\(pendingCleanupCount) screenshots will be permanently deleted. Favourite screenshots are kept."
+            )
         }
     }
 
@@ -70,10 +88,10 @@ struct HistoryPreferencesView: View {
                     .onChange(of: keepIndefinitely) { forever in
                         if forever {
                             lastFiniteRetentionDays = retentionDays
-                            storedRetentionDays = 0
-                            applyPolicy()
+                            requestPolicyChange()
                         } else {
                             retentionDays = max(lastFiniteRetentionDays, 1)
+                            requestPolicyChange()
                         }
                     }
             }
@@ -86,8 +104,7 @@ struct HistoryPreferencesView: View {
                 value: maxItems
             ) { newValue in
                 maxItems = newValue
-                storedMaxItems = newValue
-                applyPolicy()
+                requestPolicyChange()
             }
 
             if !keepIndefinitely {
@@ -99,8 +116,7 @@ struct HistoryPreferencesView: View {
                     value: retentionDays
                 ) { newValue in
                     retentionDays = newValue
-                    storedRetentionDays = newValue
-                    applyPolicy()
+                    requestPolicyChange()
                 }
             }
 
@@ -124,11 +140,15 @@ struct HistoryPreferencesView: View {
                 Text("Capacity")
             }
 
-            Slider(value: $storageSize, in: 0.1...10.0, step: 0.1)
-                .onChange(of: storageSize) { newValue in
-                    storedStorageSize = newValue
-                    applyPolicy()
+            Slider(
+                value: $storageSize,
+                in: 0.1...10.0,
+                step: 0.1,
+                onEditingChanged: { isDragging in
+                    guard !isDragging else { return }
+                    requestPolicyChange()
                 }
+            )
         }
     }
 
@@ -193,7 +213,39 @@ struct HistoryPreferencesView: View {
         }
     }
 
-    private func applyPolicy() {
+    /// Asks the history store how many records the pending limits would remove,
+    /// and only writes the new limits after the user has decided. Limits that
+    /// delete nothing are applied silently.
+    private func requestPolicyChange() {
+        policyRequestGeneration &+= 1
+        let generation = policyRequestGeneration
+        let pendingMaxItems = maxItems
+        let pendingRetentionDays = keepIndefinitely ? 0 : retentionDays
+        let pendingStorageSize = storageSize
+
+        guard let history = HistoryActor.shared else { return }
+        Task {
+            let deletions = await history.entriesPendingDeletion(
+                maxItems: pendingMaxItems,
+                retentionDays: pendingRetentionDays == 0 ? Int.max : pendingRetentionDays,
+                maxTotalSizeBytes: UInt64((pendingStorageSize * 1024 * 1024 * 1024).rounded())
+            )
+            guard generation == policyRequestGeneration else { return }
+            if deletions > 0 {
+                pendingCleanupCount = deletions
+                showsCleanupConfirmation = true
+            } else {
+                commitPolicyChange()
+            }
+        }
+    }
+
+    /// Persists the limits currently shown and applies them.
+    private func commitPolicyChange() {
+        storedMaxItems = maxItems
+        storedRetentionDays = keepIndefinitely ? 0 : retentionDays
+        storedStorageSize = storageSize
+
         Task {
             do {
                 try await HistoryActor.shared?.reloadConfiguredPolicyAndCleanup()
@@ -201,5 +253,16 @@ struct HistoryPreferencesView: View {
                 logger.error("Failed to apply history retention policy: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Restores the limits that were in effect before the pending change.
+    private func revertPendingPolicyChange() {
+        policyRequestGeneration &+= 1
+        keepIndefinitely = storedRetentionDays == 0
+        retentionDays = storedRetentionDays == 0
+            ? lastFiniteRetentionDays
+            : storedRetentionDays
+        maxItems = storedMaxItems
+        storageSize = storedStorageSize
     }
 }

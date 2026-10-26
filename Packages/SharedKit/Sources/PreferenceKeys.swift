@@ -4,6 +4,8 @@ import Foundation
 public enum PreferenceKeys {
     /// Whether Return inserts a newline instead of committing an annotation.
     public static let editorEnterInsertsNewline = "editor_enterInsertsNewline"
+    /// Folder the editor's Save panel opens in; absent means "system default".
+    public static let editorSaveDirectory = "editor_saveDirectory"
     public static let launchAtLogin = "general_launchAtLogin"
     public static let appLanguage = "general_appLanguage"
     public static let appearanceMode = "appearance_mode"

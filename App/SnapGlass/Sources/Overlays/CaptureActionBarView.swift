@@ -9,9 +9,11 @@ final class CaptureActionBarView: NSVisualEffectView {
     var onCopy: (() -> Void)?
     var onEdit: (() -> Void)?
     var onPin: (() -> Void)?
+    var onScan: (() -> Void)?
 
     private let backButton = NSButton()
     private let copyButton = NSButton()
+    private let scanButton = NSButton()
     private let editButton = NSButton()
     private let pinButton = NSButton()
 
@@ -27,7 +29,7 @@ final class CaptureActionBarView: NSVisualEffectView {
 
         configureActionButtons()
 
-        let stack = NSStackView(views: [backButton, copyButton, editButton, pinButton])
+        let stack = NSStackView(views: [backButton, copyButton, scanButton, editButton, pinButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.distribution = .fill
@@ -69,6 +71,15 @@ final class CaptureActionBarView: NSVisualEffectView {
         copyButton.keyEquivalent = "\r"
 
         configure(
+            scanButton,
+            title: AppLocalization.string("Scan Selection"),
+            symbol: "qrcode.viewfinder",
+            toolTip: AppLocalization.string("Scan the selected area for a QR code or barcode"),
+            action: #selector(scanSelection)
+        )
+        scanButton.keyEquivalent = "s"
+
+        configure(
             editButton,
             title: AppLocalization.string("Edit Screenshot"),
             symbol: "pencil.and.outline",
@@ -101,8 +112,16 @@ final class CaptureActionBarView: NSVisualEffectView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+    /// 识别中：按钮文案换「识别中…」并禁用，避免重复起任务。
+    func setScanning(_ isScanning: Bool) {
+        scanButton.title = isScanning
+            ? AppLocalization.string("Scanning…")
+            : AppLocalization.string("Scan Selection")
+        scanButton.isEnabled = !isScanning
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
-        for button in [backButton, copyButton, editButton, pinButton]
+        for button in [backButton, copyButton, scanButton, editButton, pinButton]
         where button.convert(button.bounds, to: self).contains(point) {
             return button
         }
@@ -117,6 +136,7 @@ final class CaptureActionBarView: NSVisualEffectView {
         let actions: [(NSButton, () -> Void)] = [
             (backButton, { [weak self] in self?.onBack?() }),
             (copyButton, { [weak self] in self?.onCopy?() }),
+            (scanButton, { [weak self] in self?.onScan?() }),
             (editButton, { [weak self] in self?.onEdit?() }),
             (pinButton, { [weak self] in self?.onPin?() }),
         ]
@@ -147,6 +167,7 @@ final class CaptureActionBarView: NSVisualEffectView {
 
     @objc private func back() { onBack?() }
     @objc private func copyImage() { onCopy?() }
+    @objc private func scanSelection() { onScan?() }
     @objc private func editScreenshot() { onEdit?() }
     @objc private func pinImage() { onPin?() }
 }

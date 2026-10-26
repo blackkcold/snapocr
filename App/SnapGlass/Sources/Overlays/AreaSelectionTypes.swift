@@ -30,6 +30,7 @@ private final class AreaSelectionSession {
         overlayMode: CaptureOverlayMode = .live,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
         onColorPicked: ((SampledColor) -> Void)? = nil,
+        onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         let screens = NSScreen.screens
@@ -44,7 +45,8 @@ private final class AreaSelectionSession {
             on: screens,
             style: style,
             overlayMode: overlayMode,
-            onColorPicked: onColorPicked
+            onColorPicked: onColorPicked,
+            onRecaptureRegion: onRecaptureRegion
         )
     }
 
@@ -56,7 +58,8 @@ private final class AreaSelectionSession {
         on screens: [NSScreen],
         style: CaptureSelectionStyle,
         overlayMode: CaptureOverlayMode,
-        onColorPicked: ((SampledColor) -> Void)?
+        onColorPicked: ((SampledColor) -> Void)?,
+        onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)?
     ) {
         panels = screens.map { screen in
             AreaSelectionPanel(
@@ -64,12 +67,16 @@ private final class AreaSelectionSession {
                 style: style,
                 overlayMode: overlayMode,
                 capturedFrames: capturedFrames,
-                onColorPicked: onColorPicked
+                onColorPicked: onColorPicked,
+                onRecaptureRegion: onRecaptureRegion
             ) { [weak self] result in
                 self?.finish(with: result)
             }
         }
-        for panel in panels { panel.orderFrontRegardless() }
+        for panel in panels {
+            panel.orderFrontRegardless()
+            panel.sharingType = .none
+        }
         let mouseLocation = NSEvent.mouseLocation
         let initialPanel = panels.first { $0.frame.contains(mouseLocation) } ?? panels.first
         initialPanel?.makeKey()
@@ -98,6 +105,7 @@ final class AreaSelectionPanel: NSPanel {
         overlayMode: CaptureOverlayMode = .live,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
         onColorPicked: ((SampledColor) -> Void)? = nil,
+        onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         AreaSelectionSession.show(
@@ -105,6 +113,7 @@ final class AreaSelectionPanel: NSPanel {
             overlayMode: overlayMode,
             capturedFrames: capturedFrames,
             onColorPicked: onColorPicked,
+            onRecaptureRegion: onRecaptureRegion,
             onComplete: onComplete
         )
     }
@@ -115,6 +124,7 @@ final class AreaSelectionPanel: NSPanel {
         overlayMode: CaptureOverlayMode,
         capturedFrames: [CGDirectDisplayID: CGImage],
         onColorPicked: ((SampledColor) -> Void)?,
+        onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
         let contentSize = screen.frame.size
@@ -124,7 +134,8 @@ final class AreaSelectionPanel: NSPanel {
             overlayMode: overlayMode,
             screen: screen,
             capturedFrames: capturedFrames,
-            onColorPicked: onColorPicked
+            onColorPicked: onColorPicked,
+            onRecaptureRegion: onRecaptureRegion
         )
         self.trackingView = trackingView
         self.onComplete = onComplete
@@ -141,6 +152,9 @@ final class AreaSelectionPanel: NSPanel {
         hasShadow = false
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // 决策 8 同族：遮罩面板不进入任何录屏、系统截屏或自己的截图。
+        // `sharingType` 是逐窗口属性，排序后可能被重置，所以每次前置后重设。
+        sharingType = .none
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
         isMovableByWindowBackground = false
@@ -152,6 +166,12 @@ final class AreaSelectionPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func orderFrontRegardless() {
+        super.orderFrontRegardless()
+        sharingType = .none
+    }
+
     override func close() { finish(with: nil) }
 
     fileprivate func dismissWithoutCompleting() {

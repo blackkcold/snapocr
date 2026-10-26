@@ -40,6 +40,7 @@ struct EditorView: View {
                 isBarcodeScanning: editorVM.isBarcodeScanning,
                 isVerticalTrimAvailable: editorVM.supportsVerticalTrim,
                 isVerticalTrimActive: editorVM.isVerticalTrimEnabled,
+                zoomController: editorVM.canvasZoom,
                 onPresetSelected: editorVM.applyPreset,
                 onVerticalTrim: editorVM.activateVerticalTrim,
                 onRunOCR: editorVM.startOCR,
@@ -70,6 +71,10 @@ struct EditorView: View {
                         showsOCROverlay: editorVM.showsOCROverlay,
                         verticalCropOnly: editorVM.isVerticalTrimEnabled,
                         dominantColorCount: editorVM.dominantColorCount,
+                        zoomController: editorVM.canvasZoom,
+                        onToolShortcut: { tool in
+                            editorVM.activateTool(tool)
+                        },
                         onNodeCreated: { node in
                             editorVM.addNode(node)
                         },
@@ -94,9 +99,6 @@ struct EditorView: View {
                         onRegionColorsPicked: editorVM.handleRegionColorsPicked
                     )
                     .frame(minWidth: 500, minHeight: 400)
-                } else {
-                    ProgressView("Loading image…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
                 if editorVM.selectedNode != nil
@@ -111,12 +113,56 @@ struct EditorView: View {
         }
         .frame(minWidth: 640, minHeight: 480)
         .toast(message: $editorVM.toastMessage)
+        .background(
+            EditorWindowCloseGuard(
+                isDirty: { editorVM.hasUnsavedChanges && !editorVM.hasAcceptedClose },
+                onBlocked: { editorVM.showsCloseConfirmation = true }
+            )
+        )
+        .sheet(isPresented: $editorVM.showsCloseConfirmation) {
+            closeConfirmation
+        }
         .onAppear {
             editorVM.onClose = {
-                NSApplication.shared.keyWindow?.close()
+                AppWindowPresenter.window(id: "editor")?.close()
+            }
+            editorVM.onForceClose = {
+                AppWindowPresenter.window(id: "editor")?.close()
             }
         }
         .onDisappear { editorVM.cancelTextEntry() }
+    }
+
+    /// Three-way choice shown when closing would discard annotations.
+    private var closeConfirmation: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Save your annotations?")
+                .font(.headline)
+
+            Text("Closing the editor now discards the annotations on this screenshot.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button("Discard", role: .destructive) {
+                    editorVM.discardAndClose()
+                }
+                Spacer()
+                Button("Cancel") {
+                    editorVM.showsCloseConfirmation = false
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    editorVM.saveThenClose()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
+        .interactiveDismissDisabled()
     }
 
     private var bottomBar: some View {
@@ -167,15 +213,15 @@ struct EditorView: View {
             } label: {
                 Label("Save to History", systemImage: "square.and.arrow.down.on.square")
             }
-            .keyboardShortcut("h", modifiers: [.command])
-            .help("Save the annotated image into history")
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+            .help("Save the annotated image into history (⇧⌘S)")
             .disabled(editorVM.isEnteringText)
 
             Button("Copy") {
-                editorVM.copyToClipboard()
+                editorVM.copyContextually()
             }
-            .keyboardShortcut("c", modifiers: [.command, .shift])
-            .help("Copy annotated image to clipboard")
+            .keyboardShortcut("c", modifiers: .command)
+            .help("Copy the annotated image to the clipboard (⌘C)")
 
             Button("Save") {
                 editorVM.save()

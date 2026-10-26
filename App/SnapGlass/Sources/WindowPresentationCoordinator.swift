@@ -155,7 +155,7 @@ final class WindowPresentationCoordinator {
         }
     }
 
-    private func registeredWindow(id: String) -> NSWindow? {
+    func registeredWindow(id: String) -> NSWindow? {
         guard let reference = windows[id], let window = reference.value else {
             removeStaleWindow(id: id)
             return nil

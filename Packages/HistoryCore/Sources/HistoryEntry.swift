@@ -86,6 +86,19 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     public var imageRevision: UUID?
     public var canRestoreOriginal: Bool { imageRevision != nil && imagePath != nil }
 
+    /// Pixel size of the stored image, recorded at save time so history can lay
+    /// out its grid without reading every thumbnail first. `nil` for records
+    /// written before this field existed.
+    public var pixelWidth: Int?
+    public var pixelHeight: Int?
+
+    /// Pixel size for layout, falling back to the preferred aspect when unknown.
+    public var imagePixelSize: CGSize? {
+        guard let pixelWidth, let pixelHeight,
+              pixelWidth > 0, pixelHeight > 0 else { return nil }
+        return CGSize(width: pixelWidth, height: pixelHeight)
+    }
+
     // MARK: - Initialization
 
     /// 创建历史记录条目
@@ -131,6 +144,8 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         self.isFavourite = isFavourite
         self.tags = tags
         self.isProtected = isProtected
+        self.pixelWidth = nil
+        self.pixelHeight = nil
     }
 
     // MARK: - Codable
@@ -139,7 +154,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         case id, timestamp, textContent, ocrConfidence, captureMode
         case sourceType, sourceAppName, sourceWindowTitle
         case imagePath, thumbnailPath, isFavourite, tags
-        case imageRevision, isProtected
+        case imageRevision, isProtected, pixelWidth, pixelHeight
     }
 
     /// 自定义解码以兼容不含 `isProtected` 键的旧记录。
@@ -163,5 +178,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         tags = try container.decode([String].self, forKey: .tags)
         imageRevision = try container.decodeIfPresent(UUID.self, forKey: .imageRevision)
         isProtected = try container.decodeIfPresent(Bool.self, forKey: .isProtected) ?? false
+        pixelWidth = try container.decodeIfPresent(Int.self, forKey: .pixelWidth)
+        pixelHeight = try container.decodeIfPresent(Int.self, forKey: .pixelHeight)
     }
 }

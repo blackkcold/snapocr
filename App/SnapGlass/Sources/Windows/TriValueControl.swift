@@ -13,6 +13,10 @@ struct TriValueControl: View {
 
     @State private var textFieldValue = ""
     @State private var isEditing = false
+    /// Slider position while the user is still dragging. Committed to
+    /// `onChanged` only on release so a single gesture produces one change
+    /// instead of one per intermediate step.
+    @State private var sliderValue: Double = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -64,21 +68,32 @@ struct TriValueControl: View {
                     .onChange(of: value) { newValue in
                         guard !isEditing else { return }
                         textFieldValue = String(newValue)
+                        guard Int(sliderValue.rounded()) != newValue else { return }
+                        sliderValue = Double(newValue)
                     }
 
                 Slider(
                     value: Binding(
-                        get: { Double(value) },
-                        set: { onChanged(Int($0)) }
+                        get: { sliderValue },
+                        set: { sliderValue = $0 }
                     ),
                     in: Double(range.lowerBound)...Double(range.upperBound),
-                    step: 1
+                    step: 1,
+                    onEditingChanged: { isDragging in
+                        guard !isDragging else { return }
+                        let committed = Int(sliderValue.rounded())
+                        guard committed != value else { return }
+                        onChanged(committed)
+                    }
                 )
             }
         }
         .padding(14)
         .glassSurface(in: .rounded(14))
-        .onAppear { textFieldValue = String(value) }
+        .onAppear {
+            textFieldValue = String(value)
+            sliderValue = Double(value)
+        }
     }
 
     private var placeholder: String {

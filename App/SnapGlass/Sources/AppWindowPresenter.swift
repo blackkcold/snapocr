@@ -13,6 +13,11 @@ enum AppWindowPresenter {
     static func register(_ window: NSWindow?, id: String) {
         coordinator.register(window, id: id)
     }
+
+    /// The window currently registered for `id`, if it is still alive.
+    static func window(id: String) -> NSWindow? {
+        coordinator.registeredWindow(id: id)
+    }
 }
 
 @MainActor

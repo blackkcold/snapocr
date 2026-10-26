@@ -48,6 +48,9 @@ extension HistoryActor {
         committed = true
         logger.info("历史条目已保存: \(entry.id)")
 
+        // Lets an open history window refresh itself after a new capture.
+        NotificationCenter.default.post(name: Self.imagesDidChange, object: nil)
+
         // 检查并执行清理
         try await enforceCleanup()
     }
@@ -182,9 +185,12 @@ extension HistoryActor {
             thumbnailPath: thumbnailURL,
             isProtected: isProtected
         )
+        var sized = entry
+        sized.pixelWidth = image.width
+        sized.pixelHeight = image.height
 
-        try await save(entry)
-        return entry.id
+        try await save(sized)
+        return sized.id
     }
 
     public func load(id: UUID) async throws -> HistoryEntry? {

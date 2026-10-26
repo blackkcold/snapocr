@@ -1,5 +1,6 @@
 import AppKit
 import BarcodeCore
+import CaptureCore
 import OCRCore
 import SharedKit
 import SwiftUI
@@ -45,6 +46,23 @@ extension CaptureViewModel {
         } catch {
             logger.warning("Automatic barcode hint failed: \(error.localizedDescription)")
             return []
+        }
+    }
+
+    /// 动作栏「重新识别」：实时重截选区。
+    ///
+    /// 遮罩面板已设 `sharingType = .none`，把自己排除在截图之外；
+    /// 区域路径返回的已经是裁好的图，这里不需要再做任何裁剪。
+    func recaptureRegionForBarcodeScan(_ quartzRect: CGRect) async -> CGImage? {
+        do {
+            let result = try await captureOrchestrator.capture(
+                mode: CaptureCore.CaptureMode.area(quartzRect),
+                options: CaptureOptions(includeCursor: false, highResolution: true)
+            )
+            return result.image
+        } catch {
+            logger.warning("Barcode rescan capture failed: \(error.localizedDescription)")
+            return nil
         }
     }
 

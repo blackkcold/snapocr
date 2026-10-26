@@ -19,14 +19,7 @@ extension CaptureViewModel {
             isCapturing = true
             defer { isCapturing = false }
 
-            let selectionStyle =
-                CaptureSelectionStyle(
-                    rawValue: Self.stringPreference(
-                        forKey: PreferenceKeys.captureSelectionStyle,
-                        defaultValue: PreferenceDefaults.captureSelectionStyle
-                    )
-                ) ?? .rectangle
-            let overlayMode = Self.currentCaptureOverlayMode()
+            let (selectionStyle, overlayMode) = Self.areaCapturePreferences()
 
             let capturedFrames = await preCaptureAllScreens()
 
@@ -39,6 +32,10 @@ extension CaptureViewModel {
                         capturedFrames: capturedFrames,
                         onColorPicked: { [weak self] color in
                             self?.copyHexToClipboard(color)
+                        },
+                        onRecaptureRegion: { [weak self] quartzRect in
+                            guard let self else { return nil }
+                            return await self.recaptureRegionForBarcodeScan(quartzRect)
                         },
                         onComplete: { result in
                             guard !didResume else { return }
@@ -65,6 +62,18 @@ extension CaptureViewModel {
                 managesCaptureState: false
             )
         }
+    }
+
+    /// 区域截图的样式与遮罩模式偏好。
+    private static func areaCapturePreferences() -> (CaptureSelectionStyle, CaptureOverlayMode) {
+        let style =
+            CaptureSelectionStyle(
+                rawValue: stringPreference(
+                    forKey: PreferenceKeys.captureSelectionStyle,
+                    defaultValue: PreferenceDefaults.captureSelectionStyle
+                )
+            ) ?? .rectangle
+        return (style, currentCaptureOverlayMode())
     }
 
     private static func currentCaptureOverlayMode() -> CaptureOverlayMode {
@@ -455,30 +464,6 @@ extension CaptureViewModel {
                 message: completionMessage,
                 type: .success
             )
-        }
-    }
-
-    private func selectWindow() async -> WindowSelectionResult? {
-        await withCheckedContinuation { continuation in
-            var didResume = false
-            let resumeOnce: (WindowSelectionResult?) -> Void = { result in
-                guard !didResume else { return }
-                didResume = true
-                continuation.resume(returning: result)
-            }
-
-            Task { @MainActor in
-                WindowSelectionPanel.show { result in
-                    resumeOnce(result)
-                }
-            }
-
-            // Safety net: if the panel never completes (e.g. a stale/leaked
-            // instance), force-resume so `isCapturing` is always released.
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(8))
-                resumeOnce(nil)
-            }
         }
     }
 

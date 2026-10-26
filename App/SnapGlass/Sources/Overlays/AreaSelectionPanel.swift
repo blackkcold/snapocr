@@ -66,6 +66,17 @@ final class WindowSelectionPanel: NSPanel {
         retainedPanels.removeAll { $0 === panel }
     }
 
+    /// Closes any picker still on screen. Used only by the capture-side
+    /// timeout so a panel that never appeared cannot block the next capture.
+    @MainActor
+    static func closeActivePanel() {
+        // `close()` routes through `finish(with:)`, which resolves the pending
+        // continuation and releases the panel.
+        for panel in retainedPanels {
+            panel.close()
+        }
+    }
+
     private init(
         windows: [SelectableWindow],
         content: SCShareableContent,
