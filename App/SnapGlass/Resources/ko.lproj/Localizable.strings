@@ -121,6 +121,10 @@
 "%d barcodes found" = "바코드 %d개를 찾았습니다";
 "No screenshot available" = "선택 영역 스크린샷을 사용할 수 없습니다";
 "Barcode Results" = "바코드 인식 결과";
+"Barcode Hint" = "Return 복사 · R 다시 인식 · Esc 닫기";
+"Barcode Hint with Link" = "Return 복사 · ⌘Return 열기 · R 다시 인식 · Esc 닫기";
+"%d more" = "%d개 더";
+"Close" = "닫기";
 "Preferences..." = "설정…";
 "Quit SnapGlass" = "SnapGlass 종료";
 "Preferences" = "설정";

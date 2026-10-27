@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-27
+
+### Fixed
+- 选区条码结果浮层：浮层出现时主动激活应用并设为 key，首次点击即可落到按钮与正文；此前点击会被当成「点空白」直接收起浮层。
+- 「打开链接」先结束选区会话、收掉全屏遮罩再交给系统打开；系统没有可用应用时退回复制链接并提示。
+- 识别结果正文改为可选文本：按词换行、最多三行，可拖选后 ⌘C；长链接不再只有一行中间截断。
+- 浮层吞掉卡片内点击并带兜底命中分发，点击正文不再误关浮层；新增显式关闭按钮。
+
+### Changed
+- 结果浮层宽度 320 → 360；链接拆「域名 / 路径」两级，主操作（复制 / 打开）分层，重识别与关闭改为图标按钮。
+- 浮层新增组合键：⌘↵ 打开链接、⌘C 复制整条（正文有选中时复制选中片段），底部提示当前可用按键。
+- 多结果超过 5 条折叠为「还有 N 条」，不再无限拉高浮层。
+
 ## [0.9.0] - 2026-10-26
 
 ### Fixed
@@ -314,6 +327,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
 [Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.0...HEAD
+[0.9.1]: https://github.com/blackkcold/snapocr/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/blackkcold/snapocr/compare/v0.8.9...v0.9.0
 [0.8.9]: https://github.com/blackkcold/snapocr/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/blackkcold/snapocr/compare/v0.8.7...v0.8.8

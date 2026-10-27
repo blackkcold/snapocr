@@ -121,6 +121,10 @@
 "%d barcodes found" = "%d barcodes found";
 "No screenshot available" = "No screenshot available";
 "Barcode Results" = "Barcode Results";
+"Barcode Hint" = "Return to copy · R to rescan · Esc to close";
+"Barcode Hint with Link" = "Return to copy · ⌘Return to open · R to rescan · Esc to close";
+"%d more" = "%d more";
+"Close" = "Close";
 "Preferences..." = "Preferences...";
 "Quit SnapGlass" = "Quit SnapGlass";
 "Preferences" = "Preferences";
