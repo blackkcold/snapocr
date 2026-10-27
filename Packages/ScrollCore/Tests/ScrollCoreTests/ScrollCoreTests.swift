@@ -246,11 +246,23 @@ struct ScrollCoreTests {
                 space: CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             ))
-            let croppedA = try #require(imageA.cropping(to: CGRect(x: 0, y: 0, width: min(width, CGFloat(imageA.width)), height: offset)))
-            context.draw(croppedA, in: CGRect(x: 0, y: heightB, width: CGFloat(croppedA.width), height: CGFloat(croppedA.height)))
+            let croppedA = try #require(
+                imageA.cropping(
+                    to: CGRect(x: 0, y: 0, width: min(width, CGFloat(imageA.width)), height: offset)))
+            context.draw(
+                croppedA,
+                in: CGRect(x: 0, y: heightB, width: CGFloat(croppedA.width), height: CGFloat(croppedA.height)))
             let drawHeightB = min(heightB, totalHeight - offset)
-            let croppedB = try #require(imageB.cropping(to: CGRect(x: 0, y: Int(max(0, heightB - drawHeightB)), width: min(Int(width), imageB.width), height: Int(drawHeightB))))
-            context.draw(croppedB, in: CGRect(x: 0, y: 0, width: CGFloat(croppedB.width), height: CGFloat(croppedB.height)))
+            let croppedB = try #require(
+                imageB.cropping(
+                    to: CGRect(
+                        x: 0,
+                        y: Int(max(0, heightB - drawHeightB)),
+                        width: min(Int(width), imageB.width),
+                        height: Int(drawHeightB))))
+            context.draw(
+                croppedB,
+                in: CGRect(x: 0, y: 0, width: CGFloat(croppedB.width), height: CGFloat(croppedB.height)))
             composite = try #require(context.makeImage())
         }
         return composite

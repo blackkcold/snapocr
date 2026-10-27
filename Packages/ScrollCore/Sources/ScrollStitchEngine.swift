@@ -336,13 +336,13 @@ extension ScrollStitchActor {
         stitchCanvasAllocatedBytes += width * outputHeight * 4
 
         // 4) 逐帧绘制到固定画布：后绘制的帧覆盖重叠带，与旧实现的裁剪拼接等价。
-        for (index, y) in positions.enumerated() {
+        for (index, offsetY) in positions.enumerated() {
             try Task.checkCancellation()
 
             let image = frames[index].image
             context.draw(image, in: CGRect(
                 x: 0,
-                y: outputHeight - y - image.height,
+                y: outputHeight - offsetY - image.height,
                 width: image.width,
                 height: image.height
             ))

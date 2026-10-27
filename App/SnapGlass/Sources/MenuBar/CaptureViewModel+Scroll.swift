@@ -67,40 +67,8 @@ extension CaptureViewModel {
                 guard !Task.isCancelled, scrollSession?.id == session.id else { return }
 
                 // 去重与重叠探测都在引擎 actor 里做，主线程不接触 5K 像素。
-                switch try await scrollEngine.appendIncrementalFrame(result.image) {
-                case .appended(let frameCount):
-                    guard !Task.isCancelled, scrollSession?.id == session.id else { return }
-                    scrollCapturedFrameCount = frameCount
-                    showToast(
-                        message: AppLocalization.string("Frame %lld captured", frameCount),
-                        type: .success
-                    )
-                case .duplicate:
-                    showToast(
-                        message: AppLocalization.string("No visual change detected; scroll and try again"),
-                        type: .info
-                    )
-                case .limitReached:
-                    if !scrollReachedSizeLimit {
-                        scrollReachedSizeLimit = true
-                        showToast(
-                            message: AppLocalization.string(
-                                "Scrolling capture reached the size limit; finish to keep what has been captured"
-                            ),
-                            type: .info
-                        )
-                    }
-                case .sizeChanged:
-                    if !scrollReachedSizeLimit {
-                        scrollReachedSizeLimit = true
-                        showToast(
-                            message: AppLocalization.string(
-                                "The window size changed; finish to keep what has been captured"
-                            ),
-                            type: .info
-                        )
-                    }
-                }
+                let appendResult = try await scrollEngine.appendIncrementalFrame(result.image)
+                handleIncrementalAppend(appendResult, session: session)
             } catch CaptureError.permissionDenied {
                 openWindow?("permission")
             } catch {
@@ -111,6 +79,40 @@ extension CaptureViewModel {
             }
         }
         scrollCaptureTask = task
+    }
+
+    /// 处理增量拼接结果，只保留与当前会话一致的帧。
+    private func handleIncrementalAppend(_ result: IncrementalAppendResult, session: ScrollSession) {
+        switch result {
+        case .appended(let frameCount):
+            guard !Task.isCancelled, scrollSession?.id == session.id else { return }
+            scrollCapturedFrameCount = frameCount
+            showToast(
+                message: AppLocalization.string("Frame %lld captured", frameCount),
+                type: .success
+            )
+        case .duplicate:
+            showToast(
+                message: AppLocalization.string("No visual change detected; scroll and try again"),
+                type: .info
+            )
+        case .limitReached:
+            warnScrollSizeLimit(
+                AppLocalization.string(
+                    "Scrolling capture reached the size limit; finish to keep what has been captured"
+                )
+            )
+        case .sizeChanged:
+            warnScrollSizeLimit(
+                AppLocalization.string("The window size changed; finish to keep what has been captured")
+            )
+        }
+    }
+
+    private func warnScrollSizeLimit(_ message: String) {
+        guard !scrollReachedSizeLimit else { return }
+        scrollReachedSizeLimit = true
+        showToast(message: message, type: .info)
     }
 
     /// Finishes the active scrolling capture and sends the long image through the normal capture flow.
