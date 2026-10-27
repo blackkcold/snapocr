@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "0.9.0"
+    MARKETING_VERSION: "0.9.1"
     CURRENT_PROJECT_VERSION: "1"
   configs:
     Debug:
@@ -123,6 +123,8 @@ targets:
     platform: macOS
     sources:
       - path: App/SnapGlass/Tests
+        excludes:
+          - BarcodePanel
       - path: App/SnapGlass/Sources/WindowLifecycleState.swift
       - path: App/SnapGlass/Sources/AppWindowPresenter.swift
       - path: App/SnapGlass/Sources/WindowPresentationCoordinator.swift
@@ -133,6 +135,24 @@ targets:
       base:
         PRODUCT_NAME: WindowLifecycleStateTests
         PRODUCT_MODULE_NAME: WindowLifecycleStateTests
+        GENERATE_INFOPLIST_FILE: YES
+  BarcodePanelTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: App/SnapGlass/Tests/BarcodePanel
+      - path: App/SnapGlass/Sources/Overlays/BarcodeResultPanel.swift
+      - path: App/SnapGlass/Sources/Overlays/BarcodeResultPanel+Controls.swift
+      - path: App/SnapGlass/Sources/Overlays/BarcodeScanState.swift
+      - path: App/SnapGlass/Sources/AppLocalization.swift
+      - path: App/SnapGlass/Sources/AppLanguage.swift
+    dependencies:
+      - package: SharedKit
+      - package: BarcodeCore
+    settings:
+      base:
+        PRODUCT_NAME: BarcodePanelTests
+        PRODUCT_MODULE_NAME: BarcodePanelTests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
   EditorInteractionTests:
@@ -149,3 +169,10 @@ schemes:
     test:
       targets:
         - WindowLifecycleStateTests
+  BarcodePanelTests:
+    build:
+      targets:
+        BarcodePanelTests: test
+    test:
+      targets:
+        - BarcodePanelTests

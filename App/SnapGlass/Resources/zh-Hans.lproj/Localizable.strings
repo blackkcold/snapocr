@@ -121,6 +121,10 @@
 "%d barcodes found" = "识别到 %d 个条码";
 "No screenshot available" = "选区截图不可用";
 "Barcode Results" = "条码识别结果";
+"Barcode Hint" = "回车复制 · R 重新识别 · Esc 关闭";
+"Barcode Hint with Link" = "回车复制 · ⌘回车打开 · R 重新识别 · Esc 关闭";
+"%d more" = "还有 %d 条";
+"Close" = "关闭";
 "Preferences..." = "设置…";
 "Quit SnapGlass" = "退出 SnapGlass";
 "Preferences" = "设置";

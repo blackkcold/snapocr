@@ -17,23 +17,31 @@ final class BarcodeResultPanel: NSVisualEffectView {
     var onOpenLink: ((URL) -> Void)?
     var onRescan: (() -> Void)?
     var onCopyAll: (() -> Void)?
+    /// 显式关闭；点卡片外与 `esc` 由选区视图处理。
+    var onClose: (() -> Void)?
 
-    static let width: CGFloat = 320
-    private static let horizontalInset: CGFloat = 12
-    private static let verticalInset: CGFloat = 10
+    static let width: CGFloat = 360
+    static let horizontalInset: CGFloat = 12
+    static let verticalInset: CGFloat = 10
+    static let contentWidth: CGFloat = width - horizontalInset * 2
+    /// 正文最多三行：看得清长链接，又不至于把浮层撑成一块板。
+    static let payloadLines = 3
+    /// 多结果最多平铺五行，其余折叠成「还有 N 条」。
     private static let maximumRows = 5
-    private static let contentWidth: CGFloat = width - horizontalInset * 2
 
-    private struct CopyTarget {
+    struct CopyTarget {
         let button: NSButton
         let title: String
+        let image: NSImage?
         let imagePosition: NSControl.ImagePosition
         let payload: String
     }
 
     private let stack = NSStackView()
-    private var copyTargets: [CopyTarget] = []
+    private(set) var copyTargets: [CopyTarget] = []
     private var copiedResetWorkItem: DispatchWorkItem?
+    /// 单条结果的正文字段：兜底点击需要它接管选中。
+    private(set) weak var primaryPayloadField: NSTextField?
     /// 识别中沿用上一次内容高度，避免面板高度跳动。
     private var retainedHeight: CGFloat = 0
 
@@ -68,6 +76,47 @@ final class BarcodeResultPanel: NSVisualEffectView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+    // MARK: - Interaction
+
+    /// 卡片吞掉落在自己身上的点击。
+    ///
+    /// 选区视图把「不在动作栏上的点击」当作点空白并收起浮层；如果卡片不拦，
+    /// 一次正文点击就会连带关掉结果。拦在这里比让事件继续冒泡更可靠。
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, bounds.contains(point) else { return nil }
+        if let button = allButtons.first(where: { $0.convert($0.bounds, to: self).contains(point) }) {
+            return button
+        }
+        return super.hitTest(point) ?? self
+    }
+
+    /// 兜底点击分发。
+    ///
+    /// 浮层是 `.screenSaver` 级别的非激活面板，首次点击偶尔会绕过控件直接落到
+    /// 选区视图。此时按坐标把点击补派一次，避免「按钮/文本点不动」。
+    /// 与 `CaptureActionBarView.performAction(at:)` 同一套做法。
+    ///
+    /// - Returns: 点是否落在卡片内（落在卡内一律不算「点空白」）。
+    @discardableResult
+    func handleClick(at point: CGPoint) -> Bool {
+        guard !isHidden, bounds.contains(point) else { return false }
+        if let button = allButtons.first(where: { $0.convert($0.bounds, to: self).contains(point) }) {
+            button.performClick(nil)
+            return true
+        }
+        if let field = primaryPayloadField,
+           field.convert(field.bounds, to: self).contains(point) {
+            window?.makeFirstResponder(field)
+            field.selectText(nil)
+            return true
+        }
+        return true
+    }
+
     // MARK: - Sizing
 
     /// 面板当前需要的尺寸；高度按内容计算，宽度固定。
@@ -83,6 +132,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
     func update(state: ScanState) {
         copiedResetWorkItem?.cancel()
         copyTargets.removeAll()
+        primaryPayloadField = nil
         removeAllRows()
 
         for view in content(for: state) {
@@ -101,15 +151,30 @@ final class BarcodeResultPanel: NSVisualEffectView {
         }
     }
 
-    /// 复制成功反馈：对应按钮标题短暂换成「已复制」。
+    /// 复制成功反馈：按钮短暂换成「已复制」，图标按钮保持宽度不变。
     func markCopied(payload: String) {
         guard let target = copyTargets.first(where: { $0.payload == payload }) else { return }
         copiedResetWorkItem?.cancel()
-        target.button.title = AppLocalization.string("Copied")
-        target.button.imagePosition = .noImage
+
+        if target.imagePosition == .imageOnly {
+            target.button.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+            target.button.toolTip = AppLocalization.string("Copied")
+            target.button.setAccessibilityLabel(AppLocalization.string("Copied"))
+        } else {
+            target.button.title = AppLocalization.string("Copied")
+            target.button.imagePosition = .noImage
+        }
+
         let workItem = DispatchWorkItem { [weak self, weak button = target.button] in
-            button?.title = target.title
-            button?.imagePosition = target.imagePosition
+            guard let button else { return }
+            if target.imagePosition == .imageOnly {
+                button.image = target.image
+                button.toolTip = target.title
+                button.setAccessibilityLabel(target.title)
+            } else {
+                button.title = target.title
+                button.imagePosition = target.imagePosition
+            }
             self?.copiedResetWorkItem = nil
         }
         copiedResetWorkItem = workItem
@@ -147,7 +212,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
             label(
                 AppLocalization.string("Scanning…"),
                 font: .systemFont(ofSize: 12),
-                color: .secondaryLabelColor
+                color: NSColor.white.withAlphaComponent(0.62)
             ),
         ])
         row.orientation = .horizontal
@@ -157,16 +222,32 @@ final class BarcodeResultPanel: NSVisualEffectView {
     }
 
     private func singleResultContent(payload: BarcodePayload) -> [NSView] {
-        var actions: [NSView] = [
-            copyButton(payload: payload.text, title: AppLocalization.string("Copy Content")),
-        ]
+        let field = payloadField(payload, lines: Self.payloadLines)
+        primaryPayloadField = field
+
+        var actions: [NSView] = []
         if let url = payload.webLink {
+            actions.append(
+                copyButton(
+                    payload: payload.text,
+                    title: AppLocalization.string("Copy Content"),
+                    role: .secondary
+                )
+            )
             actions.append(
                 button(
                     title: AppLocalization.string("Open Link"),
                     symbol: "arrow.up.right.square",
-                    emphasis: false
+                    role: .primary
                 ) { [weak self] in self?.onOpenLink?(url) }
+            )
+        } else {
+            actions.append(
+                copyButton(
+                    payload: payload.text,
+                    title: AppLocalization.string("Copy Content"),
+                    role: .primary
+                )
             )
         }
 
@@ -177,8 +258,9 @@ final class BarcodeResultPanel: NSVisualEffectView {
 
         return [
             header(title: AppLocalization.string("Barcode found"), badge: payload.type.displayName),
-            payloadLabel(payload.text, lines: 2),
+            field,
             actionRow,
+            hintLabel(hasLink: payload.webLink != nil),
         ]
     }
 
@@ -192,15 +274,25 @@ final class BarcodeResultPanel: NSVisualEffectView {
         for payload in payloads.prefix(Self.maximumRows) {
             views.append(row(for: payload))
         }
-        if payloads.count > 1 {
-            let joined = payloads.map(\.text).joined(separator: "\n")
+        let overflow = payloads.count - Self.maximumRows
+        if overflow > 0 {
             views.append(
-                copyButton(
-                    payload: joined,
-                    title: AppLocalization.string("Copy All"),
-                    isCopyAll: true
+                label(
+                    AppLocalization.string("%d more", overflow),
+                    font: .systemFont(ofSize: 11),
+                    color: NSColor.white.withAlphaComponent(0.42)
                 )
             )
+        }
+        if payloads.count > 1 {
+            let joined = payloads.map(\.text).joined(separator: "\n")
+            let copyAll = button(
+                title: AppLocalization.string("Copy All"),
+                symbol: "doc.on.doc",
+                role: .secondary
+            ) { [weak self] in self?.onCopyAll?() }
+            registerCopyTarget(joined, button: copyAll)
+            views.append(copyAll)
         }
         return views
     }
@@ -209,12 +301,12 @@ final class BarcodeResultPanel: NSVisualEffectView {
         let copy = copyButton(
             payload: payload.text,
             title: AppLocalization.string("Copy Content"),
-            compact: true
+            role: .icon
         )
         let row = NSStackView(views: [
             badge(payload.type.displayName),
-            payloadLabel(
-                payload.text,
+            payloadField(
+                payload,
                 lines: 1,
                 maxWidth: Self.contentWidth - 44 - 32 - 16
             ),
@@ -232,17 +324,17 @@ final class BarcodeResultPanel: NSVisualEffectView {
             label(
                 AppLocalization.string("No barcode in selection"),
                 font: .systemFont(ofSize: 12),
-                color: .secondaryLabelColor,
+                color: NSColor.white.withAlphaComponent(0.62),
                 lines: 2
             ),
-            rescanButton(),
+            rescanButton(role: .secondary),
         ]
     }
 
     private func failureContent(message: String) -> [NSView] {
         [
             label(message, font: .systemFont(ofSize: 12), color: .systemRed, lines: 2),
-            rescanButton(),
+            rescanButton(role: .secondary),
         ]
     }
 
@@ -257,7 +349,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
             label(
                 title,
                 font: .systemFont(ofSize: 12, weight: .semibold),
-                color: .labelColor,
+                color: NSColor.white.withAlphaComponent(0.94),
                 maxWidth: Self.contentWidth - reserved - 96
             )
         )
@@ -265,7 +357,8 @@ final class BarcodeResultPanel: NSVisualEffectView {
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: 8).isActive = true
         views.append(spacer)
-        views.append(rescanButton())
+        views.append(rescanButton(role: .icon))
+        views.append(closeButton())
 
         let row = NSStackView(views: views)
         row.orientation = .horizontal
@@ -275,140 +368,70 @@ final class BarcodeResultPanel: NSVisualEffectView {
         return row
     }
 
-    private func rescanButton() -> NSButton {
+    private func rescanButton(role: ButtonRole) -> NSButton {
         button(
             title: AppLocalization.string("Scan Again"),
             symbol: "arrow.clockwise",
-            emphasis: false
+            role: role
         ) { [weak self] in self?.onRescan?() }
     }
 
-    // MARK: - Controls
+    private func closeButton() -> NSButton {
+        button(
+            title: AppLocalization.string("Close"),
+            symbol: "xmark",
+            role: .icon
+        ) { [weak self] in self?.onClose?() }
+    }
+
+    private func hintLabel(hasLink: Bool) -> NSTextField {
+        label(
+            AppLocalization.string(hasLink ? "Barcode Hint with Link" : "Barcode Hint"),
+            font: .systemFont(ofSize: 10),
+            color: NSColor.white.withAlphaComponent(0.42)
+        )
+    }
+
+    // MARK: - Helpers
 
     private func copyButton(
         payload: String,
         title: String,
-        compact: Bool = false,
-        isCopyAll: Bool = false
+        role: ButtonRole
     ) -> NSButton {
-        let control = button(title: title, symbol: "doc.on.doc", emphasis: true) { [weak self] in
-            if isCopyAll {
-                self?.onCopyAll?()
-            } else {
-                self?.onCopy?(payload)
-            }
+        let control = button(title: title, symbol: "doc.on.doc", role: role) { [weak self] in
+            self?.onCopy?(payload)
         }
-        if compact {
-            control.title = ""
-            control.imagePosition = .imageOnly
-            control.toolTip = AppLocalization.string("Copy Content")
-            control.setAccessibilityLabel(AppLocalization.string("Copy Content"))
-        }
+        registerCopyTarget(payload, button: control)
+        return control
+    }
+
+    private func registerCopyTarget(_ payload: String, button: NSButton) {
         copyTargets.append(
             CopyTarget(
-                button: control,
-                title: control.title,
-                imagePosition: control.imagePosition,
+                button: button,
+                title: button.toolTip ?? button.title,
+                image: button.image,
+                imagePosition: button.imagePosition,
                 payload: payload
             )
         )
-        return control
     }
 
-    private func button(
-        title: String,
-        symbol: String,
-        emphasis: Bool,
-        action: @escaping () -> Void
-    ) -> NSButton {
-        let control = ClosureButton(title: title, onPress: action)
-        control.bezelStyle = emphasis ? .rounded : .inline
-        control.controlSize = .small
-        control.font = .systemFont(ofSize: 11, weight: emphasis ? .semibold : .regular)
-        control.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        control.imagePosition = .imageLeading
-        control.setAccessibilityLabel(title)
-        return control
+    private var allButtons: [NSButton] {
+        var buttons: [NSButton] = []
+        func collect(_ view: NSView) {
+            if let button = view as? NSButton { buttons.append(button) }
+            for subview in view.subviews { collect(subview) }
+        }
+        collect(self)
+        return buttons
     }
-
-    private func badge(_ text: String) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.font = .systemFont(ofSize: 10, weight: .semibold)
-        field.textColor = .labelColor
-        field.alignment = .center
-        field.wantsLayer = true
-        field.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
-        field.layer?.cornerRadius = 4
-        field.setContentHuggingPriority(.required, for: .horizontal)
-        field.widthAnchor.constraint(greaterThanOrEqualToConstant: 36).isActive = true
-        field.heightAnchor.constraint(equalToConstant: 16).isActive = true
-        return field
-    }
-
-    private func payloadLabel(
-        _ text: String,
-        lines: Int,
-        maxWidth: CGFloat = contentWidth
-    ) -> NSTextField {
-        let field = label(
-            text,
-            font: .monospacedSystemFont(ofSize: 12, weight: .regular),
-            color: .labelColor,
-            lines: lines,
-            maxWidth: maxWidth
-        )
-        field.isSelectable = true
-        field.toolTip = text
-        return field
-    }
-
-    private func label(
-        _ text: String,
-        font: NSFont,
-        color: NSColor,
-        lines: Int = 1,
-        maxWidth: CGFloat = contentWidth
-    ) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.font = font
-        field.textColor = color
-        field.maximumNumberOfLines = lines
-        field.lineBreakMode = lines > 1 ? .byTruncatingMiddle : .byTruncatingTail
-        field.cell?.truncatesLastVisibleLine = true
-        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        field.widthAnchor.constraint(lessThanOrEqualToConstant: maxWidth).isActive = true
-        return field
-    }
-
-    // MARK: - Helpers
 
     private func removeAllRows() {
         for view in stack.arrangedSubviews {
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
-    }
-}
-
-// MARK: - ClosureButton
-
-/// 面板里的按钮只做一件事，用闭包比逐个开 selector 更省。
-private final class ClosureButton: NSButton {
-    private let onPress: () -> Void
-
-    init(title: String, onPress: @escaping () -> Void) {
-        self.onPress = onPress
-        super.init(frame: .zero)
-        self.title = title
-        target = self
-        action = #selector(press)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    @objc private func press() {
-        onPress()
     }
 }

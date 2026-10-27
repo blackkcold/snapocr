@@ -3,36 +3,6 @@ import BarcodeCore
 import CaptureCore
 import SharedKit
 
-// MARK: - 选区条码识别状态
-
-/// 动作栏「识别」按钮驱动的状态机。
-///
-/// 识别是只读的：不产生截图产物、不写历史、不碰剪贴板（直到用户点复制）。
-enum ScanState {
-    /// 没有浮层。
-    case idle
-    /// 识别中。
-    case scanning
-    /// 有结果（引擎顺序 = 置信度降序）。
-    case results([BarcodeResult])
-    /// 选区内没有条码。
-    case empty
-    /// 识别或截图失败。
-    case failed(String)
-
-    /// 是否需要在选区上显示浮层。
-    var isVisible: Bool {
-        if case .idle = self { return false }
-        return true
-    }
-
-    /// 是否处于识别中（动作栏按钮据此禁用）。
-    var isScanning: Bool {
-        if case .scanning = self { return true }
-        return false
-    }
-}
-
 // MARK: - AreaTrackingView 条码识别
 
 extension AreaTrackingView {
@@ -42,14 +12,17 @@ extension AreaTrackingView {
         barcodePanel.onCopy = { [weak self] text in
             self?.copyScanPayload(text)
         }
-        barcodePanel.onOpenLink = { url in
-            NSWorkspace.shared.open(url)
+        barcodePanel.onOpenLink = { [weak self] url in
+            self?.openScanLink(url)
         }
         barcodePanel.onRescan = { [weak self] in
             self?.scanSelectedRegion(liveCapture: true)
         }
         barcodePanel.onCopyAll = { [weak self] in
             self?.copyAllScanPayloads()
+        }
+        barcodePanel.onClose = { [weak self] in
+            _ = self?.dismissBarcodePanel()
         }
         addSubview(barcodePanel)
     }
@@ -131,15 +104,59 @@ extension AreaTrackingView {
         return true
     }
 
+    /// 打开识别到的链接。
+    ///
+    /// 遮罩是 `.screenSaver` 级别的全屏面板：不先收掉它，浏览器会被整块盖住，
+    /// 看起来就是「按钮没反应」。所以先结束选区会话、关掉所有屏幕的遮罩，
+    /// 再把 URL 交给系统；系统没有能处理它的应用时退回复制。
+    func openScanLink(_ url: URL) {
+        guard NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
+            copyScanPayload(url.absoluteString)
+            NSSound.beep()
+            return
+        }
+
+        cancelScan()
+        scanState = .idle
+        onSelectionComplete?(nil)
+        DispatchQueue.main.async {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// 打开第一条链接结果（`⌘↵`）。
+    @discardableResult
+    func openFirstScanLink() -> Bool {
+        guard case .results(let results) = scanState,
+              let payload = BarcodePayloadFormatter.payloads(from: results).first,
+              let url = payload.webLink
+        else { return false }
+        openScanLink(url)
+        return true
+    }
+
     /// 按扫描状态刷新浮层：`.idle` 隐藏，其余状态显示并重新贴靠动作栏。
     func refreshBarcodePanel() {
         guard phase == .choosingAction, scanState.isVisible else {
             barcodePanel.isHidden = true
             return
         }
+        let wasHidden = barcodePanel.isHidden
         barcodePanel.update(state: scanState)
         barcodePanel.isHidden = false
         positionBarcodePanel()
+        if wasHidden {
+            activateForScanPanel()
+        }
+    }
+
+    /// 浮层一出现就请求激活，并把面板设为 key。
+    ///
+    /// 遮罩是 `.nonactivatingPanel`：少了这一步，进程一直是「非活跃」，
+    /// 首次点击会被当成激活点击交给 `mouseDown`，按钮和正文都收不到事件。
+    private func activateForScanPanel() {
+        SystemApplicationActivationController().requestActivation()
+        window?.makeKey()
     }
 
     /// 把浮层贴到动作栏外侧，并夹在屏幕范围内。
@@ -163,7 +180,7 @@ extension AreaTrackingView {
         let spaceBelowSelection = selectionRect.minY - margin - (bounds.minY + inset)
         let barIsBelowSelection = barFrame.midY < selectionRect.midY
 
-        var originY: CGFloat
+        let originY: CGFloat
         if barIsBelowSelection, spaceBelowBar >= size.height {
             originY = barFrame.minY - margin - size.height
         } else if !barIsBelowSelection, spaceAboveBar >= size.height {
@@ -181,9 +198,13 @@ extension AreaTrackingView {
             originY = bounds.midY - size.height / 2
         }
         let maximumY = max(bounds.minY + inset, bounds.maxY - size.height - inset)
-        originY = min(max(originY, bounds.minY + inset), maximumY)
-
-        barcodePanel.frame = CGRect(origin: CGPoint(x: originX, y: originY), size: size)
+        barcodePanel.frame = CGRect(
+            origin: CGPoint(
+                x: originX,
+                y: min(max(originY, bounds.minY + inset), maximumY)
+            ),
+            size: size
+        )
     }
 
     /// `s` 识别、`r` 重新识别（仅浮层可见时）。
@@ -205,6 +226,23 @@ extension AreaTrackingView {
         default:
             return false
         }
+    }
+
+    /// 浮层可见时的组合键：`⌘↵` 打开链接，`⌘C` 复制整条内容。
+    ///
+    /// `⌘C` 在正文有选中文本时不消费，交给字段编辑器复制选中的片段。
+    func handleScanCommand(_ event: NSEvent) -> Bool {
+        guard phase == .choosingAction,
+              scanState.isVisible,
+              event.modifierFlags.contains(.command)
+        else { return false }
+
+        if event.keyCode == 36 || event.keyCode == 76 {
+            return openFirstScanLink()
+        }
+        guard event.charactersIgnoringModifiers?.lowercased() == "c" else { return false }
+        guard !hasSelectedScanText() else { return false }
+        return copyFirstScanPayload()
     }
 
     /// 取消进行中的识别任务（换选区、收动作栏、关浮层都会走这里）。
@@ -241,6 +279,11 @@ extension AreaTrackingView {
     }
 
     // MARK: - 复制
+
+    private func hasSelectedScanText() -> Bool {
+        guard let editor = window?.firstResponder as? NSTextView else { return false }
+        return editor.selectedRange().length > 0
+    }
 
     private func copyScanPayload(_ text: String) {
         NSPasteboard.general.clearContents()

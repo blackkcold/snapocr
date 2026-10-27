@@ -168,6 +168,12 @@ final class AreaTrackingView: NSView {
         if phase == .choosingAction {
             let actionPoint = actionBar.convert(point, from: self)
             if actionBar.performAction(at: actionPoint) { return }
+            // 卡片内的点击永远不算「点空白」：事件偶尔会绕过控件落到这里，
+            // 按坐标补派一次，避免一次正文点击把结果浮层整个关掉。
+            if !barcodePanel.isHidden, barcodePanel.frame.contains(point) {
+                _ = barcodePanel.handleClick(at: barcodePanel.convert(point, from: self))
+                return
+            }
             // 点空白先收浮层，动作栏留在原处。
             if dismissBarcodePanel() {
                 actionBar.focusDefaultAction()
@@ -259,6 +265,7 @@ final class AreaTrackingView: NSView {
     /// Catches the pin shortcut when the event carries key-equivalent modifiers
     /// (⌘ / ⌃ / ⌥), which AppKit resolves before dispatching `keyDown`.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleScanCommand(event) { return true }
         guard PinSelectionShortcut.matches(event: event), isPinShortcutPhase else {
             return super.performKeyEquivalent(with: event)
         }
