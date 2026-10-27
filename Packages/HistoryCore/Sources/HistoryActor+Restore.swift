@@ -13,10 +13,13 @@ extension HistoryActor {
     ///   - entry: 被删除的条目元数据。
     ///   - imageData: 删除前解密的截图数据；`nil` 表示该条目本就没有图片。
     ///   - thumbnailData: 删除前的缩略图数据；缺失时条目仍可恢复，只是没有预览图。
+    ///   - originalImageData: 「覆盖原记录」之前保留的原图；撤销删除时必须一并
+    ///     写回，否则条目仍声称可还原原图，但底层文件已在删除事务中被移走。
     public func restore(
         _ entry: HistoryEntry,
         imageData: Data?,
-        thumbnailData: Data?
+        thumbnailData: Data?,
+        originalImageData: Data? = nil
     ) async throws {
         var restored = entry
         var createdFiles: [URL] = []
@@ -34,6 +37,17 @@ extension HistoryActor {
                 restored.imagePath = imageURL
             } else {
                 restored.imagePath = nil
+            }
+
+            if let originalImageData, restored.imageRevision != nil {
+                let originalURL = mediaURL(for: restored.id, revision: nil, thumbnail: false)
+                let encryptedOriginal = try cryptoService.encrypt(originalImageData)
+                try encryptedOriginal.write(to: originalURL, options: .atomic)
+                createdFiles.append(originalURL)
+            } else if restored.imageRevision != nil {
+                // 没有原图字节就不能继续宣称「可还原原图」，否则菜单项会
+                // 永久指向一个不存在的文件，点击只会得到错误提示。
+                restored.imageRevision = nil
             }
 
             if let thumbnailData {

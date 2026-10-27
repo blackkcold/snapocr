@@ -113,11 +113,19 @@ extension AreaTrackingView {
     private func drawSelectionOutline(in context: CGContext) {
         if style == .freeform, freeformPoints.count >= 2 {
             let path = freeformPath()
+            // 深色衬边 + 白色内描边：单白线在白底网页/浅色 PDF 上几乎不可见。
+            context.setStrokeColor(NSColor.black.withAlphaComponent(0.45).cgColor)
+            context.setLineWidth(3)
+            context.addPath(path)
+            context.strokePath()
             context.setStrokeColor(NSColor.white.cgColor)
             context.setLineWidth(2)
             context.addPath(path)
             context.strokePath()
         } else if !selectionRect.isEmpty {
+            context.setStrokeColor(NSColor.black.withAlphaComponent(0.45).cgColor)
+            context.setLineWidth(3)
+            context.stroke(selectionRect.insetBy(dx: -1.5, dy: -1.5))
             context.setStrokeColor(NSColor.white.cgColor)
             context.setLineWidth(2)
             context.stroke(selectionRect.insetBy(dx: -1, dy: -1))
@@ -172,13 +180,19 @@ extension AreaTrackingView {
         let textPadding: CGFloat = 6
         let lineHeight = max(hexSize.height, rgbSize.height)
         let textWidth = max(hexSize.width, rgbSize.width)
-        let rect = CGRect(
-            x: point.x + 16,
-            y: point.y + 16,
+        let labelSize = CGSize(
             width: swatchSize + swatchPadding + textWidth + textPadding * 2,
             height: lineHeight * 2 + 8
         )
-        NSColor.black.withAlphaComponent(0.75).setFill()
+        let rect = hoverLabelRect.isEmpty
+            ? LabelPlacement.rect(
+                size: labelSize,
+                near: point,
+                offset: CGSize(width: DS.Space.s16, height: DS.Space.s16),
+                inside: bounds
+            )
+            : hoverLabelRect
+        NSColor.black.withAlphaComponent(Palette.labelBackground).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
         let swatchRect = CGRect(
             x: rect.minX + 6,
@@ -215,9 +229,23 @@ extension AreaTrackingView {
     }
 
     private func drawHandles() {
-        NSColor.white.setFill()
-        for point in handlePoints().values {
-            NSBezierPath(ovalIn: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)).fill()
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        for (handle, point) in handlePoints() {
+            let isHovered = handle == hoveredHandle
+            let scale: CGFloat = isHovered && !reduceMotion ? 1.2 : 1
+            let size = DS.Control.handleVisualSize * scale
+            let rect = CGRect(
+                x: point.x - size / 2,
+                y: point.y - size / 2,
+                width: size,
+                height: size
+            )
+            let path = NSBezierPath(ovalIn: rect)
+            Palette.handleFill.setFill()
+            path.fill()
+            (isHovered ? Palette.handleHoverStroke : Palette.handleStroke).setStroke()
+            path.lineWidth = isHovered ? 1.5 : 1
+            path.stroke()
         }
     }
 

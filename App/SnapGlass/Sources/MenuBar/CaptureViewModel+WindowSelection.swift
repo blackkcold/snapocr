@@ -14,9 +14,11 @@ extension CaptureViewModel {
     func selectWindow() async -> WindowSelectionResult? {
         await withCheckedContinuation { continuation in
             var didResume = false
+            var timeoutTask: Task<Void, Never>?
             let resumeOnce: (WindowSelectionResult?) -> Void = { result in
                 guard !didResume else { return }
                 didResume = true
+                timeoutTask?.cancel()
                 continuation.resume(returning: result)
             }
 
@@ -26,9 +28,9 @@ extension CaptureViewModel {
                 }
             }
 
-            Task { @MainActor in
+            timeoutTask = Task { @MainActor in
                 try? await Task.sleep(for: .seconds(60))
-                guard !didResume else { return }
+                guard !Task.isCancelled, !didResume else { return }
                 WindowSelectionPanel.closeActivePanel()
                 resumeOnce(nil)
                 showToast(

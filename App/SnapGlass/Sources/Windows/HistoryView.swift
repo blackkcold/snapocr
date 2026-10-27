@@ -26,10 +26,12 @@ struct HistoryView: View {
     @State var thumbnailSizes: [UUID: CGSize] = [:]
     @State var updatingFavourites: Set<UUID> = []
     @State var screenshotLoadID = UUID()
-    @State var errorMessage: String?
+    @State var failure: HistoryFailure?
     @State private var searchTask: Task<Void, Never>?
     @State var visibleColumnCount = 4
     @State var toastMessage: ToastMessage?
+    @State var toastDeduplicator = ToastDeduplicator()
+    @FocusState private var isGridFocused: Bool
     /// True while the first/refresh load is running; prevents the empty state
     /// from flashing before the actor has finished its lazy disk scan.
     @State var isLoadingScreenshots = true
@@ -89,16 +91,10 @@ struct HistoryView: View {
             // never shows stale thumbnails.
             Task { await loadEntries() }
         }
-        .onChange(of: errorMessage) { message in
-            guard let message, !message.isEmpty else { return }
-            errorMessage = nil
-            showToast(
-                message,
-                type: .error,
-                actionLabel: AppLocalization.string("Retry"),
-                action: { Task { await loadEntries() } },
-                duration: 6
-            )
+        .onChange(of: failure) { failure in
+            guard let failure else { return }
+            self.failure = nil
+            present(failure)
         }
         .onChange(of: segment) { _ in
             searchTask?.cancel()
@@ -175,7 +171,10 @@ struct HistoryView: View {
                             entry: entry, imageSize: thumbnailSizes[entry.id],
                             isSelected: selectedEntryID == entry.id,
                             isUpdatingFavourite: updatingFavourites.contains(entry.id),
-                            onSelect: { selectedEntryID = entry.id },
+                            onSelect: {
+                                selectedEntryID = entry.id
+                                isGridFocused = true
+                            },
                             onOpen: {
                                 selectedEntryID = entry.id
                                 Task { await openInEditor(entry) }
@@ -190,6 +189,13 @@ struct HistoryView: View {
             .onAppear { visibleColumnCount = count }
             .onChange(of: count) { visibleColumnCount = $0 }
             .focusable()
+            .focused($isGridFocused)
+            .onReturnKey(enabled: selectedEntryID != nil) {
+                guard let id = selectedEntryID,
+                      let selected = visibleEntries.first(where: { $0.id == id })
+                else { return }
+                Task { await openInEditor(selected) }
+            }
             .onDeleteCommand {
                 guard let id = selectedEntryID,
                       let selected = visibleEntries.first(where: { $0.id == id })

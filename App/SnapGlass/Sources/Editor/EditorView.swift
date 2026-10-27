@@ -1,14 +1,19 @@
 import SwiftUI
 import AppKit
 import AnnotationCore
+import SharedKit
 
 struct EditorView: View {
-    @StateObject private var editorVM: EditorViewModel
+    @ObservedObject var editorVM: EditorViewModel
     private let context: EditorCaptureContext
 
-    init(image: CGImage, context: EditorCaptureContext = .standard) {
+    /// 检查器常驻开关（⌥⌘I）。默认常驻，避免选中标注时画布宽度跳动。
+    @AppStorage(PreferenceKeys.editorInspectorVisible)
+    private var showsInspector = PreferenceDefaults.editorInspectorVisible
+
+    init(viewModel: EditorViewModel, context: EditorCaptureContext = .standard) {
+        self.editorVM = viewModel
         self.context = context
-        self._editorVM = StateObject(wrappedValue: EditorViewModel(image: image, context: context))
     }
 
     var body: some View {
@@ -107,9 +112,7 @@ struct EditorView: View {
                     .frame(minWidth: 500, minHeight: 400)
                 }
 
-                if editorVM.selectedNode != nil
-                    || (editorVM.selectedTool.annotationTool != nil && editorVM.selectedTool != .crop)
-                    || editorVM.selectedTool == .picker {
+                if showsInspector {
                     AnnotationInspectorView(viewModel: editorVM)
                 }
             }
@@ -117,67 +120,33 @@ struct EditorView: View {
             bottomBar
                 .disabled(editorVM.isEnteringText)
         }
-        .frame(minWidth: 640, minHeight: 480)
+        .overlay(alignment: .topTrailing) {
+            if editorVM.isApplyingCrop {
+                HStack(spacing: DS.Space.s6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Processing…")
+                        .font(DS.Typography.caption)
+                }
+                .padding(.horizontal, DS.Space.s10)
+                .padding(.vertical, DS.Space.s6)
+                .glassSurface(Capsule(), elevation: .raised)
+                .padding(DS.Space.s12)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .frame(minWidth: 740, minHeight: 480)
         .task(id: context.sourceEntryID) {
             if let entryID = context.sourceEntryID {
                 editorVM.attachSourceEntry(entryID)
             }
         }
         .toast(message: $editorVM.toastMessage)
-        .background(
-            EditorWindowCloseGuard(
-                isDirty: { editorVM.hasUnsavedChanges && !editorVM.hasAcceptedClose },
-                onBlocked: { editorVM.showsCloseConfirmation = true }
-            )
-        )
-        .sheet(isPresented: $editorVM.showsCloseConfirmation) {
-            closeConfirmation
-        }
-        .onAppear {
-            editorVM.onClose = {
-                AppWindowPresenter.window(id: "editor")?.close()
-            }
-            editorVM.onForceClose = {
-                AppWindowPresenter.window(id: "editor")?.close()
-            }
-        }
         .onDisappear { editorVM.cancelTextEntry() }
     }
 
-    /// Three-way choice shown when closing would discard annotations.
-    private var closeConfirmation: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Save your annotations?")
-                .font(.headline)
-
-            Text("Closing the editor now discards the annotations on this screenshot.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                Button("Discard", role: .destructive) {
-                    editorVM.discardAndClose()
-                }
-                Spacer()
-                Button("Cancel") {
-                    editorVM.showsCloseConfirmation = false
-                }
-                .keyboardShortcut(.cancelAction)
-                Button("Save") {
-                    editorVM.saveThenClose()
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(20)
-        .frame(width: 380)
-        .interactiveDismissDisabled()
-    }
-
     private var bottomBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Space.s10) {
             Button("Cancel") {
                 editorVM.cancel()
             }
@@ -190,9 +159,9 @@ struct EditorView: View {
             } label: {
                 Image(systemName: "arrow.uturn.backward")
             }
-            .disabled(!editorVM.canUndo)
+            .disabled(!editorVM.canUndo || editorVM.isApplyingCrop)
             .keyboardShortcut("z", modifiers: .command)
-            .help("Undo (⌘Z)")
+            .help(editorVM.isApplyingCrop ? Text("Processing crop…") : Text("Undo (⌘Z)"))
             .accessibilityLabel("Undo")
 
             Button {
@@ -200,13 +169,13 @@ struct EditorView: View {
             } label: {
                 Image(systemName: "arrow.uturn.forward")
             }
-            .disabled(!editorVM.canRedo)
+            .disabled(!editorVM.canRedo || editorVM.isApplyingCrop)
             .keyboardShortcut("z", modifiers: [.command, .shift])
-            .help("Redo (⇧⌘Z)")
+            .help(editorVM.isApplyingCrop ? Text("Processing crop…") : Text("Redo (⇧⌘Z)"))
             .accessibilityLabel("Redo")
 
             Divider()
-                .frame(height: 18)
+                .frame(height: DS.Space.s18)
 
             Toggle(isOn: $editorVM.showsOCROverlay) {
                 Image(systemName: "text.viewfinder")
@@ -229,22 +198,30 @@ struct EditorView: View {
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .help("Save the annotated image into history (⇧⌘S)")
-            .disabled(editorVM.isEnteringText)
+            .disabled(editorVM.isEnteringText || editorVM.isApplyingCrop || editorVM.isWritingImage)
 
             Button("Copy") {
                 editorVM.copyContextually()
             }
             .keyboardShortcut("c", modifiers: .command)
-            .help("Copy the annotated image to the clipboard (⌘C)")
+            .help(editorVM.isApplyingCrop
+                  ? Text("Processing crop…")
+                  : Text("Copy the annotated image to the clipboard (⌘C)"))
+            .disabled(editorVM.isApplyingCrop || editorVM.isWritingImage)
 
             Button("Save") {
                 editorVM.save()
             }
             .keyboardShortcut("s", modifiers: .command)
+            .help(editorVM.isApplyingCrop
+                  ? Text("Processing crop…")
+                  : Text("Save the annotated image (⌘S)"))
+            .disabled(editorVM.isApplyingCrop || editorVM.isWritingImage)
             .buttonStyle(.borderedProminent)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, DS.Space.s14)
+        .padding(.vertical, DS.Space.s9)
+        .glassSurface(Rectangle(), elevation: .raised, castsShadow: false, showsStroke: false)
+        .overlay(alignment: .top) { Divider() }
     }
 }

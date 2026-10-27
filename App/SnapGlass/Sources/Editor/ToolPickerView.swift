@@ -25,16 +25,16 @@ struct ToolPickerView: View {
             fullControls
             compactControls
         })
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7)
-        .background(.ultraThinMaterial, in: Capsule())
-        .padding(10)
+        .padding(.horizontal, DS.Space.s14)
+        .padding(.vertical, DS.Space.s7)
+        .glassSurface(Capsule(), elevation: .raised)
+        .padding(DS.Space.s10)
     }
 
     // MARK: - Layouts
 
     private var fullControls: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DS.Space.s6) {
             if isVerticalTrimAvailable {
                 trimButton
                 divider
@@ -68,7 +68,7 @@ struct ToolPickerView: View {
     }
 
     private var compactControls: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DS.Space.s6) {
             toolGroup
 
             divider
@@ -120,8 +120,8 @@ struct ToolPickerView: View {
             .disabled(isBarcodeScanning)
         } label: {
             Image(systemName: "ellipsis.circle")
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 28, height: 28)
+                .font(DS.Typography.control)
+                .frame(width: DS.Hit.small, height: DS.Hit.small)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -133,7 +133,7 @@ struct ToolPickerView: View {
     // MARK: - Controls
 
     private var toolGroup: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: DS.Space.s2) {
             ForEach(EditorTool.allCases) { tool in
                 if tool != .ocr {
                     toolButton(tool)
@@ -148,14 +148,14 @@ struct ToolPickerView: View {
                 .labelStyle(.titleAndIcon)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 7)
-        .frame(height: 28)
+        .padding(.horizontal, DS.Control.trimButtonHorizontal)
+        .frame(height: DS.Hit.small)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DS.Corner.c6)
                 .fill(isVerticalTrimActive ? Color.accentColor.opacity(0.18) : .clear)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DS.Corner.c6)
                 .strokeBorder(
                     isVerticalTrimActive ? Color.accentColor.opacity(0.5) : .clear,
                     lineWidth: 1
@@ -178,13 +178,13 @@ struct ToolPickerView: View {
             }
         }
         .pickerStyle(.menu)
-        .frame(width: 108)
+        .frame(width: DS.Control.presetWidth)
         .accessibilityLabel("Style preset")
     }
 
     private var colorPicker: some View {
         ColorPicker("", selection: $selectedColor)
-            .frame(width: 26, height: 26)
+            .frame(width: DS.Control.colorWell, height: DS.Control.colorWell)
             .labelsHidden()
             .help("Annotation color")
             .accessibilityLabel("Annotation color")
@@ -197,13 +197,13 @@ struct ToolPickerView: View {
             }
         }
         .pickerStyle(.menu)
-        .frame(width: 62)
+        .frame(width: DS.Control.strokeWidthPicker)
         .help("Stroke width")
         .accessibilityLabel("Stroke width")
     }
 
     private var ocrControls: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DS.Space.s6) {
             if isOCRRunning {
                 ProgressView()
                     .controlSize(.small)
@@ -252,12 +252,12 @@ struct ToolPickerView: View {
     /// Zoom readout plus in/out buttons. Percentages refer to the image's own
     /// pixels, so "100%" means one image pixel per point.
     private var zoomControl: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: DS.Space.s2) {
             Button {
                 zoomController.zoomOut()
             } label: {
                 Image(systemName: "minus.magnifyingglass")
-                    .frame(width: 22, height: 24)
+                    .frame(width: DS.Control.zoomButtonWidth, height: DS.Control.zoomButtonHeight)
             }
             .buttonStyle(.plain)
             .disabled(zoomController.isFit)
@@ -280,7 +280,7 @@ struct ToolPickerView: View {
                 zoomController.zoomIn()
             } label: {
                 Image(systemName: "plus.magnifyingglass")
-                    .frame(width: 22, height: 24)
+                    .frame(width: DS.Control.zoomButtonWidth, height: DS.Control.zoomButtonHeight)
             }
             .buttonStyle(.plain)
             .disabled(zoomController.scale >= 7.999)
@@ -303,7 +303,7 @@ struct ToolPickerView: View {
     }
 
     private var divider: some View {
-        Divider().frame(height: 22)
+        Divider().frame(height: DS.Control.dividerHeight)
     }
 
     private func toolButton(_ tool: EditorTool) -> some View {
@@ -311,16 +311,16 @@ struct ToolPickerView: View {
             selectedTool = tool
         } label: {
             Image(systemName: tool.iconName)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 28, height: 28)
+                .font(DS.Typography.control)
+                .frame(width: DS.Hit.small, height: DS.Hit.small)
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DS.Corner.c6)
                 .fill(selectedTool == tool ? Color.accentColor.opacity(0.18) : .clear)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DS.Corner.c6)
                 .strokeBorder(
                     selectedTool == tool ? Color.accentColor.opacity(0.5) : .clear,
                     lineWidth: 1

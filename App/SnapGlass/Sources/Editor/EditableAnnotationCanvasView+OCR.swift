@@ -8,13 +8,24 @@ import SwiftUI
 // MARK: - OCR 文本选取、布局与绘制
 
 extension EditableAnnotationCanvasNSView {
+    /// 两档透明度的填充/描边色。每帧解析一次而不是每行一次；用计算属性而不是
+    /// `static let`，否则明暗外观切换后颜色会被冻结在首次使用时的外观上。
+    private static var ocrFillActive: CGColor { NSColor.systemBlue.withAlphaComponent(0.06).cgColor }
+    private static var ocrFillPassive: CGColor { NSColor.systemBlue.withAlphaComponent(0.035).cgColor }
+    private static var ocrStrokeActive: CGColor { NSColor.systemBlue.withAlphaComponent(0.55).cgColor }
+    private static var ocrStrokePassive: CGColor { NSColor.systemBlue.withAlphaComponent(0.25).cgColor }
+    private static var ocrSelectionFill: CGColor {
+        NSColor.selectedContentBackgroundColor.withAlphaComponent(0.68).cgColor
+    }
+
     func drawOCROverlay(in context: CGContext) {
         context.saveGState()
+        let isActive = currentTool == .ocr
+        context.setFillColor(isActive ? Self.ocrFillActive : Self.ocrFillPassive)
+        context.setStrokeColor(isActive ? Self.ocrStrokeActive : Self.ocrStrokePassive)
+        context.setLineWidth(isActive ? 1 : 0.75)
         for line in ocrLines {
             let rect = viewRect(from: line.editorBoundingBox)
-            context.setFillColor(NSColor.systemBlue.withAlphaComponent(currentTool == .ocr ? 0.06 : 0.035).cgColor)
-            context.setStrokeColor(NSColor.systemBlue.withAlphaComponent(currentTool == .ocr ? 0.55 : 0.25).cgColor)
-            context.setLineWidth(currentTool == .ocr ? 1 : 0.75)
             context.fill(rect)
             context.stroke(rect)
         }
@@ -23,9 +34,7 @@ extension EditableAnnotationCanvasNSView {
             if selection.isEmpty {
                 drawOCRInsertionPoint(selection.extent, in: context)
             } else {
-                context.setFillColor(
-                    NSColor.selectedContentBackgroundColor.withAlphaComponent(0.68).cgColor
-                )
+                context.setFillColor(Self.ocrSelectionFill)
                 for rect in ocrSelectionRects(for: selection) {
                     context.fill(rect)
                 }
@@ -39,7 +48,7 @@ extension EditableAnnotationCanvasNSView {
     func drawOCRInsertionPoint(_ position: OCRTextPosition, in context: CGContext) {
         guard orderedOCRLines.indices.contains(position.lineIndex) else { return }
         let line = orderedOCRLines[position.lineIndex]
-        let layout = ocrLineLayout(for: line)
+        let layout = ocrLineLayout(for: line, index: position.lineIndex)
         let offset = min(position.offset, (line.text as NSString).length)
         let insertionX = layout.rect.minX
             + CTLineGetOffsetForStringIndex(layout.line, offset, nil) * layout.horizontalScale
@@ -54,7 +63,7 @@ extension EditableAnnotationCanvasNSView {
         let lines = orderedOCRLines
         return selection.slices(in: lines.map(\.text)).compactMap { slice in
             guard slice.length > 0, lines.indices.contains(slice.lineIndex) else { return nil }
-            let layout = ocrLineLayout(for: lines[slice.lineIndex])
+            let layout = ocrLineLayout(for: lines[slice.lineIndex], index: slice.lineIndex)
             let start = CTLineGetOffsetForStringIndex(layout.line, slice.location, nil)
             let end = CTLineGetOffsetForStringIndex(layout.line, NSMaxRange(slice.range), nil)
             let minX = layout.rect.minX + min(start, end) * layout.horizontalScale
@@ -81,7 +90,8 @@ extension EditableAnnotationCanvasNSView {
     }
 
     var orderedOCRLines: [OCRLine] {
-        ocrLines
+        if let cached = ocrOrderedLinesCache { return cached }
+        let ordered = ocrLines
             .filter { !$0.text.isEmpty && !$0.editorBoundingBox.isEmpty }
             .sorted { lhs, rhs in
                 let lhsRect = lhs.editorBoundingBox
@@ -92,6 +102,8 @@ extension EditableAnnotationCanvasNSView {
                 }
                 return lhsRect.minX < rhsRect.minX
             }
+        ocrOrderedLinesCache = ordered
+        return ordered
     }
 
     func ocrLineHit(at point: CGPoint) -> OCRLineHit? {
@@ -119,7 +131,7 @@ extension EditableAnnotationCanvasNSView {
     }
 
     func textPosition(in hit: OCRLineHit, at point: CGPoint) -> OCRTextPosition {
-        let layout = ocrLineLayout(for: hit.line)
+        let layout = ocrLineLayout(for: hit.line, index: hit.index)
         let textLength = (hit.line.text as NSString).length
         let localX = (point.x - layout.rect.minX) / max(layout.horizontalScale, 0.001)
         let index = CTLineGetStringIndexForPosition(
@@ -135,15 +147,29 @@ extension EditableAnnotationCanvasNSView {
         return OCRTextPosition(lineIndex: hit.index, offset: offset)
     }
 
-    func ocrLineLayout(for line: OCRLine) -> OCRLineLayout {
+    func ocrLineLayout(for line: OCRLine, index: Int) -> OCRLineLayout {
         let rect = viewRect(from: line.editorBoundingBox)
-        let font = fittedOCRFont(for: line.text, in: rect.size)
-        let attributedString = NSAttributedString(
-            string: line.text,
-            attributes: [.font: font]
-        )
-        let textLine = CTLineCreateWithAttributedString(attributedString)
-        let measuredWidth = CGFloat(CTLineGetTypographicBounds(textLine, nil, nil, nil))
+
+        let textLine: CTLine
+        let measuredWidth: CGFloat
+        if let cached = ocrTextLineCache[index], cached.size == rect.size {
+            textLine = cached.line
+            measuredWidth = cached.measuredWidth
+        } else {
+            let font = fittedOCRFont(for: line.text, in: rect.size)
+            let attributedString = NSAttributedString(
+                string: line.text,
+                attributes: [.font: font]
+            )
+            textLine = CTLineCreateWithAttributedString(attributedString)
+            measuredWidth = CGFloat(CTLineGetTypographicBounds(textLine, nil, nil, nil))
+            ocrTextLineCache[index] = OCRTextLineCache(
+                size: rect.size,
+                line: textLine,
+                measuredWidth: measuredWidth
+            )
+        }
+
         return OCRLineLayout(
             line: textLine,
             rect: rect,
@@ -163,6 +189,8 @@ extension EditableAnnotationCanvasNSView {
         }.joined(separator: "\n")
         if newContentSignature != ocrContentSignature {
             ocrContentSignature = newContentSignature
+            ocrOrderedLinesCache = nil
+            ocrTextLineCache.removeAll()
             ocrTextSelection = nil
             if case .selectingOCRText = interaction {
                 interaction = .none

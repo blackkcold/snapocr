@@ -267,7 +267,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
     private func multiResultContent(payloads: [BarcodePayload]) -> [NSView] {
         var views: [NSView] = [
             header(
-                title: AppLocalization.string("%d barcodes found", payloads.count),
+                title: AppLocalization.string("%lld barcodes found", payloads.count),
                 badge: nil
             ),
         ]

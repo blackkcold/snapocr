@@ -8,13 +8,13 @@ public struct ToastView: View {
     let message: ToastMessage
     
     public var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.s12) {
             Image(systemName: iconName)
                 .foregroundColor(iconColor)
-                .font(.system(size: 16, weight: .semibold))
-            
+                .font(DS.Typography.icon)
+
             Text(message.message)
-                .font(.system(size: 14, weight: .medium))
+                .font(DS.Typography.toast)
                 .foregroundColor(.primary)
 
             if let actionLabel = message.actionLabel, let action = message.action {
@@ -25,17 +25,12 @@ public struct ToastView: View {
                 .controlSize(.small)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(0.2), lineWidth: 0.5)
-        }
+        .padding(.horizontal, DS.Space.s16)
+        .padding(.vertical, DS.Space.s12)
+        .glassSurface(
+            RoundedRectangle(cornerRadius: DS.Corner.c12, style: .continuous),
+            elevation: .overlay
+        )
     }
     
     /// The SF Symbol name for the toast type.
@@ -65,19 +60,24 @@ public struct ToastModifier: ViewModifier {
     @Binding var toast: ToastMessage?
     /// The edge of the container where the toast appears.
     var edge: Edge = .top
-    
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     public func body(content: Content) -> some View {
         ZStack(alignment: edge == .top ? .top : .bottom) {
             content
-            
+
             if let toast = toast {
                 ToastView(message: toast)
                     .transition(.move(edge: edge).combined(with: .opacity))
-                    .padding(Edge.Set(edge), 20)
+                    .padding(Edge.Set(edge), DS.Space.s20)
                     .zIndex(100)
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: toast != nil)
+        .animation(
+            reduceMotion ? nil : .spring(response: DS.Motion.slow, dampingFraction: 0.7),
+            value: toast != nil
+        )
     }
 }
 

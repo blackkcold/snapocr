@@ -45,11 +45,13 @@ struct CanvasTextRenderingTests {
     #expect(abs(inline.height - committed.height) < 0.015)
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
       .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("release")
+    // CI 上 release/ 不存在，诊断产物写入前先建目录；写失败不应影响几何断言。
+    try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let artifact = root.appendingPathComponent("text-preview-\(UUID().uuidString).png")
-    try bitmap.representation(using: .png, properties: [:])?.write(to: artifact)
+    try? bitmap.representation(using: .png, properties: [:])?.write(to: artifact)
     print("Inline text render evidence: \(artifact.path)")
     let finalArtifact = root.appendingPathComponent("text-committed-\(UUID().uuidString).png")
-    try NSBitmapImageRep(cgImage: rendered).representation(using: .png, properties: [:])?.write(to: finalArtifact)
+    try? NSBitmapImageRep(cgImage: rendered).representation(using: .png, properties: [:])?.write(to: finalArtifact)
     print("Committed text render evidence: \(finalArtifact.path); inline \(inline), committed \(committed)")
   }
 

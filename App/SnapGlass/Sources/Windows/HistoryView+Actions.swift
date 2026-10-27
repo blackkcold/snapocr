@@ -23,6 +23,7 @@ extension HistoryView {
         action: (@MainActor () -> Void)? = nil,
         duration: TimeInterval = 3
     ) {
+        guard toastDeduplicator.shouldPresent(message) else { return }
         let toast = ToastMessage(
             message: message,
             type: type,
@@ -38,6 +39,50 @@ extension HistoryView {
         }
     }
 
+    /// 把失败归类后交给视图统一呈现出口。
+    func reportFailure(
+        _ kind: HistoryFailure.Kind,
+        message: String,
+        entryID: UUID? = nil
+    ) {
+        failure = HistoryFailure(kind: kind, message: message, entryID: entryID)
+    }
+
+    /// 按失败类型给出口：加载→重试，复制→再次复制，资源丢失→打开目录。
+    func present(_ failure: HistoryFailure) {
+        let actionLabel: String?
+        let action: (@MainActor () -> Void)?
+
+        switch failure.recovery {
+        case .retryLoad:
+            actionLabel = AppLocalization.string("Retry")
+            action = { Task { await loadEntries() } }
+        case .retryCopy:
+            if let entryID = failure.entryID,
+               let entry = entries.first(where: { $0.id == entryID }) {
+                actionLabel = AppLocalization.string("Copy Again")
+                action = { Task { await copyImage(entry) } }
+            } else {
+                actionLabel = AppLocalization.string("Open Storage Folder")
+                action = { openHistoryFolder() }
+            }
+        case .revealStorage:
+            actionLabel = AppLocalization.string("Open Storage Folder")
+            action = { openHistoryFolder() }
+        case .dismiss:
+            actionLabel = nil
+            action = nil
+        }
+
+        showToast(
+            failure.message,
+            type: .error,
+            actionLabel: actionLabel,
+            action: action,
+            duration: action == nil ? 4 : 6
+        )
+    }
+
     func loadEntries() async {
         switch segment {
         case .screenshots:
@@ -51,6 +96,9 @@ extension HistoryView {
     /// failure (for example, a transient permissions or key-access problem).
     func retryHistoryInitialization() async {
         if history == nil {
+            // A permanently cached failure would make Retry a no-op forever;
+            // drop the cached instance so the next access re-initializes it.
+            HistoryActor.resetSharedForRetry()
             history = try? HistoryActor.sharedResult().get()
         }
         await loadEntries()
@@ -92,7 +140,7 @@ extension HistoryView {
             guard screenshotLoadID == loadID else { return }
             entries = []
             loadError = error.localizedDescription
-            errorMessage = error.localizedDescription
+            reportFailure(.load, message: error.localizedDescription)
         }
     }
 
@@ -133,6 +181,12 @@ extension HistoryView {
             // Keep the bytes so the deletion can be undone from the toast.
             let imageData = try await history.imageData(for: entry.id)
             let thumbnailData = try await history.thumbnailData(for: entry.id)
+            // Delete moves the original and the edited media into a transaction
+            // folder that is removed immediately, so the undo payload must carry
+            // both or "Restore Original Image" becomes a dead menu item.
+            let originalImageData = entry.canRestoreOriginal
+                ? try? await history.originalImageData(for: entry.id)
+                : nil
             try await history.delete(id: entry.id)
             await loadEntries()
             showToast(
@@ -140,26 +194,39 @@ extension HistoryView {
                 type: .info,
                 actionLabel: AppLocalization.string("Undo"),
                 action: {
-                    Task { await restoreDeletedEntry(entry, imageData: imageData, thumbnailData: thumbnailData) }
+                    Task {
+                        await restoreDeletedEntry(
+                            entry,
+                            imageData: imageData,
+                            thumbnailData: thumbnailData,
+                            originalImageData: originalImageData
+                        )
+                    }
                 },
                 duration: 6
             )
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
     private func restoreDeletedEntry(
         _ entry: HistoryEntry,
         imageData: Data?,
-        thumbnailData: Data?
+        thumbnailData: Data?,
+        originalImageData: Data?
     ) async {
         guard let history else { return }
         do {
-            try await history.restore(entry, imageData: imageData, thumbnailData: thumbnailData)
+            try await history.restore(
+                entry,
+                imageData: imageData,
+                thumbnailData: thumbnailData,
+                originalImageData: originalImageData
+            )
             await loadEntries()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
@@ -173,7 +240,7 @@ extension HistoryView {
                 entries[index] = updated
             }
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
@@ -184,7 +251,7 @@ extension HistoryView {
             try await colorHistory.delete(id: entry.id)
             await loadEntries()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
@@ -201,7 +268,7 @@ extension HistoryView {
                   let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
             else {
-                errorMessage = AppLocalization.string("Unable to copy image")
+                reportFailure(.copy, message: AppLocalization.string("Unable to copy image"), entryID: entry.id)
                 return
             }
             let nsImage = NSImage(
@@ -210,12 +277,12 @@ extension HistoryView {
             )
             NSPasteboard.general.clearContents()
             guard NSPasteboard.general.writeObjects([nsImage]) else {
-                errorMessage = AppLocalization.string("Unable to copy image")
+                reportFailure(.copy, message: AppLocalization.string("Unable to copy image"), entryID: entry.id)
                 return
             }
             showToast(AppLocalization.string("Screenshot copied to clipboard"))
         } catch {
-            errorMessage = AppLocalization.string("Unable to copy image")
+            reportFailure(.copy, message: AppLocalization.string("Unable to copy image"), entryID: entry.id)
         }
     }
 
@@ -223,15 +290,24 @@ extension HistoryView {
         guard let history else { return }
         do {
             guard let data = try await history.imageData(for: entry.id) else {
-                errorMessage = AppLocalization.string(
-                    "The original screenshot is no longer available. It may have been removed by the retention policy."
+                reportFailure(
+                    .storage,
+                    message: AppLocalization.string(
+                        // swiftlint:disable:next line_length
+                        "The original screenshot is no longer available. It may have been removed by the retention policy."
+                    ),
+                    entryID: entry.id
                 )
                 return
             }
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
             else {
-                errorMessage = AppLocalization.string("The stored screenshot could not be decoded.")
+                reportFailure(
+                    .storage,
+                    message: AppLocalization.string("The stored screenshot could not be decoded."),
+                    entryID: entry.id
+                )
                 return
             }
             captureViewModel.openEditor(
@@ -240,7 +316,7 @@ extension HistoryView {
                 sourceEntryID: entry.id
             )
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
@@ -253,7 +329,7 @@ extension HistoryView {
             // Color history is a separate dataset with its own "Clear Colors"
             // action; wiping screenshots must not take it down silently.
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
@@ -264,7 +340,7 @@ extension HistoryView {
             try await colorHistory.clear()
             colorEntries = []
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
@@ -275,7 +351,7 @@ extension HistoryView {
             await loadEntries()
             showToast(AppLocalization.string("Original image restored"))
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 
@@ -319,9 +395,9 @@ extension HistoryView {
 
             let data = try await history.export(ids: ids, format: historyFormat)
             try data.write(to: url, options: .atomic)
-            showToast(AppLocalization.string("Exported %d entries to %@", ids.count, url.lastPathComponent))
+            showToast(AppLocalization.string("Exported %lld entries to %@", ids.count, url.lastPathComponent))
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(.action, message: error.localizedDescription)
         }
     }
 

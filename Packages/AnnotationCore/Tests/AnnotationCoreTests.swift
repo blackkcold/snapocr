@@ -36,6 +36,35 @@ struct AnnotationCoreTests {
     #expect(document.nodes.isEmpty)
   }
 
+  /// B1 的保护测试：裁剪合成必须是纯值操作，可以整段搬到主线程之外执行。
+  /// （真正的主线程阻塞时长需要在 Instruments 里用 signpost 验收。）
+  @Test func cropCanRunOffTheMainActor() async throws {
+    let image = try makeImage(width: 200, height: 100)
+    var document = AnnotationDocument(baseImage: image)
+    document.addNode(
+      AnnotationNode(
+        tool: .rect,
+        normalizedRect: CGRect(x: 0.1, y: 0.1, width: 0.2, height: 0.2)
+      ))
+
+    let crop = AnnotationNode(
+      tool: .crop,
+      normalizedRect: CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)
+    )
+    let interactor = AnnotationInteractor()
+
+    let cropped = await Task.detached { () -> AnnotationDocument in
+      var snapshot = document
+      try? interactor.apply(.crop, to: &snapshot, node: crop)
+      return snapshot
+    }.value
+
+    #expect(cropped.baseImage.width == 100)
+    #expect(cropped.baseImage.height == 50)
+    #expect(cropped.nodes.isEmpty)
+    #expect(cropped.canUndo)
+  }
+
   @Test func cropConvertsBottomOriginToImageScanlines() throws {
     let image = try makeVerticalSplitImage(width: 200, height: 100)
     let crop = AnnotationNode(

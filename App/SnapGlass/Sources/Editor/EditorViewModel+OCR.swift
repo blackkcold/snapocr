@@ -248,7 +248,7 @@ extension EditorViewModel {
       )
     } else {
       showToast(
-        message: AppLocalization.string("%d barcodes copied to clipboard", payloads.count),
+        message: AppLocalization.string("%lld barcodes copied to clipboard", payloads.count),
         type: .success
       )
     }

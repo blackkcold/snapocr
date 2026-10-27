@@ -6,6 +6,17 @@ import OCRCore
 import SharedKit
 import SwiftUI
 import UniformTypeIdentifiers
+import os
+
+/// 文字标注的草稿状态。
+///
+/// 单独成对象、单独发布：草稿原来直接挂在 `EditorViewModel` 的 `@Published`
+/// 上，敲一个字就会让整个 `EditorView` 重新求值，`updateNSView` 再把 5K 画布
+/// 整张标脏。真正需要草稿的只有提交路径（`commitTextEntry`）和内联编辑器。
+@MainActor
+public final class TextEntryState: ObservableObject {
+  @Published public var draft = ""
+}
 
 /// How an edited image should be written back to history.
 public enum EditorHistorySaveMode: Sendable, Equatable {
@@ -79,8 +90,23 @@ public final class EditorViewModel: ObservableObject {
   /// Whether the editor is manually scanning the current image for barcodes.
   @Published public internal(set) var isBarcodeScanning = false
 
+  /// 是否正在后台执行裁剪合成。
+  ///
+  /// 5K 底图的裁剪需要先把整张文档合成出来；这段合成原来跑在主线程上，
+  /// 每次确认裁剪都会冻结界面。现在放到 detached task，期间禁止再次触发。
+  @Published public internal(set) var isApplyingCrop = false
+
+  /// 文字草稿状态（独立发布源，避免每次击键都重算整个编辑器视图）。
+  public let textEntry = TextEntryState()
+
   /// Text currently being entered for a pending text annotation.
-  @Published public var textDraft = ""
+  ///
+  /// 计算属性桥接：读写的仍是同一个字符串，但不再触发 `EditorViewModel`
+  /// 的 `objectWillChange`。测试与提交路径的调用方式保持不变。
+  public var textDraft: String {
+    get { textEntry.draft }
+    set { textEntry.draft = newValue }
+  }
 
   /// Whether the in-canvas text editor is active.
   @Published public var isEnteringText = false
@@ -103,6 +129,7 @@ public final class EditorViewModel: ObservableObject {
 
   /// The current toast message to display.
   @Published public var toastMessage: ToastMessage?
+  let toastDeduplicator = ToastDeduplicator()
 
   /// Whether the document holds annotations that were never written to a file
   /// or to history. Drives the close confirmation.
@@ -110,6 +137,9 @@ public final class EditorViewModel: ObservableObject {
   /// Compares content rather than a mutation counter, so undoing every change
   /// back to the saved state counts as clean again.
   public var hasUnsavedChanges: Bool {
+    // 裁剪在后台合成期间文档还没变，但结果随时会落回文档。此时关闭窗口
+    // 会把这次裁剪连同撤销记录一起丢掉，所以按「有未保存内容」处理。
+    if isApplyingCrop { return true }
     if isEnteringText {
       let trimmed = textDraft.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
@@ -166,6 +196,8 @@ public final class EditorViewModel: ObservableObject {
   var savedChangeCount = 0
 
   let logger = Logger(category: "editor")
+  /// Instruments「Points of Interest」里的裁剪区间；用于验证主线程空档。
+  let cropSignposter = OSSignposter(subsystem: "com.snapglass.app", category: "crop")
   let recognizeImage: @Sendable (CGImage, OCROptions) async throws -> OCRResult
   let detectBarcodes: @Sendable (CGImage, [BarcodeType]) async throws -> [BarcodeResult]
   let historySaver: @Sendable (CGImage, EditorHistorySaveMode, UUID?) async throws -> Void
@@ -270,26 +302,88 @@ public final class EditorViewModel: ObservableObject {
   ///
   /// - Parameter node: The annotation node to add.
   public func addNode(_ node: AnnotationNode) {
+    guard !isApplyingCrop else {
+      showToast(message: AppLocalization.string("Processing…"), type: .info)
+      return
+    }
+
+    if node.tool == .crop {
+      applyCropNode(node)
+      return
+    }
+
     guard var doc = document else { return }
-    let completedVerticalTrim = node.tool == .crop && isVerticalTrimEnabled
     do {
       try interactor.apply(node.tool, to: &doc, node: node)
       document = doc
       markChanged()
-      selectedNodeID = node.tool == .crop ? nil : node.id
-      if node.tool == .crop {
+      selectedNodeID = node.id
+      selectedTool = .select
+      logger.debug("Added node: \(node.tool.rawValue), id=\(node.id)")
+    } catch {
+      logger.error("Failed to add node: \(error.localizedDescription)")
+      showToast(message: error.localizedDescription, type: .error)
+    }
+  }
+
+  /// 裁剪：合成 + 裁剪放到后台线程，主线程只做结果替换。
+  ///
+  /// 撤销语义不变——传进去的是完整文档快照，`replaceContent` 仍会把
+  /// 原图与节点压进撤销栈，撤销后回到裁剪前。
+  private func applyCropNode(_ node: AnnotationNode) {
+    guard let snapshot = document else { return }
+    let completedVerticalTrim = isVerticalTrimEnabled
+    // 合成期间用户仍可能撤销/改样式：记下版本号，回来时若文档已变就丢弃这次裁剪，
+    // 而不是用旧快照把用户的编辑整体覆盖掉。
+    let baselineChangeCount = changeCount
+    let interactor = self.interactor
+    isApplyingCrop = true
+
+    Task {
+      let signposter = cropSignposter
+      let interval = signposter.beginInterval("crop")
+      let outcome = await Task.detached(priority: .userInitiated) { () -> Result<AnnotationDocument, AnnotationError> in
+        let renderInterval = signposter.beginInterval("crop.render")
+        defer { signposter.endInterval("crop.render", renderInterval) }
+        var doc = snapshot
+        do {
+          try interactor.apply(.crop, to: &doc, node: node)
+          return .success(doc)
+        } catch let error as AnnotationError {
+          return .failure(error)
+        } catch {
+          return .failure(.renderFailed(reason: error.localizedDescription))
+        }
+      }.value
+      signposter.endInterval("crop", interval)
+
+      isApplyingCrop = false
+
+      guard changeCount == baselineChangeCount else {
+        logger.info("Crop discarded: document changed while rendering")
+        showToast(
+          message: AppLocalization.string(
+            "The document changed while cropping, so this crop was cancelled."),
+          type: .info
+        )
+        return
+      }
+
+      switch outcome {
+      case .success(let doc):
+        document = doc
+        markChanged()
+        selectedNodeID = nil
         restartOCRForCurrentImage()
         if completedVerticalTrim {
           isVerticalTrimEnabled = false
           selectedTool = .select
         }
-      } else {
-        selectedTool = .select
+        logger.debug("Added node: \(node.tool.rawValue), id=\(node.id)")
+      case .failure(let error):
+        logger.error("Failed to add node: \(error.localizedDescription)")
+        showToast(message: error.localizedDescription, type: .error)
       }
-      logger.debug("Added node: \(node.tool.rawValue), id=\(node.id)")
-    } catch {
-      logger.error("Failed to add node: \(error.localizedDescription)")
-      showToast(message: error.localizedDescription, type: .error)
     }
   }
 
@@ -366,6 +460,10 @@ public final class EditorViewModel: ObservableObject {
 
   /// Undoes the last annotation operation.
   public func undo() {
+    guard !isApplyingCrop else {
+      showToast(message: AppLocalization.string("Processing…"), type: .info)
+      return
+    }
     guard var doc = document else { return }
     let previousImage = doc.baseImage
     do {
@@ -382,6 +480,10 @@ public final class EditorViewModel: ObservableObject {
 
   /// Redoes the last undone annotation operation.
   public func redo() {
+    guard !isApplyingCrop else {
+      showToast(message: AppLocalization.string("Processing…"), type: .info)
+      return
+    }
     guard var doc = document else { return }
     let previousImage = doc.baseImage
     do {

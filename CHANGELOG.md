@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-10-27
+
+### Added
+- 编辑器检查器改为常驻（默认 240pt，⌥⌘I 可隐藏），选中标注时画布不再横向跳动；无选中时显示空态而不是一排灰控件。
+- 新增设计系统刻度（`DS`）与三态玻璃表面：macOS 26 使用 Liquid Glass，13–25 使用系统材质，打开「降低透明度」时改用实色。
+- 历史列表支持回车打开当前选中的截图。
+- 全局菜单增加 ⌘⇧W 关闭当前窗口。
+- 裁剪合成增加 Instruments signpost（`crop` / `crop.render`），便于复核主线程空档。
+
+### Fixed
+- 裁剪在途关窗会被当作未保存内容，先询问再关闭，不再丢失这次裁剪；裁剪因文档变更被丢弃时会给出提示。
+- 裁剪处理期间按 ⌘Z / ⇧⌘Z 不再静默无反应：按钮禁用并说明原因，键盘路径给出「处理中」提示。
+- 取色标签靠近画布四边时自动翻到光标另一侧并夹入可见区域，边缘不再被裁掉或留下残影。
+- 缩放手柄改为白底深色描边、8pt 视觉尺寸、22pt 命中范围；八方向悬停光标与高亮，文本手柄也不再偏小。
+- 历史失败提示按原因给出出口：加载失败→重试，复制失败→再次复制，原图丢失/损坏→打开存储目录。
+- 历史窗口的截图级提示移到顶部，与窗口底部的历史提示不再互相遮挡。
+- 窗口选择器未选中窗口时，副标题说明「选择一个窗口以继续」或「没有可截取的窗口」，不再只把按钮变灰。
+- 截图进行中禁用菜单栏的三种截图命令与「截取下一帧」，避免重复触发。
+- 1 秒内重复的同文案 toast 合并为一条；打开「降低动态效果」时 toast 不再做进出动画。
+- 修正 8 个本地化文案的 `%d` 为 `%lld`，避免 64 位整数在格式化时被截断。
+- 历史记录改为全进程单一 `HistoryActor` 实例；收藏切换以磁盘为准，不再用陈旧快照抹掉新的 `imageRevision`。
+- 区域选区增加失焦 Esc 兜底与 300 秒有界超时，截图会话不再永久卡住全局热键。
+- 删除历史后撤销会一并恢复原图；撤销后「还原原图」不再指向已删除文件。
+- 编辑器保存成功后以实际写入的文档建立干净基线，保存面板打开期间的新标注不再被误判为已保存。
+- 编辑器改为多标签工作区：新截图以新标签打开，不再替换并丢弃当前未保存标注；同一历史条目只激活一个标签。
+- 历史缩略图在「覆盖原记录 / 还原原图」后立即刷新。
+- 编辑器 `Esc` 在无选中时交还窗口，Cancel 的 `.cancelAction` 恢复生效。
+- 关闭编辑器窗口时清理 delegate proxy 静态注册表，避免长时间使用后累积。
+- 应用内单独切换深色时同步窗口 `NSAppearance`，Liquid Glass 工具栏与图标不再停留浅色、对比度过低。
+
+### Changed
+- 工具条、检查器、Toast、编辑器底栏迁移到统一字号/间距/圆角/命中区域 token；偏好设置保留自己的视觉体系。
+- 未选中窗口的预览保持低频冻结（只刷新选中行与首行），以换取更低的 SCK 调用与电量消耗；这是有意行为，写入变更记录。
+- 编辑器工具栏与检查器在最小窗口 800pt 下仍保留 ≥500pt 画布；未提高窗口下限。
+- 编辑器渲染尺寸按档位量化，连续缩放不再逐帧重新合成 5K 图。
+- 图片复制统一走后台 PNG 编码，主线程只写剪贴板数据。
+- 选区描边增加深色衬边，浅色内容与白底网页上仍可辨认。
+
+### Docs
+- 代码签名文档改为真实的 ad-hoc 分发状态，移除未实现的 Developer ID / Hardened Runtime 承诺；README 下载徽章更新到 0.9.5。
+
 ## [0.9.1] - 2026-10-27
 
 ### Fixed
@@ -326,7 +367,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/blackkcold/snapocr/compare/v0.9.1...v0.9.5
 [0.9.1]: https://github.com/blackkcold/snapocr/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/blackkcold/snapocr/compare/v0.8.9...v0.9.0
 [0.8.9]: https://github.com/blackkcold/snapocr/compare/v0.8.8...v0.8.9

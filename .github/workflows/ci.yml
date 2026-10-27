@@ -15,6 +15,7 @@ jobs:
       - run: brew install swift-format
       - run: swift-format lint --recursive . --configuration .swift-format
       - run: swiftlint lint --strict --config .swiftlint.yml
+      - run: bash scripts/check-localization.sh
 
   build:
     runs-on: macos-latest
@@ -27,6 +28,7 @@ jobs:
             -project SnapGlass.xcodeproj \
             -scheme SnapGlass \
             -configuration Release \
+            -derivedDataPath .build/DerivedData-release \
             build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
@@ -35,11 +37,11 @@ jobs:
         with:
           name: SnapGlass-app
           path: .build/DerivedData-release/Build/Products/Release/SnapGlass.app
-          if-no-files-found: warn
+          if-no-files-found: error
 
   unit-test:
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: |
@@ -56,3 +58,16 @@ jobs:
             fi
           done
         timeout-minutes: 10
+      - run: brew install xcodegen && xcodegen generate
+      # 本地全绿（32 tests / 7.7s），但无头 runner 上偶发在 EditorHistoryTests 挂起。
+      # 包测试仍是硬闸门；App scheme 测试先作为非阻断信号，待定位 CI 环境问题。
+      - name: App scheme tests
+        timeout-minutes: 8
+        continue-on-error: true
+        run: |
+          xcodebuild test -project SnapGlass.xcodeproj -scheme EditorInteractionTests \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          xcodebuild test -project SnapGlass.xcodeproj -scheme WindowLifecycleStateTests \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO

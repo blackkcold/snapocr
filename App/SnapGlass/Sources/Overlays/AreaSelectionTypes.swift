@@ -24,6 +24,8 @@ private final class AreaSelectionSession {
     private var panels: [AreaSelectionPanel] = []
     private var didFinish = false
     private var capturedFrames: [CGDirectDisplayID: CGImage] = [:]
+    private var watchdog: Task<Void, Never>?
+    private var escapeMonitor: Any?
 
     static func show(
         style: CaptureSelectionStyle,
@@ -48,6 +50,36 @@ private final class AreaSelectionSession {
             onColorPicked: onColorPicked,
             onRecaptureRegion: onRecaptureRegion
         )
+        session.installSafetyNets()
+    }
+
+    /// 选区遮罩不是 key window 时收不到 `keyDown`：系统弹窗、切换 Space、
+    /// 合盖唤醒都会让 Esc 失效，而外层 `withCheckedContinuation` 只依赖
+    /// 这一次回调，`isCapturing` 会永久停在 true，之后所有截图热键都被
+    /// 静默吞掉。这里补两条兜底：失去 key 时的本地 Esc 监听，以及有界超时。
+    ///
+    /// 遮罩仍持有键盘时不动手，保留「关浮层 → 回调整 → 取消」的原有层级。
+    private func installSafetyNets() {
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // `NSEvent` 不是 Sendable：只把 keyCode 带进主 actor 闭包，
+            // 事件对象本身留在监听的调用线程上。
+            let keyCode = event.keyCode
+            let consumed = MainActor.assumeIsolated { () -> Bool in
+                guard let self, !self.didFinish, keyCode == 53 else { return false }
+                if let keyWindow = NSApp.keyWindow,
+                    self.panels.contains(where: { $0 === keyWindow }) {
+                    return false
+                }
+                self.finish(with: nil)
+                return true
+            }
+            return consumed ? nil : event
+        }
+        watchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(300))
+            guard !Task.isCancelled, let self, !self.didFinish else { return }
+            self.finish(with: nil)
+        }
     }
 
     private init(onComplete: @escaping (AreaSelectionResult?) -> Void) {
@@ -85,6 +117,12 @@ private final class AreaSelectionSession {
     private func finish(with result: AreaSelectionResult?) {
         guard !didFinish else { return }
         didFinish = true
+        watchdog?.cancel()
+        watchdog = nil
+        if let escapeMonitor {
+            NSEvent.removeMonitor(escapeMonitor)
+            self.escapeMonitor = nil
+        }
         let completion = onComplete
         let activePanels = panels
         panels.removeAll()

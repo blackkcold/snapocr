@@ -36,3 +36,26 @@ public enum ToastType {
   /// An informational notification.
   case info
 }
+
+
+/// 1 秒内同文案只展示一次。
+///
+/// 使用引用类型，视图重建不会丢掉「刚弹过」的状态；三个宿主
+/// （截图、编辑器、历史）各自持有一个，互不干扰。
+@MainActor
+final class ToastDeduplicator {
+    private var lastMessage: String?
+    private var lastTime: TimeInterval = 0
+
+    func shouldPresent(
+        _ message: String,
+        now: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) -> Bool {
+        if message == lastMessage, now - lastTime < 1.0 {
+            return false
+        }
+        lastMessage = message
+        lastTime = now
+        return true
+    }
+}

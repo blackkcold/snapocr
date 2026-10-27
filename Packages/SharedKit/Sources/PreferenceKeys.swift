@@ -6,6 +6,8 @@ public enum PreferenceKeys {
     public static let editorEnterInsertsNewline = "editor_enterInsertsNewline"
     /// Folder the editor's Save panel opens in; absent means "system default".
     public static let editorSaveDirectory = "editor_saveDirectory"
+    /// Whether the annotation inspector stays visible beside the canvas.
+    public static let editorInspectorVisible = "editor_inspectorVisible"
     public static let launchAtLogin = "general_launchAtLogin"
     public static let appLanguage = "general_appLanguage"
     public static let appearanceMode = "appearance_mode"
@@ -47,6 +49,7 @@ public enum PreferenceKeys {
 public enum PreferenceDefaults {
     /// Preserve Return-to-submit as the default text editing behavior.
     public static let editorEnterInsertsNewline = false
+    public static let editorInspectorVisible = true
     public static let launchAtLogin = false
     public static let appLanguage = "system"
     public static let appearanceMode = "system"

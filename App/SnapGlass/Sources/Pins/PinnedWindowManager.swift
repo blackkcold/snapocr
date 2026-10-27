@@ -102,16 +102,14 @@ final class PinnedWindowManager: NSObject, NSWindowDelegate {
     }
 
     private func copyImage(_ image: CGImage) {
-        let nsImage = NSImage(
-            cgImage: image,
-            size: NSSize(width: image.width, height: image.height)
-        )
-        NSPasteboard.general.clearContents()
-        guard NSPasteboard.general.writeObjects([nsImage]) else {
-            presentToast(AppLocalization.string("Unable to copy image"), type: .error)
-            return
+        Task {
+            do {
+                try await ClipboardWriter.write(image: image)
+                presentToast(AppLocalization.string("Screenshot copied to clipboard"), type: .success)
+            } catch {
+                presentToast(AppLocalization.string("Unable to copy image"), type: .error)
+            }
         }
-        presentToast(AppLocalization.string("Screenshot copied to clipboard"), type: .success)
     }
 
     private func copyOCRText(from image: CGImage) {

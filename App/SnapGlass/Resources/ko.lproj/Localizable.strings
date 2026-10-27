@@ -106,7 +106,7 @@
 "One barcode detected" = "바코드 1개 감지됨";
 "Copy Content" = "내용 복사";
 "Barcode copied to clipboard" = "바코드 내용을 클립보드에 복사했습니다";
-"%d barcodes copied to clipboard" = "%d개의 바코드 내용을 클립보드에 복사했습니다";
+"%lld barcodes copied to clipboard" = "%lld개의 바코드 내용을 클립보드에 복사했습니다";
 "No barcode found" = "바코드를 찾을 수 없습니다";
 "Barcode scan failed: %@" = "바코드 스캔 실패: %@";
 "Scan Selection" = "인식";
@@ -118,7 +118,7 @@
 "No barcode in selection" = "선택 영역에서 바코드를 찾지 못했습니다. 코드 전체가 들어오도록 다시 선택하세요";
 "Copied" = "복사됨";
 "Barcode found" = "바코드를 찾았습니다";
-"%d barcodes found" = "바코드 %d개를 찾았습니다";
+"%lld barcodes found" = "바코드 %lld개를 찾았습니다";
 "No screenshot available" = "선택 영역 스크린샷을 사용할 수 없습니다";
 "Barcode Results" = "바코드 인식 결과";
 "Barcode Hint" = "Return 복사 · R 다시 인식 · Esc 닫기";
@@ -211,7 +211,7 @@
 
 // MARK: - Menu Bar
 
-"Capture Next Scroll Frame (%d)" = "다음 스크롤 프레임 캡처(%d)";
+"Capture Next Scroll Frame (%lld)" = "다음 스크롤 프레임 캡처(%lld)";
 
 // MARK: - Permission Guide
 
@@ -305,7 +305,7 @@
 "Export as Plaintext" = "일반 텍스트로 내보내기";
 "Clear All History?" = "기록을 모두 지우시겠습니까?";
 "Clear" = "지우기";
-"This will permanently delete all %d history entries." = "그러면 기록 항목 %d개가 모두 영구 삭제됩니다.";
+"This will permanently delete all %lld history entries." = "그러면 기록 항목 %lld개가 모두 영구 삭제됩니다.";
 "No text detected" = "텍스트가 감지되지 않았습니다";
 "The original screenshot is no longer available. It may have been removed by the retention policy." = "원본 스크린샷을 더 이상 사용할 수 없습니다. 보존 정책에 의해 제거되었을 수 있습니다.";
 "The stored screenshot could not be decoded." = "저장된 스크린샷을 디코딩할 수 없습니다.";
@@ -402,7 +402,7 @@
 "No matching colors" = "일치하는 색상이 없습니다";
 "Clear Colors" = "색상 지우기";
 "Clear Color History?" = "색상 기록을 지울까요?";
-"This will permanently delete all %d color entries." = "모든 색상 항목 %d개를 영구 삭제합니다.";
+"This will permanently delete all %lld color entries." = "모든 색상 항목 %lld개를 영구 삭제합니다.";
 "This will permanently delete all color entries." = "모든 색상 항목을 영구 삭제합니다.";
 "Area" = "영역";
 "Editor" = "편집기";
@@ -443,12 +443,16 @@
 "Scrolling capture cancelled" = "스크롤 캡처를 취소했습니다";
 "Scroll the window, then capture the next frame" = "창을 스크롤한 다음 다음 프레임을 캡처하세요";
 "No visual change detected; scroll and try again" = "화면 변화가 감지되지 않았습니다. 스크롤 후 다시 시도하세요";
-"Frame %d captured" = "%d번째 프레임을 캡처했습니다";
+"Frame %lld captured" = "%lld번째 프레임을 캡처했습니다";
 "Saved to %@" = "%@에 저장했습니다";
 "Capture failed: %@" = "캡처 실패: %@";
 "OCR failed: %@" = "텍스트 인식 실패: %@";
 "History save failed: %@" = "기록 저장 실패: %@";
 "Scroll frame failed: %@" = "스크롤 프레임 캡처 실패: %@";
+"The window size changed; finish to keep what has been captured" = "창 크기가 변경되었습니다. 종료하면 캡처된 부분이 유지됩니다";
+"Scrolling capture reached the size limit; finish to keep what has been captured" = "스크롤 캡처가 크기 한도에 도달했습니다. 종료하면 캡처된 부분이 유지됩니다";
+"Processing…" = "처리 중…";
+"Long screenshot reached the size limit; the captured part was kept" = "긴 스크린샷이 크기 한도에 도달했습니다. 결합된 부분만 유지됩니다";
 "Save failed: %@" = "저장 실패: %@";
 "Copy failed: %@" = "복사 실패: %@";
 "Undo" = "실행 취소";
@@ -457,7 +461,7 @@
 "Open Storage Folder" = "저장 폴더 열기";
 "Screenshot deleted" = "스크린샷을 삭제했습니다";
 "Window picker timed out; please try again" = "창 선택 시간이 초과되었습니다. 다시 시도해 주세요";
-"Exported %d entries to %@" = "%d개를 %@(으)로 내보냈습니다";
+"Exported %lld entries to %@" = "%lld개를 %@(으)로 내보냈습니다";
 "Save your annotations?" = "주석을 저장할까요?";
 "Closing the editor now discards the annotations on this screenshot." = "지금 편집기를 닫으면 이 스크린샷의 주석이 사라집니다.";
 "Discard" = "버리기";
@@ -480,3 +484,27 @@
 "Copy %lld recognized lines" = "인식된 %lld줄 복사";
 "Zoom (⌘0 fits the window, ⌘1 shows actual size)" = "확대/축소(⌘0 창에 맞추기, ⌘1 실제 크기)";
 "Capturing…" = "캡처 중…";
+
+/* Editor workspace */
+"No open screenshots" = "열린 스크린샷이 없습니다";
+"Discard annotations in %lld tabs?" = "%lld개 탭의 주석을 버릴까요?";
+"Close a tab before opening another screenshot" = "새 스크린샷을 열기 전에 탭을 닫으세요";
+
+/* Editor inspector and crop lifecycle */
+"Toggle Inspector" = "검사기 표시/숨기기";
+"Select an annotation to adjust its style" = "스타일을 조정할 주석을 선택하세요";
+"Processing crop…" = "자르기를 처리하는 중…";
+"The document changed while cropping, so this crop was cancelled." = "자르는 동안 문서가 변경되어 이번 자르기가 취소되었습니다.";
+"Select a window to continue" = "계속하려면 윈도우를 선택하세요";
+
+"Inspector" = "검사기";
+"Annotation inspector" = "주석 검사기";
+"Stroke color" = "선 색상";
+"Copy %@" = "%@ 복사";
+"Copy Again" = "다시 복사";
+"Close Window" = "윈도우 닫기";
+"No capturable windows found" = "캡처할 수 있는 윈도우가 없습니다";
+
+"Save the annotated image (⌘S)" = "주석이 있는 이미지 저장(⌘S)";
+"Copy the annotated image to the clipboard (⌘C)" = "주석이 있는 이미지를 클립보드에 복사(⌘C)";
+"Drag on the canvas to choose the crop area" = "캔버스에서 드래그하여 자를 영역을 선택하세요";

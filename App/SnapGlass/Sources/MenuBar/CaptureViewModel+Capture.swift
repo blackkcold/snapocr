@@ -287,19 +287,26 @@ extension CaptureViewModel {
     }
 
     /// Opens a fresh annotation editor session for an image.
+    @discardableResult
     public func openEditor(
         with image: CGImage,
         captureMode: String? = nil,
         sourceEntryID: UUID? = nil
-    ) {
-        editorImage = image
-        editorContext = EditorCaptureContext.capture(
+    ) -> UUID? {
+        let context = EditorCaptureContext.capture(
             image: image,
             captureMode: captureMode,
             sourceEntryID: sourceEntryID
         )
-        editorSessionID = UUID()
+        guard let tab = editorWorkspace.open(image: image, context: context) else {
+            showToast(
+                message: AppLocalization.string("Close a tab before opening another screenshot"),
+                type: .error
+            )
+            return nil
+        }
         openWindow?("editor")
+        return tab.id
     }
 
     /// Performs a capture with the specified mode.
@@ -353,10 +360,10 @@ extension CaptureViewModel {
 
     func resetScrollCaptureState() {
         scrollSession = nil
-        scrollFrames.removeAll()
         scrollSourceAppName = nil
         scrollSourceWindowTitle = nil
         scrollCapturedFrameCount = 0
+        scrollReachedSizeLimit = false
         isScrollCaptureActive = false
     }
 }

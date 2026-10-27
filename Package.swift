@@ -109,7 +109,7 @@ let package = Package(
         // MARK: - AutomationCore
         .target(
             name: "AutomationCore",
-            dependencies: ["SharedKit", "CaptureCore", "OCRCore", "BarcodeCore"],
+            dependencies: ["SharedKit", "CaptureCore", "OCRCore", "BarcodeCore", "HistoryCore"],
             path: "Packages/AutomationCore/Sources",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
