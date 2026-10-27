@@ -13,6 +13,8 @@ struct SnapGlassApp: App {
     private var appLanguage = PreferenceDefaults.appLanguage
     @AppStorage(PreferenceKeys.appearanceMode)
     private var appearanceMode = PreferenceDefaults.appearanceMode
+    @AppStorage(PreferenceKeys.editorInspectorVisible)
+    private var editorInspectorVisible = PreferenceDefaults.editorInspectorVisible
 
     private var locale: Locale {
         (AppLanguage(rawValue: appLanguage) ?? .system).locale
@@ -52,7 +54,7 @@ struct SnapGlassApp: App {
                 .environmentObject(viewModel)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
-                .background(AppWindowRegistrationView(id: "preferences"))
+                .background(AppWindowRegistrationView(id: "preferences", appearanceMode: appearanceMode))
         }
         .defaultSize(width: PreferencesSpacing.idealWindowWidth, height: PreferencesSpacing.idealWindowHeight)
         .windowResizability(.contentMinSize)
@@ -69,33 +71,42 @@ struct SnapGlassApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+
+            CommandGroup(after: .sidebar) {
+                Button(AppLocalization.string("Toggle Inspector")) {
+                    editorInspectorVisible.toggle()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+            }
+
+            CommandGroup(after: .windowArrangement) {
+                Button(AppLocalization.string("Close Window")) {
+                    NSApp.keyWindow?.performClose(nil)
+                }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
+            }
         }
 
         Window("History", id: "history") {
             HistoryView()
                 .navigationTitle(Text("History"))
                 .environmentObject(viewModel)
-                .toast(message: $viewModel.toastMessage, edge: .bottom)
+                // 历史窗口自己的 toast 在底部；截图级提示放顶部，两者不重叠。
+                .toast(message: $viewModel.toastMessage, edge: .top)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
-                .background(AppWindowRegistrationView(id: "history"))
+                .background(AppWindowRegistrationView(id: "history", appearanceMode: appearanceMode))
         }
         
         Window("Annotation Editor", id: "editor") {
-            Group {
-                if let image = viewModel.editorImage {
-                    EditorView(image: image, context: viewModel.editorContext)
-                        .id(viewModel.editorSessionID)
-                        .frame(minWidth: 800, minHeight: 600)
-                        // Capture-level toasts sit at the bottom so they cannot
-                        // overlap the editor's own toast at the top.
-                        .toast(message: $viewModel.toastMessage, edge: .bottom)
-                        .environment(\.locale, locale)
-                        .preferredColorScheme(preferredColorScheme)
-                }
-            }
-            .navigationTitle(Text("Annotation Editor"))
-            .background(AppWindowRegistrationView(id: "editor"))
+            EditorWorkspaceView(workspace: viewModel.editorWorkspace)
+                // Capture-level toasts sit at the bottom so they cannot
+                // overlap the editor's own toast at the top.
+                .toast(message: $viewModel.toastMessage, edge: .bottom)
+                .environment(\.locale, locale)
+                .preferredColorScheme(preferredColorScheme)
+                .navigationTitle(Text("Annotation Editor"))
+                .background(AppWindowRegistrationView(id: "editor", appearanceMode: appearanceMode))
         }
         
         Window("Permission Required", id: "permission") {
@@ -104,7 +115,7 @@ struct SnapGlassApp: App {
                 .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
-                .background(AppWindowRegistrationView(id: "permission"))
+                .background(AppWindowRegistrationView(id: "permission", appearanceMode: appearanceMode))
         }
         .windowResizability(.contentSize)
     }

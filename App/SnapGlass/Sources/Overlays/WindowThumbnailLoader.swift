@@ -12,6 +12,9 @@ actor WindowThumbnailLoader {
 
     private let orchestrator = CaptureOrchestrator()
     private var cache: [CGWindowID: CGImage] = [:]
+    /// 最近使用顺序，末尾为最近使用；超过 `cacheLimit` 时淘汰头部。
+    private var cacheRecency: [CGWindowID] = []
+    private static let cacheLimit = 100
 
     /// Max concurrent SCStream captures.
     private static let maxConcurrentCaptures = 4
@@ -19,7 +22,7 @@ actor WindowThumbnailLoader {
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     func thumbnail(for windowID: CGWindowID, content: SCShareableContent) async -> CGImage? {
-        if let cached = cache[windowID] {
+        if let cached = touch(windowID) {
             return cached
         }
 
@@ -30,7 +33,7 @@ actor WindowThumbnailLoader {
     /// bypass the cache so the picker shows the window's *current* contents rather
     /// than a stale frame from an earlier session.
     func thumbnail(for windowID: CGWindowID, content: SCShareableContent, forceRefresh: Bool) async -> CGImage? {
-        if !forceRefresh, let cached = cache[windowID] {
+        if !forceRefresh, let cached = touch(windowID) {
             return cached
         }
 
@@ -43,9 +46,8 @@ actor WindowThumbnailLoader {
                 maximumSize: CGSize(width: 240, height: 140),
                 content: content
             )
-            cache[windowID] = image
-            result = image
-        } catch {
+            store(image, for: windowID)
+            result = image        } catch {
             result = nil
         }
 
@@ -57,6 +59,25 @@ actor WindowThumbnailLoader {
     /// fresh window contents.
     func clearCache() {
         cache.removeAll()
+        cacheRecency.removeAll()
+    }
+
+    private func touch(_ windowID: CGWindowID) -> CGImage? {
+        guard let image = cache[windowID] else { return nil }
+        cacheRecency.removeAll { $0 == windowID }
+        cacheRecency.append(windowID)
+        return image
+    }
+
+    private func store(_ image: CGImage, for windowID: CGWindowID) {
+        cache[windowID] = image
+        cacheRecency.removeAll { $0 == windowID }
+        cacheRecency.append(windowID)
+
+        while cacheRecency.count > Self.cacheLimit {
+            let evicted = cacheRecency.removeFirst()
+            cache[evicted] = nil
+        }
     }
 
     private func acquireSlot() async {

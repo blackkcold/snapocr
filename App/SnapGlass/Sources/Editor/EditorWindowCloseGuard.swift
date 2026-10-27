@@ -41,6 +41,16 @@ struct EditorWindowCloseGuard: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            guard window != nil else {
+                // The window is gone: drop the proxy from the static registry,
+                // otherwise every editor window leaks one object for the
+                // lifetime of the process.
+                if let proxy {
+                    WindowDelegateProxy.release(proxy)
+                    self.proxy = nil
+                }
+                return
+            }
             installIfNeeded()
         }
 
@@ -70,6 +80,15 @@ struct EditorWindowCloseGuard: NSViewRepresentable {
 
         static func retain(_ proxy: WindowDelegateProxy) {
             registry[ObjectIdentifier(proxy)] = proxy
+        }
+
+        static func release(_ proxy: WindowDelegateProxy) {
+            registry.removeValue(forKey: ObjectIdentifier(proxy))
+        }
+
+        func windowWillClose(_ notification: Notification) {
+            WindowDelegateProxy.release(self)
+            originalDelegate?.windowWillClose?(notification)
         }
 
         weak var owner: GuardView?

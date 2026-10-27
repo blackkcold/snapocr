@@ -61,11 +61,41 @@ struct HistoryScreenshotCard: View {
         .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
         .allowsHitTesting(false)
     }
-    .task(id: entry.id) {
+    .task(id: entry.thumbnailPath?.path ?? entry.id.uuidString) {
+      // 覆盖原记录 / 还原原图会改变 thumbnailPath，但 id 不变；只按 id
+      // 触发任务会让格子继续显示旧图，甚至按新宽高比拉伸。
+      let key = entry.thumbnailPath?.path ?? entry.id.uuidString
+      if let cached = HistoryThumbnailCache.shared.image(for: key) {
+        thumbnail = cached
+        return
+      }
       guard let history = HistoryActor.shared,
         let data = try? await history.thumbnailData(for: entry.id), !Task.isCancelled
       else { return }
-      thumbnail = NSImage(data: data)
+      guard let image = NSImage(data: data) else { return }
+      HistoryThumbnailCache.shared.store(image, for: key)
+      thumbnail = image
     }
+  }
+}
+
+
+/// 缩略图内存缓存：卡片滚出屏幕再滚回来不必重新读盘 + 解码。
+/// `NSCache` 会在系统内存压力下自动回收。
+@MainActor
+final class HistoryThumbnailCache {
+  static let shared = HistoryThumbnailCache()
+  private let cache = NSCache<NSString, NSImage>()
+
+  private init() {
+    cache.countLimit = 200
+  }
+
+  func image(for key: String) -> NSImage? {
+    cache.object(forKey: key as NSString)
+  }
+
+  func store(_ image: NSImage, for key: String) {
+    cache.setObject(image, forKey: key as NSString)
   }
 }

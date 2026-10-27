@@ -6,7 +6,9 @@ extension HistoryActor {
     /// Atomically updates favourite metadata without rewriting screenshot data.
     /// Returns nil if the entry was deleted before the update.
     public func setFavourite(id: UUID, isFavourite: Bool) throws -> HistoryEntry? {
-        guard var entry = entries[id] ?? loadEntryFromDiskSync(id: id) else { return nil }
+        // 以磁盘为准：内存条目可能停留在「覆盖原记录」之前，整条回写会把
+        // 新的 imageRevision 抹掉。收藏只是元数据变更，不应携带旧媒体指针。
+        guard var entry = loadEntryFromDiskSync(id: id) ?? entries[id] else { return nil }
         entry.isFavourite = isFavourite
         try persistEntry(entry)
         entries[id] = entry
@@ -72,6 +74,21 @@ extension HistoryActor {
         } catch {
             logger.error("缩略图读取失败: \(id)", error: error)
             throw HistoryError.fileIOError(path: thumbURL.path)
+        }
+    }
+
+    /// 读取「覆盖原记录」之前保留的原图字节。
+    ///
+    /// 删除事务会把原图与编辑版一起移走；撤销删除时若只恢复编辑版，
+    /// 条目仍会声称 `canRestoreOriginal`，但「还原原图」必然失败。
+    public func originalImageData(for id: UUID) async throws -> Data? {
+        let url = mediaURL(for: id, revision: nil, thumbnail: false)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            return try cryptoService.decrypt(Data(contentsOf: url))
+        } catch {
+            logger.error("原图解密失败: \(id)", error: error)
+            throw HistoryError.decryptionFailed(reason: error.localizedDescription)
         }
     }
 

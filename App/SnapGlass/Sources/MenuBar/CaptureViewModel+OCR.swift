@@ -31,13 +31,14 @@ extension CaptureViewModel {
         }
     }
 
-    func writeImageToClipboard(_ image: CGImage) -> Bool {
-        let nsImage = NSImage(
-            cgImage: image,
-            size: NSSize(width: image.width, height: image.height)
-        )
-        NSPasteboard.general.clearContents()
-        return NSPasteboard.general.writeObjects([nsImage])
+    func writeImageToClipboard(_ image: CGImage) async -> Bool {
+        do {
+            try await ClipboardWriter.write(image: image)
+            return true
+        } catch {
+            logger.warning("Clipboard write failed: \(error.localizedDescription)")
+            return false
+        }
     }
 
     func detectBarcodesForSuggestion(in image: CGImage) async -> [BarcodeResult] {

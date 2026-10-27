@@ -106,7 +106,7 @@
 "One barcode detected" = "バーコードが1つ検出されました";
 "Copy Content" = "内容をコピー";
 "Barcode copied to clipboard" = "バーコードの内容をクリップボードにコピーしました";
-"%d barcodes copied to clipboard" = "%d個のバーコードの内容をクリップボードにコピーしました";
+"%lld barcodes copied to clipboard" = "%lld個のバーコードの内容をクリップボードにコピーしました";
 "No barcode found" = "バーコードが見つかりませんでした";
 "Barcode scan failed: %@" = "バーコードのスキャンに失敗しました：%@";
 "Scan Selection" = "読み取り";
@@ -118,7 +118,7 @@
 "No barcode in selection" = "選択範囲にバーコードが見つかりません。コード全体が入るように選択し直してください";
 "Copied" = "コピーしました";
 "Barcode found" = "バーコードを検出しました";
-"%d barcodes found" = "%d 個のバーコードを検出しました";
+"%lld barcodes found" = "%lld 個のバーコードを検出しました";
 "No screenshot available" = "選択範囲のスクリーンショットを取得できません";
 "Barcode Results" = "バーコードの検出結果";
 "Barcode Hint" = "Return でコピー · R で再読み取り · Esc で閉じる";
@@ -211,7 +211,7 @@
 
 // MARK: - Menu Bar
 
-"Capture Next Scroll Frame (%d)" = "次のスクロールフレームを撮影（%d）";
+"Capture Next Scroll Frame (%lld)" = "次のスクロールフレームを撮影（%lld）";
 
 // MARK: - Permission Guide
 
@@ -305,7 +305,7 @@
 "Export as Plaintext" = "プレーンテキストとして書き出し";
 "Clear All History?" = "履歴をすべて消去しますか？";
 "Clear" = "消去";
-"This will permanently delete all %d history entries." = "これにより履歴エントリ%d件すべてが完全に削除されます。";
+"This will permanently delete all %lld history entries." = "これにより履歴エントリ%lld件すべてが完全に削除されます。";
 "No text detected" = "テキストが検出されませんでした";
 "The original screenshot is no longer available. It may have been removed by the retention policy." = "元のスクリーンショットは利用できなくなりました。保持ポリシーによって削除された可能性があります。";
 "The stored screenshot could not be decoded." = "保存されたスクリーンショットをデコードできませんでした。";
@@ -402,7 +402,7 @@
 "No matching colors" = "一致するカラーがありません";
 "Clear Colors" = "カラーを消去";
 "Clear Color History?" = "カラー履歴を消去しますか？";
-"This will permanently delete all %d color entries." = "全 %d 件のカラー記録を完全に削除します。";
+"This will permanently delete all %lld color entries." = "全 %lld 件のカラー記録を完全に削除します。";
 "This will permanently delete all color entries." = "すべてのカラー記録を完全に削除します。";
 "Area" = "範囲";
 "Editor" = "エディタ";
@@ -443,12 +443,16 @@
 "Scrolling capture cancelled" = "スクロール撮影をキャンセルしました";
 "Scroll the window, then capture the next frame" = "ウィンドウをスクロールして、次のフレームを撮影してください";
 "No visual change detected; scroll and try again" = "画面に変化がありません。スクロールして再試行してください";
-"Frame %d captured" = "%d フレーム目を撮影しました";
+"Frame %lld captured" = "%lld フレーム目を撮影しました";
 "Saved to %@" = "%@ に保存しました";
 "Capture failed: %@" = "撮影に失敗しました：%@";
 "OCR failed: %@" = "文字認識に失敗しました：%@";
 "History save failed: %@" = "履歴の保存に失敗しました：%@";
 "Scroll frame failed: %@" = "スクロールフレームの撮影に失敗しました：%@";
+"The window size changed; finish to keep what has been captured" = "ウィンドウサイズが変わったため、終了すると取得済みの部分を保持します";
+"Scrolling capture reached the size limit; finish to keep what has been captured" = "スクロールキャプチャがサイズ上限に達しました。終了すると取得済みの部分を保持します";
+"Processing…" = "処理中…";
+"Long screenshot reached the size limit; the captured part was kept" = "長いスクリーンショットがサイズ上限に達しました。結合済みの部分を保持しています";
 "Save failed: %@" = "保存に失敗しました：%@";
 "Copy failed: %@" = "コピーに失敗しました：%@";
 "Undo" = "元に戻す";
@@ -457,7 +461,7 @@
 "Open Storage Folder" = "保存フォルダを開く";
 "Screenshot deleted" = "スクリーンショットを削除しました";
 "Window picker timed out; please try again" = "ウィンドウ選択がタイムアウトしました。もう一度お試しください";
-"Exported %d entries to %@" = "%d 件を %@ に書き出しました";
+"Exported %lld entries to %@" = "%lld 件を %@ に書き出しました";
 "Save your annotations?" = "注釈を保存しますか？";
 "Closing the editor now discards the annotations on this screenshot." = "ここでエディタを閉じると、このスクリーンショットの注釈は破棄されます。";
 "Discard" = "破棄";
@@ -480,3 +484,27 @@
 "Copy %lld recognized lines" = "認識した %lld 行をコピー";
 "Zoom (⌘0 fits the window, ⌘1 shows actual size)" = "ズーム（⌘0 でウィンドウに合わせる、⌘1 で実際のサイズ）";
 "Capturing…" = "キャプチャ中…";
+
+/* Editor workspace */
+"No open screenshots" = "開いているスクリーンショットはありません";
+"Discard annotations in %lld tabs?" = "%lld 個のタブの注釈を破棄しますか？";
+"Close a tab before opening another screenshot" = "新しいスクリーンショットを開く前にタブを閉じてください";
+
+/* Editor inspector and crop lifecycle */
+"Toggle Inspector" = "インスペクタを表示/非表示";
+"Select an annotation to adjust its style" = "注釈を選択してスタイルを調整します";
+"Processing crop…" = "切り抜きを処理中…";
+"The document changed while cropping, so this crop was cancelled." = "切り抜き中に書類が変更されたため、この切り抜きはキャンセルされました。";
+"Select a window to continue" = "続けるにはウィンドウを選択してください";
+
+"Inspector" = "インスペクタ";
+"Annotation inspector" = "注釈インスペクタ";
+"Stroke color" = "線の色";
+"Copy %@" = "%@ をコピー";
+"Copy Again" = "もう一度コピー";
+"Close Window" = "ウインドウを閉じる";
+"No capturable windows found" = "キャプチャできるウインドウがありません";
+
+"Save the annotated image (⌘S)" = "注釈付き画像を保存（⌘S）";
+"Copy the annotated image to the clipboard (⌘C)" = "注釈付き画像をクリップボードにコピー（⌘C）";
+"Drag on the canvas to choose the crop area" = "キャンバス上でドラッグして切り抜き範囲を選択します";

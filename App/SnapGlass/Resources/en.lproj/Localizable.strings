@@ -106,7 +106,7 @@
 "One barcode detected" = "One barcode detected";
 "Copy Content" = "Copy Content";
 "Barcode copied to clipboard" = "Barcode copied to clipboard";
-"%d barcodes copied to clipboard" = "%d barcodes copied to clipboard";
+"%lld barcodes copied to clipboard" = "%lld barcodes copied to clipboard";
 "No barcode found" = "No barcode found";
 "Barcode scan failed: %@" = "Barcode scan failed: %@";
 "Scan Selection" = "Scan Selection";
@@ -118,7 +118,7 @@
 "No barcode in selection" = "No barcode in selection. Frame the whole code and try again.";
 "Copied" = "Copied";
 "Barcode found" = "Barcode found";
-"%d barcodes found" = "%d barcodes found";
+"%lld barcodes found" = "%lld barcodes found";
 "No screenshot available" = "No screenshot available";
 "Barcode Results" = "Barcode Results";
 "Barcode Hint" = "Return to copy · R to rescan · Esc to close";
@@ -211,7 +211,7 @@
 
 // MARK: - Menu Bar
 
-"Capture Next Scroll Frame (%d)" = "Capture Next Scroll Frame (%d)";
+"Capture Next Scroll Frame (%lld)" = "Capture Next Scroll Frame (%lld)";
 
 // MARK: - Permission Guide
 
@@ -305,7 +305,7 @@
 "Export as Plaintext" = "Export as Plaintext";
 "Clear All History?" = "Clear All History?";
 "Clear" = "Clear";
-"This will permanently delete all %d history entries." = "This will permanently delete all %d history entries.";
+"This will permanently delete all %lld history entries." = "This will permanently delete all %lld history entries.";
 "No text detected" = "No text detected";
 "The original screenshot is no longer available. It may have been removed by the retention policy." = "The original screenshot is no longer available. It may have been removed by the retention policy.";
 "The stored screenshot could not be decoded." = "The stored screenshot could not be decoded.";
@@ -402,7 +402,7 @@
 "No matching colors" = "No matching colors";
 "Clear Colors" = "Clear Colors";
 "Clear Color History?" = "Clear Color History?";
-"This will permanently delete all %d color entries." = "This will permanently delete all %d color entries.";
+"This will permanently delete all %lld color entries." = "This will permanently delete all %lld color entries.";
 "This will permanently delete all color entries." = "This will permanently delete all color entries.";
 "Area" = "Area";
 "Editor" = "Editor";
@@ -443,12 +443,16 @@
 "Scrolling capture cancelled" = "Scrolling capture cancelled";
 "Scroll the window, then capture the next frame" = "Scroll the window, then capture the next frame";
 "No visual change detected; scroll and try again" = "No visual change detected; scroll and try again";
-"Frame %d captured" = "Frame %d captured";
+"Frame %lld captured" = "Frame %lld captured";
 "Saved to %@" = "Saved to %@";
 "Capture failed: %@" = "Capture failed: %@";
 "OCR failed: %@" = "OCR failed: %@";
 "History save failed: %@" = "History save failed: %@";
 "Scroll frame failed: %@" = "Scroll frame failed: %@";
+"The window size changed; finish to keep what has been captured" = "The window size changed; finish to keep what has been captured";
+"Scrolling capture reached the size limit; finish to keep what has been captured" = "Scrolling capture reached the size limit; finish to keep what has been captured";
+"Processing…" = "Processing…";
+"Long screenshot reached the size limit; the captured part was kept" = "Long screenshot reached the size limit; the captured part was kept";
 "Save failed: %@" = "Save failed: %@";
 "Copy failed: %@" = "Copy failed: %@";
 "Undo" = "Undo";
@@ -457,7 +461,7 @@
 "Open Storage Folder" = "Open Storage Folder";
 "Screenshot deleted" = "Screenshot deleted";
 "Window picker timed out; please try again" = "Window picker timed out; please try again";
-"Exported %d entries to %@" = "Exported %d entries to %@";
+"Exported %lld entries to %@" = "Exported %lld entries to %@";
 "Save your annotations?" = "Save your annotations?";
 "Closing the editor now discards the annotations on this screenshot." = "Closing the editor now discards the annotations on this screenshot.";
 "Discard" = "Discard";
@@ -480,3 +484,27 @@
 "Copy %lld recognized lines" = "Copy %lld recognized lines";
 "Zoom (⌘0 fits the window, ⌘1 shows actual size)" = "Zoom (⌘0 fits the window, ⌘1 shows actual size)";
 "Capturing…" = "Capturing…";
+
+/* Editor workspace */
+"No open screenshots" = "No open screenshots";
+"Discard annotations in %lld tabs?" = "Discard annotations in %lld tabs?";
+"Close a tab before opening another screenshot" = "Close a tab before opening another screenshot";
+
+/* Editor inspector and crop lifecycle */
+"Toggle Inspector" = "Toggle Inspector";
+"Select an annotation to adjust its style" = "Select an annotation to adjust its style";
+"Processing crop…" = "Processing crop…";
+"The document changed while cropping, so this crop was cancelled." = "The document changed while cropping, so this crop was cancelled.";
+"Select a window to continue" = "Select a window to continue";
+
+"Inspector" = "Inspector";
+"Annotation inspector" = "Annotation inspector";
+"Stroke color" = "Stroke color";
+"Copy %@" = "Copy %@";
+"Copy Again" = "Copy Again";
+"Close Window" = "Close Window";
+"No capturable windows found" = "No capturable windows found";
+
+"Save the annotated image (⌘S)" = "Save the annotated image (⌘S)";
+"Copy the annotated image to the clipboard (⌘C)" = "Copy the annotated image to the clipboard (⌘C)";
+"Drag on the canvas to choose the crop area" = "Drag on the canvas to choose the crop area";

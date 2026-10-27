@@ -106,7 +106,7 @@
 "One barcode detected" = "检测到一个条码";
 "Copy Content" = "复制内容";
 "Barcode copied to clipboard" = "条码内容已复制到剪贴板";
-"%d barcodes copied to clipboard" = "已将 %d 个条码内容复制到剪贴板";
+"%lld barcodes copied to clipboard" = "已将 %lld 个条码内容复制到剪贴板";
 "No barcode found" = "未检测到条码";
 "Barcode scan failed: %@" = "条码扫描失败：%@";
 "Scan Selection" = "识别";
@@ -118,7 +118,7 @@
 "No barcode in selection" = "选区内未找到条码，把整个码框进选区再试";
 "Copied" = "已复制";
 "Barcode found" = "识别到条码";
-"%d barcodes found" = "识别到 %d 个条码";
+"%lld barcodes found" = "识别到 %lld 个条码";
 "No screenshot available" = "选区截图不可用";
 "Barcode Results" = "条码识别结果";
 "Barcode Hint" = "回车复制 · R 重新识别 · Esc 关闭";
@@ -211,7 +211,7 @@
 
 // MARK: - Menu Bar
 
-"Capture Next Scroll Frame (%d)" = "截图下一滚动帧（%d）";
+"Capture Next Scroll Frame (%lld)" = "截图下一滚动帧（%lld）";
 
 // MARK: - Permission Guide
 
@@ -305,7 +305,7 @@
 "Export as Plaintext" = "导出为纯文本";
 "Clear All History?" = "清空全部历史记录？";
 "Clear" = "清空";
-"This will permanently delete all %d history entries." = "这将永久删除全部 %d 条历史记录。";
+"This will permanently delete all %lld history entries." = "这将永久删除全部 %lld 条历史记录。";
 "No text detected" = "未检测到文字";
 "The original screenshot is no longer available. It may have been removed by the retention policy." = "原始截图已不可用，可能已被保留策略删除。";
 "The stored screenshot could not be decoded." = "无法解码存储的截图。";
@@ -402,7 +402,7 @@
 "No matching colors" = "没有匹配的颜色";
 "Clear Colors" = "清空颜色";
 "Clear Color History?" = "清空颜色历史？";
-"This will permanently delete all %d color entries." = "这将永久删除全部 %d 条颜色记录。";
+"This will permanently delete all %lld color entries." = "这将永久删除全部 %lld 条颜色记录。";
 "This will permanently delete all color entries." = "这将永久删除全部颜色记录。";
 "Area" = "区域";
 "Editor" = "编辑器";
@@ -443,12 +443,16 @@
 "Scrolling capture cancelled" = "已取消滚动截图";
 "Scroll the window, then capture the next frame" = "请滚动窗口，然后截取下一帧";
 "No visual change detected; scroll and try again" = "画面没有变化，请滚动后重试";
-"Frame %d captured" = "已截取第 %d 帧";
+"Frame %lld captured" = "已截取第 %lld 帧";
 "Saved to %@" = "已保存至 %@";
 "Capture failed: %@" = "截图失败：%@";
 "OCR failed: %@" = "文字识别失败：%@";
 "History save failed: %@" = "历史记录保存失败：%@";
 "Scroll frame failed: %@" = "滚动帧截取失败：%@";
+"The window size changed; finish to keep what has been captured" = "窗口尺寸发生变化，结束拼接即可保留已采集的部分";
+"Scrolling capture reached the size limit; finish to keep what has been captured" = "滚动截图已达尺寸上限，结束拼接即可保留已采集的部分";
+"Processing…" = "处理中…";
+"Long screenshot reached the size limit; the captured part was kept" = "长图已达尺寸上限，已保留已拼接的部分";
 "Save failed: %@" = "保存失败：%@";
 "Copy failed: %@" = "复制失败：%@";
 "Undo" = "撤销";
@@ -457,7 +461,7 @@
 "Open Storage Folder" = "打开存储文件夹";
 "Screenshot deleted" = "截图已删除";
 "Window picker timed out; please try again" = "窗口选择超时，请重试";
-"Exported %d entries to %@" = "已导出 %d 条记录到 %@";
+"Exported %lld entries to %@" = "已导出 %lld 条记录到 %@";
 "Save your annotations?" = "要保存标注吗？";
 "Closing the editor now discards the annotations on this screenshot." = "现在关闭编辑器将丢弃此截图上的标注。";
 "Discard" = "不保存";
@@ -480,3 +484,27 @@
 "Copy %lld recognized lines" = "复制 %lld 行识别文本";
 "Zoom (⌘0 fits the window, ⌘1 shows actual size)" = "缩放（⌘0 适合窗口，⌘1 实际大小）";
 "Capturing…" = "正在截取…";
+
+/* Editor workspace */
+"No open screenshots" = "没有打开的截图";
+"Discard annotations in %lld tabs?" = "要丢弃 %lld 个标签中的标注吗？";
+"Close a tab before opening another screenshot" = "请先关闭一个标签，再打开新的截图";
+
+/* Editor inspector and crop lifecycle */
+"Toggle Inspector" = "显示或隐藏检查器";
+"Select an annotation to adjust its style" = "选择一个标注以调整样式";
+"Processing crop…" = "正在处理裁剪…";
+"The document changed while cropping, so this crop was cancelled." = "裁剪期间文档已修改，本次裁剪已取消。";
+"Select a window to continue" = "选择一个窗口以继续";
+
+"Inspector" = "检查器";
+"Annotation inspector" = "标注检查器";
+"Stroke color" = "描边颜色";
+"Copy %@" = "复制 %@";
+"Copy Again" = "再次复制";
+"Close Window" = "关闭窗口";
+"No capturable windows found" = "没有可截取的窗口";
+
+"Save the annotated image (⌘S)" = "保存标注后的图片（⌘S）";
+"Copy the annotated image to the clipboard (⌘C)" = "复制标注后的图片到剪贴板（⌘C）";
+"Drag on the canvas to choose the crop area" = "在画布上拖动以选择裁剪区域";

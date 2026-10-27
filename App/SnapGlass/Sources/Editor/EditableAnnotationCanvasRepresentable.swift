@@ -78,6 +78,8 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.currentBlurMode = blurMode
         view.currentBlurIntensity = blurIntensity
         view.selectedNodeID = textEntryNode == nil ? selectedNodeID : nil
+        // 节点被拖动/缩放后手柄位置会变，cursor rect 必须跟着重算。
+        view.window?.invalidateCursorRects(for: view)
         view.liveStyleNodeID = isAdjustingStyle ? selectedNodeID : nil
         view.ocrLines = ocrLines
         view.showsOCROverlay = showsOCROverlay

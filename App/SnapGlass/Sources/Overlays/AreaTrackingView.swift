@@ -34,6 +34,11 @@ final class AreaTrackingView: NSView {
     private var dragAction: DragAction?
     var hoverPoint: CGPoint = .zero
     var hoverColor: SampledColor?
+    /// 取色标签当前实际占用的矩形；夹取后可能翻到光标另一侧，
+    /// 失效必须用这个矩形而不是光标附近的固定框。
+    var hoverLabelRect: CGRect = .zero
+    /// 当前悬停的缩放手柄；用于手柄高亮与方向光标。
+    var hoveredHandle: ResizeHandle?
     /// Throttles per-pixel sampling so moving the pointer across a 5K overlay
     /// does not allocate a new 1×1 CGContext on every mouse event.
     private var lastHoverSampleTime: TimeInterval = 0
@@ -121,6 +126,9 @@ final class AreaTrackingView: NSView {
     override func cursorUpdate(with event: NSEvent) {
         if phase == .choosingAction {
             NSCursor.arrow.set()
+        } else if phase == .adjusting,
+                  let handle = hitHandle(at: convert(event.locationInWindow, from: nil)) {
+            handle.cursor.set()
         } else {
             NSCursor.crosshair.set()
         }
@@ -131,12 +139,14 @@ final class AreaTrackingView: NSView {
         capturedFrames = frames
         if hoverColor == nil {
             hoverColor = sampleColor(at: hoverPoint)
+            updateHoverLabelRect()
         }
         needsDisplay = true
     }
 
     override func mouseMoved(with event: NSEvent) {
         let previousPoint = hoverPoint
+        let previousLabelRect = hoverLabelRect
         let point = convert(event.locationInWindow, from: nil)
         hoverPoint = point
 
@@ -145,21 +155,54 @@ final class AreaTrackingView: NSView {
             lastHoverSampleTime = now
             hoverColor = sampleColor(at: point)
         }
+        updateHoverLabelRect()
+
+        if phase == .adjusting {
+            let handle = hitHandle(at: point)
+            if handle != hoveredHandle {
+                hoveredHandle = handle
+                (handle?.cursor ?? .crosshair).set()
+                setNeedsDisplay(selectionRect.insetBy(dx: -20, dy: -20))
+            }
+        } else if hoveredHandle != nil {
+            hoveredHandle = nil
+        }
 
         // Only the crosshair and the color label follow the pointer. Repainting
         // just their union keeps AppKit from invalidating the whole 5K overlay.
         guard phase != .choosingAction else { return }
         let dirty =
-            hoverInvalidationRect(for: previousPoint)
-            .union(hoverInvalidationRect(for: point))
+            crosshairInvalidationRect(for: previousPoint)
+            .union(crosshairInvalidationRect(for: point))
+            .union(previousLabelRect)
+            .union(hoverLabelRect)
+            .insetBy(dx: -4, dy: -4)
         setNeedsDisplay(dirty)
     }
 
-    /// Bounding box of the pointer decorations: crosshair plus hover label.
-    private func hoverInvalidationRect(for point: CGPoint) -> CGRect {
-        let crosshair = CGRect(x: point.x - 24, y: point.y - 24, width: 48, height: 48)
-        let label = CGRect(x: point.x + 12, y: point.y + 12, width: 260, height: 64)
-        return crosshair.union(label).insetBy(dx: -4, dy: -4)
+    /// Crosshair 的包围盒。标签单独用实际矩形，因为它会被夹取到边缘另一侧。
+    private func crosshairInvalidationRect(for point: CGPoint) -> CGRect {
+        CGRect(x: point.x - 24, y: point.y - 24, width: 48, height: 48)
+    }
+
+    /// 标签尺寸只随色值文本变化；位置每次都跟着光标重算。
+    private func updateHoverLabelRect() {
+        guard phase != .choosingAction, let hoverColor else {
+            hoverLabelRect = .zero
+            return
+        }
+        let hexSize = AreaHoverLabelMetrics.hexSize(for: hoverColor.hexString)
+        let rgbSize = AreaHoverLabelMetrics.rgbSize(for: hoverColor.rgbString)
+        let size = CGSize(
+            width: 10 + 5 + max(hexSize.width, rgbSize.width) + 6 * 2,
+            height: max(hexSize.height, rgbSize.height) * 2 + 8
+        )
+        hoverLabelRect = LabelPlacement.rect(
+            size: size,
+            near: hoverPoint,
+            offset: CGSize(width: 16, height: 16),
+            inside: bounds
+        )
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -290,6 +333,7 @@ final class AreaTrackingView: NSView {
     private func showActionChooser() {
         guard phase == .adjusting, selectionRect.width > 5, selectionRect.height > 5 else { return }
         phase = .choosingAction
+        hoveredHandle = nil
         actionBar.isHidden = false
         actionBar.updatePinShortcutHint()
         positionActionBar()
@@ -301,6 +345,7 @@ final class AreaTrackingView: NSView {
         guard phase == .choosingAction else { return }
         dismissBarcodePanel()
         actionBar.isHidden = true
+        hoveredHandle = nil
         phase = .adjusting
         window?.makeFirstResponder(self)
         needsDisplay = true
@@ -339,8 +384,8 @@ final class AreaTrackingView: NSView {
 
         let fittingSize = actionBar.fittingSize
         let size = CGSize(width: max(fittingSize.width, 400), height: max(fittingSize.height, 44))
-        let margin: CGFloat = 12
-        let horizontalInset: CGFloat = 8
+        let margin: CGFloat = DS.Space.s12
+        let horizontalInset: CGFloat = DS.Space.s8
         let proposedX = selectionRect.midX - size.width / 2
         let originX = min(
             max(proposedX, bounds.minX + horizontalInset),
@@ -361,6 +406,7 @@ final class AreaTrackingView: NSView {
     private func resetSelection() {
         dismissBarcodePanel()
         actionBar.isHidden = true
+        hoveredHandle = nil
         phase = .idle
         selectionRect = .zero
         freeformPoints = []
@@ -414,7 +460,12 @@ final class AreaTrackingView: NSView {
 
     private func hitHandle(at point: CGPoint) -> ResizeHandle? {
         handlePoints().first { _, center in
-            CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14).contains(point)
+            CGRect(
+                x: center.x - DS.Hit.handle / 2,
+                y: center.y - DS.Hit.handle / 2,
+                width: DS.Hit.handle,
+                height: DS.Hit.handle
+            ).contains(point)
         }?.key
     }
 
@@ -492,4 +543,25 @@ extension AreaTrackingView {
         return true
     }
 
+}
+
+
+extension AreaTrackingView.ResizeHandle {
+    /// 八方向手柄对应的系统光标（对角线在 macOS 15 以下退回十字）。
+    var cursor: NSCursor {
+        switch self {
+        case .left, .right: return NSCursor.resizeLeftRight
+        case .top, .bottom: return NSCursor.resizeUpDown
+        case .topLeft, .bottomRight:
+            if #available(macOS 15.0, *) {
+                return NSCursor.frameResize(position: .topLeft, directions: .all)
+            }
+            return .crosshair
+        case .topRight, .bottomLeft:
+            if #available(macOS 15.0, *) {
+                return NSCursor.frameResize(position: .topRight, directions: .all)
+            }
+            return .crosshair
+        }
+    }
 }

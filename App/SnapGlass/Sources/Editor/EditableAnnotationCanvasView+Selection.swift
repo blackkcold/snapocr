@@ -10,25 +10,55 @@ extension EditableAnnotationCanvasNSView {
     func drawSelection(in context: CGContext) {
         guard currentTool == .select, let node = interactiveNode ?? selectedNode else { return }
         context.saveGState()
-        context.setStrokeColor(NSColor.controlAccentColor.cgColor)
-        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+        context.setStrokeColor(Palette.selectionStroke.cgColor)
         context.setLineWidth(1.5)
         context.setLineDash(phase: 0, lengths: [5, 3])
         context.stroke(selectionFrameRect(for: node))
         context.setLineDash(phase: 0, lengths: [])
+
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         for handle in visibleHandles(for: node) {
             let center = handlePoint(handle, for: node)
-            let handleSize: CGFloat = node.tool == .text ? 7 : 8
+            let isHovered = handle == hoveredHandle
+            let scale: CGFloat = isHovered && !reduceMotion ? 1.2 : 1
+            let handleSize = DS.Control.handleVisualSize * scale
             let handleRect = CGRect(
                 x: center.x - handleSize / 2,
                 y: center.y - handleSize / 2,
                 width: handleSize,
                 height: handleSize
             )
+            context.setFillColor(Palette.handleFill.cgColor)
+            context.setStrokeColor(
+                (isHovered ? Palette.handleHoverStroke : Palette.handleStroke).cgColor
+            )
+            context.setLineWidth(isHovered ? 1.5 : 1)
             context.fill(handleRect)
             context.stroke(handleRect)
         }
         context.restoreGState()
+    }
+
+    /// 八方向手柄对应的系统光标。
+    ///
+    /// AppKit 直到 macOS 15 才提供对角线缩放光标；13–14 上对角线退回十字，
+    /// 正交方向仍用传统的左右/上下缩放光标。
+    static func cursor(for handle: ResizeHandle) -> NSCursor {
+        switch handle {
+        case .left, .right: return NSCursor.resizeLeftRight
+        case .top, .bottom: return NSCursor.resizeUpDown
+        case .topLeft, .bottomRight:
+            if #available(macOS 15.0, *) {
+                return NSCursor.frameResize(position: .topLeft, directions: .all)
+            }
+            return .crosshair
+        case .topRight, .bottomLeft:
+            if #available(macOS 15.0, *) {
+                return NSCursor.frameResize(position: .topRight, directions: .all)
+            }
+            return .crosshair
+        case .start, .end: return NSCursor.crosshair
+        }
     }
 
     var selectedNode: AnnotationNode? {
@@ -69,7 +99,7 @@ extension EditableAnnotationCanvasNSView {
         )
     }
 
-    private func visibleHandles(for node: AnnotationNode) -> [ResizeHandle] {
+    func visibleHandles(for node: AnnotationNode) -> [ResizeHandle] {
         if node.tool == .arrow { return [.start, .end] }
         if node.tool == .text {
             let contentRect = viewRect(from: normalizedBounds(for: node))
@@ -86,11 +116,11 @@ extension EditableAnnotationCanvasNSView {
     func resizeHandle(at point: CGPoint, for node: AnnotationNode) -> ResizeHandle? {
         visibleHandles(for: node).first {
             let center = handlePoint($0, for: node)
-            return hypot(point.x - center.x, point.y - center.y) <= 9
+            return hypot(point.x - center.x, point.y - center.y) <= DS.Hit.handle / 2
         }
     }
 
-    private func handlePoint(_ handle: ResizeHandle, for node: AnnotationNode) -> CGPoint {
+    func handlePoint(_ handle: ResizeHandle, for node: AnnotationNode) -> CGPoint {
         if node.tool == .arrow, node.points.count >= 2 {
             return viewPoint(from: handle == .start ? node.points[0] : node.points[1])
         }
@@ -252,7 +282,11 @@ extension EditableAnnotationCanvasNSView {
         }
 
         let backingScale = window?.backingScaleFactor ?? 2
-        let maximumDimension = max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
+        // 缩放时显示尺寸每帧都变；把渲染尺寸吸附到固定档位，否则缓存键
+        // 必然 miss，每一帧都会重新合成整张 5K 图。
+        let maximumDimension = CanvasRenderScale.quantize(
+            max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
+        )
         if let renderedPreview,
            renderedPreviewNodes == previewNodes,
            renderedPreviewSource === image,

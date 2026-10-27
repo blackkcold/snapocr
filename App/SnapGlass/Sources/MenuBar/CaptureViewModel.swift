@@ -31,17 +31,15 @@ public final class CaptureViewModel: ObservableObject {
     /// Whether a capture is currently in progress
     @Published public var isCapturing = false
     
-    /// The image to open in the annotation editor
-    @Published public var editorImage: CGImage?
-
-    /// Changes whenever a different image should create a fresh editor document.
-    @Published public internal(set) var editorSessionID = UUID()
-
-    /// Capture metadata used to configure image-specific editor affordances.
-    @Published internal(set) var editorContext = EditorCaptureContext.standard
+    /// 编辑器窗口的多标签工作区：一个窗口承载多份文档。
+    ///
+    /// 新截图永远作为新标签打开，不再替换当前会话，因此「截图时正在编辑
+    /// 的标注」不会被静默丢弃。
+    public let editorWorkspace = EditorWorkspace()
 
     /// The current toast message to display
     @Published public var toastMessage: ToastMessage?
+    private let toastDeduplicator = ToastDeduplicator()
 
     /// Whether a manual scrolling capture session is active.
     @Published public internal(set) var isScrollCaptureActive = false
@@ -59,9 +57,14 @@ public final class CaptureViewModel: ObservableObject {
     public var openWindow: ((String) -> Void)?
 
     var scrollSession: ScrollSession?
-    var scrollFrames: [ScrollFrame] = []
+    /// 采帧不再在 VM 里堆全分辨率数组：首帧进引擎画布后就地释放，
+    /// 之后每帧追加完即丢，稳态内存 = 画布 + 1 帧。
     var scrollSourceAppName: String?
     var scrollSourceWindowTitle: String?
+    /// 本次会话是否已经提示过「已达尺寸上限」，避免每次采帧都刷同一条 toast。
+    var scrollReachedSizeLimit = false
+    /// 在途的采帧任务。取消时先 cancel，避免迟到的帧写进新会话。
+    var scrollCaptureTask: Task<Void, Never>?
     let updateService: UpdateService
     let logger = Logger(category: "capture")
 
@@ -177,6 +180,7 @@ public final class CaptureViewModel: ObservableObject {
         actionLabel: String? = nil,
         action: (@MainActor () -> Void)? = nil
     ) {
+        guard toastDeduplicator.shouldPresent(message) else { return }
         let toast = ToastMessage(
             message: message,
             type: type,

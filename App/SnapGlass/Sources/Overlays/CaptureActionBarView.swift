@@ -24,7 +24,7 @@ final class CaptureActionBarView: NSVisualEffectView {
         blendingMode = .withinWindow
         state = .active
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = DS.Corner.c10
         layer?.masksToBounds = true
 
         configureActionButtons()
@@ -33,15 +33,15 @@ final class CaptureActionBarView: NSVisualEffectView {
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.distribution = .fill
-        stack.spacing = 8
+        stack.spacing = DS.Space.s8
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: DS.Space.s8),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -DS.Space.s8),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: DS.Space.s10),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -DS.Space.s10),
         ])
 
         setAccessibilityElement(true)

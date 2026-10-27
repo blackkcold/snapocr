@@ -3,6 +3,21 @@ import CaptureCore
 import CoreGraphics
 import Foundation
 
+/// 增量拼接的进行中状态。
+///
+/// 画布一次性按 `heightLimit` 预分配：几何增长看起来更省，但 `CGContext`
+/// 无法原地扩容，扩容要先 `makeImage()` 再重绘，瞬时是「旧图 + 旧画布 + 新画布」
+/// 三份，比一次性预留更糟。
+private struct LiveStitchState {
+    var context: CGContext
+    var width: Int
+    var limit: Int
+    var lastTop: Int
+    var frames: Int
+    var dropped: Int
+    var lastImage: CGImage
+}
+
 /// 滚动截图拼接引擎。
 ///
 /// 作为 `ScrollProtocol` 的 `actor` 实现，串行化所有滚动截图操作。
@@ -40,6 +55,18 @@ public actor ScrollStitchActor: ScrollProtocol {
     /// 重叠检测器
     private let overlapDetector: OverlapDetector
 
+    /// 长图输出预算（高度 + 像素双上限）
+    private let budget: StitchBudget
+
+    /// 诊断：本次拼接的画布分配次数与字节数，用于测试「一次性预分配」不变量。
+    private(set) var stitchCanvasAllocationCount = 0
+    private(set) var stitchCanvasAllocatedBytes = 0
+    /// 诊断：重叠探测的实际调用次数，用于测试「每对相邻帧只探测一次」。
+    private(set) var overlapProbeCount = 0
+
+    /// 增量拼接的进行中状态（采一帧拼一帧，原始帧随即释放）。
+    private var liveStitch: LiveStitchState?
+
     /// 当前活跃会话
     private var currentSession: ScrollSession?
 
@@ -55,7 +82,6 @@ public actor ScrollStitchActor: ScrollProtocol {
     private static let normalMemoryThreshold: UInt64 = 150 * 1024 * 1024
     private static let moderateMemoryThreshold: UInt64 = 200 * 1024 * 1024
     private static let highMemoryThreshold: UInt64 = 300 * 1024 * 1024
-    private static let maxFramesBeforePressureCheck = 5
 
     /// 当前内存压力级别
     private var memoryPressureLevel: MemoryPressureLevel = .normal
@@ -70,13 +96,16 @@ public actor ScrollStitchActor: ScrollProtocol {
     /// - Parameters:
     ///   - deduper: 帧去重器，默认使用 `FrameDeduper()`。
     ///   - overlapDetector: 重叠检测器，默认使用 `OverlapDetector()`。
+    ///   - budget: 长图输出预算，默认使用 ``StitchBudget/default``。
     public init(
         deduper: FrameDeduper = FrameDeduper(),
-        overlapDetector: OverlapDetector = OverlapDetector()
+        overlapDetector: OverlapDetector = OverlapDetector(),
+        budget: StitchBudget = .default
     ) {
         self.captureAdapter = nil
         self.deduper = deduper
         self.overlapDetector = overlapDetector
+        self.budget = budget
     }
 
     /// 创建滚动截图引擎（完整模式）。
@@ -87,14 +116,17 @@ public actor ScrollStitchActor: ScrollProtocol {
     ///   - captureAdapter: 遵循 `CaptureProtocol` 的截图适配器。
     ///   - deduper: 帧去重器，默认使用 `FrameDeduper()`。
     ///   - overlapDetector: 重叠检测器，默认使用 `OverlapDetector()`。
+    ///   - budget: 输出预算，默认使用 ``StitchBudget/default``。
     public init(
         captureAdapter: any CaptureProtocol,
         deduper: FrameDeduper = FrameDeduper(),
-        overlapDetector: OverlapDetector = OverlapDetector()
+        overlapDetector: OverlapDetector = OverlapDetector(),
+        budget: StitchBudget = .default
     ) {
         self.captureAdapter = captureAdapter
         self.deduper = deduper
         self.overlapDetector = overlapDetector
+        self.budget = budget
     }
 
     /// 注入截图适配器以启用自动帧捕获。
@@ -169,7 +201,17 @@ extension ScrollStitchActor {
         return frame
     }
 
+    /// 兼容入口：只返回图像。输出可能被预算截断且不报告丢弃帧数。
+    /// 需要截断信息时用 ``stitchFramesDetailed(_:)``。
     public func stitchFrames(_ frames: [ScrollFrame]) async throws -> CGImage {
+        try await stitchFramesDetailed(frames).image
+    }
+
+    /// 将多个帧拼接为完整长图，并返回预算截断信息。
+    ///
+    /// 与 ``stitchFrames(_:)`` 相同，但会报告因 ``StitchBudget`` 被截断的帧数。
+    /// 达到上限时保留已经拼好的部分，不抛错。
+    public func stitchFramesDetailed(_ frames: [ScrollFrame]) async throws -> StitchResult {
         guard !isCancelled else {
             throw ScrollError.invalidSession
         }
@@ -195,12 +237,14 @@ extension ScrollStitchActor {
             throw ScrollError.insufficientFrames(count: deduped.count)
         }
 
-        let overlaps = overlapDetector.detectOverlaps(deduped)
+        let result = try await stitchOnce(frames: deduped)
 
-        let result = try await streamStitch(frames: deduped, overlaps: overlaps)
-
+        session = currentSession
         session?.status = .completed
         self.currentSession = session
+
+        // 拼接完成后不再需要原始帧，立刻让出内存。
+        cleanup()
 
         return result
     }
@@ -220,144 +264,307 @@ extension ScrollStitchActor {
 
 extension ScrollStitchActor {
 
-    /// 流式拼接多帧图像。
+    /// 一次性拼接多帧图像。
     ///
-    /// 逐对处理相邻帧，每次拼接后立即释放已处理帧的 CGImage，
-    /// 控制内存占用在设计目标范围内。
-    ///
-    /// 拼接流程：
-    /// 1. 取帧 A（上方）和帧 B（下方）
-    /// 2. 用 OverlapDetector 找到最佳拼接偏移量
-    /// 3. 创建合成图像：A[0..offset] + B[offset..end]
-    /// 4. 释放 A 和 B 的原始 CGImage
-    /// 5. 合成图像成为下一轮的帧 A
-    /// 6. 重复直到所有帧处理完毕
-    private func streamStitch(
-        frames: [ScrollFrame],
-        overlaps: [CGFloat]
-    ) async throws -> CGImage {
-        var composite = frames[0].image
-
-        for index in 0..<(frames.count - 1) {
-            try Task.checkCancellation()
-
-            if memoryPressureLevel >= .high {
-                try await Task.sleep(nanoseconds: 500_000_000)
-            }
-
-            let frameB = frames[index + 1]
-            let stitchOffset = findStitchOffset(
-                frameA: composite,
-                frameB: frameB.image,
-                overlapRatio: overlaps.indices.contains(index) ? overlaps[index] : 0
-            )
-
-            guard let stitched = stitchPair(
-                imageA: composite,
-                imageB: frameB.image,
-                stitchOffset: stitchOffset
-            ) else {
-                throw ScrollError.stitchFailed(
-                    reason: "帧 \(index) 和 \(index + 1) 拼接失败: 无法创建合成画布"
-                )
-            }
-
-            composite = stitched
-
-            if index % Self.maxFramesBeforePressureCheck == 0 {
-                updateMemoryPressure()
-                if memoryPressureLevel >= .critical {
-                    throw ScrollError.memoryPressureHigh
-                }
-            }
+    /// B5 重构后的实现，在「各帧同宽同高、重叠探测成功」时与原逐对拼接逐像素一致
+    /// （探测失败或中途换过窗口尺寸时按上一帧高度收敛，比旧实现更保守），并且：
+    /// 1. 每对相邻帧只做 **一次** 重叠探测（原实现每对探测两次，且第二次在
+    ///    不断变高的合成图上做）；
+    /// 2. 先算出每帧的纵向位置和最终高度，**一次性分配**唯一画布，
+    ///    不再每步新建 `(offset + heightB)` 的画布并重绘整张旧图；
+    /// 3. 高度同时受 `maxHeight` 与 `maxPixels` 约束，宽图自动降低高度上限；
+    /// 4. 超出预算时保留已拼部分并返回 `droppedFrameCount`，由 UI 提示。
+    private func stitchOnce(frames: [ScrollFrame]) async throws -> StitchResult {
+        let width = frames.reduce(0) { max($0, $1.image.width) }
+        guard width > 0 else {
+            throw ScrollError.stitchFailed(reason: "帧尺寸无效")
         }
 
-        return composite
-    }
+        // 1) 计划：只用原始相邻帧探测一次，得到每帧相对上一帧的增长量。
+        var growth: [Int] = [0]
+        growth.reserveCapacity(frames.count)
+        for index in 1..<frames.count {
+            try Task.checkCancellation()
+            growth.append(overlapGrowth(previous: frames[index - 1], next: frames[index]))
+        }
 
-    /// 拼接相邻两帧。
-    ///
-    /// - Parameters:
-    ///   - imageA: 上方帧（或累积的合成图像）。
-    ///   - imageB: 下方帧。
-    ///   - stitchOffset: imageA 底部应保留的像素高度（拼接点）。
-    /// - Returns: 拼接后的合成图像，失败返回 `nil`。
-    private func stitchPair(
-        imageA: CGImage,
-        imageB: CGImage,
-        stitchOffset: CGFloat
-    ) -> CGImage? {
-        let heightA = CGFloat(imageA.height)
-        let heightB = CGFloat(imageB.height)
-        let width = CGFloat(max(imageA.width, imageB.width))
+        // 2) 累加位置，按像素预算截断。
+        let heightLimit = budget.heightLimit(forWidth: width)
+        var positions: [Int] = []
+        positions.reserveCapacity(frames.count)
+        var cursor = 0
+        var outputHeight = 0
+        var clippedLastFrame = false
 
-        let offset = stitchOffset > 0 && stitchOffset < heightA
-            ? stitchOffset
-            : heightA * 0.85
+        for (index, frame) in frames.enumerated() {
+            if index > 0 {
+                cursor += max(0, growth[index])
+            }
+            guard cursor < heightLimit else { break }
+            positions.append(cursor)
+            let bottom = cursor + frame.image.height
+            outputHeight = min(heightLimit, bottom)
+            clippedLastFrame = bottom > heightLimit
+            if clippedLastFrame { break }
+        }
 
-        let totalHeight = offset + heightB
+        guard !positions.isEmpty, outputHeight > 0 else {
+            throw ScrollError.stitchFailed(reason: "帧内容为空，无法拼接")
+        }
+
+        // 3) 一次性分配唯一画布。
+        //
+        // 压力闸门放在分配之前：一旦画布已经分配，再在绘制循环里 sleep 并不会
+        // 释放任何内存，只会让「完成拼接」这一步变慢。
+        updateMemoryPressure()
+        if memoryPressureLevel >= .critical {
+            throw ScrollError.memoryPressureHigh
+        }
 
         guard let context = CGContext(
             data: nil,
-            width: Int(width),
-            height: Int(totalHeight),
+            width: width,
+            height: outputHeight,
             bitsPerComponent: 8,
             bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else {
-            return nil
+            throw ScrollError.stitchFailed(reason: "无法创建合成画布")
         }
+        stitchCanvasAllocationCount += 1
+        stitchCanvasAllocatedBytes += width * outputHeight * 4
 
-        if let croppedA = imageA.cropping(to: CGRect(
-            x: 0, y: 0,
-            width: min(width, CGFloat(imageA.width)),
-            height: offset
-        )) {
-            context.draw(croppedA, in: CGRect(
-                x: 0, y: heightB,
-                width: CGFloat(croppedA.width),
-                height: CGFloat(croppedA.height)
-            ))
-        }
+        // 4) 逐帧绘制到固定画布：后绘制的帧覆盖重叠带，与旧实现的裁剪拼接等价。
+        for (index, y) in positions.enumerated() {
+            try Task.checkCancellation()
 
-        let drawHeightB = min(heightB, totalHeight - offset)
-        if let croppedB = imageB.cropping(to: CGRect(
-            x: 0,
-            y: Int(max(0, heightB - drawHeightB)),
-            width: min(Int(width), imageB.width),
-            height: Int(drawHeightB)
-        )) {
-            context.draw(croppedB, in: CGRect(
+            let image = frames[index].image
+            context.draw(image, in: CGRect(
                 x: 0,
-                y: 0,
-                width: CGFloat(croppedB.width),
-                height: CGFloat(croppedB.height)
+                y: outputHeight - y - image.height,
+                width: image.width,
+                height: image.height
             ))
         }
 
-        return context.makeImage()
+        guard let image = context.makeImage() else {
+            throw ScrollError.stitchFailed(reason: "无法生成拼接结果")
+        }
+
+        let dropped = frames.count - positions.count
+        return StitchResult(
+            image: image,
+            stitchedFrameCount: positions.count,
+            droppedFrameCount: clippedLastFrame ? max(1, dropped) : dropped
+        )
     }
 
-    /// 使用 OverlapDetector 找到拼接偏移量。
-    private func findStitchOffset(
-        frameA: CGImage,
-        frameB: CGImage,
-        overlapRatio: CGFloat
-    ) -> CGFloat {
-        let heightA = CGFloat(frameA.height)
+    /// 计算下一帧相对上一帧顶部的纵向增长量（像素）。
+    ///
+    /// 顺序与旧实现一致：先用重叠探测，失败则退回采帧时记录的滚动偏移，
+    /// 最后按 85% 高度保守估算。探测失败时沿用旧实现的 `detectOverlaps`
+    /// 比例公式，保证输出不变。
+    private func overlapGrowth(previous: ScrollFrame, next: ScrollFrame) -> Int {
+        let previousHeight = CGFloat(previous.image.height)
+        guard previousHeight > 0, next.image.height > 0 else { return 0 }
 
-        let detectedOffset = overlapDetector.findBestMatchOffset(frameA, frameB)
-        if detectedOffset > 0 {
-            return detectedOffset
+        overlapProbeCount += 1
+        let detected = overlapDetector.findBestMatchOffset(previous.image, next.image)
+        if detected > 0 && detected < previousHeight {
+            return Int(detected.rounded())
         }
 
-        if overlapRatio > 0 {
-            let overlapHeight = CGFloat(frameB.height) * overlapRatio
-            return max(1, heightA - overlapHeight)
+        let estimated: CGFloat
+        if previous.predictedScrollOffset > 0 && previous.predictedScrollOffset < previousHeight {
+            estimated = previous.predictedScrollOffset
+        } else {
+            estimated = previousHeight * 0.85
         }
 
-        return heightA * 0.85
+        let overlapRatio = min(max((previousHeight - estimated) / previousHeight, 0), 1)
+        return Int((previousHeight - CGFloat(next.image.height) * overlapRatio).rounded())
+    }
+}
+
+// MARK: - Incremental Stitching
+
+extension ScrollStitchActor {
+
+    /// 开始增量拼接：画布一次性预分配到像素预算允许的最大高度。
+    ///
+    /// 采帧端每拿到一帧就 `append`，原始帧随即释放，因此稳态内存是
+    /// 「画布 + 1 帧」，而不是「全部帧 + 画布」。
+    public func beginIncrementalStitch(firstFrame: ScrollFrame) throws {
+        guard !isCancelled else {
+            throw ScrollError.invalidSession
+        }
+
+        updateMemoryPressure()
+        if memoryPressureLevel >= .critical {
+            throw ScrollError.memoryPressureHigh
+        }
+
+        let width = firstFrame.image.width
+        let height = firstFrame.image.height
+        guard width > 0, height > 0 else {
+            throw ScrollError.stitchFailed(reason: "帧尺寸无效")
+        }
+
+        let limit = budget.heightLimit(forWidth: width)
+        // 首帧比整个预算还高时显式失败，而不是悄悄裁掉下半截。
+        guard height <= limit else {
+            throw ScrollError.stitchFailed(reason: "首帧高度超出输出预算")
+        }
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: limit,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw ScrollError.stitchFailed(reason: "无法创建合成画布")
+        }
+
+        context.draw(firstFrame.image, in: CGRect(
+            x: 0,
+            y: limit - height,
+            width: width,
+            height: height
+        ))
+
+        liveStitch = LiveStitchState(
+            context: context,
+            width: width,
+            limit: limit,
+            lastTop: 0,
+            frames: 1,
+            dropped: 0,
+            lastImage: firstFrame.image
+        )
+        stitchCanvasAllocationCount += 1
+        stitchCanvasAllocatedBytes += width * limit * 4
+
+        var session = currentSession
+        session?.status = .capturing
+        self.currentSession = session
+    }
+
+    /// 追加一帧到正在进行的增量拼接。
+    ///
+    /// - Note: 预算边界与批式拼接略有不同：增量路径在写入前判断整帧是否放得下，
+    ///   放不下时返回 `.limitReached`，不会只画半帧；`stitchOnce` 则会画入能放下的
+    ///   部分。因此在「刚好差一点」的阈值上，两者的输出可能相差一个残条高度。
+    ///   需要与批式逐像素一致时，请走 `stitchFramesDetailed(_:)`。
+    ///
+    /// - Parameter image: 新捕获的帧。
+    @discardableResult
+    public func appendIncrementalFrame(_ image: CGImage) throws -> IncrementalAppendResult {
+        guard var live = liveStitch else {
+            throw ScrollError.invalidSession
+        }
+        guard !isCancelled else {
+            throw ScrollError.invalidSession
+        }
+        guard image.width > 0, image.height > 0 else {
+            throw ScrollError.stitchFailed(reason: "帧尺寸无效")
+        }
+
+        if deduper.isDuplicate(live.lastImage, image) {
+            return .duplicate
+        }
+
+        // 宽不一致（1x ↔ 2x 显示器、窗口被拉宽）时继续拼会横向错位，直接停。
+        guard image.width == live.width else {
+            live.dropped += 1
+            liveStitch = live
+            return .sizeChanged
+        }
+
+        let growth = overlapGrowth(
+            previous: ScrollFrame(image: live.lastImage, index: 0),
+            next: ScrollFrame(image: image, index: 0)
+        )
+        let top = live.lastTop + max(0, growth)
+        guard top + image.height <= live.limit else {
+            live.dropped += 1
+            liveStitch = live
+            return .limitReached
+        }
+
+        // 按原始尺寸绘制，超出画布的部分由 CGContext 裁掉；用 min() 会缩放变形。
+        live.context.draw(image, in: CGRect(
+            x: 0,
+            y: live.limit - top - image.height,
+            width: image.width,
+            height: image.height
+        ))
+
+        live.lastTop = top
+        live.frames += 1
+        live.lastImage = image
+        liveStitch = live
+        return .appended(frameCount: live.frames)
+    }
+
+    /// 完成增量拼接并返回结果。
+    public func finishIncrementalStitch() throws -> StitchResult {
+        guard let live = liveStitch else {
+            throw ScrollError.invalidSession
+        }
+        liveStitch = nil
+
+        let height = min(live.limit, live.lastTop + live.lastImage.height)
+        guard height > 0, let full = live.context.makeImage() else {
+            throw ScrollError.stitchFailed(reason: "无法生成拼接结果")
+        }
+
+        // 内容明显短于预算时把结果复制到精确高度：`cropping` 会共享整块
+        // 预分配缓冲，否则一张 8 000 行的长图会一直背着 32 000 行的内存。
+        // 阈值取 1/4 而不是 1/2：1/2 附近复制会同时压住「预算画布 + 接近半个预算的副本」。
+        updateMemoryPressure()
+        if memoryPressureLevel >= .critical {
+            throw ScrollError.memoryPressureHigh
+        }
+        let image: CGImage
+        if height * 4 < live.limit {
+            guard let exactContext = CGContext(
+                data: nil,
+                width: live.width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else {
+                throw ScrollError.stitchFailed(reason: "无法创建输出画布")
+            }
+            guard let cropped = full.cropping(to: CGRect(x: 0, y: 0, width: live.width, height: height)) else {
+                throw ScrollError.stitchFailed(reason: "无法裁剪拼接结果")
+            }
+            exactContext.draw(cropped, in: CGRect(x: 0, y: 0, width: live.width, height: height))
+            guard let exact = exactContext.makeImage() else {
+                throw ScrollError.stitchFailed(reason: "无法生成输出图像")
+            }
+            image = exact
+        } else {
+            guard let cropped = full.cropping(to: CGRect(x: 0, y: 0, width: live.width, height: height)) else {
+                throw ScrollError.stitchFailed(reason: "无法裁剪拼接结果")
+            }
+            image = cropped
+        }
+
+        var session = currentSession
+        session?.status = .completed
+        self.currentSession = session
+
+        return StitchResult(
+            image: image,
+            stitchedFrameCount: live.frames,
+            droppedFrameCount: live.dropped
+        )
     }
 }
 
@@ -451,6 +658,7 @@ extension ScrollStitchActor {
     /// 清理所有会话资源。
     private func cleanup() {
         capturedFrames.removeAll()
+        liveStitch = nil
     }
 
     /// 获取会话进度报告。

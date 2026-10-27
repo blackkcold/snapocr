@@ -30,7 +30,12 @@ extension CaptureViewModel {
             presentPinnedImage(image, pinRect: pinRect)
         }
 
-        let imageCopySucceeded = !shouldCopyImage || writeImageToClipboard(image)
+        let imageCopySucceeded: Bool
+        if shouldCopyImage {
+            imageCopySucceeded = await writeImageToClipboard(image)
+        } else {
+            imageCopySucceeded = true
+        }
         presentCopyFeedback(
             imageCopySucceeded: imageCopySucceeded,
             shouldOpenEditor: shouldOpenEditor,
@@ -66,9 +71,8 @@ extension CaptureViewModel {
     }
 
     /// Links a history record that finished writing after the editor opened.
-    private func attachHistoryEntry(_ entryID: UUID, to sessionID: UUID) {
-        guard sessionID == editorSessionID else { return }
-        editorContext.sourceEntryID = entryID
+    private func attachHistoryEntry(_ entryID: UUID, to tabID: UUID) {
+        editorWorkspace.attachSourceEntry(entryID, to: tabID)
     }
 
     /// Opens the editor immediately, then runs OCR/barcode detection and the
@@ -81,8 +85,7 @@ extension CaptureViewModel {
         historyContext: HistorySaveContext,
         imageCopySucceeded: Bool
     ) {
-        openEditor(with: image, captureMode: modeDescription, sourceEntryID: nil)
-        let sessionID = editorSessionID
+        let tabID = openEditor(with: image, captureMode: modeDescription, sourceEntryID: nil)
         Task { [weak self] in
             guard let self else { return }
             let ocrResult = await self.runOCRAndSuggestions(
@@ -97,8 +100,8 @@ extension CaptureViewModel {
                 imageCopySucceeded: imageCopySucceeded,
                 context: historyContext
             )
-            if let historyEntryID {
-                self.attachHistoryEntry(historyEntryID, to: sessionID)
+            if let historyEntryID, let tabID {
+                self.attachHistoryEntry(historyEntryID, to: tabID)
             }
         }
     }

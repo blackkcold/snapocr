@@ -185,7 +185,13 @@ extension EditableAnnotationCanvasNSView {
         case 51, 117:
             onDeleteSelection?()
         case 53:
-            onSelectionChanged?(nil)
+            // 有选中节点时先取消选中；没有选中时把 Esc 交还给窗口，
+            // 否则 Cancel 按钮的 `.cancelAction` 永远收不到事件。
+            if selectedNodeID != nil {
+                onSelectionChanged?(nil)
+            } else {
+                super.keyDown(with: event)
+            }
         case 123, 124, 125, 126:
             nudgeSelection(keyCode: event.keyCode, multiplier: event.modifierFlags.contains(.shift) ? 10 : 1)
         default:

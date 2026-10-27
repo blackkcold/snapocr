@@ -175,10 +175,11 @@ public struct TextAnonymizer {
 
 | 要求 | 说明 |
 |------|------|
-| 签名类型 | Developer ID 签名 |
-| 运行时 | Hardened Runtime |
-| 公证 | `xcrun notarytool submit` |
-| macOS 15+ | 必须 Developer ID 签名才能使用 ScreenCaptureKit |
+| 签名类型 | ad-hoc（`codesign --force --deep --sign -`），无 Developer ID |
+| 运行时 | 未启用 Hardened Runtime |
+| 公证 | 未公证；首次安装需在「系统设置 → 隐私与安全性」中允许打开 |
+| 升级注意 | ad-hoc 没有稳定的 Team ID，升级后屏幕录制授权可能需要重新授予 |
+| macOS 15+ | ScreenCaptureKit 需要屏幕录制权限，由系统按代码身份记录 |
 
 ---
 

@@ -150,10 +150,14 @@ final class WindowSelectionPanel: NSPanel {
 
         let completion = onComplete
         coordinator.stopRefreshTimer()
+        coordinator.cancelPendingThumbnails()
         Self.release(self)
         super.close()
         completion(result)
     }
+
+    /// 列表下方的提示；未选中窗口时改为说明为什么按钮不可用。
+    private var subtitleLabel: NSTextField?
 
     private func makeContentView() -> NSView {
         let container = NSVisualEffectView()
@@ -171,6 +175,7 @@ final class WindowSelectionPanel: NSPanel {
             font: .systemFont(ofSize: 11),
             color: .secondaryLabelColor
         )
+        self.subtitleLabel = subtitleLabel
 
         let scrollView = makeWindowListScrollView()
         let buttonStack = makeActionButtonStack()
@@ -285,6 +290,17 @@ final class WindowSelectionPanel: NSPanel {
     func setActionButtonsEnabled(_ enabled: Bool) {
         captureButton.isEnabled = enabled
         scrollCaptureButton.isEnabled = enabled
+
+        if enabled {
+            subtitleLabel?.stringValue = AppLocalization.string(
+                "Select a preview, then choose a still or scrolling capture."
+            )
+        } else {
+            let hasRows = (coordinator.tableView?.numberOfRows ?? 0) > 0
+            subtitleLabel?.stringValue = AppLocalization.string(
+                hasRows ? "Select a window to continue" : "No capturable windows found"
+            )
+        }
     }
 
     /// Captures the selected window and opens the result directly in the editor.

@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "0.9.1"
+    MARKETING_VERSION: "0.9.5"
     CURRENT_PROJECT_VERSION: "1"
   configs:
     Debug:
@@ -70,7 +70,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.snapglass.app
         PRODUCT_NAME: SnapGlass
         CODE_SIGN_ENTITLEMENTS: App/SnapGlass/SnapGlass.entitlements
-        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_HARDENED_RUNTIME: NO
         DEVELOPMENT_TEAM: "${DEVELOPMENT_TEAM}"
         CODE_SIGN_IDENTITY: "${CODE_SIGN_IDENTITY:--}"
     dependencies:
@@ -98,6 +98,8 @@ targets:
       - path: App/SnapGlass/EditorTests
       - path: App/SnapGlass/Sources/AppLanguage.swift
       - path: App/SnapGlass/Sources/AppLocalization.swift
+      - path: App/SnapGlass/Sources/ClipboardWriter.swift
+      - path: App/SnapGlass/Sources/DesignSystem
       - path: App/SnapGlass/Sources/Editor
         excludes:
           - EditorView.swift
@@ -105,6 +107,7 @@ targets:
           - ToolPickerView.swift
           - AnnotationCanvasView.swift
           - EditorWindowCloseGuard.swift
+          - EditorWorkspaceView.swift
       - path: App/SnapGlass/Sources/MenuBar/ToastMessage.swift
       - path: App/SnapGlass/Sources/MenuBar/OCRSettings.swift
     dependencies:
@@ -126,6 +129,7 @@ targets:
         excludes:
           - BarcodePanel
       - path: App/SnapGlass/Sources/WindowLifecycleState.swift
+      - path: App/SnapGlass/Sources/Windows/HistoryFailure.swift
       - path: App/SnapGlass/Sources/AppWindowPresenter.swift
       - path: App/SnapGlass/Sources/WindowPresentationCoordinator.swift
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift

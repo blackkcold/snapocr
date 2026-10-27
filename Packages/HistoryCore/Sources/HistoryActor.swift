@@ -122,16 +122,36 @@ public actor HistoryActor: HistoryProtocol {
 // MARK: - Shared singleton alias
 
 extension HistoryActor {
-    /// 共享实例，供 UI 层使用
+    /// 全进程唯一的共享实例，供 UI 层使用。
     ///
-    /// 初始化失败时返回 `nil` 而非崩溃，调用方应优雅降级。
-    public static let shared: HistoryActor? = {
-        try? HistoryActor(cleanupPolicy: configuredCleanupPolicy())
-    }()
+    /// 历史记录的元数据、媒体文件与内存缓存必须只有一个所有者。若
+    /// `shared` 与 `sharedResult()` 各自创建实例，陈旧实例会用编辑前的
+    /// `imageRevision` 回写磁盘，导致「覆盖原记录」后无法还原原图。
+    /// 初始化失败时不缓存失败结果，下次访问可重试。
+    public static var shared: HistoryActor? {
+        switch sharedResult() {
+        case .success(let actor):
+            return actor
+        case .failure:
+            return nil
+        }
+    }
 
-    /// 共享实例的显式 Result 版本，调用方可获取具体错误信息
+    /// 共享实例的显式 Result 版本，调用方可获取具体错误信息。
     public static func sharedResult() -> Result<HistoryActor, any Error> {
-        Result { try HistoryActor(cleanupPolicy: configuredCleanupPolicy()) }
+        sharedProvider.instance()
+    }
+
+    /// 丢弃当前共享实例，下一次访问重新初始化。
+    ///
+    /// 仅在存储目录或密钥恢复后由「重试」路径调用，避免把永久性初始化
+    /// 失败缓存成不可恢复状态。
+    public static func resetSharedForRetry() {
+        sharedProvider.reset()
+    }
+
+    private static var sharedProvider: HistorySharedProvider {
+        HistorySharedProvider.shared
     }
 
     static func configuredCleanupPolicy() -> CleanupPolicy {
@@ -176,5 +196,45 @@ extension HistoryActor {
                 .thumbnail: maxItems,
             ]
         )
+    }
+}
+
+/// 线程安全的共享 actor 缓存。
+///
+/// 使用 `NSLock` 而非 actor，是为了让同步调用点（菜单栏、View 初始化）
+/// 也能取得同一个实例。工厂注入让测试可以在临时目录上验证
+/// 「同一进程只持有一个实例」这一不变量。
+final class HistorySharedProvider: @unchecked Sendable {
+    static let shared = HistorySharedProvider {
+        try HistoryActor(cleanupPolicy: HistoryActor.configuredCleanupPolicy())
+    }
+
+    private let lock = NSLock()
+    private let makeActor: @Sendable () throws -> HistoryActor
+    private var cached: HistoryActor?
+
+    init(makeActor: @escaping @Sendable () throws -> HistoryActor) {
+        self.makeActor = makeActor
+    }
+
+    func instance() -> Result<HistoryActor, any Error> {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached {
+            return .success(cached)
+        }
+        do {
+            let created = try makeActor()
+            cached = created
+            return .success(created)
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        cached = nil
     }
 }

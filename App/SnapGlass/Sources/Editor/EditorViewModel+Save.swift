@@ -29,6 +29,11 @@ extension EditorViewModel {
     /// overwrite of the originating capture.
     public func saveToHistory(mode: EditorHistorySaveMode) async {
         if isEnteringText { commitTextEntry() }
+        // 裁剪合成期间文档仍是裁剪前的快照，此时保存会写出缺了裁剪的图。
+        guard !isApplyingCrop else {
+            showToast(message: AppLocalization.string("Processing…"), type: .info)
+            return
+        }
         guard let doc = document else { return }
         if mode == .overwriteOriginal && sourceEntryID == nil {
             showToast(
@@ -48,7 +53,7 @@ extension EditorViewModel {
             case .overwriteOriginal: AppLocalization.string("History updated; original kept for restore")
             }
             showToast(message: message, type: .success)
-            markSaved()
+            markSaved(document: doc)
             logger.info("Editor image saved to history (mode: \(mode))")
         } catch {
             showToast(
@@ -64,6 +69,10 @@ extension EditorViewModel {
     ///   it to close only after a successful write.
     public func save(onCompleted: ((Bool) -> Void)? = nil) {
         if isEnteringText { commitTextEntry() }
+        guard !isApplyingCrop else {
+            showToast(message: AppLocalization.string("Processing…"), type: .info)
+            return
+        }
         guard let doc = document else {
             onCompleted?(false)
             return
@@ -131,7 +140,7 @@ extension EditorViewModel {
                     message: AppLocalization.string("Saved to %@", url.lastPathComponent),
                     type: .success
                 )
-                self.markSaved()
+                self.markSaved(document: document)
                 self.logger.info("Saved annotated image to \(url.path())")
                 onCompleted?(true)
             } catch {
@@ -217,6 +226,10 @@ extension EditorViewModel {
 
     /// Renders the annotated image and copies it to the system clipboard.
     public func copyToClipboard() {
+        guard !isApplyingCrop else {
+            showToast(message: AppLocalization.string("Processing…"), type: .info)
+            return
+        }
         if isEnteringText { commitTextEntry() }
         guard let doc = document, !isWritingImage else { return }
         isWritingImage = true
@@ -224,13 +237,8 @@ extension EditorViewModel {
             do {
                 let image = try await Self.renderOffMain(doc)
                 guard let self else { return }
+                try await ClipboardWriter.write(image: image)
                 self.isWritingImage = false
-                let nsImage = NSImage(
-                    cgImage: image,
-                    size: NSSize(width: image.width, height: image.height)
-                )
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.writeObjects([nsImage])
                 self.showToast(message: AppLocalization.string("Copied to clipboard"), type: .success)
                 self.logger.info("Copied annotated image to clipboard")
             } catch {
@@ -255,6 +263,7 @@ extension EditorViewModel {
     ///   - message: The message text.
     ///   - type: The type of toast.
     public func showToast(message: String, type: ToastType) {
+        guard toastDeduplicator.shouldPresent(message) else { return }
         let toast = ToastMessage(message: message, type: type)
         toastMessage = toast
         Task {

@@ -15,6 +15,7 @@ jobs:
       - run: brew install swift-format
       - run: swift-format lint --recursive . --configuration .swift-format
       - run: swiftlint lint --strict --config .swiftlint.yml
+      - run: bash scripts/check-localization.sh
 
   build:
     runs-on: macos-latest
@@ -27,6 +28,7 @@ jobs:
             -project SnapGlass.xcodeproj \
             -scheme SnapGlass \
             -configuration Release \
+            -derivedDataPath .build/DerivedData-release \
             build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
@@ -35,7 +37,7 @@ jobs:
         with:
           name: SnapGlass-app
           path: .build/DerivedData-release/Build/Products/Release/SnapGlass.app
-          if-no-files-found: warn
+          if-no-files-found: error
 
   unit-test:
     runs-on: macos-latest
@@ -56,3 +58,12 @@ jobs:
             fi
           done
         timeout-minutes: 10
+      - run: brew install xcodegen && xcodegen generate
+      - name: App scheme tests
+        run: |
+          xcodebuild test -project SnapGlass.xcodeproj -scheme EditorInteractionTests \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          xcodebuild test -project SnapGlass.xcodeproj -scheme WindowLifecycleStateTests \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO

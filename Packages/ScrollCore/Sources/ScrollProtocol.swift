@@ -53,8 +53,13 @@ public protocol ScrollProtocol: Sendable {
     /// 对帧数组进行去重、重叠检测后执行像素级拼接，
     /// 生成包含所有滚动内容的单一图像。
     ///
+    /// - Important: 输出受 `StitchBudget` 限制，**可能被静默截断**。
+    ///   返回值不包含丢弃帧数；需要知道是否截断、截断了几帧时，请调用
+    ///   `ScrollStitchActor.stitchFramesDetailed(_:)` 并读取 `StitchResult.isTruncated`。
+    ///   截断时返回的仍是一张有效的、已拼好部分的长图，而不是失败。
+    ///
     /// - Parameter frames: 按捕获顺序排列的帧数组，至少需要 2 帧。
-    /// - Returns: 拼接完成的 `CGImage`。
+    /// - Returns: 拼接完成的 `CGImage`（可能已截断）。
     /// - Throws: `ScrollError` — 帧数不足、拼接受损、内存不足等。
     func stitchFrames(_ frames: [ScrollFrame]) async throws -> CGImage
 
@@ -213,6 +218,75 @@ public enum ScrollError: Error, Sendable, LocalizedError {
             return "截图帧尺寸不一致: \(details)"
         }
     }
+}
+
+// MARK: - StitchBudget
+
+/// 长图拼接的输出预算。
+///
+/// 长图高度必须同时受两项约束，缺一不可：
+/// - `maxHeight`：UI 与图像编解码器能接受的最大高度（默认 32 768）。
+/// - `maxPixels`：按像素数限制的内存预算，保证宽图时高度自动降低。
+///   宽 2560 时 32 768 行 ≈ 335MB，超过该预算，因此实际上限由像素数决定。
+public struct StitchBudget: Sendable, Equatable {
+    /// 输出图像的最大像素数（默认 64 000 000，RGBA 下约 256MB）。
+    ///
+    /// 32M 对常见 Retina 窗口（宽 2 560）只能拼 ~6 屏，会让滚动截图在用户
+    /// 毫无预期时被截断；64M 在宽 2 560 时仍有 25 000 行，接近 32 768 的高度上限。
+    public let maxPixels: Int
+    /// 输出图像的最大高度（默认 32 768）。
+    public let maxHeight: Int
+
+    public init(maxPixels: Int = 64_000_000, maxHeight: Int = 32_768) {
+        self.maxPixels = max(1, maxPixels)
+        self.maxHeight = max(1, maxHeight)
+    }
+
+    public static let `default` = StitchBudget()
+
+    /// 指定宽度下允许的最大输出高度。
+    public func heightLimit(forWidth width: Int) -> Int {
+        guard width > 0 else { return maxHeight }
+        return min(maxHeight, max(1, maxPixels / width))
+    }
+}
+
+// MARK: - IncrementalAppendResult
+
+/// 增量拼接时追加一帧的结果。
+public enum IncrementalAppendResult: Sendable, Equatable {
+    /// 已拼入，参数是当前累计帧数。
+    case appended(frameCount: Int)
+    /// 与上一帧没有可见差异，未拼入。
+    case duplicate
+    /// 已达到输出预算，未拼入；已拼好的部分仍然可以通过完成接口取回。
+    case limitReached
+    /// 帧宽与本次拼接的画布宽不一致（窗口被拖到另一块屏幕/改了尺寸）。
+    /// 继续拼会得到一张横向错位的图，所以直接停止。
+    case sizeChanged
+}
+
+// MARK: - StitchResult
+
+/// 拼接结果。
+///
+/// 除图像本身外，还报告被丢弃的帧数，供 UI 提示「已达上限，已保留此前内容」。
+public struct StitchResult: Sendable {
+    /// 拼接完成的图像。
+    public let image: CGImage
+    /// 实际绘入输出的帧数。
+    public let stitchedFrameCount: Int
+    /// 因超出预算而未绘入（或只绘入一部分）的帧数。
+    public let droppedFrameCount: Int
+
+    public init(image: CGImage, stitchedFrameCount: Int, droppedFrameCount: Int) {
+        self.image = image
+        self.stitchedFrameCount = stitchedFrameCount
+        self.droppedFrameCount = droppedFrameCount
+    }
+
+    /// 输出是否被预算截断。
+    public var isTruncated: Bool { droppedFrameCount > 0 }
 }
 
 // MARK: - ScrollProgress
