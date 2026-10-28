@@ -143,6 +143,19 @@ public actor UpdateService {
             throw UpdateServiceError.checksumMismatch
         }
 
+        let directory = try downloadsDirectory ?? Self.defaultDownloadsDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        // Reuse a previously downloaded DMG only when its bytes still match the
+        // release's authoritative checksum. This prevents repeated update tests
+        // from piling up `-1`, `-2`… copies without weakening verification.
+        let canonicalDestination = directory.appendingPathComponent(release.assetName)
+        if FileManager.default.fileExists(atPath: canonicalDestination.path),
+           let existingChecksum = try? Self.sha256(of: canonicalDestination),
+           existingChecksum == sidecarChecksum {
+            return canonicalDestination
+        }
+
         let (temporaryURL, downloadResponse) = try await client.download(
             for: Self.request(for: release.dmgURL, accepting: "application/octet-stream")
         )
@@ -154,8 +167,6 @@ public actor UpdateService {
             throw UpdateServiceError.checksumMismatch
         }
 
-        let directory = try downloadsDirectory ?? Self.defaultDownloadsDirectory()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let destination = Self.uniqueDestination(
             in: directory,
             preferredName: release.assetName

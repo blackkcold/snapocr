@@ -1,74 +1,59 @@
-import AppKit
+import Foundation
 import SharedKit
-import SwiftUI
 
 // MARK: - CaptureViewModel Update Handling
 
 extension CaptureViewModel {
-    func presentUpdate(_ release: UpdateRelease) async {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = AppLocalization.string("SnapGlass %@ is Available", release.tagName)
-        let notes = release.releaseNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        alert.informativeText = notes.isEmpty
-            ? AppLocalization.string("A new version is ready to download.")
-            : String(notes.prefix(1_500))
-        alert.addButton(withTitle: AppLocalization.string("Download Update"))
-        alert.addButton(withTitle: AppLocalization.string("View on GitHub"))
-        alert.addButton(withTitle: AppLocalization.string("Later"))
+    /// Downloads and verifies the selected release, then publishes the ready state.
+    ///
+    /// This never opens an alert: a menu-bar app may be inactive when the
+    /// download finishes, and a modal would block in the background.
+    func downloadUpdate(_ release: UpdateRelease) {
+        guard !isDownloadingUpdate else { return }
+        updateCheckState = .downloading(release)
 
-        if #available(macOS 14.0, *) {
-            NSApplication.shared.activate()
-        } else {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-        }
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            await download(release)
-        case .alertSecondButtonReturn:
-            NSWorkspace.shared.open(release.releasePageURL)
-        default:
-            break
+        Task {
+            do {
+                let fileURL = try await updateService.download(release)
+                logger.info("update.downloaded path=\(fileURL.path)")
+                updateCheckState = .readyToInstall(release, fileURL)
+            } catch {
+                logger.error("update.download.failed \(error.localizedDescription)")
+                updateCheckState = .downloadFailed(release, error.localizedDescription)
+            }
         }
     }
 
-    private func download(_ release: UpdateRelease) async {
-        isDownloadingUpdate = true
-        defer { isDownloadingUpdate = false }
-        do {
-            let fileURL = try await updateService.download(release)
-            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-            presentInformationAlert(
-                title: AppLocalization.string("Update Downloaded"),
-                message: AppLocalization.string(
-                    "%@ passed SHA-256 verification and is ready in Downloads.",
-                    fileURL.lastPathComponent
+    /// Hands a verified DMG to the installer and quits on success.
+    ///
+    /// Only the explicit "Open Installer" action reaches this path, so the
+    /// quit is user-initiated. Unsaved editor work still keeps the app alive.
+    func installDownloadedUpdate(_ release: UpdateRelease, at fileURL: URL) {
+        guard updateCheckState == .readyToInstall(release, fileURL) else { return }
+
+        Task {
+            switch await updateInstallHandoff.run(dmgURL: fileURL) {
+            case .openedInstaller:
+                logger.info("update.installer.opened path=\(fileURL.lastPathComponent)")
+            case .deferredForUnsavedWork:
+                logger.warning("update.install.deferred unsaved-editor")
+                showToast(
+                    message: AppLocalization.string(
+                        "Update downloaded. Save your edits, then open the installer again."
+                    ),
+                    type: .info
                 )
-            )
-        } catch {
-            presentInformationAlert(
-                title: AppLocalization.string("Update Download Failed"),
-                message: error.localizedDescription,
-                style: .warning
-            )
+            case .ignored:
+                logger.info("update.install.ignored duplicate-handoff")
+            case .failed(let diagnostic):
+                logger.error("update.installer.failed \(diagnostic)")
+                showToast(
+                    message: AppLocalization.string(
+                        "Unable to open the update installer. The DMG is in Downloads."
+                    ),
+                    type: .error
+                )
+            }
         }
-    }
-
-    func presentInformationAlert(
-        title: String,
-        message: String,
-        style: NSAlert.Style = .informational
-    ) {
-        let alert = NSAlert()
-        alert.alertStyle = style
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: AppLocalization.string("OK"))
-        if #available(macOS 14.0, *) {
-            NSApplication.shared.activate()
-        } else {
-            NSApplication.shared.activate(ignoringOtherApps: true)
-        }
-        alert.runModal()
     }
 }
