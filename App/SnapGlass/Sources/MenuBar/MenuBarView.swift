@@ -5,6 +5,7 @@ import SharedKit
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var viewModel: CaptureViewModel
+    @EnvironmentObject private var router: PreferencesRouter
     
     var body: some View {
         if viewModel.isCapturing {
@@ -71,14 +72,12 @@ struct MenuBarView: View {
         }
         .keyboardShortcut(",", modifiers: .command)
 
-        if viewModel.isCheckingForUpdates {
-            Text("Checking for Updates...")
-        } else if viewModel.isDownloadingUpdate {
-            Text("Downloading Update...")
-        } else {
-            Button("Check for Updates...") {
-                viewModel.checkForUpdates()
-            }
+        Button("Check for Updates...") {
+            // The result is rendered in the Updates settings page. Opening it
+            // first keeps the menu-bar action useful even when the 30-second
+            // lookup outlives the menu (or the user's attention).
+            router.presentUpdates()
+            viewModel.checkForUpdates()
         }
 
         Divider()

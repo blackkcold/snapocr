@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SharedKit
 
@@ -90,35 +91,249 @@ struct UpdatesPreferencesView: View {
                             .monospacedDigit()
                     }
 
-                    if viewModel.isCheckingForUpdates {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Checking for Updates...")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else if viewModel.isDownloadingUpdate {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Downloading Update...")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Button("Check for Updates...") {
-                            viewModel.checkForUpdates()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
+                    Divider()
 
-                    PreferencesCardCaption(text: LocalizedStringKey(
-                        "Updates are downloaded from the GitHub Releases page "
-                            + "and verified with SHA-256 before saving."
-                    ))
+                    stateContent
+
+                    Divider()
+
+                    footnote
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var stateContent: some View {
+        switch viewModel.updateCheckState {
+        case .idle:
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Check GitHub Releases for a newer version.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Button("Check for Updates...") {
+                    viewModel.checkForUpdates()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+        case .checking:
+            statusHeader(
+                systemImage: "arrow.triangle.2.circlepath",
+                tint: .accentColor,
+                title: AppLocalization.string("Checking for Updates...")
+            ) {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+        case .upToDate(let latestVersion):
+            VStack(alignment: .leading, spacing: 12) {
+                statusHeader(
+                    systemImage: "checkmark.seal.fill",
+                    tint: .green,
+                    title: AppLocalization.string("SnapGlass is Up to Date"),
+                    detail: AppLocalization.string(
+                        "You are running the latest version (%@).",
+                        latestVersion.description
+                    )
+                )
+
+                Button("Check Again") {
+                    viewModel.checkForUpdates()
+                }
+                .buttonStyle(.bordered)
+            }
+
+        case .available(let release):
+            VStack(alignment: .leading, spacing: 12) {
+                statusHeader(
+                    systemImage: "arrow.down.circle.fill",
+                    tint: .accentColor,
+                    title: AppLocalization.string("SnapGlass %@ is Available", release.tagName),
+                    detail: AppLocalization.string("A new version is ready to download.")
+                )
+
+                releaseNotes(for: release)
+
+                HStack(spacing: 10) {
+                    Button("Download Update") {
+                        viewModel.downloadUpdate(release)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("View on GitHub") {
+                        NSWorkspace.shared.open(release.releasePageURL)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+        case .downloading(let release):
+            statusHeader(
+                systemImage: "arrow.down.circle",
+                tint: .accentColor,
+                title: AppLocalization.string("Downloading Update..."),
+                detail: AppLocalization.string(
+                    "SnapGlass %@ is being downloaded and verified.",
+                    release.tagName
+                )
+            ) {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+        case .readyToInstall(let release, let fileURL):
+            VStack(alignment: .leading, spacing: 12) {
+                statusHeader(
+                    systemImage: "checkmark.circle.fill",
+                    tint: .green,
+                    title: AppLocalization.string("Update Ready to Install"),
+                    detail: AppLocalization.string(
+                        "SnapGlass %@ has been downloaded and verified.",
+                        release.tagName
+                    )
+                )
+
+                HStack(spacing: 10) {
+                    Button("Open Installer") {
+                        viewModel.installDownloadedUpdate(release, at: fileURL)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+        case .checkFailed(let message):
+            VStack(alignment: .leading, spacing: 12) {
+                statusHeader(
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    title: AppLocalization.string("Unable to Check for Updates"),
+                    detail: message
+                )
+
+                Button("Try Again") {
+                    viewModel.checkForUpdates()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+        case .downloadFailed(let release, let message):
+            VStack(alignment: .leading, spacing: 12) {
+                statusHeader(
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    title: AppLocalization.string("Update Download Failed"),
+                    detail: message
+                )
+
+                HStack(spacing: 10) {
+                    Button("Try Again") {
+                        viewModel.downloadUpdate(release)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("View on GitHub") {
+                        NSWorkspace.shared.open(release.releasePageURL)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+    }
+
+    private func statusHeader(
+        systemImage: String,
+        tint: Color,
+        title: String,
+        detail: String? = nil
+    ) -> some View {
+        statusHeader(
+            systemImage: systemImage,
+            tint: tint,
+            title: title,
+            detail: detail
+        ) {
+            EmptyView()
+        }
+    }
+
+    private func statusHeader<Accessory: View>(
+        systemImage: String,
+        tint: Color,
+        title: String,
+        detail: String? = nil,
+        @ViewBuilder accessory: () -> Accessory
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 38, height: 38)
+                .background(
+                    tint.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+
+                if let detail {
+                    Text(detail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            accessory()
+                .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private func releaseNotes(for release: UpdateRelease) -> some View {
+        let notes = release.releaseNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !notes.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("What's New")
+                    .font(.subheadline.weight(.semibold))
+
+                Text(String(notes.prefix(1_500)))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                Color.primary.opacity(0.045),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var footnote: some View {
+        if case .readyToInstall = viewModel.updateCheckState {
+            PreferencesCardCaption(text: LocalizedStringKey(
+                "SnapGlass will quit after opening the installer. Save your work first."
+            ))
+        } else {
+            PreferencesCardCaption(text: LocalizedStringKey(
+                "Updates are downloaded from the GitHub Releases page "
+                    + "and verified with SHA-256 before saving."
+            ))
         }
     }
 

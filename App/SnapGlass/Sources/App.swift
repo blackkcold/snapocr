@@ -32,6 +32,7 @@ struct SnapGlassApp: App {
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(viewModel)
+                .environmentObject(router)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
         } label: {

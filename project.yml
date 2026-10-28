@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "0.9.6"
+    MARKETING_VERSION: "0.9.7"
     CURRENT_PROJECT_VERSION: "1"
   configs:
     Debug:
@@ -133,6 +133,7 @@ targets:
       - path: App/SnapGlass/Sources/AppWindowPresenter.swift
       - path: App/SnapGlass/Sources/WindowPresentationCoordinator.swift
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift
+      - path: App/SnapGlass/Sources/MenuBar/UpdateInstallHandoff.swift
     dependencies:
       - package: SharedKit
     settings:

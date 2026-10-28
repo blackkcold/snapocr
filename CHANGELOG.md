@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-10-28
+
+### Changed
+- 「检查更新」改为打开「设置 → 更新」并在页内展示结果：检查中、已是最新、发现新版本、下载中、可安装、失败都有持久状态，不再使用后台 `NSAlert.runModal()` 抢占 key window。
+
+### Fixed
+- 更新检查与下载的异步结果不再在用户切走后弹模态窗：菜单栏、已是最新、检查失败、下载失败四条路径统一收敛到窗口内状态，消除后台假死与焦点抢占。
+- 下载完成后的安装交接改为用户点击「打开安装包」后执行：先打开 DMG 再退出 App；编辑器有未保存标注时保留 App 并提示。
+- 已存在且 SHA-256 校验通过的更新 DMG 直接复用，不再重复生成 `-1`、`-2` 副本。
+
 ## [0.9.6] - 2026-10-28
 
 ### Fixed
@@ -378,7 +388,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.7...HEAD
+[0.9.7]: https://github.com/blackkcold/snapocr/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/blackkcold/snapocr/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/blackkcold/snapocr/compare/v0.9.1...v0.9.5
 [0.9.1]: https://github.com/blackkcold/snapocr/compare/v0.9.0...v0.9.1
