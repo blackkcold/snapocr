@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-28
+
+### Fixed
+- `GlassSurface` 补编译期守卫：旧 SDK（Swift < 6.2）没有 `glassEffect` 符号，26+ 分支改为同时受 `#if compiler(>=6.2)` 与 `#available` 保护，跨 Xcode 版本不再编译失败。
+- 条码结果浮层文字改用系统语义色（`labelColor` / `secondaryLabelColor` / `tertiaryLabelColor`）并固定深色 HUD 外观，浅色系统与「降低透明度」下仍可读。
+- 标注检查器整列可滚动：600pt 高窗口下底部控件不再被裁掉，且能滚动到位。
+- 选区动作栏与条码结果浮层改用 `.behindWindow` 混合：宿主遮罩窗是 clear + 非 opaque，`.withinWindow` 采不到桌面内容，HUD 曾显示为灰块。
+- 历史窗口「颜色」页新增「历史不可用」态与重试入口，与「还没有取色记录」区分；共享存储初始化失败不再被缓存成不可恢复状态。
+- 偏好设置修改保留策略或清空取色历史时，存储初始化失败会弹出可见提示，不再静默丢弃操作。
+- 存储概览的取色数量在读取失败时显示「—」，不再把未知显示成 0。
+
 ## [0.9.5] - 2026-10-27
 
 ### Added
@@ -367,7 +378,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/blackkcold/snapocr/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/blackkcold/snapocr/compare/v0.9.1...v0.9.5
 [0.9.1]: https://github.com/blackkcold/snapocr/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/blackkcold/snapocr/compare/v0.8.9...v0.9.0

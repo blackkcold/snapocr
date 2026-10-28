@@ -104,6 +104,16 @@ extension HistoryView {
         await loadEntries()
     }
 
+    /// Retries creating the shared color history store after an initialization
+    /// failure (for example, a transient permissions or key-access problem).
+    func retryColorHistoryInitialization() async {
+        if colorHistory == nil {
+            ColorHistoryStore.resetSharedForRetry()
+            colorHistory = ColorHistoryStore.shared
+        }
+        await loadColorEntries()
+    }
+
     func loadScreenshotEntries() async {
         let loadID = UUID()
         screenshotLoadID = loadID

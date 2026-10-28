@@ -15,7 +15,19 @@ import SharedKit
 public actor ColorHistoryStore {
 
     /// 共享实例，供 UI 层使用；初始化失败时返回 `nil`，调用方优雅降级。
-    public static let shared: ColorHistoryStore? = try? ColorHistoryStore()
+    ///
+    /// 失败不缓存：目录或密钥恢复后，下一次访问（或「重试」入口）可重新初始化。
+    public static var shared: ColorHistoryStore? {
+        ColorHistorySharedProvider.shared.instance()
+    }
+
+    /// 丢弃当前共享实例，下一次访问重新初始化。
+    ///
+    /// 与 `HistoryActor.resetSharedForRetry()` 同源：供历史窗口的「重试」使用，
+    /// 避免把一次初始化失败缓存成不可恢复状态。
+    public static func resetSharedForRetry() {
+        ColorHistorySharedProvider.shared.reset()
+    }
 
     private let fileURL: URL
     private let cryptoService: CryptoService
@@ -113,5 +125,38 @@ public actor ColorHistoryStore {
             ? PreferenceDefaults.colorHistoryMaxItems
             : defaults.integer(forKey: PreferenceKeys.colorHistoryMaxItems)
         return min(max(configured, 10), 5_000)
+    }
+}
+
+/// 线程安全的共享 actor 缓存。
+///
+/// 与 `HistorySharedProvider` 同构：用 `NSLock` 而非 actor，让同步调用点
+/// （菜单栏、View 初始化）也能取得同一实例；初始化失败不缓存，下一次访问可重试。
+private final class ColorHistorySharedProvider: @unchecked Sendable {
+    static let shared = ColorHistorySharedProvider { try ColorHistoryStore() }
+
+    private let lock = NSLock()
+    private let makeStore: @Sendable () throws -> ColorHistoryStore
+    private var cached: ColorHistoryStore?
+
+    init(makeStore: @escaping @Sendable () throws -> ColorHistoryStore) {
+        self.makeStore = makeStore
+    }
+
+    func instance() -> ColorHistoryStore? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached {
+            return cached
+        }
+        guard let created = try? makeStore() else { return nil }
+        cached = created
+        return created
+    }
+
+    func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        cached = nil
     }
 }

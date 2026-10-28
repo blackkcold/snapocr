@@ -6,7 +6,7 @@ import SharedKit
 
 /// 选区条码识别的结果浮层。
 ///
-/// 与动作栏同族：`NSVisualEffectView` + `.hudWindow` + `.withinWindow`。
+/// 与动作栏同族：`NSVisualEffectView` + `.hudWindow` + `.behindWindow`。
 /// 它是 `AreaTrackingView` 的子视图而不是独立窗口，因此不会被自己的截图
 /// 收进去，也不依赖任何 `sharingType` 处理。
 ///
@@ -49,7 +49,12 @@ final class BarcodeResultPanel: NSVisualEffectView {
         super.init(frame: frameRect)
 
         material = .hudWindow
-        blendingMode = .withinWindow
+        // 宿主 `AreaSelectionPanel` 是 clear + 非 opaque：窗内没有可采样的内容，
+        // `.withinWindow` 只会退化成一块灰底。改用 `.behindWindow` 采桌面，
+        // 与 `PinnedToolbarView` 保持一致。
+        blendingMode = .behindWindow
+        // HUD 恒定深色：上面的语义文字色据此解析，浅色系统与「降低透明度」下都保持浅字。
+        appearance = NSAppearance(named: .darkAqua)
         state = .active
         wantsLayer = true
         layer?.cornerRadius = 10
@@ -212,7 +217,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
             label(
                 AppLocalization.string("Scanning…"),
                 font: .systemFont(ofSize: 12),
-                color: NSColor.white.withAlphaComponent(0.62)
+                color: .secondaryLabelColor
             ),
         ])
         row.orientation = .horizontal
@@ -280,7 +285,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
                 label(
                     AppLocalization.string("%d more", overflow),
                     font: .systemFont(ofSize: 11),
-                    color: NSColor.white.withAlphaComponent(0.42)
+                    color: .tertiaryLabelColor
                 )
             )
         }
@@ -324,7 +329,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
             label(
                 AppLocalization.string("No barcode in selection"),
                 font: .systemFont(ofSize: 12),
-                color: NSColor.white.withAlphaComponent(0.62),
+                color: .secondaryLabelColor,
                 lines: 2
             ),
             rescanButton(role: .secondary),
@@ -349,7 +354,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
             label(
                 title,
                 font: .systemFont(ofSize: 12, weight: .semibold),
-                color: NSColor.white.withAlphaComponent(0.94),
+                color: .labelColor,
                 maxWidth: Self.contentWidth - reserved - 96
             )
         )
@@ -388,7 +393,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
         label(
             AppLocalization.string(hasLink ? "Barcode Hint with Link" : "Barcode Hint"),
             font: .systemFont(ofSize: 10),
-            color: NSColor.white.withAlphaComponent(0.42)
+            color: .tertiaryLabelColor
         )
     }
 

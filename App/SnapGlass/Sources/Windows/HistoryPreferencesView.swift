@@ -31,6 +31,9 @@ struct HistoryPreferencesView: View {
     @State private var pendingCleanupCount = 0
     @State private var showsCleanupConfirmation = false
     @State private var policyRequestGeneration = 0
+    /// Retention changes need `HistoryActor.shared`; a failed store initialization
+    /// must be surfaced instead of silently dropping the change.
+    @State private var showsHistoryUnavailable = false
 
     private let logger = Logger(category: "preferences")
 
@@ -122,6 +125,12 @@ struct HistoryPreferencesView: View {
 
             PreferencesCardCaption(text: "Favourite screenshots are not removed by count or age limits.")
         }
+        // 单独挂在保留卡上：同一视图上的两个 `.alert` 只会生效一个。
+        .alert("History unavailable", isPresented: $showsHistoryUnavailable) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check the application support folder permissions")
+        }
     }
 
     private var storageCard: some View {
@@ -205,7 +214,10 @@ struct HistoryPreferencesView: View {
     }
 
     private func clearColorHistory() async {
-        guard let colorHistory = ColorHistoryStore.shared else { return }
+        guard let colorHistory = ColorHistoryStore.shared else {
+            showsHistoryUnavailable = true
+            return
+        }
         do {
             try await colorHistory.clear()
         } catch {
@@ -223,7 +235,10 @@ struct HistoryPreferencesView: View {
         let pendingRetentionDays = keepIndefinitely ? 0 : retentionDays
         let pendingStorageSize = storageSize
 
-        guard let history = HistoryActor.shared else { return }
+        guard let history = HistoryActor.shared else {
+            showsHistoryUnavailable = true
+            return
+        }
         Task {
             let deletions = await history.entriesPendingDeletion(
                 maxItems: pendingMaxItems,

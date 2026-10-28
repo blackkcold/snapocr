@@ -21,7 +21,12 @@ final class CaptureActionBarView: NSVisualEffectView {
         super.init(frame: frameRect)
 
         material = .hudWindow
-        blendingMode = .withinWindow
+        // 宿主 `AreaSelectionPanel` 是 clear + 非 opaque：窗内没有可采样的内容，
+        // `.withinWindow` 只会退化成一块灰底。改用 `.behindWindow` 采桌面，
+        // 与 `PinnedToolbarView` 保持一致。
+        blendingMode = .behindWindow
+        // HUD 恒定深色：按钮标题等语义色据此解析，浅色系统下不会变成黑字。
+        appearance = NSAppearance(named: .darkAqua)
         state = .active
         wantsLayer = true
         layer?.cornerRadius = DS.Corner.c10

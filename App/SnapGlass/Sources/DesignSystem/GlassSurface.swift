@@ -40,12 +40,20 @@ struct GlassSurface<S: InsettableShape>: ViewModifier {
     private var surface: some View {
         if reduceTransparency {
             shape.fill(Color(nsColor: .windowBackgroundColor))
-        } else if #available(macOS 26.0, *) {
-            shape
-                .fill(.clear)
-                .glassEffect(.regular, in: shape)
         } else {
+            // `glassEffect` 只存在于 macOS 26 SDK（Swift 6.2 起）。旧 SDK 上连符号
+            // 都没有，只写 `#available` 会在编译期失败，因此编译期与运行时两层守卫都要有。
+            #if compiler(>=6.2)
+            if #available(macOS 26.0, *) {
+                shape
+                    .fill(.clear)
+                    .glassEffect(.regular, in: shape)
+            } else {
+                shape.fill(elevation.material)
+            }
+            #else
             shape.fill(elevation.material)
+            #endif
         }
     }
 }
