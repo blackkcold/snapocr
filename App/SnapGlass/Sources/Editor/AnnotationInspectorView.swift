@@ -60,38 +60,41 @@ struct AnnotationInspectorView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.s12) {
-            HStack {
-                Label {
-                    Text(headerTitle)
-                } icon: {
-                    Image(systemName: headerIcon)
-                }
-                .font(.headline)
-
-                Spacer()
-
-                if isEditingSelection {
-                    Button(role: .destructive, action: viewModel.removeSelectedNode) {
-                        Image(systemName: "trash")
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: DS.Space.s12) {
+                HStack {
+                    Label {
+                        Text(headerTitle)
+                    } icon: {
+                        Image(systemName: headerIcon)
                     }
-                    .buttonStyle(.plain)
-                    .frame(width: DS.Hit.small, height: DS.Hit.small)
-                    .contentShape(Rectangle())
-                    .help("Delete selected annotation")
-                    .accessibilityLabel("Delete selected annotation")
+                    .font(.headline)
+
+                    Spacer()
+
+                    if isEditingSelection {
+                        Button(role: .destructive, action: viewModel.removeSelectedNode) {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: DS.Hit.small, height: DS.Hit.small)
+                        .contentShape(Rectangle())
+                        .help("Delete selected annotation")
+                        .accessibilityLabel("Delete selected annotation")
+                    }
                 }
-            }
 
-            if hasContext {
-                controls
-            } else {
-                emptyState
-            }
+                if hasContext {
+                    controls
+                } else {
+                    emptyState
+                }
 
-            Spacer()
+                Spacer(minLength: 0)
+            }
+            .padding(DS.Space.s12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(DS.Space.s12)
         .frame(minWidth: 240, idealWidth: 240, maxWidth: 280)
         .glassSurface(
             Rectangle(),

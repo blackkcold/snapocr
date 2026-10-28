@@ -40,7 +40,7 @@ extension BarcodeResultPanel {
             control.bezelStyle = .inline
             control.title = ""
             control.imagePosition = .imageOnly
-            control.contentTintColor = NSColor.white.withAlphaComponent(0.7)
+            control.contentTintColor = .secondaryLabelColor
             control.widthAnchor.constraint(equalToConstant: 20).isActive = true
             control.heightAnchor.constraint(equalToConstant: 20).isActive = true
         }
@@ -81,7 +81,7 @@ extension BarcodeResultPanel {
     func attributedPayload(_ payload: BarcodePayload) -> NSAttributedString {
         let secondary: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.62),
+            .foregroundColor: NSColor.secondaryLabelColor,
         ]
         let text = NSMutableAttributedString()
 
@@ -99,7 +99,7 @@ extension BarcodeResultPanel {
                     string: host,
                     attributes: [
                         .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
-                        .foregroundColor: NSColor.white.withAlphaComponent(0.94),
+                        .foregroundColor: NSColor.labelColor,
                     ]
                 )
             )
@@ -115,7 +115,7 @@ extension BarcodeResultPanel {
                     string: payload.text,
                     attributes: [
                         .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-                        .foregroundColor: NSColor.white.withAlphaComponent(0.94),
+                        .foregroundColor: NSColor.labelColor,
                     ]
                 )
             )
@@ -128,7 +128,7 @@ extension BarcodeResultPanel {
     func badge(_ text: String) -> NSTextField {
         let field = NSTextField(labelWithString: text)
         field.font = .systemFont(ofSize: 10, weight: .semibold)
-        field.textColor = .white
+        field.textColor = .labelColor
         field.alignment = .center
         field.wantsLayer = true
         field.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor

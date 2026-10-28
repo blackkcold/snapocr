@@ -55,6 +55,35 @@ extension HistoryView {
         NSWorkspace.shared.open(folder)
     }
 
+    /// 取色历史存储初始化失败：与「还没有取过色」区分开，并给出重试入口。
+    var colorUnavailableState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundColor(.secondary)
+
+            Text("History unavailable")
+                .font(.title3)
+                .foregroundColor(.secondary)
+
+            Text("Check the application support folder permissions")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 340)
+
+            HStack(spacing: 12) {
+                Button("Retry") {
+                    Task { await retryColorHistoryInitialization() }
+                }
+                Button("Open Storage Folder") {
+                    openHistoryFolder()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: - Empty State
 
     var emptyStateTitle: LocalizedStringKey {
@@ -97,11 +126,7 @@ extension HistoryView {
                 .font(.title3)
                 .foregroundColor(.secondary)
 
-            if colorHistory == nil {
-                Text("Check the application support folder permissions")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else if !colorFilter.isEmpty {
+            if !colorFilter.isEmpty {
                 Text("Try a different search term")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -111,10 +136,7 @@ extension HistoryView {
     }
 
     var colorEmptyStateTitle: LocalizedStringKey {
-        if colorHistory == nil {
-            return "History unavailable"
-        }
-        return colorFilter.isEmpty ? "No colors captured yet" : "No matching colors"
+        colorFilter.isEmpty ? "No colors captured yet" : "No matching colors"
     }
 
 }

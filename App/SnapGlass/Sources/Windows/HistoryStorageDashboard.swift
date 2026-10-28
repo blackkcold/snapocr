@@ -99,7 +99,8 @@ struct HistoryStorageDashboard: View {
             metricCard(
                 icon: "eyedropper",
                 title: "Colors",
-                value: "\(colorCount ?? 0)",
+                // 读取失败与「真的没有记录」必须区分：未知显示破折号，不冒充 0。
+                value: colorCount.map { String($0) } ?? "—",
                 tint: .orange
             )
             metricCard(

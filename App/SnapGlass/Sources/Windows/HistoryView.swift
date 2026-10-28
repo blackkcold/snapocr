@@ -39,7 +39,9 @@ struct HistoryView: View {
     /// A failed history read, kept separate from transient action errors.
     @State var loadError: String?
 
-    let colorHistory = ColorHistoryStore.shared
+    /// Kept in state so a failed shared store initialization can be retried from
+    /// the unavailable screen instead of requiring an app restart.
+    @State var colorHistory: ColorHistoryStore? = ColorHistoryStore.shared
     /// Kept in state so a failed `HistoryActor.shared` initialization can be
     /// retried from the unavailable screen instead of requiring an app restart.
     @State var history: HistoryActor? = HistoryActor.shared
@@ -77,6 +79,8 @@ struct HistoryView: View {
                 colorFilterBar
                 if isLoadingColors, colorEntries.isEmpty {
                     loadingState
+                } else if colorHistory == nil {
+                    colorUnavailableState
                 } else if filteredColorEntries.isEmpty {
                     colorEmptyState
                 } else {
