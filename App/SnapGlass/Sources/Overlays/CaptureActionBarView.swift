@@ -5,13 +5,11 @@ import SwiftUI
 // MARK: - CaptureActionBarView
 
 final class CaptureActionBarView: NSVisualEffectView {
-    var onBack: (() -> Void)?
     var onCopy: (() -> Void)?
     var onEdit: (() -> Void)?
     var onPin: (() -> Void)?
     var onScan: (() -> Void)?
 
-    private let backButton = NSButton()
     private let copyButton = NSButton()
     private let scanButton = NSButton()
     private let editButton = NSButton()
@@ -34,7 +32,7 @@ final class CaptureActionBarView: NSVisualEffectView {
 
         configureActionButtons()
 
-        let stack = NSStackView(views: [backButton, copyButton, scanButton, editButton, pinButton])
+        let stack = NSStackView(views: [copyButton, scanButton, editButton, pinButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.distribution = .fill
@@ -57,15 +55,6 @@ final class CaptureActionBarView: NSVisualEffectView {
     }
 
     private func configureActionButtons() {
-        configure(
-            backButton,
-            title: AppLocalization.string("Back"),
-            symbol: "chevron.backward",
-            toolTip: AppLocalization.string("Return to selection adjustments"),
-            action: #selector(back)
-        )
-        backButton.keyEquivalent = "\u{1b}"
-
         configure(
             copyButton,
             title: AppLocalization.string("Copy Image"),
@@ -126,20 +115,15 @@ final class CaptureActionBarView: NSVisualEffectView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        for button in [backButton, copyButton, scanButton, editButton, pinButton]
+        for button in [copyButton, scanButton, editButton, pinButton]
         where button.convert(button.bounds, to: self).contains(point) {
             return button
         }
         return super.hitTest(point)
     }
 
-    func focusDefaultAction() {
-        window?.makeFirstResponder(copyButton)
-    }
-
     func performAction(at point: NSPoint) -> Bool {
         let actions: [(NSButton, () -> Void)] = [
-            (backButton, { [weak self] in self?.onBack?() }),
             (copyButton, { [weak self] in self?.onCopy?() }),
             (scanButton, { [weak self] in self?.onScan?() }),
             (editButton, { [weak self] in self?.onEdit?() }),
@@ -170,7 +154,6 @@ final class CaptureActionBarView: NSVisualEffectView {
         button.imagePosition = .imageLeading
     }
 
-    @objc private func back() { onBack?() }
     @objc private func copyImage() { onCopy?() }
     @objc private func scanSelection() { onScan?() }
     @objc private func editScreenshot() { onEdit?() }

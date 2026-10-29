@@ -32,7 +32,7 @@ extension AreaTrackingView {
     /// - Parameter liveCapture: `true` 时重新截屏（「重新识别」，能拿到动画码的
     ///   最新帧）；`false` 时用遮罩弹出前的预截原图，无时差、无闪烁。
     func scanSelectedRegion(liveCapture: Bool = false) {
-        guard phase == .choosingAction,
+        guard phase == .selected,
               selectionRect.width > 5, selectionRect.height > 5,
               !scanState.isScanning
         else { return }
@@ -137,7 +137,7 @@ extension AreaTrackingView {
 
     /// 按扫描状态刷新浮层：`.idle` 隐藏，其余状态显示并重新贴靠动作栏。
     func refreshBarcodePanel() {
-        guard phase == .choosingAction, scanState.isVisible else {
+        guard phase == .selected, scanState.isVisible else {
             barcodePanel.isHidden = true
             return
         }
@@ -211,7 +211,7 @@ extension AreaTrackingView {
     ///
     /// 带 ⌘/⌃/⌥ 的组合键交给既有快捷键逻辑，这里只处理裸按键。
     func handleScanShortcut(_ event: NSEvent) -> Bool {
-        guard phase == .choosingAction,
+        guard phase == .selected,
               event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
               let characters = event.charactersIgnoringModifiers?.lowercased()
         else { return false }
@@ -232,7 +232,7 @@ extension AreaTrackingView {
     ///
     /// `⌘C` 在正文有选中文本时不消费，交给字段编辑器复制选中的片段。
     func handleScanCommand(_ event: NSEvent) -> Bool {
-        guard phase == .choosingAction,
+        guard phase == .selected,
               scanState.isVisible,
               event.modifierFlags.contains(.command)
         else { return false }

@@ -48,7 +48,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v0.9.7-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v0.9.8-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -78,14 +78,14 @@
 
 - 矩形区域 / 自由圈选 / 窗口 / 全屏 / 滚动截图
 - 支持多显示器与混合缩放环境
-- 实时十字准线，释放后二次调整选区
+- 实时十字准线；松开鼠标立即出现动作栏，选区仍可拖动、八向缩放和方向键微调
 - 区域选取支持实时画面与静态快照预览；快照不可用时使用纯黑背景
 - 默认 Retina 像素，可切换标准 1x
 - 支持 PNG/JPEG 编码与 JPEG 质量设置
 
 ### 置顶（⌘P，可配置）
 
-- 选区确认阶段按 <kbd>⌘</kbd>+<kbd>P</kbd>，或点击操作条「置顶图片」
+- 选区可调整阶段按 <kbd>⌘</kbd>+<kbd>P</kbd>，或点击动作栏「置顶图片」
 - 拖动移动；右下角拖拽等比缩放；滚轮 / 捏合缩放；<kbd>⌥</kbd>+滚轮调透明度
 - 鼠标悬停出现编辑工具条：不透明度滑杆、缩放滑杆（对数映射，10%–800%）与实时百分比读数，另有 1:1 与「适应屏幕」按钮
 - 右键菜单：复制图片 / 复制文字 (OCR) / 缩放 / 适应屏幕 / 关闭全部置顶图片

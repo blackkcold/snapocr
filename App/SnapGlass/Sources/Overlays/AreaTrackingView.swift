@@ -11,7 +11,9 @@ import SwiftUI
 final class AreaTrackingView: NSView {
     var onSelectionComplete: ((AreaSelectionResult?) -> Void)?
 
-    enum Phase { case idle, drawing, adjusting, choosingAction }
+    /// 选区只有「画」和「可调整的已选」两种进行态；动作栏常驻，
+    /// 不再有单独冻结选区的确认态。
+    enum Phase { case idle, drawing, selected }
     enum ResizeHandle: CaseIterable {
         case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
     }
@@ -32,6 +34,11 @@ final class AreaTrackingView: NSView {
     var selectionRect: CGRect = .zero
     var freeformPoints: [CGPoint] = []
     private var dragAction: DragAction?
+    /// 在选区外按下时先记住旧选区；没拖出有效新框就原样恢复，
+    /// 避免动作栏常驻后一次误点就把选区清掉。
+    private var pendingPreviousSelection: (rect: CGRect, freeform: [CGPoint])?
+    /// 动作栏贴靠方向在拖拽期间锁定，避免跨过阈值时上下跳。
+    private var actionBarAbove = false
     var hoverPoint: CGPoint = .zero
     var hoverColor: SampledColor?
     /// 取色标签当前实际占用的矩形；夹取后可能翻到光标另一侧，
@@ -75,12 +82,7 @@ final class AreaTrackingView: NSView {
         super.init(frame: frameRect)
 
         actionBar.isHidden = true
-        // 浮层打开时 esc 只关浮层、↵ 复制识别内容；第二次 esc 才收动作栏。
-        actionBar.onBack = { [weak self] in
-            guard let self else { return }
-            if self.dismissBarcodePanel() { return }
-            self.hideActionChooser()
-        }
+        // 浮层打开时 esc 只关浮层、↵ 复制识别内容；再按一次 esc 结束会话。
         actionBar.onCopy = { [weak self] in
             guard let self else { return }
             if self.copyFirstScanPayload() { return }
@@ -124,11 +126,17 @@ final class AreaTrackingView: NSView {
     }
 
     override func cursorUpdate(with event: NSEvent) {
-        if phase == .choosingAction {
+        let point = convert(event.locationInWindow, from: nil)
+        guard phase == .selected, style == .rectangle else {
+            NSCursor.crosshair.set()
+            return
+        }
+        if actionBar.frame.contains(point) {
             NSCursor.arrow.set()
-        } else if phase == .adjusting,
-                  let handle = hitHandle(at: convert(event.locationInWindow, from: nil)) {
+        } else if let handle = hitHandle(at: point) {
             handle.cursor.set()
+        } else if selectionRect.contains(point) {
+            NSCursor.openHand.set()
         } else {
             NSCursor.crosshair.set()
         }
@@ -157,11 +165,12 @@ final class AreaTrackingView: NSView {
         }
         updateHoverLabelRect()
 
-        if phase == .adjusting {
+        if phase == .selected, style == .rectangle {
             let handle = hitHandle(at: point)
             if handle != hoveredHandle {
                 hoveredHandle = handle
-                (handle?.cursor ?? .crosshair).set()
+                let fallback: NSCursor = selectionRect.contains(point) ? .openHand : .crosshair
+                (handle?.cursor ?? fallback).set()
                 setNeedsDisplay(selectionRect.insetBy(dx: -20, dy: -20))
             }
         } else if hoveredHandle != nil {
@@ -170,7 +179,6 @@ final class AreaTrackingView: NSView {
 
         // Only the crosshair and the color label follow the pointer. Repainting
         // just their union keeps AppKit from invalidating the whole 5K overlay.
-        guard phase != .choosingAction else { return }
         let dirty =
             crosshairInvalidationRect(for: previousPoint)
             .union(crosshairInvalidationRect(for: point))
@@ -187,7 +195,7 @@ final class AreaTrackingView: NSView {
 
     /// 标签尺寸只随色值文本变化；位置每次都跟着光标重算。
     private func updateHoverLabelRect() {
-        guard phase != .choosingAction, let hoverColor else {
+        guard let hoverColor else {
             hoverLabelRect = .zero
             return
         }
@@ -208,84 +216,98 @@ final class AreaTrackingView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         hoverPoint = point
-        if phase == .choosingAction {
-            let actionPoint = actionBar.convert(point, from: self)
-            if actionBar.performAction(at: actionPoint) { return }
+
+        if phase == .selected {
+            if actionBar.frame.contains(point) {
+                _ = actionBar.performAction(at: actionBar.convert(point, from: self))
+                return
+            }
             // 卡片内的点击永远不算「点空白」：事件偶尔会绕过控件落到这里，
             // 按坐标补派一次，避免一次正文点击把结果浮层整个关掉。
             if !barcodePanel.isHidden, barcodePanel.frame.contains(point) {
                 _ = barcodePanel.handleClick(at: barcodePanel.convert(point, from: self))
                 return
             }
-            // 点空白先收浮层，动作栏留在原处。
+            // 点空白先收浮层，动作栏与选区留在原处。
             if dismissBarcodePanel() {
-                actionBar.focusDefaultAction()
                 needsDisplay = true
                 return
             }
-            actionBar.focusDefaultAction()
-            return
-        }
-        if event.clickCount == 2, phase == .adjusting {
-            showActionChooser()
+            // 双击保留为「复制」快捷路径；手柄上的双击不触发，避免误判。
+            if event.clickCount == 2, style == .rectangle,
+               selectionRect.contains(point), hitHandle(at: point) == nil {
+                completeSelection(action: .copy)
+                return
+            }
+            if style == .rectangle {
+                if let handle = hitHandle(at: point) {
+                    dragAction = .resize(handle, initial: selectionRect, start: point)
+                    return
+                }
+                if selectionRect.contains(point) {
+                    dragAction = .move(initial: selectionRect, start: point)
+                    NSCursor.closedHand.set()
+                    return
+                }
+            }
+            beginNewSelection(at: point)
             return
         }
 
-        if style == .rectangle, phase == .adjusting {
-            if let handle = hitHandle(at: point) {
-                dragAction = .resize(handle, initial: selectionRect, start: point)
-                return
-            }
-            if selectionRect.contains(point) {
-                dragAction = .move(initial: selectionRect, start: point)
-                return
-            }
-        }
-
-        phase = .drawing
-        startPoint = point
-        selectionRect = .zero
-        freeformPoints = style == .freeform ? [point] : []
-        dragAction = nil
-        needsDisplay = true
+        beginNewSelection(at: point)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard phase != .choosingAction else { return }
         let point = convert(event.locationInWindow, from: nil)
         hoverPoint = point
 
         if let dragAction {
             updateAdjustedSelection(action: dragAction, current: point)
-        } else if style == .freeform {
-            if let last = freeformPoints.last, hypot(point.x - last.x, point.y - last.y) >= 2 {
-                freeformPoints.append(point.clamped(to: bounds))
-                selectionRect = boundingRect(for: freeformPoints)
+            // 选区一变，已有的条码结果就失效了。
+            if dismissBarcodePanel() { needsDisplay = true }
+            positionActionBar(keepingSide: true)
+        } else if phase == .drawing {
+            if style == .freeform {
+                if let last = freeformPoints.last, hypot(point.x - last.x, point.y - last.y) >= 2 {
+                    freeformPoints.append(point.clamped(to: bounds))
+                    selectionRect = boundingRect(for: freeformPoints)
+                }
+            } else if let startPoint {
+                selectionRect = CGRect(spanning: startPoint, and: point.clamped(to: bounds))
             }
-        } else if let startPoint {
-        selectionRect = CGRect(spanning: startPoint, and: point.clamped(to: bounds))
+        } else {
+            return
         }
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard phase != .choosingAction else { return }
         defer {
             dragAction = nil
             startPoint = nil
             needsDisplay = true
         }
-        guard dragAction == nil else { return }
+
+        if dragAction != nil {
+            // 结束移动/缩放：动作栏重新选边贴靠，光标回到手柄/框内语义。
+            positionActionBar()
+            cursorUpdate(with: event)
+            return
+        }
+
+        guard phase == .drawing else { return }
 
         if style == .freeform {
             guard freeformPoints.count >= 3 else {
-                resetSelection()
+                if !restorePendingSelection() { resetSelection() }
                 return
             }
             selectionRect = boundingRect(for: freeformPoints)
         }
 
         guard selectionRect.width > 5, selectionRect.height > 5 else {
+            // 在已有选区外点了一下但没拖出新框：恢复原选区，不当作取消。
+            if restorePendingSelection() { return }
             if onColorPicked != nil {
                 pickColorAndFinish(at: hoverPoint)
             } else {
@@ -293,7 +315,36 @@ final class AreaTrackingView: NSView {
             }
             return
         }
-        phase = .adjusting
+
+        pendingPreviousSelection = nil
+        phase = .selected
+        showActionBar()
+    }
+
+    /// 从「已选」状态在空白处重新起框；先记住旧框，空点一下可恢复。
+    private func beginNewSelection(at point: CGPoint) {
+        pendingPreviousSelection = selectionRect.isEmpty || onColorPicked != nil
+            ? nil
+            : (selectionRect, freeformPoints)
+        phase = .drawing
+        startPoint = point
+        selectionRect = .zero
+        freeformPoints = style == .freeform ? [point] : []
+        dragAction = nil
+        hoveredHandle = nil
+        actionBar.isHidden = true
+        needsDisplay = true
+    }
+
+    @discardableResult
+    private func restorePendingSelection() -> Bool {
+        guard onColorPicked == nil, let pending = pendingPreviousSelection else { return false }
+        pendingPreviousSelection = nil
+        selectionRect = pending.rect
+        freeformPoints = pending.freeform
+        phase = .selected
+        showActionBar()
+        return true
     }
 
     private func pickColorAndFinish(at point: CGPoint) {
@@ -330,29 +381,20 @@ final class AreaTrackingView: NSView {
         }
     }
 
-    private func showActionChooser() {
-        guard phase == .adjusting, selectionRect.width > 5, selectionRect.height > 5 else { return }
-        phase = .choosingAction
+    /// 松手即出栏；动作栏与手柄同时在线，不再有单独的确认态。
+    private func showActionBar() {
+        guard phase == .selected, selectionRect.width > 5, selectionRect.height > 5 else { return }
         hoveredHandle = nil
         actionBar.isHidden = false
         actionBar.updatePinShortcutHint()
         positionActionBar()
-        actionBar.focusDefaultAction()
-        needsDisplay = true
-    }
-
-    private func hideActionChooser() {
-        guard phase == .choosingAction else { return }
-        dismissBarcodePanel()
-        actionBar.isHidden = true
-        hoveredHandle = nil
-        phase = .adjusting
+        // 方向键微调依赖 overlay 保持 first responder；不把焦点交给按钮。
         window?.makeFirstResponder(self)
         needsDisplay = true
     }
 
     func completeSelection(action: AreaCaptureAction) {
-        guard phase == .choosingAction, selectionRect.width > 5, selectionRect.height > 5 else { return }
+        guard phase == .selected, selectionRect.width > 5, selectionRect.height > 5 else { return }
         dismissBarcodePanel()
         onSelectionComplete?(makeSelectionResult(action: action))
     }
@@ -379,83 +421,54 @@ final class AreaTrackingView: NSView {
         )
     }
 
-    private func positionActionBar() {
+    private func positionActionBar(keepingSide: Bool = false) {
         guard !actionBar.isHidden, !selectionRect.isEmpty else { return }
 
         let fittingSize = actionBar.fittingSize
         let size = CGSize(width: max(fittingSize.width, 400), height: max(fittingSize.height, 44))
         let margin: CGFloat = DS.Space.s12
-        let horizontalInset: CGFloat = DS.Space.s8
+        let inset: CGFloat = DS.Space.s8
         let proposedX = selectionRect.midX - size.width / 2
         let originX = min(
-            max(proposedX, bounds.minX + horizontalInset),
-            bounds.maxX - size.width - horizontalInset
+            max(proposedX, bounds.minX + inset),
+            bounds.maxX - size.width - inset
         )
 
-        var originY = selectionRect.minY - size.height - margin
-        if originY < bounds.minY + horizontalInset {
-            originY = selectionRect.maxY + margin
-        }
-        if originY + size.height > bounds.maxY - horizontalInset {
-            originY = max(bounds.minY + horizontalInset, selectionRect.midY - size.height / 2)
+        let belowFits = selectionRect.minY - size.height - margin >= bounds.minY + inset
+        let aboveFits = selectionRect.maxY + margin + size.height <= bounds.maxY - inset
+        if !keepingSide {
+            if belowFits {
+                actionBarAbove = false
+            } else if aboveFits {
+                actionBarAbove = true
+            }
         }
 
-        actionBar.frame = CGRect(origin: CGPoint(x: originX, y: originY), size: size)
+        let originY: CGFloat
+        if !keepingSide && !belowFits && !aboveFits {
+            originY = bounds.midY - size.height / 2
+        } else {
+            originY = actionBarAbove
+                ? selectionRect.maxY + margin
+                : selectionRect.minY - size.height - margin
+        }
+        let clampedY = min(
+            max(originY, bounds.minY + inset),
+            max(bounds.minY + inset, bounds.maxY - size.height - inset)
+        )
+
+        actionBar.frame = CGRect(origin: CGPoint(x: originX, y: clampedY), size: size)
+        positionBarcodePanel()
     }
 
     private func resetSelection() {
+        pendingPreviousSelection = nil
         dismissBarcodePanel()
         actionBar.isHidden = true
         hoveredHandle = nil
         phase = .idle
         selectionRect = .zero
         freeformPoints = []
-    }
-
-    /// 将当前选区同时映射为 AppKit 全局点矩形与 Quartz 全局矩形。
-    ///
-    /// AppKit 矩形直接透传用于置顶面板（面板 frame 即 AppKit 点坐标），
-    /// Quartz 矩形仅用于截图裁剪路径。
-    func selectionRects() -> (appKit: CGRect, quartz: CGRect) {
-        guard let window else { return (selectionRect, selectionRect) }
-        let windowRect = convert(selectionRect, to: nil)
-        let appKitRect = window.convertToScreen(windowRect)
-        let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }),
-              let displayID = screen.deviceDescription[
-                  NSDeviceDescriptionKey("NSScreenNumber")
-              ] as? CGDirectDisplayID else {
-            return (appKitRect, appKitRect)
-        }
-
-        let quartz = ScreenCoordinateGeometry.quartzRect(
-            from: appKitRect,
-            appKitScreenFrame: screen.frame,
-            quartzScreenFrame: CGDisplayBounds(displayID)
-        ) ?? appKitRect
-        return (appKitRect, quartz)
-    }
-
-    func freeformPath() -> CGPath {
-        let path = CGMutablePath()
-        guard let first = freeformPoints.first else { return path }
-        path.move(to: first)
-        for point in freeformPoints.dropFirst() { path.addLine(to: point) }
-        if phase == .adjusting || phase == .choosingAction { path.closeSubpath() }
-        return path
-    }
-
-    func handlePoints() -> [ResizeHandle: CGPoint] {
-        [
-            .topLeft: CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
-            .top: CGPoint(x: selectionRect.midX, y: selectionRect.maxY),
-            .topRight: CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
-            .right: CGPoint(x: selectionRect.maxX, y: selectionRect.midY),
-            .bottomRight: CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
-            .bottom: CGPoint(x: selectionRect.midX, y: selectionRect.minY),
-            .bottomLeft: CGPoint(x: selectionRect.minX, y: selectionRect.minY),
-            .left: CGPoint(x: selectionRect.minX, y: selectionRect.midY),
-        ]
     }
 
     private func hitHandle(at point: CGPoint) -> ResizeHandle? {
@@ -498,37 +511,83 @@ final class AreaTrackingView: NSView {
 }
 
 extension AreaTrackingView {
-    private func handleEscapeKey() {
-        if dismissBarcodePanel() { return }
-        if phase == .choosingAction {
-            hideActionChooser()
-        } else {
-            onSelectionComplete?(nil)
+    /// 将当前选区同时映射为 AppKit 全局点矩形与 Quartz 全局矩形。
+    ///
+    /// AppKit 矩形直接透传用于置顶面板（面板 frame 即 AppKit 点坐标），
+    /// Quartz 矩形仅用于截图裁剪路径。
+    func selectionRects() -> (appKit: CGRect, quartz: CGRect) {
+        guard let window else { return (selectionRect, selectionRect) }
+        let windowRect = convert(selectionRect, to: nil)
+        let appKitRect = window.convertToScreen(windowRect)
+        let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }),
+              let displayID = screen.deviceDescription[
+                  NSDeviceDescriptionKey("NSScreenNumber")
+              ] as? CGDirectDisplayID else {
+            return (appKitRect, appKitRect)
         }
+
+        let quartz = ScreenCoordinateGeometry.quartzRect(
+            from: appKitRect,
+            appKitScreenFrame: screen.frame,
+            quartzScreenFrame: CGDisplayBounds(displayID)
+        ) ?? appKitRect
+        return (appKitRect, quartz)
+    }
+
+    func freeformPath() -> CGPath {
+        let path = CGMutablePath()
+        guard let first = freeformPoints.first else { return path }
+        path.move(to: first)
+        for point in freeformPoints.dropFirst() { path.addLine(to: point) }
+        if phase == .selected { path.closeSubpath() }
+        return path
+    }
+
+    func handlePoints() -> [ResizeHandle: CGPoint] {
+        [
+            .topLeft: CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
+            .top: CGPoint(x: selectionRect.midX, y: selectionRect.maxY),
+            .topRight: CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
+            .right: CGPoint(x: selectionRect.maxX, y: selectionRect.midY),
+            .bottomRight: CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
+            .bottom: CGPoint(x: selectionRect.midX, y: selectionRect.minY),
+            .bottomLeft: CGPoint(x: selectionRect.minX, y: selectionRect.minY),
+            .left: CGPoint(x: selectionRect.minX, y: selectionRect.midY),
+        ]
+    }
+
+    private func handleEscapeKey() {
+        // 动作栏常驻后不再有「退回上一态」；Esc 一次收掉整个截图会话。
+        if dismissBarcodePanel() { return }
+        onSelectionComplete?(nil)
     }
 
     private func handleReturnKey() {
-        if phase == .choosingAction {
-            if copyFirstScanPayload() { return }
-            completeSelection(action: .copy)
-        } else {
-            showActionChooser()
-        }
+        guard phase == .selected else { return }
+        if copyFirstScanPayload() { return }
+        completeSelection(action: .copy)
     }
 
     private func handleDefaultKey(_ event: NSEvent) {
         if handleScanShortcut(event) { return }
         if PinSelectionShortcut.matches(event: event), isPinShortcutPhase {
             performPinShortcut()
-        } else {
-            super.keyDown(with: event)
+            return
         }
+        if phase == .selected,
+           event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
+           event.charactersIgnoringModifiers?.lowercased() == "e" {
+            completeSelection(action: .edit)
+            return
+        }
+        super.keyDown(with: event)
     }
 
     /// Moves the rectangle selection with the arrow keys (1 pt, 10 pt with
     /// Shift). Returns false when the event should fall through to AppKit.
     private func nudgeSelection(with event: NSEvent) -> Bool {
-        guard style == .rectangle, phase == .adjusting, !selectionRect.isEmpty else {
+        guard style == .rectangle, phase == .selected, !selectionRect.isEmpty else {
             return false
         }
         let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1

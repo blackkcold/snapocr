@@ -23,12 +23,9 @@ extension AreaTrackingView {
 
         if !selectionRect.isEmpty {
             drawSizeLabel(for: selectionRect)
-            if phase == .adjusting { drawActionHint(for: selectionRect) }
         }
-        if phase != .choosingAction {
-            drawCrosshair(at: hoverPoint)
-            if let hoverColor { drawHoverColorLabel(for: hoverColor, near: hoverPoint) }
-        }
+        drawCrosshair(at: hoverPoint)
+        if let hoverColor { drawHoverColorLabel(for: hoverColor, near: hoverPoint) }
     }
 
     private func drawLiveBackground(in context: CGContext) {
@@ -129,7 +126,7 @@ extension AreaTrackingView {
             context.setStrokeColor(NSColor.white.cgColor)
             context.setLineWidth(2)
             context.stroke(selectionRect.insetBy(dx: -1, dy: -1))
-            if phase == .adjusting { drawHandles() }
+            if phase == .selected { drawHandles() }
         }
     }
 
@@ -251,11 +248,6 @@ extension AreaTrackingView {
 
     private func drawSizeLabel(for rect: CGRect) {
         drawLabel("\(Int(rect.width)) × \(Int(rect.height))", at: CGPoint(x: rect.midX, y: rect.maxY + 18))
-    }
-
-    private func drawActionHint(for rect: CGRect) {
-        let text = AppLocalization.string("Return / double-click to choose an action")
-        drawLabel(text, at: CGPoint(x: rect.midX, y: rect.minY - 18))
     }
 
     private func drawLabel(_ text: String, at point: CGPoint) {

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-10-29
+
+### Changed
+- 区域截图选区松手后立即显示动作栏，不再需要 ↵ 或双击确认；动作栏与八个手柄同时在线，选区可以继续拖动、八向缩放和方向键微调。
+- 动作栏在拖拽期间锁定贴靠方向，靠近屏幕上下边缘时不再来回跳动。
+- 单击选区外空白不再清空选区；在空白处拖动才重新起框，Esc 一次结束整个截图会话。
+- 动作栏移除「返回」按钮，只保留复制、识别、编辑、置顶；双击选区保留为复制快捷路径。
+- 条码识别结果浮层在选区几何变化时立即关闭，避免结果与当前选区不一致。
+
 ## [0.9.7] - 2026-10-28
 
 ### Changed
@@ -388,7 +397,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.7...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.8...HEAD
+[0.9.8]: https://github.com/blackkcold/snapocr/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/blackkcold/snapocr/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/blackkcold/snapocr/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/blackkcold/snapocr/compare/v0.9.1...v0.9.5
