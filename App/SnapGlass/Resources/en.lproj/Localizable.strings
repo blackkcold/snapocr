@@ -43,7 +43,8 @@
 "Overlay preview" = "Overlay preview";
 "Live screen" = "Live screen";
 "Static snapshot" = "Static snapshot";
-"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "Static snapshot freezes the screen when selection starts; unavailable screens appear black.";
+"Static snapshot freezes the screen when selection starts; selection is canceled if a screen cannot be captured." = "Static snapshot freezes the screen when selection starts; selection is canceled if a screen cannot be captured.";
+"Static snapshot failed. Try again or switch to Live screen in Preferences." = "Static snapshot failed. Try again or switch to Live screen in Preferences.";
 "Saved image format" = "Saved image format";
 "PNG (lossless)" = "PNG (lossless)";
 "JPEG (smaller)" = "JPEG (smaller)";

@@ -8,6 +8,22 @@ import SwiftUI
 
 // MARK: - CaptureViewModel Capture Operations
 
+private struct PreCapturedDisplays: Sendable {
+    let images: [CGDirectDisplayID: CGImage]
+    let displayFrames: [CGDirectDisplayID: CGRect]
+
+    var hasEveryDisplay: Bool {
+        !displayFrames.isEmpty && displayFrames.keys.allSatisfy { images[$0] != nil }
+    }
+
+    static let empty = PreCapturedDisplays(images: [:], displayFrames: [:])
+}
+
+private enum CaptureImageSource {
+    case live
+    case snapshot(CGImage)
+}
+
 extension CaptureViewModel {
     public func captureArea() {
         startAreaCapture()
@@ -21,15 +37,23 @@ extension CaptureViewModel {
 
             let (selectionStyle, overlayMode) = Self.areaCapturePreferences()
             let setup = await preCaptureSetup(for: overlayMode)
+            if overlayMode == .snapshot, !setup.displays.hasEveryDisplay {
+                showStaticSnapshotFailure()
+                return
+            }
             let selection = await awaitAreaSelection(
                 style: selectionStyle,
                 overlayMode: overlayMode,
-                capturedFrames: setup.frames,
+                capturedFrames: setup.displays.images,
                 preCaptureTask: setup.task
             )
             setup.task?.cancel()
             guard let selection else { return }
-            await performAreaSelection(selection)
+            await performAreaSelection(
+                selection,
+                overlayMode: overlayMode,
+                capturedDisplays: setup.displays
+            )
         }
     }
 
@@ -39,24 +63,26 @@ extension CaptureViewModel {
     private func preCaptureSetup(
         for overlayMode: CaptureOverlayMode
     ) async -> (
-        frames: [CGDirectDisplayID: CGImage],
-        task: Task<[CGDirectDisplayID: CGImage], Never>?
+        displays: PreCapturedDisplays,
+        task: Task<PreCapturedDisplays, Never>?
     ) {
-        guard overlayMode == .snapshot else {
-            let task = Task<[CGDirectDisplayID: CGImage], Never> { [weak self] in
-                guard let self else { return [:] }
-                return await self.preCaptureAllScreens()
-            }
-            return ([:], task)
+        let captureOptions = Self.currentCaptureOptions()
+        if overlayMode == .snapshot {
+            return (await preCaptureAllScreens(options: captureOptions), nil)
         }
-        return (await preCaptureAllScreens(), nil)
+
+        let task = Task<PreCapturedDisplays, Never> { [weak self] in
+            guard let self else { return .empty }
+            return await self.preCaptureAllScreens(options: captureOptions)
+        }
+        return (.empty, task)
     }
 
     private func awaitAreaSelection(
         style: CaptureSelectionStyle,
         overlayMode: CaptureOverlayMode,
         capturedFrames: [CGDirectDisplayID: CGImage],
-        preCaptureTask: Task<[CGDirectDisplayID: CGImage], Never>?
+        preCaptureTask: Task<PreCapturedDisplays, Never>?
     ) async -> AreaSelectionResult? {
         await withCheckedContinuation { continuation in
             var didResume = false
@@ -81,28 +107,69 @@ extension CaptureViewModel {
 
                 if let preCaptureTask {
                     Task { @MainActor in
-                        let frames = await preCaptureTask.value
-                        AreaSelectionPanel.updateCapturedFrames(frames)
+                        let displays = await preCaptureTask.value
+                        AreaSelectionPanel.updateCapturedFrames(displays.images)
                     }
                 }
             }
         }
     }
 
-    private func performAreaSelection(_ selection: AreaSelectionResult) async {
+    private func performAreaSelection(
+        _ selection: AreaSelectionResult,
+        overlayMode: CaptureOverlayMode,
+        capturedDisplays: PreCapturedDisplays
+    ) async {
         let destination: CaptureDestination =
             switch selection.action {
             case .copy: .clipboardOnly
             case .edit: .editorOnly
             case .pin: .pinOnly
             }
+
+        let imageSource: CaptureImageSource
+        if overlayMode == .snapshot {
+            guard let displayID = selection.displayID,
+                  let snapshot = capturedDisplays.images[displayID],
+                  let displayFrame = capturedDisplays.displayFrames[displayID] else {
+                showStaticSnapshotFailure()
+                return
+            }
+            do {
+                let croppedImage = try StaticSnapshotRegionCropper.crop(
+                    from: snapshot,
+                    areaRect: selection.screenRect,
+                    displayFrame: displayFrame
+                )
+                imageSource = .snapshot(croppedImage)
+            } catch {
+                logger.warning("Unable to crop static snapshot for display \(displayID): \(error)")
+                showStaticSnapshotFailure()
+                return
+            }
+        } else {
+            imageSource = .live
+        }
+
         await performCapture(
             mode: CaptureCore.CaptureMode.area(selection.screenRect),
+            imageSource: imageSource,
             normalizedMaskPath: selection.normalizedPath,
             historyModeOverride: selection.isFreeform ? "freeform" : nil,
             destination: destination,
             pinRect: selection.appKitRect,
             managesCaptureState: false
+        )
+    }
+
+    private func showStaticSnapshotFailure() {
+        showToast(
+            message: AppLocalization.string(
+                "Static snapshot failed. Try again or switch to Live screen in Preferences."
+            ),
+            type: .error,
+            actionLabel: AppLocalization.string("Retry"),
+            action: { [weak self] in self?.captureArea() }
         )
     }
 
@@ -127,20 +194,16 @@ extension CaptureViewModel {
         ) ?? .live
     }
 
-    /// Pre-captures each screen's full frame before the overlay appears so the
-    /// frames contain no overlay windows, no cursor, and a stable sample source
+    /// Pre-captures each screen's full frame before the overlay appears using the
+    /// ordinary capture options, keeping a stable preview and sample source
     /// for hover/click color picking. The area rect must use Quartz global
     /// bounds (CGDisplayBounds) so it matches both the sampling path above
     /// (which converts AppKit points via quartzScreenFrame: CGDisplayBounds)
     /// and the selection path below (selection.screenRect is already a Quartz
     /// rect). AppKit screen.frame coordinates can diverge from Quartz bounds
     /// on secondary displays arranged above/left of the main screen. Sampling
-    /// and snapshot previews share these full-resolution frames.
-    private func preCaptureAllScreens() async -> [CGDirectDisplayID: CGImage] {
-        let captureOptions = CaptureOptions(
-            includeCursor: false,
-            highResolution: true
-        )
+    /// and snapshot previews share these frames at the requested resolution.
+    private func preCaptureAllScreens(options captureOptions: CaptureOptions) async -> PreCapturedDisplays {
         let displays: [(id: CGDirectDisplayID, bounds: CGRect)] = NSScreen.screens.compactMap { screen in
             guard
                 let displayID = screen.deviceDescription[
@@ -149,12 +212,13 @@ extension CaptureViewModel {
             else { return nil }
             return (displayID, CGDisplayBounds(displayID))
         }
-        guard !displays.isEmpty else { return [:] }
+        guard !displays.isEmpty else { return .empty }
+        let displayFrames = Dictionary(uniqueKeysWithValues: displays.map { ($0.id, $0.bounds) })
 
         let orchestrator = captureOrchestrator
         return await withTaskGroup(
             of: (id: CGDirectDisplayID, image: CGImage?, failure: String?).self,
-            returning: [CGDirectDisplayID: CGImage].self
+            returning: PreCapturedDisplays.self
         ) { group in
             for display in displays {
                 group.addTask {
@@ -180,7 +244,7 @@ extension CaptureViewModel {
                     )
                 }
             }
-            return capturedFrames
+            return PreCapturedDisplays(images: capturedFrames, displayFrames: displayFrames)
         }
     }
 
@@ -314,6 +378,7 @@ extension CaptureViewModel {
     /// - Parameter mode: The capture mode to use.
     private func performCapture(
         mode: CaptureCore.CaptureMode,
+        imageSource: CaptureImageSource = .live,
         sourceAppName: String? = nil,
         sourceWindowTitle: String? = nil,
         normalizedMaskPath: [CGPoint]? = nil,
@@ -333,18 +398,28 @@ extension CaptureViewModel {
         }
 
         do {
-            let result = try await captureOrchestrator.capture(
-                mode: mode,
-                options: Self.currentCaptureOptions()
-            )
+            let captureMode: CaptureCore.CaptureMode
+            let capturedImage: CGImage
+            switch imageSource {
+            case .live:
+                let result = try await captureOrchestrator.capture(
+                    mode: mode,
+                    options: Self.currentCaptureOptions()
+                )
+                captureMode = result.captureMode
+                capturedImage = result.image
+            case .snapshot(let image):
+                captureMode = mode
+                capturedImage = image
+            }
             let image = if let normalizedMaskPath {
-                try SelectionMaskProcessor.apply(to: result.image, normalizedPath: normalizedMaskPath)
+                try SelectionMaskProcessor.apply(to: capturedImage, normalizedPath: normalizedMaskPath)
             } else {
-                result.image
+                capturedImage
             }
             await processCapturedImage(
                 image,
-                captureMode: result.captureMode,
+                captureMode: captureMode,
                 sourceAppName: sourceAppName,
                 sourceWindowTitle: sourceWindowTitle,
                 historyModeOverride: historyModeOverride,

@@ -76,7 +76,10 @@ struct CapturePreferencesView: View {
             .pickerStyle(.segmented)
 
             PreferencesCardCaption(
-                text: "Static snapshot freezes the screen when selection starts; unavailable screens appear black."
+                text: """
+                    Static snapshot freezes the screen when selection starts; \
+                    selection is canceled if a screen cannot be captured.
+                    """
             )
 
             Picker("Saved image format", selection: $imageFormat) {

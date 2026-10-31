@@ -11,6 +11,7 @@ enum AreaCaptureAction {
 struct AreaSelectionResult {
     let screenRect: CGRect
     let appKitRect: CGRect
+    let displayID: CGDirectDisplayID?
     let normalizedPath: [CGPoint]?
     let action: AreaCaptureAction
 

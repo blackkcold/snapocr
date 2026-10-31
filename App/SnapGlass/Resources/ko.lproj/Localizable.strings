@@ -43,7 +43,8 @@
 "Overlay preview" = "오버레이 미리보기";
 "Live screen" = "실시간 화면";
 "Static snapshot" = "정적 스냅샷";
-"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "정적 스냅샷은 선택을 시작할 때 화면을 고정하며, 캡처할 수 없는 화면은 검게 표시됩니다.";
+"Static snapshot freezes the screen when selection starts; selection is canceled if a screen cannot be captured." = "정적 스냅샷은 선택을 시작할 때 화면을 고정하며, 어느 화면이든 캡처할 수 없으면 캡처가 취소됩니다.";
+"Static snapshot failed. Try again or switch to Live screen in Preferences." = "정적 스냅샷을 캡처하지 못했습니다. 다시 시도하거나 설정에서 실시간 화면으로 전환하세요.";
 "Saved image format" = "저장 형식";
 "PNG (lossless)" = "PNG(무손실)";
 "JPEG (smaller)" = "JPEG(더 작은 용량)";
