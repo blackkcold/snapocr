@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-10-31
+
+### Fixed
+- 静态区域截图确认后直接裁切启动预览帧，不再重新抓取动态画面；启动帧不可用时提供重试并提示切换实时模式。
+
 ## [0.9.8] - 2026-10-29
 
 ### Changed

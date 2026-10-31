@@ -43,7 +43,8 @@
 "Overlay preview" = "覆盖层预览";
 "Live screen" = "实时画面";
 "Static snapshot" = "静态快照";
-"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "静态快照会在开始选择时冻结画面；无法捕获的屏幕将显示为黑色。";
+"Static snapshot freezes the screen when selection starts; selection is canceled if a screen cannot be captured." = "静态快照会在开始选区时冻结画面；若任一屏幕无法捕获，将取消本次截图。";
+"Static snapshot failed. Try again or switch to Live screen in Preferences." = "静态快照失败。请重试，或在设置中切换为实时画面。";
 "Saved image format" = "保存格式";
 "PNG (lossless)" = "PNG（无损）";
 "JPEG (smaller)" = "JPEG（体积更小）";

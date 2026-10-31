@@ -416,6 +416,9 @@ final class AreaTrackingView: NSView {
         return AreaSelectionResult(
             screenRect: rects.quartz,
             appKitRect: rects.appKit,
+            displayID: screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? CGDirectDisplayID,
             normalizedPath: normalizedPath,
             action: action
         )

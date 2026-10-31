@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import CaptureCore
 
@@ -192,6 +193,25 @@ struct CaptureProtocolTests {
         )
 
         #expect(crop == CGRect(x: 1600, y: 900, width: 320, height: 180))
+    }
+
+    @Test func staticSnapshotCropperUsesSelectionPixelsWithoutRescaling() throws {
+        let source = try makeSnapshotImage(
+            width: 8,
+            height: 4,
+            redRect: CGRect(x: 2, y: 2, width: 4, height: 2)
+        )
+
+        let cropped = try StaticSnapshotRegionCropper.crop(
+            from: source,
+            areaRect: CGRect(x: 101, y: -19, width: 2, height: 1),
+            displayFrame: CGRect(x: 100, y: -20, width: 4, height: 2)
+        )
+
+        #expect(cropped.width == 4)
+        #expect(cropped.height == 2)
+        #expect(redComponent(atX: 0, y: 0, in: cropped) == 255)
+        #expect(greenComponent(atX: 3, y: 1, in: cropped) == 0)
     }
 
     @Test func windowCrop_clipsPartiallyOffscreenWindowToVisibleBounds() {
@@ -403,6 +423,57 @@ struct CaptureProtocolTests {
             throw CaptureError.captureFailed(reason: "Unable to finalize test image")
         }
         return image
+    }
+
+    private func makeSnapshotImage(width: Int, height: Int, redRect: CGRect) throws -> CGImage {
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        for pixelRow in 0..<height {
+            for pixelColumn in 0..<width {
+                pixels[(pixelRow * width + pixelColumn) * 4 + 3] = 255
+            }
+        }
+        for pixelRow in Int(redRect.minY)..<Int(redRect.maxY) {
+            for pixelColumn in Int(redRect.minX)..<Int(redRect.maxX) {
+                pixels[(pixelRow * width + pixelColumn) * 4] = 255
+            }
+        }
+
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let image = CGImage(
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 8,
+                  bitsPerPixel: 32,
+                  bytesPerRow: width * 4,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGBitmapInfo(
+                      rawValue: CGBitmapInfo.byteOrder32Big.rawValue
+                          | CGImageAlphaInfo.last.rawValue
+                  ),
+                  provider: provider,
+                  decode: nil,
+                  shouldInterpolate: false,
+                  intent: .defaultIntent
+              ) else {
+            throw CaptureError.captureFailed(reason: "Unable to finalize test image")
+        }
+        return image
+    }
+
+    private func redComponent(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {
+        guard let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return 0
+        }
+        return bytes[yCoordinate * image.bytesPerRow + xCoordinate * 4]
+    }
+
+    private func greenComponent(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {
+        guard let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return 0
+        }
+        return bytes[yCoordinate * image.bytesPerRow + xCoordinate * 4 + 1]
     }
 
     private func alpha(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {

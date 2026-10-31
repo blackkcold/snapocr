@@ -43,7 +43,8 @@
 "Overlay preview" = "オーバーレイプレビュー";
 "Live screen" = "ライブ画面";
 "Static snapshot" = "静止スナップショット";
-"Static snapshot freezes the screen when selection starts; unavailable screens appear black." = "静止スナップショットは選択開始時の画面を固定し、取得できない画面は黒く表示します。";
+"Static snapshot freezes the screen when selection starts; selection is canceled if a screen cannot be captured." = "静止スナップショットは選択開始時に画面を固定します。いずれかの画面を取得できない場合、撮影はキャンセルされます。";
+"Static snapshot failed. Try again or switch to Live screen in Preferences." = "静止スナップショットに失敗しました。再試行するか、設定でライブ画面に切り替えてください。";
 "Saved image format" = "保存形式";
 "PNG (lossless)" = "PNG（ロスレス）";
 "JPEG (smaller)" = "JPEG（より小さい）";
