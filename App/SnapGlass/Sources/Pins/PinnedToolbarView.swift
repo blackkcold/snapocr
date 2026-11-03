@@ -16,6 +16,9 @@ final class PinnedToolbarView: NSVisualEffectView {
     /// 不透明度滑杆拖动中（用于抑制工具条自动隐藏）。
     var onInteractionChange: ((Bool) -> Void)?
 
+    /// 缩放滑杆拖动起止（用于冻结工具条位置）。
+    var onScaleInteractionChange: ((Bool) -> Void)?
+
     /// 鼠标进入/离开工具条，用于取消或重启延迟隐藏。
     var onPointerEnter: (() -> Void)?
     var onPointerExit: (() -> Void)?
@@ -341,10 +344,12 @@ final class PinnedToolbarView: NSVisualEffectView {
 
     /// 绑定两个滑杆的拖拽起止，用于在拖动期间抑制工具条自动隐藏。
     private func wireInteractionReporting() {
-        for slider in [opacitySlider, scaleSlider] {
-            slider.onDragStateChange = { [weak self] isDragging in
-                self?.onInteractionChange?(isDragging)
-            }
+        opacitySlider.onDragStateChange = { [weak self] isDragging in
+            self?.onInteractionChange?(isDragging)
+        }
+        scaleSlider.onDragStateChange = { [weak self] isDragging in
+            self?.onInteractionChange?(isDragging)
+            self?.onScaleInteractionChange?(isDragging)
         }
     }
 }

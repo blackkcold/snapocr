@@ -48,10 +48,7 @@ final class PinnedWindowManager: NSObject, NSWindowDelegate {
         let offset = PinnedImageGeometry.cascadeOffset(forIndex: panels.count)
         let candidate = baseFrame.offsetBy(dx: offset.x, dy: offset.y)
         let screen = Self.screen(containing: candidate)
-        let frame = PinnedImageGeometry.fitToScreen(
-            candidate,
-            screenFrame: screen?.visibleFrame ?? candidate
-        )
+        let frame = screen.map { PinnedImageGeometry.fitToScreen(candidate, screenFrame: $0.visibleFrame) } ?? candidate
 
         let panel = PinnedImagePanel(contentRect: frame)
         panel.delegate = self

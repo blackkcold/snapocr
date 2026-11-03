@@ -60,6 +60,8 @@ final class PinnedToolbarCoordinator {
     private let toolbarWindow: PinnedToolbarWindow
     private let toolbarView = PinnedToolbarView(frame: .zero)
     private var toolbarSize: CGSize = .zero
+    private var lastMeasuredAvailableWidth: CGFloat?
+    private var isScaleSliderDragging = false
 
     private var visibility = PinnedToolbarVisibility()
     private var showTask: Task<Void, Never>?
@@ -127,6 +129,13 @@ final class PinnedToolbarCoordinator {
             }
             self.scheduleHide()
         }
+        toolbarView.onScaleInteractionChange = { [weak self] isDragging in
+            guard let self else { return }
+            self.isScaleSliderDragging = isDragging
+            if !isDragging {
+                self.reposition()
+            }
+        }
         toolbarView.onPointerEnter = { [weak self] in
             guard let self else { return }
             self.hideTask?.cancel()
@@ -172,6 +181,25 @@ final class PinnedToolbarCoordinator {
         pinnedView.onOpacityChanged = { [weak self] opacity in
             self?.toolbarView.updateOpacity(opacity)
         }
+        pinnedView.onScaleChanged = { [weak self] scale in
+            self?.toolbarView.updateScale(scale)
+        }
+        pinnedView.onResizeChanged = { [weak self] isResizing in
+            guard let self else { return }
+            if isResizing {
+                self.showTask?.cancel()
+                self.showTask = nil
+                self.hideTask?.cancel()
+                self.hideTask = nil
+                self.visibility.panelResizeBegan()
+                self.hideImmediately()
+            } else {
+                self.visibility.panelResizeEnded()
+                if self.visibility.shouldShowAfterResize {
+                    self.scheduleShow()
+                }
+            }
+        }
     }
 
     private func observePanelGeometry() {
@@ -196,14 +224,14 @@ final class PinnedToolbarCoordinator {
         showTask?.cancel()
         let delay = visibility.pendingShowDelay
         if delay <= 0 {
-            visibility.applyShow()
+            guard visibility.applyShow() || visibility.isVisible else { return }
             present()
             return
         }
         showTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
-            self.visibility.applyShow()
+            guard self.visibility.applyShow() || self.visibility.isVisible else { return }
             self.present()
         }
     }
@@ -227,11 +255,13 @@ final class PinnedToolbarCoordinator {
         syncReadouts()
         // 先定档位与尺寸（此刻视图已在窗口层级中），再定位，最后排序。
         // 顺序不能颠倒：定位依赖 `toolbarSize`，而排序会重置 `sharingType`。
-        updateToolbarSize()
+        updateToolbarSizeIfNeeded()
         // 必须先定位再排序：`updateToolbarFrame` 若像 `reposition()` 那样要求
         // `isVisible`，首次显示会在定位前被跳过，工具条就落在窗口初始原点
         // （屏幕左下），表现为严重偏移。
-        updateToolbarFrame()
+        if !isScaleSliderDragging {
+            updateToolbarFrame()
+        }
         toolbarWindow.orderFront(nil)
         // 排序可能重置 sharingType，必须在其后重新确认。
         toolbarWindow.reassertContentProtection()
@@ -249,8 +279,10 @@ final class PinnedToolbarCoordinator {
     /// 宽度按档位的固定件加两根滑杆算出（滑杆在档位区间内吸收剩余宽度），高度取控件
     /// 固有高度并以档位下限兜底——不再硬编码 40pt，也不再只测宽度：旧实现把高度写死
     /// 为 40 而实测内容更低，导致窗口比内容矮、控件被圆角裁切而显示不全。
-    private func updateToolbarSize() {
+    private func updateToolbarSizeIfNeeded() {
         let available = availableToolbarWidth()
+        guard available != lastMeasuredAvailableWidth else { return }
+        lastMeasuredAvailableWidth = available
         let layout = PinnedImageGeometry.toolbarLayout(availableWidth: available)
         toolbarView.apply(layout: layout)
         toolbarView.layoutSubtreeIfNeeded()
@@ -282,9 +314,10 @@ final class PinnedToolbarCoordinator {
 
     /// 面板移动/缩放时的跟随。仅在工具条可见时有意义。
     private func reposition() {
-        guard toolbarWindow.isVisible else { return }
-        // 面板可能被拖到另一块屏幕，档位与可用宽度随之变化，需重新测量。
-        updateToolbarSize()
+        syncReadouts()
+        guard toolbarWindow.isVisible, !isScaleSliderDragging else { return }
+        // 面板可能移动到可用宽度不同的屏幕；同屏几何变化不重复测量工具条。
+        updateToolbarSizeIfNeeded()
         updateToolbarFrame()
     }
 
