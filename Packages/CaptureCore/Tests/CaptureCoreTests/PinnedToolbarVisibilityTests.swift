@@ -81,6 +81,33 @@ struct PinnedToolbarVisibilityTests {
         #expect(state.isVisible == false)
     }
 
+    @Test func panelResizeHidesAndRestoresToolbarWhenPointerRemainsInside() {
+        var state = PinnedToolbarVisibility()
+        state.pointerEntered()
+        state.applyShow()
+
+        state.panelResizeBegan()
+        #expect(state.isVisible == false)
+        #expect(state.shouldShowAfterResize == false)
+
+        state.panelResizeEnded()
+        #expect(state.shouldShowAfterResize)
+        #expect(state.isVisible)
+    }
+
+    @Test func panelResizeDoesNotRestoreToolbarAfterPointerLeaves() {
+        var state = PinnedToolbarVisibility()
+        state.pointerEntered()
+        state.applyShow()
+        state.panelResizeBegan()
+        state.pointerExited()
+
+        state.panelResizeEnded()
+
+        #expect(state.shouldShowAfterResize == false)
+        #expect(state.isVisible == false)
+    }
+
     @Test func hideDoesNothingWhenAlreadyHidden() {
         var state = PinnedToolbarVisibility()
         #expect(state.pendingHideDelay == nil)

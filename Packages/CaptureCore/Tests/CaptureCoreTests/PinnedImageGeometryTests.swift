@@ -53,16 +53,13 @@ struct PinnedImageGeometryTests {
         #expect(PinnedImageGeometry.cascadeOffset(forIndex: -5) == .zero)
     }
 
-    @Test func fitToScreenShrinksOversizedFrameAndCentersIt() {
-        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let oversized = CGRect(x: 0, y: 0, width: 4000, height: 2000)
+    @Test func fitToScreenShrinksOversizedFrameAndKeepsItsLowerLeftAnchor() {
+        let screen = CGRect(x: 100, y: 50, width: 1000, height: 800)
+        let oversized = CGRect(x: 30, y: 20, width: 4000, height: 2000)
 
         let fitted = PinnedImageGeometry.fitToScreen(oversized, screenFrame: screen)
 
-        #expect(fitted.width <= screen.width * 0.9)
-        #expect(fitted.height <= screen.height * 0.9)
-        #expect(fitted.midX == screen.midX)
-        #expect(fitted.midY == screen.midY)
+        #expect(fitted == CGRect(x: 100, y: 50, width: 900, height: 450))
         #expect(abs(fitted.width / fitted.height - 2) < 0.0001)
     }
 
@@ -72,13 +69,171 @@ struct PinnedImageGeometryTests {
 
         let fitted = PinnedImageGeometry.fitToScreen(inside, screenFrame: screen)
 
-        #expect(fitted.width == inside.width)
-        #expect(fitted.height == inside.height)
+        #expect(fitted == inside)
     }
 
     @Test func fitToScreenReturnsFrameWhenScreenIsInvalid() {
         let frame = CGRect(x: 10, y: 20, width: 30, height: 40)
         #expect(PinnedImageGeometry.fitToScreen(frame, screenFrame: .zero) == frame)
+    }
+
+    @Test func resizeDirectionRecognizesAllEdgesAndCorners() {
+        let frame = CGRect(x: 100, y: 200, width: 100, height: 80)
+        let hits: [(CGPoint, PinnedImageResizeDirection)] = [
+            (CGPoint(x: 102, y: 240), .left),
+            (CGPoint(x: 198, y: 240), .right),
+            (CGPoint(x: 150, y: 202), .bottom),
+            (CGPoint(x: 150, y: 278), .top),
+            (CGPoint(x: 102, y: 202), .bottomLeft),
+            (CGPoint(x: 198, y: 202), .bottomRight),
+            (CGPoint(x: 102, y: 278), .topLeft),
+            (CGPoint(x: 198, y: 278), .topRight),
+        ]
+
+        for (point, expected) in hits {
+            #expect(PinnedImageGeometry.resizeDirection(at: point, in: frame) == expected)
+        }
+    }
+
+    @Test func resizeDirectionPrioritizesCornerHotZoneOverEdge() {
+        let frame = CGRect(x: 100, y: 200, width: 100, height: 80)
+
+        #expect(
+            PinnedImageGeometry.resizeDirection(at: CGPoint(x: 110, y: 270), in: frame) == .topLeft
+        )
+    }
+
+    @Test func resizeDirectionUsesAxisAdaptiveCornersWithoutEdgeZonesOnSmallPanels() {
+        let frame = CGRect(x: 100, y: 100, width: 20, height: 40)
+
+        #expect(PinnedImageGeometry.resizeDirection(at: CGPoint(x: 102, y: 108), in: frame) == .bottomLeft)
+        #expect(PinnedImageGeometry.resizeDirection(at: CGPoint(x: 107, y: 111), in: frame) == nil)
+        #expect(PinnedImageGeometry.resizeDirection(at: CGPoint(x: 100, y: 120), in: frame) == nil)
+    }
+
+    @Test func interactionPrioritizesCloseButtonOverCornerResize() {
+        let frame = CGRect(x: 100, y: 200, width: 100, height: 80)
+        let closeButton = CGRect(x: 174, y: 254, width: 20, height: 20)
+
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: CGPoint(x: 190, y: 270),
+                in: frame,
+                closeButtonFrame: closeButton,
+                alpha: 1
+            ) == .close
+        )
+    }
+
+    @Test func interactionPrioritizesTransparentEdgeResize() {
+        let frame = CGRect(x: 100, y: 200, width: 100, height: 80)
+
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: CGPoint(x: 102, y: 240),
+                in: frame,
+                closeButtonFrame: .zero,
+                alpha: 0
+            ) == .resize(.left)
+        )
+    }
+
+    @Test func interactionPassesThroughTransparentInteriorAndMovesOpaqueInterior() {
+        let frame = CGRect(x: 100, y: 200, width: 100, height: 80)
+        let point = CGPoint(x: 150, y: 240)
+
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: point,
+                in: frame,
+                closeButtonFrame: .zero,
+                alpha: 0
+            ) == .passThrough
+        )
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: point,
+                in: frame,
+                closeButtonFrame: .zero,
+                alpha: 0.5
+            ) == .move
+        )
+    }
+
+    @Test func resizedFramePreservesTheOppositeAnchorForEveryDirection() {
+        struct ResizeCase {
+            let direction: PinnedImageResizeDirection
+            let translation: CGPoint
+            let expected: CGRect
+        }
+
+        let start = CGRect(x: 100, y: 200, width: 200, height: 100)
+        let minimumSize = CGSize(width: 40, height: 20)
+        let cases = [
+            ResizeCase(
+                direction: .left,
+                translation: CGPoint(x: -40, y: 0),
+                expected: CGRect(x: 60, y: 190, width: 240, height: 120)
+            ),
+            ResizeCase(
+                direction: .right,
+                translation: CGPoint(x: 40, y: 0),
+                expected: CGRect(x: 100, y: 190, width: 240, height: 120)
+            ),
+            ResizeCase(
+                direction: .bottom,
+                translation: CGPoint(x: 0, y: -20),
+                expected: CGRect(x: 80, y: 180, width: 240, height: 120)
+            ),
+            ResizeCase(
+                direction: .top,
+                translation: CGPoint(x: 0, y: 20),
+                expected: CGRect(x: 80, y: 200, width: 240, height: 120)
+            ),
+            ResizeCase(
+                direction: .topLeft,
+                translation: CGPoint(x: -40, y: 20),
+                expected: CGRect(x: 60, y: 200, width: 240, height: 120)
+            ),
+            ResizeCase(
+                direction: .topRight,
+                translation: CGPoint(x: 40, y: 20),
+                expected: CGRect(x: 100, y: 200, width: 240, height: 120)
+            ),
+            ResizeCase(
+                direction: .bottomLeft,
+                translation: CGPoint(x: -40, y: -20),
+                expected: CGRect(x: 60, y: 180, width: 240, height: 120)
+            ),
+            ResizeCase(
+                direction: .bottomRight,
+                translation: CGPoint(x: 40, y: -20),
+                expected: CGRect(x: 100, y: 180, width: 240, height: 120)
+            ),
+        ]
+
+        for testCase in cases {
+            #expect(
+                PinnedImageGeometry.resizedFrame(
+                    from: start,
+                    direction: testCase.direction,
+                    translation: testCase.translation,
+                    minimumSize: minimumSize
+                ) == testCase.expected
+            )
+        }
+    }
+
+    @Test func resizedFrameEnforcesMinimumSizeWithoutBreakingAspectRatio() {
+        let start = CGRect(x: 100, y: 200, width: 200, height: 100)
+        let resized = PinnedImageGeometry.resizedFrame(
+            from: start,
+            direction: .bottomRight,
+            translation: CGPoint(x: -160, y: 80),
+            minimumSize: CGSize(width: 80, height: 30)
+        )
+
+        #expect(resized == CGRect(x: 100, y: 260, width: 80, height: 40))
     }
 
     @Test func clampedScaleRespectsBounds() {
@@ -162,6 +317,52 @@ struct PinnedImageGeometryTests {
                 displayScale: 2
             ) == frame
         )
+    }
+
+    @Test func clampFrameToScaleRangePreservesNormalizedCenterAnchorAtMinimumScale() {
+        let frame = CGRect(x: 10, y: 20, width: 40, height: 20)
+        let clamped = PinnedImageGeometry.clampFrameToScaleRange(
+            frame,
+            imagePixelWidth: 1000,
+            displayScale: 2,
+            anchor: CGPoint(x: 0.5, y: 0.5)
+        )
+
+        #expect(clamped == CGRect(x: 5, y: 17.5, width: 50, height: 25))
+    }
+
+    @Test func clampFrameToScaleRangePreservesNormalizedTopRightAnchorAtMaximumScale() {
+        let frame = CGRect(x: 10, y: 20, width: 5000, height: 2500)
+        let clamped = PinnedImageGeometry.clampFrameToScaleRange(
+            frame,
+            imagePixelWidth: 1000,
+            displayScale: 2,
+            anchor: CGPoint(x: 1, y: 1)
+        )
+
+        #expect(clamped == CGRect(x: 1010, y: 520, width: 4000, height: 2000))
+    }
+
+    @Test func clampFrameToVisibleBoundsUsesOnlyTheTranslationNeededToFit() {
+        let screen = CGRect(x: 100, y: 50, width: 800, height: 600)
+        let partlyOutsideAtLowerLeft = CGRect(x: 70, y: 20, width: 200, height: 100)
+        let partlyOutsideAtUpperRight = CGRect(x: 850, y: 550, width: 200, height: 100)
+
+        #expect(
+            PinnedImageGeometry.clampFrameToVisibleBounds(partlyOutsideAtLowerLeft, screenFrame: screen)
+                == CGRect(x: 100, y: 50, width: 200, height: 100)
+        )
+        #expect(
+            PinnedImageGeometry.clampFrameToVisibleBounds(partlyOutsideAtUpperRight, screenFrame: screen)
+                == CGRect(x: 700, y: 550, width: 200, height: 100)
+        )
+    }
+
+    @Test func clampFrameToVisibleBoundsLeavesAnAlreadyVisibleFrameUnchanged() {
+        let screen = CGRect(x: 100, y: 50, width: 800, height: 600)
+        let frame = CGRect(x: 120, y: 80, width: 200, height: 100)
+
+        #expect(PinnedImageGeometry.clampFrameToVisibleBounds(frame, screenFrame: screen) == frame)
     }
 
     // MARK: - 对数滑杆映射
@@ -321,5 +522,74 @@ struct PinnedImageGeometryTests {
             screenFrame: CGRect(x: 0, y: 0, width: 1000, height: 800)
         )
         #expect(frame == .zero)
+    }
+}
+
+struct PinnedImageResizeRegressionTests {
+    @Test func interactionLeavesAMovableCoreOnMinimumScalePanel() {
+        let frame = CGRect(x: 0, y: 0, width: 40, height: 20)
+        let closeButton = PinnedImageGeometry.closeButtonFrame(in: frame)
+
+        #expect(closeButton == CGRect(x: 29.6, y: 9.6, width: 8, height: 8))
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: CGPoint(x: 20, y: 10),
+                in: frame,
+                closeButtonFrame: closeButton,
+                alpha: 1
+            ) == .move
+        )
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: CGPoint(x: 12, y: 2),
+                in: frame,
+                closeButtonFrame: closeButton,
+                alpha: 1
+            ) == .resize(.bottomLeft)
+        )
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: CGPoint(x: 34, y: 14),
+                in: frame,
+                closeButtonFrame: closeButton,
+                alpha: 1
+            ) == .close
+        )
+    }
+
+    @Test func interactionOnlyClosesInsideTheVisibleCloseEllipse() {
+        let frame = CGRect(x: 0, y: 0, width: 40, height: 40)
+        let closeButton = PinnedImageGeometry.closeButtonFrame(in: frame)
+        let outsideEllipse = CGPoint(x: 20, y: 20)
+
+        #expect(closeButton.contains(outsideEllipse))
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: outsideEllipse,
+                in: frame,
+                closeButtonFrame: closeButton,
+                alpha: 1
+            ) == .move
+        )
+        #expect(
+            PinnedImageGeometry.interaction(
+                at: CGPoint(x: closeButton.midX, y: closeButton.midY),
+                in: frame,
+                closeButtonFrame: closeButton,
+                alpha: 1
+            ) == .close
+        )
+    }
+
+    @Test func resizedFrameDoesNotJumpToMinimumSizeWhenCurrentFrameIsSmaller() {
+        let start = CGRect(x: 0, y: 0, width: 40, height: 20)
+        let resized = PinnedImageGeometry.resizedFrame(
+            from: start,
+            direction: .right,
+            translation: CGPoint(x: 2, y: 0),
+            minimumSize: CGSize(width: 40, height: 40)
+        )
+
+        #expect(resized == CGRect(x: 0, y: -0.5, width: 42, height: 21))
     }
 }

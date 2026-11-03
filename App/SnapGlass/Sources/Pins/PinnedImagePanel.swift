@@ -19,6 +19,7 @@ final class PinnedImagePanel: NSPanel {
         hidesOnDeactivate = false
         isMovableByWindowBackground = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        acceptsMouseMovedEvents = true
         backgroundColor = .clear
         isOpaque = false
         hasShadow = true

@@ -19,8 +19,9 @@ final class PinnedImageView: NSView {
     private var opacity: CGFloat = 1
     private var dragStartLocation: CGPoint?
     private var dragStartFrame: CGRect?
-    private var isResizing = false
+    private var activeResizeDirection: PinnedImageResizeDirection?
     private var isHovering = false
+    private var hoveredResizeDirection: PinnedImageResizeDirection?
     private var trackingAreaReference: NSTrackingArea?
 
     /// 悬停状态变化回调，驱动悬浮工具条显隐。
@@ -28,6 +29,12 @@ final class PinnedImageView: NSView {
 
     /// 不透明度变化回调，用于把滚轮/⌥+滚轮的结果同步回工具条滑杆。
     var onOpacityChanged: ((CGFloat) -> Void)?
+
+    /// 面板倍率变化回调，用于同步工具条读数。
+    var onScaleChanged: ((CGFloat) -> Void)?
+
+    /// 边缘/角落缩放起止回调，用于缩放期间隐藏工具条。
+    var onResizeChanged: ((Bool) -> Void)?
 
     /// 当前缩放倍率。
     ///
@@ -45,11 +52,16 @@ final class PinnedImageView: NSView {
     /// 当前不透明度。
     var currentOpacity: CGFloat { opacity }
 
-    private static let closeButtonSize: CGFloat = 20
-    private static let resizeHitInset: CGFloat = 14
     private static let alphaMaskMaxDimension = 256
     private static let alphaHitThreshold: CGFloat = 0.05
     private static let minimumResizeWidth: CGFloat = 40
+    private static let minimumResizeHeight: CGFloat = 40
+    private static let topLeftBottomRightCursor = diagonalResizeCursor(
+        symbolName: "arrow.up.left.and.arrow.down.right"
+    ) ?? NSCursor.crosshair
+    private static let topRightBottomLeftCursor = diagonalResizeCursor(
+        symbolName: "arrow.up.right.and.arrow.down.left"
+    ) ?? NSCursor.crosshair
 
     init(
         image: CGImage,
@@ -95,24 +107,36 @@ final class PinnedImageView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         isHovering = true
+        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
         needsDisplay = true
         onHoverChanged?(true)
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovering = false
+        updateResizeHover(for: .passThrough)
         needsDisplay = true
         onHoverChanged?(false)
     }
 
+    override func mouseMoved(with event: NSEvent) {
+        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
+    }
+
     override func cursorUpdate(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        if resizeHandleRect().contains(point) {
-            NSCursor.crosshair.set()
-        } else if closeButtonRect().contains(point) {
-            NSCursor.arrow.set()
-        } else {
+        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
+    }
+
+    private func updatePointerFeedback(at point: CGPoint) {
+        let interaction = interaction(at: point)
+        updateResizeHover(for: interaction)
+        switch interaction {
+        case let .resize(direction):
+            Self.resizeCursor(for: direction).set()
+        case .move:
             NSCursor.openHand.set()
+        case .close, .passThrough:
+            NSCursor.arrow.set()
         }
     }
 
@@ -121,12 +145,12 @@ final class PinnedImageView: NSView {
     /// 关闭按钮与缩放手柄始终可命中——自由圈选截图的角落可能是透明的，
     /// 否则用户无法点击它们。
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard bounds.contains(point) else { return nil }
-        if closeButtonRect().contains(point) || resizeHandleRect().contains(point) {
+        switch interaction(at: point) {
+        case .close, .resize, .move:
             return self
+        case .passThrough:
+            return nil
         }
-        guard alphaAt(point: point) > Self.alphaHitThreshold else { return nil }
-        return super.hitTest(point)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -137,12 +161,54 @@ final class PinnedImageView: NSView {
         context.draw(image, in: CGRect(origin: .zero, size: bounds.size))
         context.restoreGState()
 
+        if let hoveredResizeDirection {
+            drawResizeHighlight(hoveredResizeDirection, in: context)
+        }
         if isHovering {
-            context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.8).cgColor)
-            context.setLineWidth(1)
-            context.stroke(bounds.insetBy(dx: 0.5, dy: 0.5))
             drawCloseButton(in: context)
         }
+    }
+
+    private func drawResizeHighlight(_ direction: PinnedImageResizeDirection, in context: CGContext) {
+        let minX = bounds.minX + 0.5
+        let maxX = bounds.maxX - 0.5
+        let minY = bounds.minY + 0.5
+        let maxY = bounds.maxY - 0.5
+        let segment = min(24, min(bounds.width, bounds.height) / 2)
+        context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor)
+        context.setLineWidth(2)
+        context.beginPath()
+        switch direction {
+        case .left:
+            context.move(to: CGPoint(x: minX, y: minY))
+            context.addLine(to: CGPoint(x: minX, y: maxY))
+        case .right:
+            context.move(to: CGPoint(x: maxX, y: minY))
+            context.addLine(to: CGPoint(x: maxX, y: maxY))
+        case .top:
+            context.move(to: CGPoint(x: minX, y: maxY))
+            context.addLine(to: CGPoint(x: maxX, y: maxY))
+        case .bottom:
+            context.move(to: CGPoint(x: minX, y: minY))
+            context.addLine(to: CGPoint(x: maxX, y: minY))
+        case .topLeft:
+            context.move(to: CGPoint(x: minX, y: maxY - segment))
+            context.addLine(to: CGPoint(x: minX, y: maxY))
+            context.addLine(to: CGPoint(x: minX + segment, y: maxY))
+        case .topRight:
+            context.move(to: CGPoint(x: maxX - segment, y: maxY))
+            context.addLine(to: CGPoint(x: maxX, y: maxY))
+            context.addLine(to: CGPoint(x: maxX, y: maxY - segment))
+        case .bottomLeft:
+            context.move(to: CGPoint(x: minX, y: minY + segment))
+            context.addLine(to: CGPoint(x: minX, y: minY))
+            context.addLine(to: CGPoint(x: minX + segment, y: minY))
+        case .bottomRight:
+            context.move(to: CGPoint(x: maxX - segment, y: minY))
+            context.addLine(to: CGPoint(x: maxX, y: minY))
+            context.addLine(to: CGPoint(x: maxX, y: minY + segment))
+        }
+        context.strokePath()
     }
 
     private func drawCloseButton(in context: CGContext) {
@@ -160,39 +226,74 @@ final class PinnedImageView: NSView {
     }
 
     private func closeButtonRect() -> CGRect {
-        let size = Self.closeButtonSize
-        return CGRect(
-            x: bounds.maxX - size - 6,
-            y: bounds.maxY - size - 6,
-            width: size,
-            height: size
+        PinnedImageGeometry.closeButtonFrame(in: bounds)
+    }
+
+    private func interaction(at point: CGPoint) -> PinnedImageInteraction {
+        PinnedImageGeometry.interaction(
+            at: point,
+            in: bounds,
+            closeButtonFrame: closeButtonRect(),
+            alpha: alphaAt(point: point),
+            alphaThreshold: Self.alphaHitThreshold
         )
     }
 
-    private func resizeHandleRect() -> CGRect {
-        CGRect(
-            x: bounds.maxX - Self.resizeHitInset,
-            y: bounds.minY,
-            width: Self.resizeHitInset,
-            height: Self.resizeHitInset
-        )
+    private func updateResizeHover(for interaction: PinnedImageInteraction) {
+        if case let .resize(direction) = interaction {
+            guard hoveredResizeDirection != direction else { return }
+            hoveredResizeDirection = direction
+            needsDisplay = true
+        } else if hoveredResizeDirection != nil {
+            hoveredResizeDirection = nil
+            needsDisplay = true
+        }
+    }
+
+    private static func resizeCursor(for direction: PinnedImageResizeDirection) -> NSCursor {
+        switch direction {
+        case .left, .right:
+            .resizeLeftRight
+        case .top, .bottom:
+            .resizeUpDown
+        case .topLeft, .bottomRight:
+            topLeftBottomRightCursor
+        case .topRight, .bottomLeft:
+            topRightBottomLeftCursor
+        }
+    }
+
+    private static func diagonalResizeCursor(symbolName: String) -> NSCursor? {
+        guard let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
+            return nil
+        }
+        image.size = NSSize(width: 16, height: 16)
+        return NSCursor(image: image, hotSpot: CGPoint(x: 8, y: 8))
     }
 
     // MARK: - 拖动与缩放
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if closeButtonRect().contains(point) {
+        switch interaction(at: point) {
+        case .close:
             onRequestClose()
+        case .move:
+            if event.clickCount == 2 {
+                onRequestClose()
+                return
+            }
+            dragStartLocation = NSEvent.mouseLocation
+            dragStartFrame = window?.frame
+        case let .resize(direction):
+            guard let window else { return }
+            dragStartLocation = NSEvent.mouseLocation
+            dragStartFrame = window.frame
+            activeResizeDirection = direction
+            onResizeChanged?(true)
+        case .passThrough:
             return
         }
-        if event.clickCount == 2 {
-            onRequestClose()
-            return
-        }
-        dragStartLocation = NSEvent.mouseLocation
-        dragStartFrame = window?.frame
-        isResizing = resizeHandleRect().contains(point)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -203,17 +304,19 @@ final class PinnedImageView: NSView {
         let deltaX = current.x - startLocation.x
         let deltaY = current.y - startLocation.y
 
-        if isResizing {
-            let newWidth = max(Self.minimumResizeWidth, startFrame.width + deltaX)
-            let aspect = CGFloat(image.width) / CGFloat(image.height)
+        if let direction = activeResizeDirection {
             applyFrame(
-                CGRect(
-                    x: startFrame.minX,
-                    y: startFrame.minY,
-                    width: newWidth,
-                    height: newWidth / aspect
+                PinnedImageGeometry.resizedFrame(
+                    from: startFrame,
+                    direction: direction,
+                    translation: CGPoint(x: deltaX, y: deltaY),
+                    minimumSize: CGSize(
+                        width: Self.minimumResizeWidth,
+                        height: Self.minimumResizeHeight
+                    )
                 ),
-                window: window
+                window: window,
+                anchor: direction.fixedAnchor
             )
         } else {
             window.setFrameOrigin(
@@ -223,9 +326,12 @@ final class PinnedImageView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if activeResizeDirection != nil {
+            onResizeChanged?(false)
+        }
+        activeResizeDirection = nil
         dragStartLocation = nil
         dragStartFrame = nil
-        isResizing = false
     }
 
     /// 滚轮缩放；按住 ⌥ 时改为调节透明度。
@@ -254,6 +360,7 @@ final class PinnedImageView: NSView {
         guard current > 0, newScale != current else { return }
         let ratio = newScale / current
         let frame = window.frame
+        let normalizedAnchor = CGPoint(x: anchor.x / frame.width, y: anchor.y / frame.height)
         applyFrame(
             CGRect(
                 x: frame.minX + anchor.x * (1 - ratio),
@@ -261,7 +368,8 @@ final class PinnedImageView: NSView {
                 width: frame.width * ratio,
                 height: frame.height * ratio
             ),
-            window: window
+            window: window,
+            anchor: normalizedAnchor
         )
     }
 
@@ -269,14 +377,16 @@ final class PinnedImageView: NSView {
     ///
     /// 拖拽缩放允许的最小宽度可能对应低于 `minimumScale` 的倍率，若不收敛，
     /// 工具条读数会落在滑杆量程之外且与画面不一致。
-    private func applyFrame(_ frame: CGRect, window: NSWindow) {
+    private func applyFrame(_ frame: CGRect, window: NSWindow, anchor: CGPoint = .zero) {
         let limited = PinnedImageGeometry.clampFrameToScaleRange(
             frame,
             imagePixelWidth: CGFloat(image.width),
-            displayScale: displayScale
+            displayScale: displayScale,
+            anchor: anchor
         )
         window.setFrame(limited, display: true)
         needsDisplay = true
+        onScaleChanged?(currentScale)
     }
 
     /// 恢复到原始点尺寸（1:1）。
@@ -311,13 +421,13 @@ final class PinnedImageView: NSView {
         onOpacityChanged?(opacity)
     }
 
-    /// 设置缩放倍率（供工具条滑杆使用），以面板中心为锚点。
+    /// 设置缩放倍率（供工具条滑杆使用），固定面板左下角。
     func setScale(_ newScale: CGFloat) {
         guard let window else { return }
         applyScale(
             PinnedImageGeometry.clampedScale(newScale),
             window: window,
-            anchor: CGPoint(x: window.frame.width / 2, y: window.frame.height / 2)
+            anchor: .zero
         )
     }
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-03
+
+### Changed
+- 置顶图片支持四边、四角等比拖拽缩放；滑杆与 1:1 固定左下角，滚轮与捏合固定光标锚点。适应屏幕保留 90% 尺寸上限，不强制居中；工具条在缩放交互期间稳定定位并同步倍率读数。
+
+### Fixed
+- 没有可用屏幕时，初始置顶面板保留候选 frame，不再误把候选 frame 当屏幕边界并缩小 10%。
+- 修复低于拖拽最小尺寸的小面板首次缩放时跳变；小面板关闭按钮缩放并为拖动保留可用区域，边缘悬停光标与高亮保持同步。
+
 ## [0.9.9] - 2026-10-31
 
 ### Fixed
@@ -402,7 +411,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v0.9.8...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/blackkcold/snapocr/compare/v0.9.9...v1.0.0
+[0.9.9]: https://github.com/blackkcold/snapocr/compare/v0.9.8...v0.9.9
 [0.9.8]: https://github.com/blackkcold/snapocr/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/blackkcold/snapocr/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/blackkcold/snapocr/compare/v0.9.5...v0.9.6

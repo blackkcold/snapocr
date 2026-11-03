@@ -17,6 +17,8 @@ public struct PinnedToolbarVisibility: Equatable, Sendable {
 
     private var isPointerInside: Bool
     private var isInteracting: Bool
+    private var isPanelResizing: Bool
+    private var hasCompletedPanelResize: Bool
     private var showDelay: TimeInterval
     private var hideDelay: TimeInterval
 
@@ -32,6 +34,8 @@ public struct PinnedToolbarVisibility: Equatable, Sendable {
         self.isVisible = false
         self.isPointerInside = false
         self.isInteracting = false
+        self.isPanelResizing = false
+        self.hasCompletedPanelResize = false
         self.showDelay = max(0, showDelay)
         self.hideDelay = max(0, hideDelay)
     }
@@ -49,8 +53,13 @@ public struct PinnedToolbarVisibility: Equatable, Sendable {
     ///
     /// - Returns: 延迟秒数；不应隐藏时返回 `nil`。
     public var pendingHideDelay: TimeInterval? {
-        guard isPointerInside == false, isInteracting == false else { return nil }
+        guard isPointerInside == false, isInteracting == false, isPanelResizing == false else { return nil }
         return isVisible ? hideDelay : nil
+    }
+
+    /// 面板缩放结束后，指针仍在面板内时是否应显示工具条。
+    public var shouldShowAfterResize: Bool {
+        hasCompletedPanelResize && !isPanelResizing && isPointerInside
     }
 
     /// 记录鼠标进入面板或工具条。
@@ -73,12 +82,28 @@ public struct PinnedToolbarVisibility: Equatable, Sendable {
         isInteracting = false
     }
 
+    /// 记录边缘或角落缩放开始，并立即隐藏工具条。
+    public mutating func panelResizeBegan() {
+        isPanelResizing = true
+        hasCompletedPanelResize = false
+        isVisible = false
+    }
+
+    /// 记录面板缩放结束；若指针仍在面板内，则恢复工具条。
+    public mutating func panelResizeEnded() {
+        isPanelResizing = false
+        hasCompletedPanelResize = true
+        if shouldShowAfterResize {
+            isVisible = true
+        }
+    }
+
     /// 应用延迟计时结束后的结果：显示工具条。
     ///
     /// - Returns: 状态是否实际发生变化。
     @discardableResult
     public mutating func applyShow() -> Bool {
-        guard !isVisible else { return false }
+        guard !isVisible, !isPanelResizing else { return false }
         isVisible = true
         return true
     }
