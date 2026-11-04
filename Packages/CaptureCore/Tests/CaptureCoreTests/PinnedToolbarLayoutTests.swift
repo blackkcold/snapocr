@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 
 @testable import CaptureCore
@@ -48,6 +49,39 @@ struct PinnedToolbarLayoutTests {
         #expect(
             PinnedImageGeometry.toolbarWidth(layout: .regular, availableWidth: 5000)
                 == PinnedToolbarLayout.regular.maximumWidth
+        )
+    }
+
+    @Test func zoomSliderViewWidthModelDocumentsCompact250PointBaseline() {
+        // View width is an optimistic proxy, not the real NSSlider thumb travel;
+        // these values document geometry and do not certify hand feel.
+        let scaleSpan = Double(PinnedImageGeometry.maximumScale / PinnedImageGeometry.minimumScale)
+        let regularStep = pow(
+            scaleSpan,
+            1.0 / Double(PinnedToolbarLayout.regular.sliderRange.upperBound)
+        ) - 1
+        let compactBestCaseStep = pow(
+            scaleSpan,
+            1.0 / Double(PinnedToolbarLayout.compact.sliderRange.upperBound)
+        ) - 1
+        let compact250SliderWidth = PinnedImageGeometry.toolbarSliderWidth(layout: .compact, availableWidth: 250)
+        let compact250Step = pow(scaleSpan, 1.0 / Double(compact250SliderWidth)) - 1
+
+        #expect(regularStep <= 0.026)
+        #expect(compactBestCaseStep <= 0.06)
+        #expect(compact250SliderWidth == 62.5)
+        // Compact at 250pt cannot meet the 6% optimistic budget with current fixed controls.
+        #expect(compact250Step > 0.06)
+    }
+
+    @Test func sliderWidthCapsAtTierMaximumWithinAvailableTier() {
+        #expect(
+            PinnedImageGeometry.toolbarSliderWidth(layout: .regular, availableWidth: 5000)
+                == PinnedToolbarLayout.regular.sliderRange.upperBound
+        )
+        #expect(
+            PinnedImageGeometry.toolbarSliderWidth(layout: .compact, availableWidth: 300)
+                == PinnedToolbarLayout.compact.sliderRange.upperBound
         )
     }
 

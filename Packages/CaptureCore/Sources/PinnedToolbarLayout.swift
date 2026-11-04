@@ -54,8 +54,8 @@ extension PinnedToolbarLayout {
     /// 这正是「响应式」的落点——同一档位内滑杆随可用宽度连续伸缩。
     public var sliderRange: ClosedRange<CGFloat> {
         switch self {
-        case .regular: 52...120
-        case .compact: 36...72
+        case .regular: 52...180
+        case .compact: 36...84
         }
     }
 

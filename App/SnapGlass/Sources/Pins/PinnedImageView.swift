@@ -11,6 +11,7 @@ final class PinnedImageView: NSView {
     private let onCopyImage: () -> Void
     private let onCopyOCRText: () -> Void
     private let onCloseAll: () -> Void
+    private let isLeftMouseButtonPressed: () -> Bool
 
     private let alphaMask: [UInt8]?
     private let alphaMaskWidth: Int
@@ -52,6 +53,12 @@ final class PinnedImageView: NSView {
     /// 当前不透明度。
     var currentOpacity: CGFloat { opacity }
 
+    /// Bit zero in `NSEvent.pressedMouseButtons` is the primary button; the mask parameter
+    /// keeps this deterministic in tests.
+    static func leftMouseButtonIsPressed(buttonMask: Int = NSEvent.pressedMouseButtons) -> Bool {
+        buttonMask & 1 != 0
+    }
+
     private static let alphaMaskMaxDimension = 256
     private static let alphaHitThreshold: CGFloat = 0.05
     private static let minimumResizeWidth: CGFloat = 40
@@ -69,7 +76,8 @@ final class PinnedImageView: NSView {
         onRequestClose: @escaping () -> Void,
         onCopyImage: @escaping () -> Void,
         onCopyOCRText: @escaping () -> Void,
-        onCloseAll: @escaping () -> Void
+        onCloseAll: @escaping () -> Void,
+        isLeftMouseButtonPressed: @escaping () -> Bool = { PinnedImageView.leftMouseButtonIsPressed() }
     ) {
         self.image = image
         self.displayScale = displayScale > 0 ? displayScale : 1
@@ -77,6 +85,7 @@ final class PinnedImageView: NSView {
         self.onCopyImage = onCopyImage
         self.onCopyOCRText = onCopyOCRText
         self.onCloseAll = onCloseAll
+        self.isLeftMouseButtonPressed = isLeftMouseButtonPressed
         let mask = Self.makeAlphaMask(image)
         self.alphaMask = mask?.alpha
         self.alphaMaskWidth = mask?.width ?? 0
@@ -91,54 +100,6 @@ final class PinnedImageView: NSView {
 
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { true }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        trackingAreaReference = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovering = true
-        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
-        needsDisplay = true
-        onHoverChanged?(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovering = false
-        updateResizeHover(for: .passThrough)
-        needsDisplay = true
-        onHoverChanged?(false)
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
-    }
-
-    private func updatePointerFeedback(at point: CGPoint) {
-        let interaction = interaction(at: point)
-        updateResizeHover(for: interaction)
-        switch interaction {
-        case let .resize(direction):
-            Self.resizeCursor(for: direction).set()
-        case .move:
-            NSCursor.openHand.set()
-        case .close, .passThrough:
-            NSCursor.arrow.set()
-        }
-    }
 
     /// alpha 感知命中：透明区域不接受事件，避免遮挡下方内容。
     ///
@@ -275,7 +236,17 @@ final class PinnedImageView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        switch interaction(at: point) {
+        let currentInteraction = interaction(at: point)
+        let continuesResize: Bool
+        if activeResizeDirection != nil, case .resize = currentInteraction {
+            continuesResize = true
+        } else {
+            continuesResize = false
+        }
+        if activeResizeDirection != nil, !continuesResize {
+            finishResize(at: point)
+        }
+        switch currentInteraction {
         case .close:
             onRequestClose()
         case .move:
@@ -290,13 +261,22 @@ final class PinnedImageView: NSView {
             dragStartLocation = NSEvent.mouseLocation
             dragStartFrame = window.frame
             activeResizeDirection = direction
-            onResizeChanged?(true)
+            updateResizeHover(for: .resize(direction))
+            Self.resizeCursor(for: direction).set()
+            if !continuesResize {
+                onResizeChanged?(true)
+            }
         case .passThrough:
             return
         }
     }
 
     override func mouseDragged(with event: NSEvent) {
+        let pointerLocation = convert(event.locationInWindow, from: nil)
+        if activeResizeDirection != nil,
+           recoverResizeIfMouseButtonReleased(at: pointerLocation) {
+            return
+        }
         guard let window, let startLocation = dragStartLocation, let startFrame = dragStartFrame else { return }
         // 用屏幕坐标而非 locationInWindow：窗口移动后 locationInWindow 会随之偏移，
         // 造成拖拽反馈抖动。
@@ -327,15 +307,34 @@ final class PinnedImageView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         if activeResizeDirection != nil {
-            onResizeChanged?(false)
+            finishResize(at: convert(event.locationInWindow, from: nil))
         }
-        activeResizeDirection = nil
         dragStartLocation = nil
         dragStartFrame = nil
     }
 
+    private func finishResize(at point: CGPoint) {
+        guard activeResizeDirection != nil else { return }
+        activeResizeDirection = nil
+        dragStartLocation = nil
+        dragStartFrame = nil
+
+        let pointerIsInside = bounds.contains(point)
+        if isHovering != pointerIsInside {
+            isHovering = pointerIsInside
+            needsDisplay = true
+            onHoverChanged?(pointerIsInside)
+        }
+        updatePointerFeedback(at: point)
+        onResizeChanged?(false)
+    }
+
     /// 滚轮缩放；按住 ⌥ 时改为调节透明度。
     override func scrollWheel(with event: NSEvent) {
+        if activeResizeDirection != nil,
+           !recoverResizeIfMouseButtonReleased(at: convert(event.locationInWindow, from: nil)) {
+            return
+        }
         guard let window else { return }
         if event.modifierFlags.contains(.option) {
             opacity = PinnedImageGeometry.clampedOpacity(opacity - event.scrollingDeltaY * 0.01)
@@ -349,6 +348,10 @@ final class PinnedImageView: NSView {
     }
 
     override func magnify(with event: NSEvent) {
+        if activeResizeDirection != nil,
+           !recoverResizeIfMouseButtonReleased(at: convert(event.locationInWindow, from: nil)) {
+            return
+        }
         guard let window else { return }
         let newScale = PinnedImageGeometry.clampedScale(currentScale * (1 + event.magnification))
         applyScale(newScale, window: window, anchor: convert(event.locationInWindow, from: nil))
@@ -512,6 +515,84 @@ final class PinnedImageView: NSView {
             alpha[index] = pixels[index * 4 + 3]
         }
         return AlphaMask(alpha: alpha, width: width, height: height)
+    }
+}
+
+// MARK: - 鼠标跟踪与指针反馈
+
+extension PinnedImageView {
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        // `.inVisibleRect` follows the resized bounds. Keep the same area for the
+        // duration of a drag so tracking churn cannot reset corner feedback.
+        guard activeResizeDirection == nil else { return }
+        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaReference = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if preserveResizePointerFeedback(at: convert(event.locationInWindow, from: nil)) { return }
+        isHovering = true
+        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
+        needsDisplay = true
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if preserveResizePointerFeedback(at: convert(event.locationInWindow, from: nil)) { return }
+        isHovering = false
+        updateResizeHover(for: .passThrough)
+        needsDisplay = true
+        onHoverChanged?(false)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        if preserveResizePointerFeedback(at: convert(event.locationInWindow, from: nil)) { return }
+        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if preserveResizePointerFeedback(at: convert(event.locationInWindow, from: nil)) { return }
+        updatePointerFeedback(at: convert(event.locationInWindow, from: nil))
+    }
+
+    private func updatePointerFeedback(at point: CGPoint) {
+        if let activeResizeDirection {
+            Self.resizeCursor(for: activeResizeDirection).set()
+            return
+        }
+        let interaction = interaction(at: point)
+        updateResizeHover(for: interaction)
+        switch interaction {
+        case let .resize(direction):
+            Self.resizeCursor(for: direction).set()
+        case .move:
+            NSCursor.openHand.set()
+        case .close, .passThrough:
+            NSCursor.arrow.set()
+        }
+    }
+
+    private func recoverResizeIfMouseButtonReleased(at point: CGPoint) -> Bool {
+        guard activeResizeDirection != nil, !isLeftMouseButtonPressed() else { return false }
+        finishResize(at: point)
+        return true
+    }
+
+    private func preserveResizePointerFeedback(at point: CGPoint) -> Bool {
+        guard activeResizeDirection != nil else { return false }
+        if !recoverResizeIfMouseButtonReleased(at: point),
+           let activeResizeDirection {
+            Self.resizeCursor(for: activeResizeDirection).set()
+        }
+        return true
     }
 }
 
