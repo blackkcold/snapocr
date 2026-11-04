@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-04
+
+### Fixed
+- 修复置顶图片缩放时鼠标松开事件丢失后，后续拖动或滚轮输入仍被当作缩放操作的问题；下一次交互会结束缩放并恢复悬停反馈。
+
+### Changed
+- 调整置顶工具条缩放滑杆的宽度上限，提升可用宽度下的调节精度。
+
 ## [1.0.0] - 2026-11-03
 
 ### Changed
@@ -411,7 +419,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/blackkcold/snapocr/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/blackkcold/snapocr/compare/v0.9.9...v1.0.0
 [0.9.9]: https://github.com/blackkcold/snapocr/compare/v0.9.8...v0.9.9
 [0.9.8]: https://github.com/blackkcold/snapocr/compare/v0.9.7...v0.9.8
