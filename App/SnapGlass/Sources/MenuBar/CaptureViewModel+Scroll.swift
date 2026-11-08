@@ -16,7 +16,7 @@ extension CaptureViewModel {
         do {
             let session = try await scrollEngine.startCapture(windowID: selectedWindow.windowID)
             startedSession = session
-            let result = try await captureOrchestrator.capture(
+            let result = try await captureWithoutScreenshotShelf(
                 mode: .window(selectedWindow.windowID),
                 options: Self.currentCaptureOptions()
             )
@@ -52,13 +52,14 @@ extension CaptureViewModel {
         scrollCaptureTask?.cancel()
         let task = Task {
             guard !isCapturing,
+                  !isRecordingBusy,
                   let session = scrollSession,
                   scrollCapturedFrameCount >= 1 else { return }
             isCapturing = true
             defer { isCapturing = false }
 
             do {
-                let result = try await captureOrchestrator.capture(
+                let result = try await captureWithoutScreenshotShelf(
                     mode: .window(session.windowID),
                     options: Self.currentCaptureOptions()
                 )
@@ -118,7 +119,10 @@ extension CaptureViewModel {
     /// Finishes the active scrolling capture and sends the long image through the normal capture flow.
     public func finishScrollCapture() {
         Task {
-            guard !isCapturing, scrollCapturedFrameCount >= 2, let session = scrollSession else { return }
+            guard !isCapturing,
+                  !isRecordingBusy,
+                  scrollCapturedFrameCount >= 2,
+                  let session = scrollSession else { return }
             isCapturing = true
             defer { isCapturing = false }
 

@@ -101,6 +101,7 @@ struct PreferencesView: View {
                 case .general: GeneralPreferencesView()
                 case .appearance: AppearancePreferencesView()
                 case .capture: CapturePreferencesView()
+                case .recording: RecordingPreferencesView()
                 case .ocr: OCRPreferencesView()
                 case .shortcuts: ShortcutsPreferencesView()
                 case .history: HistoryPreferencesView()
@@ -350,6 +351,8 @@ struct ShortcutsPreferencesView: View {
                     KeyboardShortcuts.reset(.captureWindow)
                     KeyboardShortcuts.reset(.captureFullscreen)
                     KeyboardShortcuts.reset(.ocrFromClipboard)
+                    KeyboardShortcuts.reset(.screenshotShelf)
+                    KeyboardShortcuts.reset(.screenRecording)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -381,6 +384,20 @@ struct ShortcutsPreferencesView: View {
                     title: "OCR from Clipboard",
                     systemImage: "text.viewfinder",
                     name: .ocrFromClipboard
+                )
+                Divider()
+
+                shortcutRow(
+                    title: "Toggle Screenshot Shelf",
+                    systemImage: "rectangle.stack",
+                    name: .screenshotShelf
+                )
+                Divider()
+
+                shortcutRow(
+                    title: "Start Screen Recording",
+                    systemImage: "record.circle",
+                    name: .screenRecording
                 )
             }
         }

@@ -25,6 +25,26 @@ public enum PreferenceKeys {
     public static let pickerDominantColorCount = "capture_pickerDominantColorCount"
     /// Pin shortcut override; absent means "use the code-level default".
     public static let pinSelectionShortcut = "capture_pinSelectionShortcut"
+    /// Whether the recent screenshot shelf is enabled.
+    public static let screenshotShelfEnabled = "screenshotShelf_enabled"
+    /// Maximum number of screenshots shown in the recent screenshot shelf.
+    public static let screenshotShelfCount = "screenshotShelf_count"
+    /// Screenshot shelf card height in points.
+    public static let screenshotShelfCardHeight = "screenshotShelf_cardHeight"
+    /// Opacity applied to screenshot shelf images.
+    public static let screenshotShelfImageOpacity = "screenshotShelf_imageOpacity"
+    /// Video codec used for new screen recordings.
+    public static let recordingVideoCodec = "recording_videoCodec"
+    /// Resolution ceiling used for new screen recordings.
+    public static let recordingResolution = "recording_resolution"
+    /// Frame-rate ceiling used for new screen recordings.
+    public static let recordingFrameRate = "recording_frameRate"
+    /// Average video bitrate used for new screen recordings.
+    public static let recordingAverageVideoBitrate = "recording_averageVideoBitrate"
+    /// Whether new screen recordings include system audio.
+    public static let recordingSystemAudio = "recording_systemAudio"
+    /// Optional user-selected screen-recording destination directory.
+    public static let recordingCustomOutputDirectory = "recording_customOutputDirectory"
 
     public static let ocrLanguagePriority = "ocr_languagePriority"
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"
@@ -65,6 +85,24 @@ public enum PreferenceDefaults {
     public static let captureImageFormat = "png"
     public static let captureJPEGQuality = 0.9
     public static let pickerDominantColorCount = 5
+    /// Enable the recent screenshot shelf by default.
+    public static let screenshotShelfEnabled = true
+    /// Show the three most recent screenshots by default.
+    public static let screenshotShelfCount = 3
+    /// Use a 96-point shelf card height by default.
+    public static let screenshotShelfCardHeight = 96.0
+    /// Render shelf images at 90% opacity by default.
+    public static let screenshotShelfImageOpacity = 0.9
+    /// Use H.264 for new recordings by default.
+    public static let recordingVideoCodec = "h264"
+    /// Limit new recordings to 1080p by default.
+    public static let recordingResolution = "1080p"
+    /// Record at up to 30 frames per second by default.
+    public static let recordingFrameRate = 30
+    /// Target 8 Mbps average video bitrate by default.
+    public static let recordingAverageVideoBitrate = 8_000_000
+    /// Exclude system audio from new recordings by default.
+    public static let recordingSystemAudio = false
 
     public static let ocrLanguagePriority = "auto"
     public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]
@@ -83,6 +121,122 @@ public enum PreferenceDefaults {
     public static let developerMode = false
     public static let engineComparison = false
     public static let forceUpdateAvailable = false
+}
+
+/// Reads and normalizes the persisted screenshot-shelf preferences.
+public enum ScreenshotShelfPreferences {
+    /// Returns whether the screenshot shelf is enabled, defaulting to `true`.
+    public static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: PreferenceKeys.screenshotShelfEnabled) != nil else {
+            return PreferenceDefaults.screenshotShelfEnabled
+        }
+        return defaults.bool(forKey: PreferenceKeys.screenshotShelfEnabled)
+    }
+
+    /// Returns the configured shelf count, clamped to `1...6` and persisted when corrected.
+    public static func count(in defaults: UserDefaults = .standard) -> Int {
+        let key = PreferenceKeys.screenshotShelfCount
+        guard let storedValue = defaults.object(forKey: key) as? NSNumber else {
+            return PreferenceDefaults.screenshotShelfCount
+        }
+
+        let rawValue = storedValue.doubleValue
+        let normalizedValue = Int(min(max(rawValue.isNaN ? 3 : rawValue, 1), 6))
+        if rawValue != Double(normalizedValue) {
+            defaults.set(normalizedValue, forKey: key)
+        }
+        return normalizedValue
+    }
+
+    /// Returns the card height, clamped to `64...160` points and persisted when corrected.
+    public static func cardHeight(in defaults: UserDefaults = .standard) -> Double {
+        normalizedDouble(
+            forKey: PreferenceKeys.screenshotShelfCardHeight,
+            defaultValue: PreferenceDefaults.screenshotShelfCardHeight,
+            range: 64...160,
+            in: defaults
+        )
+    }
+
+    /// Returns the image opacity, clamped to `0.2...1` and persisted when corrected.
+    public static func imageOpacity(in defaults: UserDefaults = .standard) -> Double {
+        normalizedDouble(
+            forKey: PreferenceKeys.screenshotShelfImageOpacity,
+            defaultValue: PreferenceDefaults.screenshotShelfImageOpacity,
+            range: 0.2...1,
+            in: defaults
+        )
+    }
+
+    private static func normalizedDouble(
+        forKey key: String,
+        defaultValue: Double,
+        range: ClosedRange<Double>,
+        in defaults: UserDefaults
+    ) -> Double {
+        guard let storedValue = defaults.object(forKey: key) as? NSNumber else {
+            return defaultValue
+        }
+
+        let rawValue = storedValue.doubleValue
+        let normalizedValue = rawValue.isNaN ? defaultValue : min(max(rawValue, range.lowerBound), range.upperBound)
+        if rawValue != normalizedValue {
+            defaults.set(normalizedValue, forKey: key)
+        }
+        return normalizedValue
+    }
+}
+
+/// Reads and updates the optional destination for screen recordings.
+public enum RecordingDestinationPreferences {
+    /// Returns the selected destination, defaulting to `Movies/SnapGlass/Recordings`.
+    ///
+    /// This lookup never creates the directory.
+    ///
+    /// - Parameters:
+    ///   - defaults: Defaults store containing the optional custom directory.
+    ///   - moviesDirectory: Optional Movies-directory override, primarily for tests.
+    ///   - fileManager: File manager used to locate the user's Movies directory.
+    /// - Returns: The custom or default directory, or `nil` if Movies cannot be resolved.
+    public static func directory(
+        in defaults: UserDefaults = .standard,
+        moviesDirectory: URL? = nil,
+        fileManager: FileManager = .default
+    ) -> URL? {
+        if let customDirectory = customDirectory(in: defaults) {
+            return customDirectory
+        }
+        guard let moviesDirectory = moviesDirectory
+            ?? fileManager.urls(for: .moviesDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        return moviesDirectory
+            .appendingPathComponent("SnapGlass", isDirectory: true)
+            .appendingPathComponent("Recordings", isDirectory: true)
+    }
+
+    /// Returns the remembered custom directory, if one was selected.
+    public static func customDirectory(in defaults: UserDefaults = .standard) -> URL? {
+        guard let path = defaults.string(forKey: PreferenceKeys.recordingCustomOutputDirectory),
+              !path.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+    }
+
+    /// Remembers a user-selected directory without creating it or moving files.
+    public static func setCustomDirectory(_ directory: URL, in defaults: UserDefaults = .standard) {
+        guard directory.isFileURL else { return }
+        defaults.set(
+            directory.standardizedFileURL.path,
+            forKey: PreferenceKeys.recordingCustomOutputDirectory
+        )
+    }
+
+    /// Clears the custom directory and restores the Movies default.
+    public static func reset(in defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: PreferenceKeys.recordingCustomOutputDirectory)
+    }
 }
 
 /// Interactive area-selection styles supported by the capture overlay.

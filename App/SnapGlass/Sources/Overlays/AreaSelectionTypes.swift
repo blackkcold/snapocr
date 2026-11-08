@@ -8,7 +8,12 @@ enum AreaCaptureAction {
     case pin
 }
 
-struct AreaSelectionResult {
+enum AreaSelectionPurpose: Equatable {
+    case capture
+    case recordingRegion
+}
+
+struct AreaCaptureSelectionResult {
     let screenRect: CGRect
     let appKitRect: CGRect
     let displayID: CGDirectDisplayID?
@@ -18,9 +23,20 @@ struct AreaSelectionResult {
     var isFreeform: Bool { normalizedPath != nil }
 }
 
+struct RecordingRegionSelectionResult {
+    let displayID: CGDirectDisplayID
+    let quartzRect: CGRect
+}
+
+enum AreaSelectionResult {
+    case capture(AreaCaptureSelectionResult)
+    case recordingRegion(RecordingRegionSelectionResult)
+}
+
 @MainActor
 private final class AreaSelectionSession {
     private static var retainedSessions: [AreaSelectionSession] = []
+    private let purpose: AreaSelectionPurpose
     private let onComplete: (AreaSelectionResult?) -> Void
     private var panels: [AreaSelectionPanel] = []
     private var didFinish = false
@@ -30,24 +46,29 @@ private final class AreaSelectionSession {
 
     static func show(
         style: CaptureSelectionStyle,
+        purpose: AreaSelectionPurpose = .capture,
+        on screen: NSScreen? = nil,
         overlayMode: CaptureOverlayMode = .live,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
         onColorPicked: ((SampledColor) -> Void)? = nil,
         onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)? = nil,
         onComplete: @escaping (AreaSelectionResult?) -> Void
     ) {
-        let screens = NSScreen.screens
+        let screens = screen.map { [$0] } ?? NSScreen.screens
         guard !screens.isEmpty else {
             onComplete(nil)
             return
         }
-        let session = AreaSelectionSession(onComplete: onComplete)
+        let effectiveStyle = purpose == .recordingRegion ? .rectangle : style
+        let effectiveOverlayMode = purpose == .recordingRegion ? .live : overlayMode
+        let session = AreaSelectionSession(purpose: purpose, onComplete: onComplete)
         session.capturedFrames = capturedFrames
         retainedSessions.append(session)
         session.present(
             on: screens,
-            style: style,
-            overlayMode: overlayMode,
+            style: effectiveStyle,
+            purpose: purpose,
+            overlayMode: effectiveOverlayMode,
             onColorPicked: onColorPicked,
             onRecaptureRegion: onRecaptureRegion
         )
@@ -83,13 +104,15 @@ private final class AreaSelectionSession {
         }
     }
 
-    private init(onComplete: @escaping (AreaSelectionResult?) -> Void) {
+    private init(purpose: AreaSelectionPurpose, onComplete: @escaping (AreaSelectionResult?) -> Void) {
+        self.purpose = purpose
         self.onComplete = onComplete
     }
 
     private func present(
         on screens: [NSScreen],
         style: CaptureSelectionStyle,
+        purpose: AreaSelectionPurpose,
         overlayMode: CaptureOverlayMode,
         onColorPicked: ((SampledColor) -> Void)?,
         onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)?
@@ -98,6 +121,7 @@ private final class AreaSelectionSession {
             AreaSelectionPanel(
                 screen: screen,
                 style: style,
+                purpose: purpose,
                 overlayMode: overlayMode,
                 capturedFrames: capturedFrames,
                 onColorPicked: onColorPicked,
@@ -144,6 +168,13 @@ private final class AreaSelectionSession {
         }
     }
 
+    static func cancelRecordingRegionSelection() {
+        let sessions = retainedSessions.filter { $0.purpose == .recordingRegion }
+        for session in sessions {
+            session.finish(with: nil)
+        }
+    }
+
     private func applyCapturedFrames(_ frames: [CGDirectDisplayID: CGImage]) {
         guard !didFinish else { return }
         capturedFrames.merge(frames) { _, new in new }
@@ -160,6 +191,8 @@ final class AreaSelectionPanel: NSPanel {
 
     static func show(
         style: CaptureSelectionStyle,
+        purpose: AreaSelectionPurpose = .capture,
+        on screen: NSScreen? = nil,
         overlayMode: CaptureOverlayMode = .live,
         capturedFrames: [CGDirectDisplayID: CGImage] = [:],
         onColorPicked: ((SampledColor) -> Void)? = nil,
@@ -168,6 +201,8 @@ final class AreaSelectionPanel: NSPanel {
     ) {
         AreaSelectionSession.show(
             style: style,
+            purpose: purpose,
+            on: screen,
             overlayMode: overlayMode,
             capturedFrames: capturedFrames,
             onColorPicked: onColorPicked,
@@ -181,6 +216,11 @@ final class AreaSelectionPanel: NSPanel {
         AreaSelectionSession.updateCapturedFrames(frames)
     }
 
+    @MainActor
+    static func cancelRecordingRegionSelection() {
+        AreaSelectionSession.cancelRecordingRegionSelection()
+    }
+
     fileprivate func updateCapturedFrames(_ frames: [CGDirectDisplayID: CGImage]) {
         trackingView.updateCapturedFrames(frames)
     }
@@ -188,6 +228,7 @@ final class AreaSelectionPanel: NSPanel {
     fileprivate init(
         screen: NSScreen,
         style: CaptureSelectionStyle,
+        purpose: AreaSelectionPurpose,
         overlayMode: CaptureOverlayMode,
         capturedFrames: [CGDirectDisplayID: CGImage],
         onColorPicked: ((SampledColor) -> Void)?,
@@ -198,6 +239,7 @@ final class AreaSelectionPanel: NSPanel {
         let trackingView = AreaTrackingView(
             frame: CGRect(origin: .zero, size: contentSize),
             style: style,
+            purpose: purpose,
             overlayMode: overlayMode,
             screen: screen,
             capturedFrames: capturedFrames,

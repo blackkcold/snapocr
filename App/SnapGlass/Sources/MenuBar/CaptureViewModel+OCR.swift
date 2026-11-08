@@ -56,7 +56,7 @@ extension CaptureViewModel {
     /// 区域路径返回的已经是裁好的图，这里不需要再做任何裁剪。
     func recaptureRegionForBarcodeScan(_ quartzRect: CGRect) async -> CGImage? {
         do {
-            let result = try await captureOrchestrator.capture(
+            let result = try await captureWithoutScreenshotShelf(
                 mode: CaptureCore.CaptureMode.area(quartzRect),
                 options: CaptureOptions(includeCursor: false, highResolution: true)
             )

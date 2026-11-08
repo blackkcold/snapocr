@@ -24,14 +24,60 @@ struct CapturePreferencesView: View {
     private var jpegQuality = PreferenceDefaults.captureJPEGQuality
     @AppStorage(PreferenceKeys.pickerDominantColorCount)
     private var pickerDominantColorCount = PreferenceDefaults.pickerDominantColorCount
+    @AppStorage(PreferenceKeys.screenshotShelfEnabled)
+    private var screenshotShelfEnabled = PreferenceDefaults.screenshotShelfEnabled
+    @AppStorage(PreferenceKeys.screenshotShelfCount)
+    private var screenshotShelfCount = PreferenceDefaults.screenshotShelfCount
+    @AppStorage(PreferenceKeys.screenshotShelfCardHeight)
+    private var screenshotShelfCardHeight = PreferenceDefaults.screenshotShelfCardHeight
+    @AppStorage(PreferenceKeys.screenshotShelfImageOpacity)
+    private var screenshotShelfImageOpacity = PreferenceDefaults.screenshotShelfImageOpacity
 
     var body: some View {
         ScrollView {
             PreferencesCardGrid {
+                screenshotShelfCard
                 afterCaptureCard
 
                 imageCard
             }
+        }
+    }
+
+    private var screenshotShelfCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "rectangle.stack", title: "Screenshot Shelf")
+
+            Toggle("Enable screenshot shelf", isOn: $screenshotShelfEnabled)
+
+            Stepper(
+                "Number of screenshots: \(screenshotShelfCount)",
+                value: $screenshotShelfCount,
+                in: 1...6
+            )
+            .disabled(!screenshotShelfEnabled)
+
+            VStack(alignment: .leading) {
+                LabeledContent("Card height") {
+                    Text(screenshotShelfCardHeight, format: .number.precision(.fractionLength(0)))
+                        .monospacedDigit()
+                }
+                Slider(value: $screenshotShelfCardHeight, in: 64...160, step: 4)
+            }
+            .disabled(!screenshotShelfEnabled)
+
+            VStack(alignment: .leading) {
+                LabeledContent("Image opacity") {
+                    Text(screenshotShelfImageOpacity, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit()
+                }
+                Slider(value: $screenshotShelfImageOpacity, in: 0.2...1, step: 0.05)
+            }
+            .disabled(!screenshotShelfEnabled)
+
+            PreferencesCardCaption(
+                text: "Shelf items are kept only for the current session unless saved to History."
+            )
         }
     }
 

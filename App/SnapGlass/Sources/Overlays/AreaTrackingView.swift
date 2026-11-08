@@ -23,6 +23,7 @@ final class AreaTrackingView: NSView {
     }
 
     let style: CaptureSelectionStyle
+    let purpose: AreaSelectionPurpose
     let overlayMode: CaptureOverlayMode
     let screen: NSScreen
     var capturedFrames: [CGDirectDisplayID: CGImage]
@@ -67,6 +68,7 @@ final class AreaTrackingView: NSView {
     init(
         frame frameRect: NSRect,
         style: CaptureSelectionStyle,
+        purpose: AreaSelectionPurpose,
         overlayMode: CaptureOverlayMode,
         screen: NSScreen,
         capturedFrames: [CGDirectDisplayID: CGImage],
@@ -74,6 +76,7 @@ final class AreaTrackingView: NSView {
         onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)? = nil
     ) {
         self.style = style
+        self.purpose = purpose
         self.overlayMode = overlayMode
         self.screen = screen
         self.capturedFrames = capturedFrames
@@ -317,6 +320,10 @@ final class AreaTrackingView: NSView {
         }
 
         pendingPreviousSelection = nil
+        if purpose == .recordingRegion {
+            onSelectionComplete?(makeRecordingRegionResult())
+            return
+        }
         phase = .selected
         showActionBar()
     }
@@ -383,7 +390,10 @@ final class AreaTrackingView: NSView {
 
     /// 松手即出栏；动作栏与手柄同时在线，不再有单独的确认态。
     private func showActionBar() {
-        guard phase == .selected, selectionRect.width > 5, selectionRect.height > 5 else { return }
+        guard purpose == .capture,
+              phase == .selected,
+              selectionRect.width > 5,
+              selectionRect.height > 5 else { return }
         hoveredHandle = nil
         actionBar.isHidden = false
         actionBar.updatePinShortcutHint()
@@ -394,7 +404,10 @@ final class AreaTrackingView: NSView {
     }
 
     func completeSelection(action: AreaCaptureAction) {
-        guard phase == .selected, selectionRect.width > 5, selectionRect.height > 5 else { return }
+        guard purpose == .capture,
+              phase == .selected,
+              selectionRect.width > 5,
+              selectionRect.height > 5 else { return }
         dismissBarcodePanel()
         onSelectionComplete?(makeSelectionResult(action: action))
     }
@@ -413,7 +426,7 @@ final class AreaTrackingView: NSView {
             normalizedPath = nil
         }
         let rects = selectionRects()
-        return AreaSelectionResult(
+        return .capture(AreaCaptureSelectionResult(
             screenRect: rects.quartz,
             appKitRect: rects.appKit,
             displayID: screen.deviceDescription[
@@ -421,6 +434,20 @@ final class AreaTrackingView: NSView {
             ] as? CGDirectDisplayID,
             normalizedPath: normalizedPath,
             action: action
+        ))
+    }
+
+    private func makeRecordingRegionResult() -> AreaSelectionResult? {
+        guard let displayID = screen.deviceDescription[
+            NSDeviceDescriptionKey("NSScreenNumber")
+        ] as? CGDirectDisplayID else {
+            return nil
+        }
+        return .recordingRegion(
+            RecordingRegionSelectionResult(
+                displayID: displayID,
+                quartzRect: selectionRects().quartz
+            )
         )
     }
 
