@@ -1,4 +1,5 @@
 import AnnotationCore
+import CaptureCore
 import CoreGraphics
 import Foundation
 
@@ -7,6 +8,7 @@ public struct EditorCaptureContext: Equatable, Sendable {
     let supportsVerticalTrim: Bool
     let startsInVerticalTrim: Bool
     var sourceEntryID: UUID?
+    var mockupStyle: MockupStyle?
 
     public static let standard = EditorCaptureContext(
         captureMode: nil,
@@ -15,7 +17,10 @@ public struct EditorCaptureContext: Equatable, Sendable {
     )
 
     public static func capture(
-        image: CGImage, captureMode: String?, sourceEntryID: UUID? = nil
+        image: CGImage,
+        captureMode: String?,
+        sourceEntryID: UUID? = nil,
+        mockupStyle: MockupStyle? = nil
     ) -> EditorCaptureContext {
         let isScrollingCapture = captureMode == "scroll"
         return EditorCaptureContext(
@@ -26,7 +31,8 @@ public struct EditorCaptureContext: Equatable, Sendable {
                 isScrollingCapture: isScrollingCapture
             ),
             startsInVerticalTrim: isScrollingCapture,
-            sourceEntryID: sourceEntryID
+            sourceEntryID: sourceEntryID,
+            mockupStyle: mockupStyle
         )
     }
 
@@ -38,11 +44,13 @@ public struct EditorCaptureContext: Equatable, Sendable {
         captureMode: String?,
         supportsVerticalTrim: Bool,
         startsInVerticalTrim: Bool,
-        sourceEntryID: UUID? = nil
+        sourceEntryID: UUID? = nil,
+        mockupStyle: MockupStyle? = nil
     ) {
         self.captureMode = captureMode
         self.supportsVerticalTrim = supportsVerticalTrim
         self.startsInVerticalTrim = startsInVerticalTrim
         self.sourceEntryID = sourceEntryID
+        self.mockupStyle = mockupStyle
     }
 }

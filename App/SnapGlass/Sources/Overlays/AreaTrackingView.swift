@@ -91,9 +91,12 @@ final class AreaTrackingView: NSView {
             if self.copyFirstScanPayload() { return }
             self.completeSelection(action: .copy)
         }
+        actionBar.onCopyOriginal = { [weak self] in self?.completeSelection(action: .copyOriginal) }
         actionBar.onEdit = { [weak self] in self?.completeSelection(action: .edit) }
         actionBar.onPin = { [weak self] in self?.completeSelection(action: .pin) }
         actionBar.onScan = { [weak self] in self?.scanSelectedRegion() }
+        actionBar.onMockupCopy = { [weak self] in self?.completeSelection(action: .mockup) }
+        actionBar.onMockupEdit = { [weak self] in self?.completeSelection(action: .mockupEdit) }
         addSubview(actionBar)
         configureBarcodePanel()
     }
@@ -606,9 +609,15 @@ extension AreaTrackingView {
         }
         if phase == .selected,
            event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
-           event.charactersIgnoringModifiers?.lowercased() == "e" {
-            completeSelection(action: .edit)
-            return
+           let character = event.charactersIgnoringModifiers?.lowercased() {
+            if character == "e" {
+                completeSelection(action: .edit)
+                return
+            }
+            if character == "b" {
+                completeSelection(action: .mockup)
+                return
+            }
         }
         super.keyDown(with: event)
     }

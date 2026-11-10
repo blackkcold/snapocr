@@ -1,5 +1,6 @@
 import AppKit
 import AnnotationCore
+import CaptureCore
 import HistoryCore
 import SharedKit
 import SwiftUI
@@ -7,21 +8,27 @@ import UniformTypeIdentifiers
 
 // MARK: - EditorViewModel Save / Copy / Cancel / Toast
 
+typealias EditorHistorySaver =
+    @Sendable (CGImage, EditorHistorySaveMode, UUID?, MockupStyle?) async throws -> Void
+
 extension EditorViewModel {
-    static let defaultHistorySaver:
-        @Sendable (CGImage, EditorHistorySaveMode, UUID?) async throws -> Void = { image, mode, sourceEntryID in
+    static let defaultHistorySaver: EditorHistorySaver = { image, mode, sourceEntryID, mockupStyle in
         let history = try HistoryActor.sharedResult().get()
+        let styleJSON = mockupStyle.flatMap { try? JSONEncoder().encode($0) }.flatMap {
+            String(data: $0, encoding: .utf8)
+        }
         switch mode {
         case .newRecord:
             try await history.saveCapture(
                 image: image, textContent: "", ocrConfidence: 0,
-                captureMode: "edited"
+                captureMode: "edited", mockupStyleJSON: styleJSON
             )
         case .overwriteOriginal:
             guard let sourceEntryID else {
                 throw HistoryError.entryNotFound(id: UUID())
             }
             try await history.replaceImage(id: sourceEntryID, image: image)
+            try await history.updateMockupStyle(id: sourceEntryID, styleJSON: styleJSON)
         }
     }
 
@@ -46,8 +53,10 @@ extension EditorViewModel {
         isWritingImage = true
         defer { isWritingImage = false }
         do {
+            // History keeps the editable raw/revision image; the presentation
+            // style remains metadata and is applied only to file/copy exports.
             let image = try await Self.renderOffMain(doc)
-            try await historySaver(image, mode, sourceEntryID)
+            try await historySaver(image, mode, sourceEntryID, mockupStyle)
             let message: String = switch mode {
             case .newRecord: AppLocalization.string("Saved to history")
             case .overwriteOriginal: AppLocalization.string("History updated; original kept for restore")
@@ -126,13 +135,15 @@ extension EditorViewModel {
             ? PreferenceDefaults.captureJPEGQuality
             : UserDefaults.standard.double(forKey: PreferenceKeys.captureJPEGQuality)
 
+        let style = mockupStyle
         Task { [weak self] in
             do {
                 try await Self.writeRenderedDocument(
                     document,
                     to: url,
                     format: outputFormat,
-                    jpegQuality: quality
+                    jpegQuality: quality,
+                    mockupStyle: style
                 )
                 guard let self else { return }
                 self.isWritingImage = false
@@ -199,15 +210,27 @@ extension EditorViewModel {
         }.value
     }
 
+    /// Applies the capture's presentation style to a fully rendered annotation
+    /// image. The editable base image remains untouched for history.
+    nonisolated static func applyingMockup(
+        _ image: CGImage,
+        style: MockupStyle?
+    ) -> CGImage {
+        guard let style else { return image }
+        return MockupRenderer.render(image, style: style) ?? image
+    }
+
     /// Renders, optionally flattens, encodes and writes in one background pass.
     nonisolated static func writeRenderedDocument(
         _ document: AnnotationDocument,
         to url: URL,
         format: ImageFileFormat,
-        jpegQuality: Double
+        jpegQuality: Double,
+        mockupStyle: MockupStyle? = nil
     ) async throws {
         try await Task.detached(priority: .userInitiated) {
             var image = try AnnotationInteractor().render(document)
+            image = EditorViewModel.applyingMockup(image, style: mockupStyle)
             if format == .jpeg {
                 image = EditorViewModel.flattenedOnWhite(image)
             }
@@ -237,7 +260,13 @@ extension EditorViewModel {
             do {
                 let image = try await Self.renderOffMain(doc)
                 guard let self else { return }
-                try await ClipboardWriter.write(image: image)
+                let style = self.mockupStyle
+                // Style compositing is a full-size pass; keep it off the main
+                // actor just like the annotation render.
+                let presented = await Task.detached(priority: .userInitiated) {
+                    Self.applyingMockup(image, style: style)
+                }.value
+                try await ClipboardWriter.write(image: presented)
                 self.isWritingImage = false
                 self.showToast(message: AppLocalization.string("Copied to clipboard"), type: .success)
                 self.logger.info("Copied annotated image to clipboard")

@@ -11,6 +11,7 @@ struct SelectableWindow {
     let windowTitle: String?
     let frame: CGRect
     let bundleIdentifier: String?
+    let displayCount: Int
 
     var displayName: String {
         let app = appName?.isEmpty == false
@@ -24,8 +25,14 @@ struct SelectableWindow {
 
     var subtitle: String {
         let size = "\(Int(frame.width)) × \(Int(frame.height))"
-        guard let bundleIdentifier, !bundleIdentifier.isEmpty else { return size }
-        return "\(bundleIdentifier)  ·  \(size)"
+        var parts = [size]
+        if displayCount > 1 {
+            parts.append(AppLocalization.string("Spans %lld displays", Int64(displayCount)))
+        }
+        if let bundleIdentifier, !bundleIdentifier.isEmpty {
+            parts.append(bundleIdentifier)
+        }
+        return parts.joined(separator: "  ·  ")
     }
 }
 
@@ -117,8 +124,9 @@ final class WindowPickerCell: NSTableCellView {
 final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     weak var panel: WindowSelectionPanel?
     weak var tableView: NSTableView?
-    private let windows: [SelectableWindow]
-    private let content: SCShareableContent
+    private var windows: [SelectableWindow]
+    private var content: SCShareableContent?
+    private var filterQuery = ""
     private var thumbnails: [CGWindowID: NSImage] = [:]
     private var loadingWindowIDs: Set<CGWindowID> = []
     private var thumbnailTasks: [CGWindowID: Task<Void, Never>] = [:]
@@ -129,13 +137,66 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
     /// 并把间隔拉到 9 秒，空闲时对 SCK 的调用从几十次/分钟降到 ~13 次/分钟。
     private static let refreshInterval: TimeInterval = 9.0
 
-    init(windows: [SelectableWindow], content: SCShareableContent) {
+    init(windows: [SelectableWindow], content: SCShareableContent?) {
         self.windows = windows
         self.content = content
         super.init()
-        for (index, window) in windows.enumerated() {
+        rebuildRowMap()
+    }
+
+    var visibleWindowCount: Int { visibleWindows.count }
+
+    private var visibleWindows: [SelectableWindow] {
+        let query = filterQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return windows }
+        return windows.filter { window in
+            window.displayName.localizedCaseInsensitiveContains(query)
+                || window.subtitle.localizedCaseInsensitiveContains(query)
+                || (window.bundleIdentifier?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+    }
+
+    private func rebuildRowMap() {
+        rowByWindowID.removeAll(keepingCapacity: true)
+        for (index, window) in visibleWindows.enumerated() {
             rowByWindowID[window.windowID] = index
         }
+    }
+
+    /// Applies a search query and keeps the selection on the first visible row.
+    func setFilter(_ query: String) {
+        guard filterQuery != query else { return }
+        filterQuery = query
+        rebuildRowMap()
+        tableView?.reloadData()
+        selectFirstVisibleWindow()
+    }
+
+    /// Replaces the window list after a manual refresh.
+    func replaceWindows(_ newWindows: [SelectableWindow], content newContent: SCShareableContent?) {
+        windows = newWindows
+        content = newContent
+        thumbnails.removeAll()
+        loadingWindowIDs.removeAll()
+        for task in thumbnailTasks.values { task.cancel() }
+        thumbnailTasks.removeAll()
+        rebuildRowMap()
+        tableView?.reloadData()
+        selectFirstVisibleWindow()
+    }
+
+    private func selectFirstVisibleWindow() {
+        guard !visibleWindows.isEmpty else {
+            // Only the absence of any window hides the list. A search with no
+            // matches keeps the search field and list usable so the user can
+            // clear the query instead of being trapped in an empty state.
+            panel?.setEmptyStateVisible(windows.isEmpty)
+            panel?.setActionButtonsEnabled(false)
+            return
+        }
+        panel?.setEmptyStateVisible(false)
+        tableView?.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        panel?.setActionButtonsEnabled(true)
     }
 
     /// Starts a low-frequency timer that re-captures the selected row's preview.
@@ -174,12 +235,12 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
         if let selected = tableView?.selectedRow, selected >= 0 {
             rows.insert(selected)
         }
-        if !windows.isEmpty {
+        if !visibleWindows.isEmpty {
             rows.insert(0)
         }
 
-        for row in rows where windows.indices.contains(row) {
-            let window = windows[row]
+        for row in rows where visibleWindows.indices.contains(row) {
+            let window = visibleWindows[row]
             guard thumbnails[window.windowID] != nil,
                   !loadingWindowIDs.contains(window.windowID) else { continue }
             loadThumbnail(for: window, forceRefresh: true)
@@ -187,13 +248,13 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        windows.count
+        visibleWindows.count
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard windows.indices.contains(row) else { return nil }
+        guard visibleWindows.indices.contains(row) else { return nil }
 
-        let window = windows[row]
+        let window = visibleWindows[row]
         let reusable = tableView.makeView(
             withIdentifier: WindowPickerCell.reuseIdentifier,
             owner: self
@@ -208,21 +269,23 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        panel?.notifyActivity()
         panel?.setActionButtonsEnabled(tableView?.selectedRow ?? -1 >= 0)
     }
 
     @MainActor @objc func captureSelectedWindow(_ sender: NSTableView) {
         let row = sender.clickedRow >= 0 ? sender.clickedRow : sender.selectedRow
-        guard windows.indices.contains(row) else { return }
+        guard visibleWindows.indices.contains(row) else { return }
         sender.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        // Double-click opens the preview directly in the annotation editor.
-        panel?.finishSelectedWindow(action: .edit)
+        // Double-click follows the primary capture setting; explicit editing
+        // lives on its own button so the two intents stay distinct.
+        panel?.finishSelectedWindow(action: .still)
     }
 
     func selectedResult(action: WindowCaptureAction) -> WindowSelectionResult? {
         let row = tableView?.selectedRow ?? -1
-        guard windows.indices.contains(row) else { return nil }
-        let window = windows[row]
+        guard visibleWindows.indices.contains(row) else { return nil }
+        let window = visibleWindows[row]
         return WindowSelectionResult(
             windowID: window.windowID,
             appName: window.appName,
@@ -238,7 +301,8 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
     }
 
     private func loadThumbnail(for window: SelectableWindow, forceRefresh: Bool) {
-        guard loadingWindowIDs.insert(window.windowID).inserted else { return }
+        guard let content,
+              loadingWindowIDs.insert(window.windowID).inserted else { return }
 
         let windowID = window.windowID
         let sharedContent = content

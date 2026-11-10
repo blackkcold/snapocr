@@ -11,6 +11,8 @@ import SwiftUI
 extension CaptureViewModel {
     func processCapturedImage(
         _ image: CGImage,
+        originalImage: CGImage? = nil,
+        mockupStyle: MockupStyle? = nil,
         captureMode: CaptureCore.CaptureMode,
         sourceAppName: String? = nil,
         sourceWindowTitle: String? = nil,
@@ -20,21 +22,31 @@ extension CaptureViewModel {
         sourceDisplayID: CGDirectDisplayID? = nil,
         displayScale: CGFloat? = nil
     ) async {
+        let rawImage = originalImage ?? image
         let shelfCaptureID = screenshotShelfManager.captureCompleted(
-            image,
+            rawImage,
+            presentedImage: image,
+            mockupStyle: mockupStyle,
             sourceDisplayID: sourceDisplayID,
             displayScale: displayScale
         )
         let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
         let (shouldOpenEditor, shouldCopyImage) = resolveDestination(destination)
+        let mockupStyleJSON = mockupStyle.flatMap { style in
+            try? JSONEncoder().encode(style)
+        }.flatMap { data in
+            String(data: data, encoding: .utf8)
+        }
         let historyContext = HistorySaveContext(
             modeDescription: modeDescription,
             appName: sourceAppName,
-            windowTitle: sourceWindowTitle
+            windowTitle: sourceWindowTitle,
+            mockupStyle: mockupStyle,
+            mockupStyleJSON: mockupStyleJSON
         )
 
         if destination == .pinOnly, let pinRect {
-            presentPinnedImage(image, pinRect: pinRect)
+            presentPinnedImage(rawImage, pinRect: pinRect)
         }
 
         let imageCopySucceeded: Bool
@@ -51,7 +63,7 @@ extension CaptureViewModel {
 
         if shouldOpenEditor {
             openEditorAndFinish(
-                image: image,
+                image: rawImage,
                 destination: destination,
                 historyContext: historyContext,
                 imageCopySucceeded: imageCopySucceeded,
@@ -61,7 +73,7 @@ extension CaptureViewModel {
         }
 
         let ocrResult = await runOCRAndSuggestions(
-            on: image,
+            on: rawImage,
             shouldOpenEditor: false,
             destination: destination
         )
@@ -69,7 +81,7 @@ extension CaptureViewModel {
         // Save before finishing for non-editor destinations: the caller has no
         // window to show while this runs, and pinned captures need the record.
         let historyID = await saveIfNeeded(
-            image: image,
+            image: rawImage,
             ocrResult: ocrResult,
             destination: destination,
             imageCopySucceeded: imageCopySucceeded,
@@ -98,7 +110,8 @@ extension CaptureViewModel {
         let tabID = openEditor(
             with: image,
             captureMode: historyContext.modeDescription,
-            sourceEntryID: nil
+            sourceEntryID: nil,
+            mockupStyle: historyContext.mockupStyle
         )
         Task { [weak self] in
             guard let self else { return }
@@ -170,7 +183,8 @@ extension CaptureViewModel {
                 appName: context.appName,
                 windowTitle: context.windowTitle
             ),
-            isProtected: destination == .pinOnly
+            isProtected: destination == .pinOnly,
+            mockupStyleJSON: context.mockupStyleJSON
         )
     }
 

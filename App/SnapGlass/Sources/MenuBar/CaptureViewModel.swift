@@ -247,4 +247,6 @@ struct HistorySaveContext {
     let modeDescription: String
     let appName: String?
     let windowTitle: String?
+    let mockupStyle: MockupStyle?
+    let mockupStyleJSON: String?
 }

@@ -22,7 +22,7 @@ extension ScreenshotShelfManager {
         }
     }
 
-    func enqueueAssetWrite(_ image: CGImage, captureID: UUID) {
+    func enqueueAssetWrite(original: CGImage, presented: CGImage, captureID: UUID) {
         guard sessionStore != nil else {
             cacheFailed(captureID: captureID)
             return
@@ -35,43 +35,46 @@ extension ScreenshotShelfManager {
         let previous = assetWorkTail
         let task = Task { @MainActor [weak self] in
             await previous?.value
-            await self?.storeAssets(image, captureID: captureID)
+            await self?.storeAssets(original: original, presented: presented, captureID: captureID)
         }
         assetWorkTail = task
     }
 
-    func storeAssets(_ image: CGImage, captureID: UUID) async {
+    func storeAssets(original: CGImage, presented: CGImage, captureID: UUID) async {
         defer { pendingAssetWrites -= 1 }
         guard state.entries.contains(where: { $0.captureID == captureID }),
               let sessionStore else { return }
         let assets = await Task.detached(priority: .utility) {
-            ScreenshotShelfAssetEncoder.encode(image)
+            (
+                original: ScreenshotShelfAssetEncoder.encode(original),
+                presented: ScreenshotShelfAssetEncoder.encode(presented)
+            )
         }.value
         guard state.entries.contains(where: { $0.captureID == captureID }) else { return }
-        guard let assets else {
+        guard let originalAssets = assets.original,
+              let presentedAssets = assets.presented else {
             cacheFailed(captureID: captureID)
             return
         }
 
-        // Reuse the encoded PNG the session store is about to seal: dragging a
-        // card out needs a plaintext file, and this is the only place the bytes
-        // already exist without a second encode.
+        // The shelf keeps the raw capture encrypted for history/re-edit, while
+        // the plaintext drag artifact is the presented image the user sees.
         await dragExportStore.prepare(
             captureID: captureID,
-            data: assets.originalData,
+            data: presentedAssets.originalData,
             sourceTypeIdentifier: "public.png"
         )
 
         do {
             let evictedIDs = try await sessionStore.store(
-                originalData: assets.originalData,
-                thumbnailData: assets.thumbnailData,
+                originalData: originalAssets.originalData,
+                thumbnailData: presentedAssets.thumbnailData,
                 captureID: captureID
             )
             for evictedID in evictedIDs { state.remove(captureID: evictedID) }
             removeCards(for: evictedIDs)
             if state.entries.contains(where: { $0.captureID == captureID }) {
-                await setThumbnail(assets.thumbnailData, for: captureID)
+                await setThumbnail(presentedAssets.thumbnailData, for: captureID)
             } else {
                 try? await sessionStore.remove(captureID: captureID)
             }
@@ -140,6 +143,7 @@ extension ScreenshotShelfManager {
     func removeCards(for captureIDs: [UUID]) {
         for captureID in captureIDs {
             dragExportStore.invalidate(captureID: captureID)
+            historyPresentationKeys.removeValue(forKey: captureID)
             if let card = cardsByID.removeValue(forKey: captureID) {
                 cachedThumbnailBytes = max(0, cachedThumbnailBytes - (card.thumbnailData?.count ?? 0))
             }
@@ -184,8 +188,9 @@ extension ScreenshotShelfManager {
     func handle(_ action: ScreenshotShelfAction) {
         switch action {
         case .edit(let captureID):
+            // The editor suppresses the shelf for as long as its window is open;
+            // hiding here would clear the show intent and lose the shelf for good.
             onEdit?(captureID)
-            hide()
         case .copy(let captureID):
             onCopy?(captureID)
         case .pin(let captureID):

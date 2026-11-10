@@ -1,6 +1,7 @@
 import AppKit
 import CaptureCore
 import HistoryCore
+import ImageIO
 import QuartzCore
 import SharedKit
 import SwiftUI
@@ -19,6 +20,7 @@ final class ScreenshotShelfManager {
     var state: ScreenshotShelfState
     var presentationState = ScreenshotShelfPresentationState()
     var cardsByID: [UUID: ScreenshotShelfCard] = [:]
+    var historyPresentationKeys: [UUID: String] = [:]
     var cachedThumbnailBytes = 0
     var nextCompletionSequence: UInt64 = 0
     var pendingAssetWrites = 0
@@ -35,17 +37,17 @@ final class ScreenshotShelfManager {
         model: viewModel,
         exportStore: dragExportStore,
         dataProvider: { [weak self] captureID in
-            try await self?.originalData(for: captureID)
+            try await self?.presentedData(for: captureID)
         }
     )
     lazy var keyboardController = ScreenshotShelfKeyboardController(
         model: viewModel,
         onCopy: { [weak self] in self?.onCopy?($0) },
-        onOpen: { [weak self] in
-            self?.onEdit?($0)
-            self?.hide()
-        },
+        onOpen: { [weak self] in self?.onEdit?($0) },
         onSave: { [weak self] in self?.onSave?($0) },
+        onOpenMockup: { [weak self] in self?.onInspectMockup?($0) },
+        onToggleMockup: { [weak self] in self?.toggleMockup(captureID: $0) },
+        onCycleMockup: { [weak self] in self?.cycleMockup(captureID: $0) },
         onRemove: { [weak self] in self?.remove(captureID: $0) }
     )
     var phase: ScreenshotShelfPhase = .hidden
@@ -66,8 +68,10 @@ final class ScreenshotShelfManager {
     var captureSuppressionCount = 0
     var isRecordingActive = false
     var isFullScreenSuppressed = false
+    var isEditingSuppressed = false
 
     var onEdit: ((UUID) -> Void)?
+    var onInspectMockup: ((UUID) -> Void)?
     var onCopy: ((UUID) -> Void)?
     var onPin: ((UUID) -> Void)?
     var onSave: ((UUID) -> Void)?
@@ -144,6 +148,8 @@ final class ScreenshotShelfManager {
     @discardableResult
     func captureCompleted(
         _ image: CGImage,
+        presentedImage: CGImage? = nil,
+        mockupStyle: MockupStyle? = nil,
         sourceDisplayID: CGDirectDisplayID? = nil,
         displayScale: CGFloat? = nil
     ) -> UUID? {
@@ -172,15 +178,99 @@ final class ScreenshotShelfManager {
             thumbnailData: nil,
             decodedThumbnail: nil,
             errorMessage: nil,
-            feedbackMessage: nil
+            feedbackMessage: nil,
+            mockupStyle: mockupStyle
         )
         presentationState.captureCompleted()
         preferredDisplayID = sourceDisplayID
         synchronizeCards()
         refreshPresentation()
-        enqueuePreview(image, captureID: captureID)
-        enqueueAssetWrite(image, captureID: captureID)
+        let presented = presentedImage ?? image
+        enqueuePreview(presented, captureID: captureID)
+        enqueueAssetWrite(original: image, presented: presented, captureID: captureID)
         return captureID
+    }
+
+    private func currentMockupPreset() -> MockupPreset {
+        let raw = defaults.string(forKey: PreferenceKeys.captureMockupPreset)
+            ?? PreferenceDefaults.captureMockupPreset
+        return MockupPolicy.preset(for: raw)
+    }
+
+    func setMockupStyle(_ style: MockupStyle?, captureID: UUID) {
+        Task { await applyMockup(style: style, captureID: captureID) }
+    }
+
+    private func toggleMockup(captureID: UUID) {
+        guard let card = cardsByID[captureID] else { return }
+        let style = card.mockupStyle == nil ? currentMockupPreset().style : nil
+        Task { await applyMockup(style: style, captureID: captureID) }
+    }
+
+    private func cycleMockup(captureID: UUID) {
+        guard let card = cardsByID[captureID] else { return }
+        let presets = MockupPreset.allCases
+        let nextIndex: Int
+        if let current = card.mockupStyle,
+           let index = presets.firstIndex(where: { $0.style == current }) {
+            nextIndex = (index + 1) % presets.count
+        } else {
+            nextIndex = presets.firstIndex(of: currentMockupPreset()) ?? 0
+        }
+        Task { await applyMockup(style: presets[nextIndex].style, captureID: captureID) }
+    }
+
+    /// Re-renders a shelf card from its raw capture. The session store keeps the
+    /// original untouched; only the preview and drag artifact are replaced.
+    private func applyMockup(style: MockupStyle?, captureID: UUID) async {
+        guard let data = try? await originalData(for: captureID) else { return }
+        // Decode, full-size render, and both encodes stay off the main actor:
+        // a 6K window/fullscreen capture takes hundreds of milliseconds.
+        guard let rendered = await Task.detached(priority: .userInitiated, operation: {
+            () -> (assets: ScreenshotShelfEncodedAssets, preview: CGImage?)? in
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let rawImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else { return nil }
+            let presented = style.flatMap { MockupRenderer.render(rawImage, style: $0) } ?? rawImage
+            guard let assets = ScreenshotShelfAssetEncoder.encode(presented) else {
+                return nil
+            }
+            return (
+                assets,
+                ScreenshotShelfAssetEncoder.previewImage(from: presented)
+            )
+        }).value else { return }
+
+        // Re-read after awaiting: `linkHistory` or `remove` may have changed the
+        // card while the render was running. Never write back a stale snapshot.
+        guard var card = cardsByID[captureID],
+              state.entries.contains(where: { $0.captureID == captureID })
+        else { return }
+
+        cachedThumbnailBytes = max(0, cachedThumbnailBytes - (card.thumbnailData?.count ?? 0))
+        card.mockupStyle = style
+        card.thumbnailData = rendered.assets.thumbnailData
+        card.decodedThumbnail = rendered.preview
+        cardsByID[captureID] = card
+        cachedThumbnailBytes += rendered.assets.thumbnailData.count
+        await setThumbnail(rendered.assets.thumbnailData, for: captureID)
+
+        dragExportStore.invalidate(captureID: captureID)
+        await dragExportStore.prepare(
+            captureID: captureID,
+            data: rendered.assets.originalData,
+            sourceTypeIdentifier: "public.png"
+        )
+
+        if let historyID = cardsByID[captureID]?.historyID,
+           let history = HistoryActor.shared {
+            let json = style.flatMap { try? JSONEncoder().encode($0) }.flatMap {
+                String(data: $0, encoding: .utf8)
+            }
+            try? await history.updateMockupStyle(id: historyID, styleJSON: json)
+        }
+        synchronizeCards()
+        refreshPresentation()
     }
 
     func toggle() {
@@ -195,7 +285,7 @@ final class ScreenshotShelfManager {
 
     func show() {
         refreshPreferences()
-        guard isEnabled, hasItems, !isRecordingActive else { return }
+        guard isEnabled, hasItems, !isRecordingActive, !isEditingSuppressed else { return }
         cancelCollapseTasks()
         modeState.expand()
         presentationState.show()
@@ -206,6 +296,26 @@ final class ScreenshotShelfManager {
         cancelCollapseTasks()
         presentationState.hide()
         refreshPresentation()
+    }
+
+    /// Hides the shelf for as long as an editor window opened from it is on screen.
+    ///
+    /// Unlike `hide()`, this keeps the user's show intent, so closing the editor can
+    /// restore the shelf instead of losing it until the next capture.
+    func beginEditingSuppression() {
+        guard !isEditingSuppressed else { return }
+        isEditingSuppressed = true
+        presentationState.beginSuppression(.editing)
+        refreshPresentation(immediate: true)
+    }
+
+    /// Releases the editor suppression and restores the shelf if it was showing before.
+    func endEditingSuppression() {
+        guard isEditingSuppressed else { return }
+        isEditingSuppressed = false
+        presentationState.endSuppression(.editing)
+        refreshPresentation()
+        scheduleCollapseIfNeeded()
     }
 
     func beginCaptureSuppression() {
@@ -301,6 +411,31 @@ final class ScreenshotShelfManager {
             return 1
         }
         return displayScale
+    }
+
+    /// Bytes the user sees and drags: the presented image when a mockup is
+    /// applied, otherwise the raw capture. The session store keeps the raw
+    /// original for history/re-edit.
+    func presentedData(for captureID: UUID) async throws -> Data? {
+        if let artifact = await dragExportStore.awaitArtifact(for: captureID) {
+            return try Data(contentsOf: artifact.url)
+        }
+        if let style = cardsByID[captureID]?.mockupStyle,
+           let rawData = try await originalData(for: captureID),
+           let raw = NSImage(data: rawData)?.cgImage(
+               forProposedRect: nil,
+               context: nil,
+               hints: nil
+           ),
+           let rendered = await Task.detached(priority: .userInitiated, operation: {
+               MockupRenderer.render(raw, style: style)
+           }).value,
+           let assets = await Task.detached(priority: .utility, operation: {
+               ScreenshotShelfAssetEncoder.encode(rendered)
+           }).value {
+            return assets.originalData
+        }
+        return try await originalData(for: captureID)
     }
 
     func originalData(for captureID: UUID) async throws -> Data? {

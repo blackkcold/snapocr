@@ -31,6 +31,16 @@ struct MenuBarView: View {
         .globalKeyboardShortcut(.captureFullscreen)
         .disabled(viewModel.isCapturing || viewModel.isRecordingBusy || viewModel.isScrollCaptureActive)
 
+        Button("All Displays Capture") {
+            viewModel.captureAllDisplays()
+        }
+        .disabled(viewModel.isCapturing || viewModel.isRecordingBusy || viewModel.isScrollCaptureActive)
+
+        Button("All Displays (One per Display)") {
+            viewModel.captureEachDisplay()
+        }
+        .disabled(viewModel.isCapturing || viewModel.isRecordingBusy || viewModel.isScrollCaptureActive)
+
         Divider()
 
         Button(viewModel.isScreenshotShelfVisible ? "Hide Screenshot Shelf" : "Show Screenshot Shelf") {

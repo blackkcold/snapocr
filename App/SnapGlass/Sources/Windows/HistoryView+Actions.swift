@@ -1,6 +1,8 @@
 import AppKit
+import CaptureCore
 import HistoryCore
 import ImageIO
+import SharedKit
 import SwiftUI
 
 // MARK: - HistoryView Data Loading & Actions
@@ -61,7 +63,7 @@ extension HistoryView {
             if let entryID = failure.entryID,
                let entry = entries.first(where: { $0.id == entryID }) {
                 actionLabel = AppLocalization.string("Copy Again")
-                action = { Task { await copyImage(entry) } }
+                action = { Task { await copyPresentedImage(entry) } }
             } else {
                 actionLabel = AppLocalization.string("Open Storage Folder")
                 action = { openHistoryFolder() }
@@ -167,21 +169,24 @@ extension HistoryView {
     }
 
     /// Resolves a grid cell's pixel size without touching thumbnail files when
-    /// the entry already carries it.
+    /// the entry already carries it. Adds the presentation padding so the card
+    /// aspect ratio matches the image the grid renders.
     private func pixelSize(for entry: HistoryEntry) async -> CGSize? {
-        if let size = entry.imagePixelSize { return size }
-        if let cached = thumbnailSizes[entry.id] { return cached }
-        guard let history else { return nil }
-        guard let data = try? await history.thumbnailData(for: entry.id) else { return nil }
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
-            return nil
+        let raw: CGSize
+        if let size = entry.imagePixelSize {
+            raw = size
+        } else {
+            guard let history,
+                  let data = try? await history.thumbnailData(for: entry.id),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+                  let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
+            else { return nil }
+            raw = CGSize(width: width.doubleValue, height: height.doubleValue)
         }
-        guard
-            let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-            let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
-        else { return nil }
-        return CGSize(width: width.doubleValue, height: height.doubleValue)
+        guard let style = HistoryMockupPresenter.style(from: entry) else { return raw }
+        return MockupRenderer.outputSize(for: raw, style: style)
     }
 
     func deleteEntry(_ entry: HistoryEntry) async {
@@ -296,6 +301,60 @@ extension HistoryView {
         }
     }
 
+    /// Copies the image the user sees: styled when a presentation exists,
+    /// otherwise the raw capture.
+    func copyPresentedImage(_ entry: HistoryEntry) async {
+        guard let history else { return }
+        guard let image = await HistoryMockupPresenter.presentedImage(
+            for: entry,
+            history: history
+        ) else {
+            reportFailure(.copy, message: AppLocalization.string("Unable to copy image"), entryID: entry.id)
+            return
+        }
+        let nsImage = NSImage(
+            cgImage: image,
+            size: NSSize(width: image.width, height: image.height)
+        )
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.writeObjects([nsImage]) else {
+            reportFailure(.copy, message: AppLocalization.string("Unable to copy image"), entryID: entry.id)
+            return
+        }
+        showToast(AppLocalization.string("Screenshot copied to clipboard"))
+    }
+
+    func presentMockupInspector(for entry: HistoryEntry) async {
+        guard let history,
+              let raw = await HistoryMockupPresenter.rawImage(for: entry, history: history)
+        else { return }
+
+        let presetID = UserDefaults.standard.string(forKey: PreferenceKeys.captureMockupPreset)
+            ?? PreferenceDefaults.captureMockupPreset
+        let style = HistoryMockupPresenter.style(from: entry)
+            ?? MockupPolicy.style(for: presetID)
+
+        MockupInspectorPanel.show(
+            rawImage: raw,
+            style: style,
+            onStyleChanged: { style in
+                let json = HistoryMockupPresenter.styleJSON(for: style)
+                Task {
+                    try? await history.updateMockupStyle(id: entry.id, styleJSON: json)
+                    await loadEntries()
+                }
+            },
+            onEdit: { style in
+                captureViewModel.openEditor(
+                    with: raw,
+                    captureMode: entry.captureMode,
+                    sourceEntryID: entry.id,
+                    mockupStyle: style
+                )
+            }
+        )
+    }
+
     func openInEditor(_ entry: HistoryEntry) async {
         guard let history else { return }
         do {
@@ -323,7 +382,8 @@ extension HistoryView {
             captureViewModel.openEditor(
                 with: image,
                 captureMode: entry.captureMode,
-                sourceEntryID: entry.id
+                sourceEntryID: entry.id,
+                mockupStyle: HistoryMockupPresenter.style(from: entry)
             )
         } catch {
             reportFailure(.action, message: error.localizedDescription)

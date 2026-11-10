@@ -25,6 +25,13 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
     /// 单帧捕获超时时间（毫秒）
     private static let captureTimeoutMs: Int = 5_000
 
+    /// A captured window image plus the metadata the rest of the pipeline needs
+    /// to keep shelf placement and pin geometry honest.
+    private struct WindowCaptureOutcome {
+        let image: CGImage
+        let displayInfo: CaptureDisplayInfo
+    }
+
     init(logger: Logger = Logger(category: "sck-adapter")) {
         self.logger = logger
     }
@@ -122,6 +129,7 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         await PermissionService(logger: logger).checkScreenCapturePermission()
     }
 
+    // swiftlint:disable function_body_length
     /// Captures a scaled still image suitable for a window-picker preview.
     ///
     /// When `content` is provided it is reused, avoiding a second
@@ -144,33 +152,104 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         guard let window = resolvedContent.windows.first(where: { $0.windowID == windowID }) else {
             throw CaptureError.windowNotFound
         }
-        guard let display = display(containing: window, from: resolvedContent.displays) else {
-            throw CaptureError.displayUnavailable
-        }
-
-        let pointSize = window.frame.size
-        guard pointSize.width > 0, pointSize.height > 0,
-              maximumSize.width > 0, maximumSize.height > 0 else {
+        guard maximumSize.width > 0, maximumSize.height > 0 else {
             throw CaptureError.captureFailed(reason: "Invalid window thumbnail size")
         }
 
-        let outputSize = thumbnailOutputSize(
-            pointSize: pointSize,
-            maximumSize: maximumSize,
-            display: display
+        if #available(macOS 14.0, *) {
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            let contentRect = filter.contentRect
+            guard contentRect.width > 0, contentRect.height > 0 else {
+                throw CaptureError.captureFailed(reason: "Window has no capturable content")
+            }
+
+            let nativeScale = max(CGFloat(filter.pointPixelScale), 1)
+            let maximumPixelSize = CGSize(
+                width: maximumSize.width * min(nativeScale, 2),
+                height: maximumSize.height * min(nativeScale, 2)
+            )
+            let outputSize = Self.thumbnailOutputSize(
+                contentPixelSize: CGSize(
+                    width: contentRect.width * nativeScale,
+                    height: contentRect.height * nativeScale
+                ),
+                maximumPixelSize: maximumPixelSize
+            )
+
+            let configuration = SCStreamConfiguration()
+            configuration.width = max(1, Int(outputSize.width))
+            configuration.height = max(1, Int(outputSize.height))
+            configuration.scalesToFit = false
+            configuration.preservesAspectRatio = true
+            configuration.captureResolution = .best
+            configuration.ignoreShadowsSingleWindow = true
+            configuration.shouldBeOpaque = false
+            configuration.showsCursor = false
+            configuration.capturesAudio = false
+
+            return try await captureStillImage(filter: filter, configuration: configuration)
+        }
+
+        let plan = WindowCapturePlan.make(
+            windowID: window.windowID,
+            windowFrame: window.frame,
+            displays: resolvedContent.displays.map(Self.captureDisplay),
+            usesDesktopIndependentWindow: false
+        )
+        guard let plan else { throw CaptureError.displayUnavailable }
+
+        let maximumPixelSize = CGSize(
+            width: maximumSize.width * min(max(plan.pointPixelScale, 1), 2),
+            height: maximumSize.height * min(max(plan.pointPixelScale, 1), 2)
+        )
+        let displayByID = Dictionary(
+            uniqueKeysWithValues: resolvedContent.displays.map { ($0.displayID, $0) }
+        )
+
+        if plan.strategy == .displaySegments {
+            let thumbnailPlan = plan.scaledForThumbnail(maxPixelSize: maximumPixelSize)
+            var slices: [(segment: WindowCaptureSegment, image: CGImage)] = []
+            slices.reserveCapacity(thumbnailPlan.segments.count)
+            for segment in thumbnailPlan.segments {
+                guard let display = displayByID[segment.displayID] else {
+                    throw CaptureError.displayUnavailable
+                }
+                let image = try await captureWindowSegment(
+                    window,
+                    display: display,
+                    segment: segment
+                )
+                slices.append((segment, image))
+            }
+            return try compositeWindowSlices(slices, plan: thumbnailPlan)
+        }
+
+        guard let segment = plan.segments.first,
+              let display = displayByID[segment.displayID]
+        else {
+            throw CaptureError.displayUnavailable
+        }
+        let outputSize = Self.thumbnailOutputSize(
+            contentPixelSize: CGSize(
+                width: segment.visibleRect.width * segment.pixelScale,
+                height: segment.visibleRect.height * segment.pixelScale
+            ),
+            maximumPixelSize: maximumPixelSize
         )
 
         let filter = SCContentFilter(display: display, including: [window])
         let configuration = SCStreamConfiguration()
-        configuration.width = outputSize.width
-        configuration.height = outputSize.height
+        configuration.sourceRect = segment.sourceRect
+        configuration.width = max(1, Int(outputSize.width))
+        configuration.height = max(1, Int(outputSize.height))
+        configuration.scalesToFit = false
         configuration.showsCursor = false
         configuration.capturesAudio = false
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 5)
-        configuration.queueDepth = 1
 
         return try await captureStillImage(filter: filter, configuration: configuration)
     }
+
+    // swiftlint:enable function_body_length
 
     /// Captures one still frame with the fastest engine available on this OS.
     ///
@@ -202,43 +281,63 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         )
     }
 
-    /// 计算缩略图的物理像素输出尺寸，让 ScreenCaptureKit 的 GPU 管线缩放。
-    private func thumbnailOutputSize(
-        pointSize: CGSize,
-        maximumSize: CGSize,
-        display: SCDisplay
-    ) -> (width: Int, height: Int) {
-        // Compute the output size in *physical* pixels so thumbnails stay sharp on
-        // Retina displays, then let ScreenCaptureKit's GPU pipeline scale down the
-        // streamed frame (faster and higher quality than a CPU resize).
-        let backing = Self.pixelScale(imageWidth: display.width, displayFrame: display.frame)
-        let pixelSize = CGSize(
-            width: pointSize.width * backing,
-            height: pointSize.height * backing
-        )
+    /// Aspect-fits a thumbnail into a pixel box without ever upscaling.
+    ///
+    /// ScreenCaptureKit's GPU pipeline performs the actual downscale; keeping the
+    /// arithmetic here makes the cap testable and prevents the old `×3` margin
+    /// from silently making previews larger than the row that displays them.
+    static func thumbnailOutputSize(
+        contentPixelSize: CGSize,
+        maximumPixelSize: CGSize
+    ) -> CGSize {
+        guard contentPixelSize.width > 0, contentPixelSize.height > 0,
+              maximumPixelSize.width > 0, maximumPixelSize.height > 0
+        else { return .zero }
+
         let scale = min(
-            maximumSize.width / pointSize.width,
-            maximumSize.height / pointSize.height,
+            maximumPixelSize.width / contentPixelSize.width,
+            maximumPixelSize.height / contentPixelSize.height,
             1
         )
+        return CGSize(
+            width: max(1, (contentPixelSize.width * scale).rounded()),
+            height: max(1, (contentPixelSize.height * scale).rounded())
+        )
+    }
 
-        // Cap the physical output to avoid allocating huge buffers for very large
-        // windows (e.g. 4K+). 640pt max is plenty for an ~84pt table row.
-        let cappedMaxWidth = max(1, Int((maximumSize.width * backing).rounded(.up)))
-        let cappedMaxHeight = max(1, Int((maximumSize.height * backing).rounded(.up)))
-        let outputWidth = min(
-            max(1, Int((pixelSize.width * scale).rounded(.up))),
-            cappedMaxWidth * 3
+    static func captureDisplay(_ display: SCDisplay) -> WindowCaptureDisplay {
+        let scale = nativeScale(for: display)
+        return WindowCaptureDisplay(
+            displayID: display.displayID,
+            frame: display.frame,
+            pixelSize: CGSize(
+                width: display.frame.width * scale,
+                height: display.frame.height * scale
+            )
         )
-        let outputHeight = min(
-            max(1, Int((pixelSize.height * scale).rounded(.up))),
-            cappedMaxHeight * 3
-        )
-        return (outputWidth, outputHeight)
+    }
+
+    /// `SCDisplay.width/height` are points, not backing pixels. Use the
+    /// matching `NSScreen` for the real Retina scale and only fall back to 1x.
+    static func nativeScale(for display: SCDisplay) -> CGFloat {
+        if let screen = NSScreen.screens.first(where: { screen in
+            guard let number = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? UInt32 else { return false }
+            return number == display.displayID
+        }) {
+            return max(1, screen.backingScaleFactor)
+        }
+        return 1
     }
 }
 
 extension SCKAdapter {
+    /// Captures one display for the all-display canvas composer.
+    func captureDisplay(_ display: SCDisplay, options: CaptureOptions) async throws -> CGImage {
+        try await captureDisplayImage(display, options: options)
+    }
+
     /// 全屏截图
     private func captureFullscreen(
         content: SCShareableContent,
@@ -299,24 +398,17 @@ extension SCKAdapter {
 
         logger.info("Capturing window \(windowID)")
 
-        let image = try await captureWindowImage(
+        let outcome = try await captureWindowImage(
             window,
             displays: content.displays,
             options: options
         )
 
-        let displayInfo = CaptureDisplayInfo(
-            displayID: 0,
-            scaleFactor: options.preferredScaleFactor,
-            frame: window.frame,
-            pointWidth: window.frame.width
-        )
-
         return CaptureResult(
-            image: image,
+            image: outcome.image,
             captureMode: .window(windowID),
             timestamp: timestamp,
-            displayInfo: displayInfo
+            displayInfo: outcome.displayInfo
         )
     }
 
@@ -385,54 +477,223 @@ extension SCKAdapter {
         return image
     }
 
-    /// 使用 SCStream 捕获窗口的单帧图像。
+    /// Captures a window without ever mixing display and window coordinate spaces.
     ///
-    /// `SCContentFilter(display:including:)` streams the entire display region, so the
-    /// raw frame is full-screen with the surrounding desktop rendered black. Crop the
-    /// output to the window's visible bounds (frame ∩ display) so the result is a clean
-    /// high-resolution window image, handling partially-offscreen windows gracefully.
+    /// macOS 14+ asks ScreenCaptureKit for the window's own content rect and pixel
+    /// scale. macOS 13 uses one `sourceRect` slice per display and composites only
+    /// when the window actually spans displays. No path crops the result again.
     private func captureWindowImage(
         _ window: SCWindow,
         displays: [SCDisplay],
         options: CaptureOptions
-    ) async throws -> CGImage {
-        let display = window.frame.width > 0 ? display(containing: window, from: displays) : nil
-        guard let targetDisplay = display else {
+    ) async throws -> WindowCaptureOutcome {
+        let descriptors = displays.map(Self.captureDisplay)
+
+        if #available(macOS 14.0, *) {
+            return try await captureDesktopIndependentWindow(
+                window,
+                displays: displays,
+                descriptors: descriptors,
+                options: options
+            )
+        }
+
+        return try await captureDisplaySegmentedWindow(
+            window,
+            displays: displays,
+            descriptors: descriptors,
+            options: options
+        )
+    }
+
+    @available(macOS 14.0, *)
+    private func captureDesktopIndependentWindow(
+        _ window: SCWindow,
+        displays: [SCDisplay],
+        descriptors: [WindowCaptureDisplay],
+        options: CaptureOptions
+    ) async throws -> WindowCaptureOutcome {
+        let plan = WindowCapturePlan.make(
+            windowID: window.windowID,
+            windowFrame: window.frame,
+            displays: descriptors,
+            usesDesktopIndependentWindow: true,
+            highResolution: options.highResolution
+        )
+        guard let plan else { throw CaptureError.displayUnavailable }
+
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let contentRect = filter.contentRect
+        guard contentRect.width > 0, contentRect.height > 0 else {
+            throw CaptureError.captureFailed(reason: "Window has no capturable content")
+        }
+
+        let pointScale = options.highResolution
+            ? max(CGFloat(filter.pointPixelScale), 1)
+            : 1
+        let expectedSize = WindowCapturePlan.desktopIndependentOutputSize(
+            contentRect: contentRect,
+            pointPixelScale: pointScale
+        )
+
+        let configuration = SCStreamConfiguration()
+        configuration.width = max(1, Int(expectedSize.width))
+        configuration.height = max(1, Int(expectedSize.height))
+        configuration.scalesToFit = false
+        configuration.preservesAspectRatio = true
+        configuration.captureResolution = .best
+        configuration.ignoreShadowsSingleWindow = true
+        configuration.ignoreGlobalClipSingleWindow = true
+        configuration.shouldBeOpaque = false
+        configuration.showsCursor = options.includeCursor
+        configuration.capturesAudio = false
+
+        let image = try await captureStillImage(filter: filter, configuration: configuration)
+        if abs(image.width - Int(expectedSize.width)) > 2
+            || abs(image.height - Int(expectedSize.height)) > 2 {
+            logger.warning(
+                "Window \(window.windowID) produced \(image.width)x\(image.height), "
+                    + "expected \(Int(expectedSize.width))x\(Int(expectedSize.height))"
+            )
+        }
+
+        let displayInfo = CaptureDisplayInfo(
+            displayID: plan.displayID ?? 0,
+            scaleFactor: pointScale,
+            frame: plan.displayFrame ?? window.frame,
+            pointWidth: contentRect.width
+        )
+        return WindowCaptureOutcome(image: image, displayInfo: displayInfo)
+    }
+
+    private func captureDisplaySegmentedWindow(
+        _ window: SCWindow,
+        displays: [SCDisplay],
+        descriptors: [WindowCaptureDisplay],
+        options: CaptureOptions
+    ) async throws -> WindowCaptureOutcome {
+        guard let plan = WindowCapturePlan.make(
+            windowID: window.windowID,
+            windowFrame: window.frame,
+            displays: descriptors,
+            usesDesktopIndependentWindow: false,
+            highResolution: options.highResolution
+        ) else {
             throw CaptureError.displayUnavailable
         }
 
-        let filter = SCContentFilter(display: targetDisplay, including: [window])
-        let streamConfig = SCStreamConfiguration()
-        let scale = Self.outputScale(for: targetDisplay, options: options)
-        streamConfig.width = max(1, Int((window.frame.width * scale).rounded(.up)))
-        streamConfig.height = max(1, Int((window.frame.height * scale).rounded(.up)))
-        streamConfig.showsCursor = options.includeCursor
-        streamConfig.capturesAudio = false
-
-        let image = try await captureStillImage(filter: filter, configuration: streamConfig)
-
-        let visibleBounds = window.frame.intersection(targetDisplay.frame)
-        guard !visibleBounds.isEmpty else {
-            logger.warning("Window \(window.windowID) has no visible bounds on its display; returning uncropped frame")
-            return image
-        }
-
-        let windowCrop = Self.pixelCropRect(
-            areaRect: visibleBounds,
-            displayFrame: targetDisplay.frame,
-            imageSize: CGSize(width: image.width, height: image.height)
+        let displayByID = Dictionary(
+            uniqueKeysWithValues: displays.map { ($0.displayID, $0) }
         )
 
-        guard let windowCrop, let cropped = image.cropping(to: windowCrop) else {
-            logger.warning("Window \(window.windowID): crop computation failed, returning uncropped frame")
-            return image
+        guard let firstSegment = plan.segments.first else {
+            throw CaptureError.captureFailed(reason: "Window has no visible display slice")
         }
 
-        return cropped
+        if plan.strategy == .singleDisplaySourceRect {
+            guard let display = displayByID[firstSegment.displayID] else {
+                throw CaptureError.displayUnavailable
+            }
+            let image = try await captureWindowSegment(
+                window,
+                display: display,
+                segment: firstSegment
+            )
+            let displayInfo = CaptureDisplayInfo(
+                displayID: firstSegment.displayID,
+                scaleFactor: firstSegment.pixelScale,
+                frame: firstSegment.displayFrame,
+                pointWidth: firstSegment.visibleRect.width
+            )
+            return WindowCaptureOutcome(image: image, displayInfo: displayInfo)
+        }
+
+        var slices: [(segment: WindowCaptureSegment, image: CGImage)] = []
+        slices.reserveCapacity(plan.segments.count)
+        for segment in plan.segments {
+            guard let display = displayByID[segment.displayID] else {
+                throw CaptureError.displayUnavailable
+            }
+            do {
+                let image = try await captureWindowSegment(
+                    window,
+                    display: display,
+                    segment: segment
+                )
+                slices.append((segment, image))
+            } catch {
+                throw CaptureError.captureFailed(
+                    reason: "Display \(segment.displayID) slice failed: \(error.localizedDescription)"
+                )
+            }
+        }
+
+        let image = try compositeWindowSlices(slices, plan: plan)
+        let displayInfo = CaptureDisplayInfo(
+            displayID: plan.displayID ?? firstSegment.displayID,
+            scaleFactor: plan.pointPixelScale,
+            frame: plan.displayFrame ?? firstSegment.displayFrame,
+            pointWidth: plan.contentRect.width
+        )
+        logger.info(
+            "Stitched window \(window.windowID) from \(slices.count) display slices "
+                + "at \(image.width)x\(image.height)"
+        )
+        return WindowCaptureOutcome(image: image, displayInfo: displayInfo)
     }
 
-    private func display(containing window: SCWindow, from displays: [SCDisplay]) -> SCDisplay? {
-        let windowCenter = CGPoint(x: window.frame.midX, y: window.frame.midY)
-        return displays.first { $0.frame.contains(windowCenter) } ?? displays.first
+    private func captureWindowSegment(
+        _ window: SCWindow,
+        display: SCDisplay,
+        segment: WindowCaptureSegment
+    ) async throws -> CGImage {
+        let filter = SCContentFilter(display: display, including: [window])
+        let configuration = SCStreamConfiguration()
+        configuration.sourceRect = segment.sourceRect
+        configuration.width = max(1, Int(segment.capturePixelSize.width))
+        configuration.height = max(1, Int(segment.capturePixelSize.height))
+        configuration.scalesToFit = false
+        configuration.showsCursor = false
+        configuration.capturesAudio = false
+        return try await captureStillImage(filter: filter, configuration: configuration)
+    }
+
+    private func compositeWindowSlices(
+        _ slices: [(segment: WindowCaptureSegment, image: CGImage)],
+        plan: WindowCapturePlan
+    ) throws -> CGImage {
+        let width = max(1, Int(plan.outputPixelSize.width))
+        let height = max(1, Int(plan.outputPixelSize.height))
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: colorSpace,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else {
+            throw CaptureError.captureFailed(reason: "Unable to create window stitch canvas")
+        }
+
+        context.interpolationQuality = .high
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        for slice in slices {
+            let segment = slice.segment
+            let destination = CGRect(
+                x: segment.outputOrigin.x,
+                y: CGFloat(height) - segment.outputOrigin.y - segment.outputPixelSize.height,
+                width: segment.outputPixelSize.width,
+                height: segment.outputPixelSize.height
+            )
+            context.draw(slice.image, in: destination)
+        }
+
+        guard let image = context.makeImage() else {
+            throw CaptureError.captureFailed(reason: "Unable to render stitched window")
+        }
+        return image
     }
 }

@@ -1,6 +1,7 @@
 import AnnotationCore
 import AppKit
 import BarcodeCore
+import CaptureCore
 import HistoryCore
 import OCRCore
 import SharedKit
@@ -200,12 +201,15 @@ public final class EditorViewModel: ObservableObject {
   let cropSignposter = OSSignposter(subsystem: "com.snapglass.app", category: "crop")
   let recognizeImage: @Sendable (CGImage, OCROptions) async throws -> OCRResult
   let detectBarcodes: @Sendable (CGImage, [BarcodeType]) async throws -> [BarcodeResult]
-  let historySaver: @Sendable (CGImage, EditorHistorySaveMode, UUID?) async throws -> Void
+  let historySaver: @Sendable (CGImage, EditorHistorySaveMode, UUID?, MockupStyle?) async throws -> Void
   /// The history record this image was saved as.
   ///
   /// Capture opens the editor before the (slower) history write finishes, so
   /// this is filled in later via `attachSourceEntry(_:)`.
   @Published public private(set) var sourceEntryID: UUID?
+  /// Presentation style carried from capture; applied on export, never baked
+  /// into the editable base image.
+  public var mockupStyle: MockupStyle?
   private var pendingTextPoint: CGPoint?
   private var editingTextNodeID: UUID?
   var ocrTask: Task<Void, Never>?
@@ -222,7 +226,7 @@ public final class EditorViewModel: ObservableObject {
     interactor: AnnotationInteractor = AnnotationInteractor(),
     ocrPipeline: OCRPipeline = OCRPipeline(),
     barcodeEngine: VisionBarcodeEngine = VisionBarcodeEngine(),
-    historySaver: (@Sendable (CGImage, EditorHistorySaveMode, UUID?) async throws -> Void)? = nil
+    historySaver: (@Sendable (CGImage, EditorHistorySaveMode, UUID?, MockupStyle?) async throws -> Void)? = nil
   ) {
     self.interactor = interactor
     self.supportsVerticalTrim = context.supportsVerticalTrim
@@ -234,6 +238,7 @@ public final class EditorViewModel: ObservableObject {
       try await barcodeEngine.detect(in: image, types: types)
     }
     self.sourceEntryID = context.sourceEntryID
+    self.mockupStyle = context.mockupStyle
     self.historySaver = historySaver ?? Self.defaultHistorySaver
     if let image {
       self.document = interactor.createDocument(from: image)

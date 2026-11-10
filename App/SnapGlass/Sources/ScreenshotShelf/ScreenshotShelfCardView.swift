@@ -86,6 +86,17 @@ struct ScreenshotShelfCardView: View {
                 removeButton
             }
         }
+        .overlay(alignment: .topLeading) {
+            if card.isMockup {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 16, height: 16)
+                    .background(.black.opacity(0.45), in: Circle())
+                    .padding(5)
+                    .accessibilityLabel(Text("Beautified"))
+            }
+        }
         .overlay(alignment: .bottomLeading) {
             feedback
         }
@@ -94,12 +105,21 @@ struct ScreenshotShelfCardView: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let image = card.decodedThumbnail {
-            Image(decorative: image, scale: 1)
-                .resizable()
-                .scaledToFill()
-                .opacity(imageOpacity)
-                .frame(width: cardWidth, height: cardHeight)
-                .clipped()
+            if card.isMockup {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .scaledToFit()
+                    .opacity(imageOpacity)
+                    .frame(width: cardWidth, height: cardHeight)
+                    .background(.quaternary)
+            } else {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .scaledToFill()
+                    .opacity(imageOpacity)
+                    .frame(width: cardWidth, height: cardHeight)
+                    .clipped()
+            }
         }
     }
 

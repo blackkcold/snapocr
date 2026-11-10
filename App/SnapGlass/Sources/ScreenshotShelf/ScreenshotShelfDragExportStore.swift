@@ -38,7 +38,8 @@ final class ScreenshotShelfDragExportStore {
     private var revisions: [UUID: String] = [:]
     private var tasks: [UUID: Task<Artifact?, Never>] = [:]
     private var invalidatedIDs: Set<UUID> = []
-    private var invalidationGeneration = 0
+    private var generations: [UUID: Int] = [:]
+    private var dataDigests: [UUID: Int] = [:]
 
     init(
         rootDirectory: URL? = nil,
@@ -69,20 +70,31 @@ final class ScreenshotShelfDragExportStore {
         sourceTypeIdentifier: String?,
         revision: String? = nil
     ) async -> Artifact? {
-        if let existing = artifact(for: captureID) {
+        let digest = data.hashValue
+        if let existing = artifact(for: captureID), dataDigests[captureID] == digest {
             return existing
         }
-        if let task = tasks[captureID] {
+        if let task = tasks[captureID], dataDigests[captureID] == digest {
             return await task.value
         }
         guard let sessionDirectory else { return nil }
+
+        // A new data version supersedes any old write immediately. The old task
+        // may still finish, but its generation check below rejects the result.
+        tasks[captureID]?.cancel()
+        tasks[captureID] = nil
+        if let stale = artifacts.removeValue(forKey: captureID) {
+            try? FileManager.default.removeItem(at: stale.url)
+        }
+        revisions[captureID] = nil
+        let generation = (generations[captureID] ?? 0) + 1
+        generations[captureID] = generation
+        dataDigests[captureID] = digest
 
         invalidatedIDs.remove(captureID)
         let date = now()
         let timeZone = timeZone
         let identifier = sourceTypeIdentifier
-
-        let generation = invalidationGeneration
 
         let task = Task { [weak self] () -> Artifact? in
             let artifact = await dragExportWriter.write(
@@ -94,11 +106,15 @@ final class ScreenshotShelfDragExportStore {
             )
 
             guard let self else { return artifact }
+            guard self.generations[captureID] == generation else {
+                if let artifact {
+                    try? FileManager.default.removeItem(at: artifact.url)
+                }
+                return nil
+            }
             self.tasks[captureID] = nil
             guard let artifact else { return nil }
-            guard generation == self.invalidationGeneration,
-                !self.invalidatedIDs.contains(captureID)
-            else {
+            guard !self.invalidatedIDs.contains(captureID) else {
                 try? FileManager.default.removeItem(at: artifact.url)
                 return nil
             }
@@ -111,6 +127,16 @@ final class ScreenshotShelfDragExportStore {
             return artifact
         }
         tasks[captureID] = task
+        return await task.value
+    }
+
+    /// Waits for an in-flight write so copying right after capture never falls
+    /// back to the raw image while the presented artifact is still encoding.
+    func awaitArtifact(for captureID: UUID) async -> Artifact? {
+        if let existing = artifact(for: captureID) {
+            return existing
+        }
+        guard let task = tasks[captureID] else { return nil }
         return await task.value
     }
 
@@ -133,6 +159,8 @@ final class ScreenshotShelfDragExportStore {
     /// Removes the plaintext copy after the card's bytes changed or the card left the shelf.
     func invalidate(captureID: UUID) {
         invalidatedIDs.insert(captureID)
+        generations[captureID] = (generations[captureID] ?? 0) + 1
+        dataDigests[captureID] = nil
         tasks[captureID]?.cancel()
         tasks[captureID] = nil
         revisions[captureID] = nil
@@ -148,8 +176,9 @@ final class ScreenshotShelfDragExportStore {
         tasks.removeAll()
         artifacts.removeAll()
         revisions.removeAll()
+        generations.removeAll()
+        dataDigests.removeAll()
         invalidatedIDs.removeAll()
-        invalidationGeneration &+= 1
         guard let sessionDirectory else { return }
         try? FileManager.default.removeItem(at: sessionDirectory)
         try? FileManager.default.createDirectory(

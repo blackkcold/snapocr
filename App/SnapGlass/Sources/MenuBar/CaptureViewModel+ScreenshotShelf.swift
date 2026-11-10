@@ -7,6 +7,13 @@ import UniformTypeIdentifiers
 extension CaptureViewModel {
     /// Toggles the recent screenshot shelf when it can be shown.
     public func toggleScreenshotShelf() {
+        if screenshotShelfManager.isEditingSuppressed {
+            showToast(
+                message: AppLocalization.string("Close the editor to show the screenshot shelf"),
+                type: .info
+            )
+            return
+        }
         screenshotShelfManager.toggle()
     }
 
@@ -36,6 +43,9 @@ extension CaptureViewModel {
         screenshotShelfManager.onEdit = { [weak self] in
             self?.editScreenshotShelfItem(captureID: $0)
         }
+        screenshotShelfManager.onInspectMockup = { [weak self] in
+            self?.inspectScreenshotShelfMockup(captureID: $0)
+        }
         screenshotShelfManager.onCopy = { [weak self] in
             self?.copyScreenshotShelfItem(captureID: $0)
         }
@@ -54,6 +64,9 @@ extension CaptureViewModel {
         screenshotShelfManager.onCacheFailure = { [weak self] message in
             self?.showToast(message: message, type: .error)
         }
+        editorWorkspace.onWindowClosed = { [weak self] in
+            self?.screenshotShelfManager.endEditingSuppression()
+        }
         screenshotShelfManager.publishCurrentState()
     }
 
@@ -70,7 +83,13 @@ extension CaptureViewModel {
         Task { [weak self] in
             guard let self, let image = await loadScreenshotShelfImage(captureID: captureID) else { return }
             let historyID = screenshotShelfManager.historyID(for: captureID)
-            if openEditor(with: image, captureMode: "screenshot-shelf", sourceEntryID: historyID) != nil {
+            let mockupStyle = screenshotShelfManager.card(for: captureID)?.mockupStyle
+            if openEditor(
+                with: image,
+                captureMode: "screenshot-shelf",
+                sourceEntryID: historyID,
+                mockupStyle: mockupStyle
+            ) != nil {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
                     message: .localizedKey("Opened in editor"),
@@ -80,9 +99,42 @@ extension CaptureViewModel {
         }
     }
 
+    private func inspectScreenshotShelfMockup(captureID: UUID) {
+        Task { [weak self] in
+            guard let self,
+                  let image = await loadScreenshotShelfImage(captureID: captureID),
+                  let card = screenshotShelfManager.card(for: captureID)
+            else { return }
+
+            let presetID = UserDefaults.standard.string(
+                forKey: PreferenceKeys.captureMockupPreset
+            ) ?? PreferenceDefaults.captureMockupPreset
+            let style = card.mockupStyle ?? MockupPolicy.style(for: presetID)
+            let historyID = screenshotShelfManager.historyID(for: captureID)
+
+            MockupInspectorPanel.show(
+                rawImage: image,
+                style: style,
+                onStyleChanged: { [weak self] style in
+                    self?.screenshotShelfManager.setMockupStyle(style, captureID: captureID)
+                },
+                onEdit: { [weak self] style in
+                    _ = self?.openEditor(
+                        with: image,
+                        captureMode: "screenshot-shelf",
+                        sourceEntryID: historyID,
+                        mockupStyle: style
+                    )
+                }
+            )
+        }
+    }
+
     private func copyScreenshotShelfItem(captureID: UUID) {
         Task { [weak self] in
-            guard let self, let image = await loadScreenshotShelfImage(captureID: captureID) else { return }
+            guard let self,
+                  let image = await loadScreenshotShelfPresentedImage(captureID: captureID)
+            else { return }
             if await writeImageToClipboard(image) {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
@@ -127,7 +179,7 @@ extension CaptureViewModel {
     private func saveScreenshotShelfItem(captureID: UUID) {
         Task { [weak self] in
             guard let self else { return }
-            guard let image = await loadScreenshotShelfImage(captureID: captureID) else {
+            guard let image = await loadScreenshotShelfPresentedImage(captureID: captureID) else {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
                     message: .localizedKey("Unable to load screenshot"),
@@ -166,6 +218,19 @@ extension CaptureViewModel {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         return "SnapGlass_\(formatter.string(from: Date())).png"
+    }
+
+    private func loadScreenshotShelfPresentedImage(captureID: UUID) async -> CGImage? {
+        do {
+            guard let data = try await screenshotShelfManager.presentedData(for: captureID),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                return await loadScreenshotShelfImage(captureID: captureID)
+            }
+            return image
+        } catch {
+            return await loadScreenshotShelfImage(captureID: captureID)
+        }
     }
 
     private func loadScreenshotShelfImage(captureID: UUID) async -> CGImage? {

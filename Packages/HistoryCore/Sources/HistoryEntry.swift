@@ -92,6 +92,10 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     public var pixelWidth: Int?
     public var pixelHeight: Int?
 
+    /// JSON-encoded presentation style. The canonical image stays untouched;
+    /// history can re-render or offer "copy original" later.
+    public var mockupStyleJSON: String?
+
     /// Pixel size for layout, falling back to the preferred aspect when unknown.
     public var imagePixelSize: CGSize? {
         guard let pixelWidth, let pixelHeight,
@@ -129,7 +133,8 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         thumbnailPath: URL? = nil,
         isFavourite: Bool = false,
         tags: [String] = [],
-        isProtected: Bool = false
+        isProtected: Bool = false,
+        mockupStyleJSON: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -146,6 +151,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         self.isProtected = isProtected
         self.pixelWidth = nil
         self.pixelHeight = nil
+        self.mockupStyleJSON = mockupStyleJSON
     }
 
     // MARK: - Codable
@@ -154,7 +160,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         case id, timestamp, textContent, ocrConfidence, captureMode
         case sourceType, sourceAppName, sourceWindowTitle
         case imagePath, thumbnailPath, isFavourite, tags
-        case imageRevision, isProtected, pixelWidth, pixelHeight
+        case imageRevision, isProtected, pixelWidth, pixelHeight, mockupStyleJSON
     }
 
     /// 自定义解码以兼容不含 `isProtected` 键的旧记录。
@@ -178,6 +184,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
         tags = try container.decode([String].self, forKey: .tags)
         imageRevision = try container.decodeIfPresent(UUID.self, forKey: .imageRevision)
         isProtected = try container.decodeIfPresent(Bool.self, forKey: .isProtected) ?? false
+        mockupStyleJSON = try container.decodeIfPresent(String.self, forKey: .mockupStyleJSON)
         pixelWidth = try container.decodeIfPresent(Int.self, forKey: .pixelWidth)
         pixelHeight = try container.decodeIfPresent(Int.self, forKey: .pixelHeight)
     }

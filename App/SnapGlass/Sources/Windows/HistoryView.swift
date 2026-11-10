@@ -214,7 +214,7 @@ struct HistoryView: View {
                     guard let id = selectedEntryID,
                           let selected = visibleEntries.first(where: { $0.id == id })
                     else { return }
-                    Task { await copyImage(selected) }
+                    Task { await copyPresentedImage(selected) }
                 } label: {
                     EmptyView()
                 }
@@ -313,9 +313,36 @@ struct HistoryView: View {
 
         Button {
             selectedEntryID = entry.id
-            Task { await copyImage(entry) }
+            Task { await copyPresentedImage(entry) }
         } label: {
             Label(AppLocalization.string("Copy Image"), systemImage: "photo.on.rectangle")
+        }
+
+        if entry.mockupStyleJSON != nil {
+            Button {
+                selectedEntryID = entry.id
+                Task { await copyImage(entry) }
+            } label: {
+                Label(AppLocalization.string("Copy Unstyled Image"), systemImage: "photo")
+            }
+        }
+
+        Button {
+            selectedEntryID = entry.id
+            Task { await presentMockupInspector(for: entry) }
+        } label: {
+            Label(AppLocalization.string("Beautify…"), systemImage: "wand.and.stars")
+        }
+
+        if entry.mockupStyleJSON != nil {
+            Button {
+                Task {
+                    try? await history?.updateMockupStyle(id: entry.id, styleJSON: nil)
+                    await loadEntries()
+                }
+            } label: {
+                Label(AppLocalization.string("Remove Beautify"), systemImage: "sparkles.slash")
+            }
         }
 
         Button {

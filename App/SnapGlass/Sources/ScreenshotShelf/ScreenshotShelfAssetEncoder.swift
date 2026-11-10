@@ -20,10 +20,14 @@ enum ScreenshotShelfAssetError: Error {
 enum ScreenshotShelfAssetEncoder {
     static func encode(_ image: CGImage) -> ScreenshotShelfEncodedAssets? {
         guard let originalData = imageData(image, type: .png) else { return nil }
-        guard let thumbnail = downsampledImage(image, maxPixel: 768),
-              let thumbnailData = imageData(thumbnail, type: .jpeg, quality: 0.82) else {
-            return nil
-        }
+        guard let thumbnail = downsampledImage(image, maxPixel: 768) else { return nil }
+        let thumbnailType: UTType = hasAlpha(thumbnail) ? .png : .jpeg
+        let thumbnailData = imageData(
+            thumbnail,
+            type: thumbnailType,
+            quality: thumbnailType == .jpeg ? 0.82 : nil
+        )
+        guard let thumbnailData else { return nil }
         return ScreenshotShelfEncodedAssets(originalData: originalData, thumbnailData: thumbnailData)
     }
 
@@ -33,7 +37,17 @@ enum ScreenshotShelfAssetEncoder {
 
     static func displayThumbnail(from data: Data) -> Data? {
         guard let thumbnail = decodeThumbnail(from: data) else { return nil }
-        return imageData(thumbnail, type: .jpeg, quality: 0.82)
+        let type: UTType = hasAlpha(thumbnail) ? .png : .jpeg
+        return imageData(thumbnail, type: type, quality: type == .jpeg ? 0.82 : nil)
+    }
+
+    private static func hasAlpha(_ image: CGImage) -> Bool {
+        switch image.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast:
+            return false
+        default:
+            return true
+        }
     }
 
     static func decodeThumbnail(from data: Data) -> CGImage? {

@@ -26,35 +26,61 @@ final class WindowSelectionPanel: NSPanel {
 
     private let windows: [SelectableWindow]
     private let onComplete: (WindowSelectionResult?) -> Void
-    private let coordinator: WindowSelectionCoordinator
+    private var coordinator: WindowSelectionCoordinator
     private let captureButton = NSButton()
+    private let editButton = NSButton()
     private let scrollCaptureButton = NSButton()
+    private let searchField = NSSearchField()
+    private let refreshButton = NSButton()
+    private let emptyStateView = NSStackView()
+    private let emptyStateLabel = NSTextField(labelWithString: "")
+    private let retryButton = NSButton()
+    private var content: SCShareableContent?
+    private var loadError: String?
+    private var listScrollView: NSScrollView?
     private var didFinish = false
+    private var onActivity: (() -> Void)?
 
-    static func show(onComplete: @escaping (WindowSelectionResult?) -> Void) {
+    private struct WindowLoadResult {
+        let content: SCShareableContent?
+        let windows: [SelectableWindow]
+        let error: String?
+    }
+
+    static func show(
+        onComplete: @escaping (WindowSelectionResult?) -> Void,
+        onActivity: @escaping () -> Void = {}
+    ) {
         Task { @MainActor in
-            do {
-                let (content, windows) = try await fetchAvailableWindows()
-                guard !windows.isEmpty else {
-                    onComplete(nil)
-                    return
-                }
+            let result = await loadWindows()
 
-                // Start with a clean thumbnail cache so the previews reflect each
-                // window's current contents, not a stale frame from a prior picker.
-                await WindowThumbnailLoader.shared.clearCache()
+            // Start with a clean thumbnail cache so the previews reflect each
+            // window's current contents, not a stale frame from a prior picker.
+            await WindowThumbnailLoader.shared.clearCache()
 
-                let panel = WindowSelectionPanel(
-                    windows: windows,
-                    content: content,
-                    onComplete: onComplete
-                )
-                retain(panel)
-                panel.orderFrontRegardless()
-                panel.makeKey()
-            } catch {
-                onComplete(nil)
-            }
+            let panel = WindowSelectionPanel(
+                windows: result.windows,
+                content: result.content,
+                loadError: result.error,
+                onComplete: onComplete
+            )
+            panel.onActivity = onActivity
+            retain(panel)
+            panel.orderFrontRegardless()
+            panel.makeKey()
+        }
+    }
+
+    private static func loadWindows() async -> WindowLoadResult {
+        do {
+            let (content, windows) = try await fetchAvailableWindows()
+            return WindowLoadResult(content: content, windows: windows, error: nil)
+        } catch {
+            return WindowLoadResult(
+                content: nil,
+                windows: [],
+                error: error.localizedDescription
+            )
         }
     }
 
@@ -79,18 +105,25 @@ final class WindowSelectionPanel: NSPanel {
 
     private init(
         windows: [SelectableWindow],
-        content: SCShareableContent,
+        content: SCShareableContent?,
+        loadError: String?,
         onComplete: @escaping (WindowSelectionResult?) -> Void
     ) {
         self.windows = windows
         self.onComplete = onComplete
+        self.content = content
+        self.loadError = loadError
         self.coordinator = WindowSelectionCoordinator(windows: windows, content: content)
 
         let panelSize = NSSize(
-            width: 720,
-            height: min(640, max(340, windows.count * 92 + 150))
+            width: 760,
+            height: min(680, max(420, windows.count * 96 + 190))
         )
-        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
+        let mouseLocation = NSEvent.mouseLocation
+        let targetScreen = NSScreen.screens.first { $0.frame.contains(mouseLocation) }
+            ?? NSScreen.main
+        let screenFrame = targetScreen?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 800, height: 600)
         let panelOrigin = NSPoint(
             x: screenFrame.midX - panelSize.width / 2,
             y: screenFrame.midY - panelSize.height / 2
@@ -159,6 +192,9 @@ final class WindowSelectionPanel: NSPanel {
     /// 列表下方的提示；未选中窗口时改为说明为什么按钮不可用。
     private var subtitleLabel: NSTextField?
 
+    // The constraints are intentionally kept in one place so the search row,
+    // empty state, and action buttons cannot drift apart during layout changes.
+    // swiftlint:disable:next function_body_length
     private func makeContentView() -> NSView {
         let container = NSVisualEffectView()
         container.material = .hudWindow
@@ -171,18 +207,73 @@ final class WindowSelectionPanel: NSPanel {
             color: .labelColor
         )
         let subtitleLabel = makeLabel(
-            AppLocalization.string("Select a preview, then choose a still or scrolling capture."),
+            AppLocalization.string("Capture follows your After Capture settings."),
             font: .systemFont(ofSize: 11),
             color: .secondaryLabelColor
         )
         self.subtitleLabel = subtitleLabel
 
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.placeholderString = AppLocalization.string("Search windows")
+        searchField.sendsSearchStringImmediately = true
+        searchField.target = self
+        searchField.action = #selector(searchChanged(_:))
+        searchField.isEnabled = !windows.isEmpty
+
+        refreshButton.translatesAutoresizingMaskIntoConstraints = false
+        refreshButton.bezelStyle = .inline
+        refreshButton.isBordered = false
+        refreshButton.image = NSImage(
+            systemSymbolName: "arrow.clockwise",
+            accessibilityDescription: AppLocalization.string("Refresh window list")
+        )
+        refreshButton.target = self
+        refreshButton.action = #selector(reloadWindows)
+        refreshButton.toolTip = AppLocalization.string("Refresh window list")
+
         let scrollView = makeWindowListScrollView()
+        listScrollView = scrollView
+
+        let emptyIcon = NSImageView()
+        emptyIcon.image = NSImage(
+            systemSymbolName: "macwindow",
+            accessibilityDescription: nil
+        )
+        emptyIcon.contentTintColor = .secondaryLabelColor
+        emptyIcon.imageScaling = .scaleProportionallyUpOrDown
+        emptyIcon.translatesAutoresizingMaskIntoConstraints = false
+        emptyIcon.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        emptyIcon.heightAnchor.constraint(equalToConstant: 24).isActive = true
+
+        emptyStateLabel.font = .systemFont(ofSize: 12)
+        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.alignment = .center
+        emptyStateLabel.maximumNumberOfLines = 3
+        emptyStateLabel.lineBreakMode = .byWordWrapping
+        emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        retryButton.title = AppLocalization.string("Retry")
+        retryButton.bezelStyle = .rounded
+        retryButton.target = self
+        retryButton.action = #selector(reloadWindows)
+
+        emptyStateView.orientation = .vertical
+        emptyStateView.alignment = .centerX
+        emptyStateView.spacing = 8
+        emptyStateView.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateView.addArrangedSubview(emptyIcon)
+        emptyStateView.addArrangedSubview(emptyStateLabel)
+        emptyStateView.addArrangedSubview(retryButton)
+        emptyStateView.isHidden = true
+
         let buttonStack = makeActionButtonStack()
 
         container.addSubview(titleLabel)
         container.addSubview(subtitleLabel)
+        container.addSubview(searchField)
+        container.addSubview(refreshButton)
         container.addSubview(scrollView)
+        container.addSubview(emptyStateView)
         container.addSubview(buttonStack)
 
         NSLayoutConstraint.activate([
@@ -194,9 +285,30 @@ final class WindowSelectionPanel: NSPanel {
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
 
-            scrollView.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12),
+            searchField.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 10),
+            searchField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
+            searchField.trailingAnchor.constraint(equalTo: refreshButton.leadingAnchor, constant: -8),
+
+            refreshButton.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
+            refreshButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            refreshButton.widthAnchor.constraint(equalToConstant: 24),
+            refreshButton.heightAnchor.constraint(equalToConstant: 24),
+
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+
+            emptyStateView.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyStateView.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+            emptyStateView.leadingAnchor.constraint(
+                greaterThanOrEqualTo: scrollView.leadingAnchor,
+                constant: 24
+            ),
+            emptyStateView.trailingAnchor.constraint(
+                lessThanOrEqualTo: scrollView.trailingAnchor,
+                constant: -24
+            ),
+            emptyStateLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 420),
 
             buttonStack.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 12),
             buttonStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
@@ -205,15 +317,59 @@ final class WindowSelectionPanel: NSPanel {
             buttonStack.heightAnchor.constraint(equalToConstant: 34),
         ])
 
-        Task { @MainActor in
-            guard coordinator.tableView?.numberOfRows ?? 0 > 0 else { return }
-            coordinator.tableView?.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
-            self.setActionButtonsEnabled(true)
-            // Keep previews fresh while the picker is open.
-            self.coordinator.startRefreshTimer()
+        if windows.isEmpty {
+            setEmptyStateVisible(true)
+            setActionButtonsEnabled(false)
+        } else {
+            Task { @MainActor in
+                guard coordinator.tableView?.numberOfRows ?? 0 > 0 else { return }
+                coordinator.tableView?.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+                self.setActionButtonsEnabled(true)
+                // Keep previews fresh while the picker is open.
+                self.coordinator.startRefreshTimer()
+            }
+        }
+
+        if let loadError {
+            subtitleLabel.stringValue = loadError
         }
 
         return container
+    }
+
+    func setEmptyStateVisible(_ visible: Bool) {
+        emptyStateView.isHidden = !visible
+        listScrollView?.isHidden = visible
+        if visible {
+            emptyStateLabel.stringValue = loadError
+                ?? AppLocalization.string("No capturable windows found")
+        }
+    }
+
+    func notifyActivity() {
+        onActivity?()
+    }
+
+    @objc private func searchChanged(_ sender: NSSearchField) {
+        notifyActivity()
+        coordinator.setFilter(sender.stringValue)
+    }
+
+    @objc private func reloadWindows() {
+        notifyActivity()
+        refreshButton.isEnabled = false
+        Task { @MainActor in
+            let result = await Self.loadWindows()
+            self.content = result.content
+            self.loadError = result.error
+            self.coordinator.replaceWindows(result.windows, content: result.content)
+            self.setActionButtonsEnabled(self.coordinator.visibleWindowCount > 0)
+            self.setEmptyStateVisible(result.windows.isEmpty)
+            if let error = result.error {
+                self.subtitleLabel?.stringValue = error
+            }
+            self.refreshButton.isEnabled = true
+        }
     }
 
     private func makeLabel(_ text: String, font: NSFont, color: NSColor) -> NSTextField {
@@ -225,7 +381,7 @@ final class WindowSelectionPanel: NSPanel {
     }
 
     private func makeActionButtonStack() -> NSStackView {
-        let buttonStack = NSStackView(views: [captureButton, scrollCaptureButton])
+        let buttonStack = NSStackView(views: [captureButton, editButton, scrollCaptureButton])
         buttonStack.orientation = .horizontal
         buttonStack.alignment = .centerY
         buttonStack.distribution = .fillEqually
@@ -269,6 +425,13 @@ final class WindowSelectionPanel: NSPanel {
         captureButton.keyEquivalent = "\r"
 
         configure(
+            editButton,
+            title: AppLocalization.string("Edit Window"),
+            symbol: "pencil",
+            action: #selector(editSelectedWindow)
+        )
+
+        configure(
             scrollCaptureButton,
             title: AppLocalization.string("Scrolling Capture"),
             symbol: "arrow.up.arrow.down",
@@ -289,24 +452,33 @@ final class WindowSelectionPanel: NSPanel {
 
     func setActionButtonsEnabled(_ enabled: Bool) {
         captureButton.isEnabled = enabled
+        editButton.isEnabled = enabled
         scrollCaptureButton.isEnabled = enabled
+
+        if let loadError, !enabled {
+            subtitleLabel?.stringValue = loadError
+            return
+        }
 
         if enabled {
             subtitleLabel?.stringValue = AppLocalization.string(
-                "Select a preview, then choose a still or scrolling capture."
+                "Capture follows your After Capture settings. Choose Edit to annotate first."
             )
         } else {
-            let hasRows = (coordinator.tableView?.numberOfRows ?? 0) > 0
+            let hasRows = coordinator.visibleWindowCount > 0
             subtitleLabel?.stringValue = AppLocalization.string(
                 hasRows ? "Select a window to continue" : "No capturable windows found"
             )
         }
     }
 
-    /// Captures the selected window and opens the result directly in the editor.
-    /// This mirrors double-click behavior so a single click on "Capture Window"
-    /// always enters the editor regardless of the general capture preference.
+    /// Captures the selected window using the normal After Capture settings.
     @objc private func captureStillWindow() {
+        finishSelectedWindow(action: .still)
+    }
+
+    /// Opens the selected window directly in the annotation editor.
+    @objc private func editSelectedWindow() {
         finishSelectedWindow(action: .edit)
     }
 
@@ -349,16 +521,20 @@ final class WindowSelectionPanel: NSPanel {
                     systemWindowLevel: systemWindowLevel
                 )
             }
-            .map { window in
-                SelectableWindow(
+            .map { window -> SelectableWindow in
+                let displayCount = content.displays.filter { display in
+                    window.frame.intersects(display.frame)
+                }.count
+                return SelectableWindow(
                     windowID: window.windowID,
                     appName: window.owningApplication?.applicationName,
                     windowTitle: window.title,
                     frame: window.frame,
-                    bundleIdentifier: window.owningApplication?.bundleIdentifier
+                    bundleIdentifier: window.owningApplication?.bundleIdentifier,
+                    displayCount: displayCount
                 )
             }
-            .sorted { lhs, rhs in
+            .sorted { (lhs: SelectableWindow, rhs: SelectableWindow) in
                 lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
 

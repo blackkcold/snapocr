@@ -1,4 +1,5 @@
 import AppKit
+import CaptureCore
 import HistoryCore
 
 /// History reconciliation for the screenshot shelf.
@@ -19,20 +20,24 @@ extension ScreenshotShelfManager {
             guard let historyID = entry.historyID,
                 let historyEntry = entriesByID[historyID]
             else { continue }
+            let historyStyle = HistoryMockupPresenter.style(from: historyEntry)
+            if var card = cardsByID[entry.captureID],
+               card.mockupStyle != historyStyle {
+                card.mockupStyle = historyStyle
+                cardsByID[entry.captureID] = card
+                historyPresentationKeys[entry.captureID] = nil
+            }
             updateHistoryCard(
                 captureID: entry.captureID,
                 historyID: historyID,
                 pixelWidth: historyEntry.pixelWidth,
                 pixelHeight: historyEntry.pixelHeight
             )
-            await refreshHistoryThumbnail(
+            await refreshHistoryPresentation(
                 captureID: entry.captureID,
                 historyID: historyID,
-                from: history
-            )
-            await refreshDragExportIfNeeded(
-                captureID: entry.captureID,
-                revision: historyEntry.imageRevision
+                revision: historyEntry.imageRevision,
+                history: history
             )
         }
         synchronizeCards()
@@ -49,12 +54,12 @@ extension ScreenshotShelfManager {
                 pixelWidth: historyEntry.pixelWidth,
                 pixelHeight: historyEntry.pixelHeight
             )
-            await refreshHistoryThumbnail(
+            await refreshHistoryPresentation(
                 captureID: captureID,
                 historyID: historyID,
-                from: history
+                revision: historyEntry.imageRevision,
+                history: history
             )
-            await refreshDragExport(captureID: captureID, revision: historyEntry.imageRevision)
             synchronizeCards()
             schedulePresentationUpdate()
         } catch {
@@ -80,53 +85,87 @@ extension ScreenshotShelfManager {
         cardsByID[captureID] = card
     }
 
-    private func refreshHistoryThumbnail(
+    /// Rebuilds both the card preview and the drag artifact from history.
+    ///
+    /// When the card has a style, the raw history image is re-rendered with that
+    /// style. This is the step that used to overwrite a beautified card with the
+    /// raw history thumbnail after `linkHistory`.
+    private func refreshHistoryPresentation(
         captureID: UUID,
         historyID: UUID,
-        from history: HistoryActor
+        revision: UUID?,
+        history: HistoryActor
     ) async {
         guard
+            let card = cardsByID[captureID],
+            card.historyID == historyID,
             state.entries.contains(where: {
                 $0.captureID == captureID && $0.historyID == historyID
             })
-        else {
+        else { return }
+
+        let styleJSON = card.mockupStyle.flatMap {
+            try? JSONEncoder().encode($0)
+        }.flatMap {
+            String(data: $0, encoding: .utf8)
+        }
+        let key = "\(revision?.uuidString ?? "nil")|\(styleJSON ?? "nil")"
+        if historyPresentationKeys[captureID] == key,
+           dragExportStore.artifact(for: captureID) != nil {
             return
         }
+
+        if let style = card.mockupStyle {
+            do {
+                guard let rawData = try await history.imageData(for: historyID),
+                      let raw = NSImage(data: rawData)?.cgImage(
+                          forProposedRect: nil,
+                          context: nil,
+                          hints: nil
+                      )
+                else { return }
+                guard let presented = await Task.detached(priority: .userInitiated, operation: {
+                    MockupRenderer.render(raw, style: style)
+                }).value,
+                      let assets = await Task.detached(priority: .utility, operation: {
+                          ScreenshotShelfAssetEncoder.encode(presented)
+                      }).value
+                else { return }
+
+                await setThumbnail(assets.thumbnailData, for: captureID)
+                dragExportStore.invalidate(captureID: captureID)
+                await dragExportStore.prepare(
+                    captureID: captureID,
+                    data: assets.originalData,
+                    sourceTypeIdentifier: "public.png",
+                    revision: revision?.uuidString
+                )
+                historyPresentationKeys[captureID] = key
+            } catch {
+                return
+            }
+            return
+        }
+
         do {
             guard let data = try await history.thumbnailData(for: historyID) else { return }
             let thumbnailData = await Task.detached(priority: .utility) {
                 ScreenshotShelfAssetEncoder.displayThumbnail(from: data)
             }.value
-            guard let thumbnailData,
-                state.entries.contains(where: {
-                    $0.captureID == captureID && $0.historyID == historyID
-                })
-            else { return }
-            await setThumbnail(thumbnailData, for: captureID)
+            if let thumbnailData {
+                await setThumbnail(thumbnailData, for: captureID)
+            }
+            guard let rawData = try await originalData(for: captureID) else { return }
+            dragExportStore.invalidate(captureID: captureID)
+            await dragExportStore.prepare(
+                captureID: captureID,
+                data: rawData,
+                sourceTypeIdentifier: ScreenshotShelfImageTypeIdentifier.identifier(for: rawData),
+                revision: revision?.uuidString
+            )
+            historyPresentationKeys[captureID] = key
         } catch {
             return
         }
-    }
-
-    /// Rebuilds the plaintext copy from the card's current bytes.
-    private func refreshDragExport(captureID: UUID, revision: UUID?) async {
-        dragExportStore.invalidate(captureID: captureID)
-        guard let data = try? await originalData(for: captureID) else { return }
-        await dragExportStore.prepare(
-            captureID: captureID,
-            data: data,
-            sourceTypeIdentifier: ScreenshotShelfImageTypeIdentifier.identifier(for: data),
-            revision: revision?.uuidString
-        )
-    }
-
-    /// Rebuilds the plaintext copy only when the history revision changed.
-    private func refreshDragExportIfNeeded(captureID: UUID, revision: UUID?) async {
-        let revisionKey = revision?.uuidString
-        if dragExportStore.artifact(for: captureID) != nil,
-            dragExportStore.revision(for: captureID) == revisionKey {
-            return
-        }
-        await refreshDragExport(captureID: captureID, revision: revision)
     }
 }

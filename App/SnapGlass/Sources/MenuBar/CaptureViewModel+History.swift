@@ -34,7 +34,8 @@ extension CaptureViewModel {
     saveFullText: Bool,
     captureMode: String,
     source: CaptureSourceInfo,
-    isProtected: Bool = false
+    isProtected: Bool = false,
+    mockupStyleJSON: String? = nil
   ) async -> UUID? {
     let textToStore = saveFullText ? (ocrResult?.text ?? "") : ""
     let confidence = ocrResult?.confidence ?? 0
@@ -52,7 +53,8 @@ extension CaptureViewModel {
         sourceType: .screenshot,
         sourceAppName: source.appName,
         sourceWindowTitle: source.windowTitle,
-        isProtected: isProtected
+        isProtected: isProtected,
+        mockupStyleJSON: mockupStyleJSON
       )
     } catch HistoryError.storageFull {
       logger.error("History storage is full of protected records")

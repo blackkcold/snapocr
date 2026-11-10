@@ -127,10 +127,21 @@ extension CaptureViewModel {
     ) async {
         let destination: CaptureDestination =
             switch selection.action {
-            case .copy: .clipboardOnly
-            case .edit: .editorOnly
+            case .copy, .copyOriginal, .mockup: .clipboardOnly
+            case .edit, .mockupEdit: .editorOnly
             case .pin: .pinOnly
             }
+        let forceMockup: Bool
+        switch selection.action {
+        case .mockup, .mockupEdit: forceMockup = true
+        default: forceMockup = false
+        }
+        let forceOriginal: Bool
+        if case .copyOriginal = selection.action {
+            forceOriginal = true
+        } else {
+            forceOriginal = false
+        }
 
         let imageSource: CaptureImageSource
         if overlayMode == .snapshot {
@@ -164,6 +175,8 @@ extension CaptureViewModel {
             destination: destination,
             pinRect: selection.appKitRect,
             sourceDisplayID: selection.displayID,
+            forceMockup: forceMockup,
+            forceOriginal: forceOriginal,
             managesCaptureState: false
         )
     }
@@ -366,12 +379,14 @@ extension CaptureViewModel {
     public func openEditor(
         with image: CGImage,
         captureMode: String? = nil,
-        sourceEntryID: UUID? = nil
+        sourceEntryID: UUID? = nil,
+        mockupStyle: MockupStyle? = nil
     ) -> UUID? {
         let context = EditorCaptureContext.capture(
             image: image,
             captureMode: captureMode,
-            sourceEntryID: sourceEntryID
+            sourceEntryID: sourceEntryID,
+            mockupStyle: mockupStyle
         )
         guard let tab = editorWorkspace.open(image: image, context: context) else {
             showToast(
@@ -380,7 +395,12 @@ extension CaptureViewModel {
             )
             return nil
         }
-        openWindow?("editor")
+        // An open editor owns the screen: suppress the shelf instead of hiding it,
+        // so it comes back when the window closes (and never floats over the canvas).
+        if let openWindow {
+            screenshotShelfManager.beginEditingSuppression()
+            openWindow("editor")
+        }
         return tab.id
     }
 
@@ -397,6 +417,8 @@ extension CaptureViewModel {
         destination: CaptureDestination = .configured,
         pinRect: CGRect? = nil,
         sourceDisplayID: CGDirectDisplayID? = nil,
+        forceMockup: Bool = false,
+        forceOriginal: Bool = false,
         managesCaptureState: Bool = true
     ) async {
         if managesCaptureState {
@@ -441,18 +463,18 @@ extension CaptureViewModel {
                     pointWidth: pointWidth
                 )
             }
-            let styledImage = WindowScreenshotStyling.applyIfNeeded(
+            let presentation = await Self.presentation(
                 image,
                 captureMode: captureMode,
-                isEnabled: Self.boolPreference(
-                    forKey: PreferenceKeys.captureWindowStyling,
-                    defaultValue: PreferenceDefaults.captureWindowStyling
-                ),
-                isPinning: pinRect != nil || destination == .pinOnly,
-                scale: displayScale ?? 2
+                displayScale: displayScale,
+                isPinning: destination == .pinOnly,
+                forceMockup: forceMockup,
+                forceOriginal: forceOriginal
             )
             await processCapturedImage(
-                styledImage,
+                presentation.image,
+                originalImage: image,
+                mockupStyle: presentation.style,
                 captureMode: captureMode,
                 sourceAppName: sourceAppName,
                 sourceWindowTitle: sourceWindowTitle,
@@ -466,6 +488,187 @@ extension CaptureViewModel {
             openWindow?("permission")
         } catch {
             showToast(message: AppLocalization.string("Capture failed: %@", error.localizedDescription), type: .error)
+        }
+    }
+
+    /// Applies the user's chosen share-ready treatment, then the legacy window
+    /// float look. The returned style is the source of truth for shelf/history
+    /// metadata; `nil` means the presented image is also the raw image.
+    private static func presentation(
+        _ image: CGImage,
+        captureMode: CaptureCore.CaptureMode,
+        displayScale: CGFloat?,
+        isPinning: Bool,
+        forceMockup: Bool = false,
+        forceOriginal: Bool = false
+    ) async -> (image: CGImage, style: MockupStyle?) {
+        guard !isPinning else { return (image, nil) }
+        if forceOriginal { return (image, nil) }
+
+        let isEnabled = forceMockup || boolPreference(
+            forKey: PreferenceKeys.captureMockupEnabled,
+            defaultValue: PreferenceDefaults.captureMockupEnabled
+        )
+        if MockupPolicy.applies(
+            captureMode: captureMode,
+            isPinning: false,
+            isEnabled: isEnabled
+        ) {
+            let rawPreset = UserDefaults.standard.string(
+                forKey: PreferenceKeys.captureMockupPreset
+            ) ?? PreferenceDefaults.captureMockupPreset
+            let style = MockupPolicy.style(for: rawPreset)
+            // 6K mockups take hundreds of milliseconds; keep the main thread
+            // free so the action bar, toast, and shelf appear immediately.
+            let renderTask = Task.detached(priority: .userInitiated) {
+                MockupRenderer.render(image, style: style)
+            }
+            if let rendered = await renderTask.value {
+                return (rendered, style)
+            }
+        }
+
+        let windowStylingEnabled = boolPreference(
+            forKey: PreferenceKeys.captureWindowStyling,
+            defaultValue: PreferenceDefaults.captureWindowStyling
+        )
+        if windowStylingEnabled,
+           case .window = captureMode,
+           let style = WindowScreenshotStyling.mockupStyle(
+               for: image,
+               scale: displayScale ?? 2
+           ) {
+            let rendered = await Task.detached(priority: .userInitiated) {
+                MockupRenderer.render(image, style: style)
+            }.value
+            if let rendered {
+                return (rendered, style)
+            }
+        }
+        return (image, nil)
+    }
+
+    /// Captures every display into one canvas using the saved compact/physical plan.
+    public func captureAllDisplays() {
+        Task {
+            guard !isCapturing,
+                  !isScrollCaptureActive,
+                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy)
+            else { return }
+            isCapturing = true
+            defer { isCapturing = false }
+
+            guard await captureOrchestrator.checkPermissionStatus() else {
+                openWindow?("permission")
+                return
+            }
+
+            screenshotShelfManager.beginCaptureSuppression()
+            defer { screenshotShelfManager.endCaptureSuppression() }
+
+            let mode = DisplayCanvasMode(
+                rawValue: Self.stringPreference(
+                    forKey: PreferenceKeys.displayCanvasMode,
+                    defaultValue: PreferenceDefaults.displayCanvasMode
+                )
+            ) ?? .compactHorizontal
+            let gap = UserDefaults.standard.object(
+                forKey: PreferenceKeys.displayCanvasGap
+            ) as? Double ?? PreferenceDefaults.displayCanvasGap
+            let alignment = DisplayCanvasAlignment(
+                rawValue: Self.stringPreference(
+                    forKey: PreferenceKeys.displayCanvasAlignment,
+                    defaultValue: PreferenceDefaults.displayCanvasAlignment
+                )
+            ) ?? .start
+
+            do {
+                let result = try await captureOrchestrator.captureAllDisplays(
+                    mode: mode,
+                    gap: CGFloat(gap),
+                    alignment: alignment,
+                    options: Self.currentCaptureOptions()
+                )
+                let presentation = await Self.presentation(
+                    result.image,
+                    captureMode: .fullscreen,
+                    displayScale: result.displayInfo?.scaleFactor,
+                    isPinning: false,
+                    forceMockup: false
+                )
+                await processCapturedImage(
+                    presentation.image,
+                    originalImage: result.image,
+                    mockupStyle: presentation.style,
+                    captureMode: .fullscreen,
+                    historyModeOverride: "all-displays",
+                    destination: .configured,
+                    sourceDisplayID: nil,
+                    displayScale: result.displayInfo?.scaleFactor
+                )
+            } catch {
+                showToast(
+                    message: AppLocalization.string(
+                        "Capture failed: %@",
+                        error.localizedDescription
+                    ),
+                    type: .error
+                )
+            }
+        }
+    }
+
+    /// Captures one result per display using the same suppression and styling
+    /// rules as the merged canvas.
+    public func captureEachDisplay() {
+        Task {
+            guard !isCapturing,
+                  !isScrollCaptureActive,
+                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy)
+            else { return }
+            isCapturing = true
+            defer { isCapturing = false }
+
+            guard await captureOrchestrator.checkPermissionStatus() else {
+                openWindow?("permission")
+                return
+            }
+
+            screenshotShelfManager.beginCaptureSuppression()
+            defer { screenshotShelfManager.endCaptureSuppression() }
+
+            do {
+                let results = try await captureOrchestrator.captureEachDisplay(
+                    options: Self.currentCaptureOptions()
+                )
+                for result in results {
+                    let presentation = await Self.presentation(
+                        result.image,
+                        captureMode: .fullscreen,
+                        displayScale: result.displayInfo?.scaleFactor,
+                        isPinning: false,
+                        forceMockup: false
+                    )
+                    await processCapturedImage(
+                        presentation.image,
+                        originalImage: result.image,
+                        mockupStyle: presentation.style,
+                        captureMode: .fullscreen,
+                        historyModeOverride: "all-displays",
+                        destination: .configured,
+                        sourceDisplayID: result.displayInfo?.displayID,
+                        displayScale: result.displayInfo?.scaleFactor
+                    )
+                }
+            } catch {
+                showToast(
+                    message: AppLocalization.string(
+                        "Capture failed: %@",
+                        error.localizedDescription
+                    ),
+                    type: .error
+                )
+            }
         }
     }
 

@@ -149,7 +149,8 @@ extension HistoryActor {
         sourceType: HistorySourceType = .screenshot,
         sourceAppName: String? = nil,
         sourceWindowTitle: String? = nil,
-        isProtected: Bool = false
+        isProtected: Bool = false,
+        mockupStyleJSON: String? = nil
     ) async throws -> UUID {
         try tempDir.ensureDirectoryExists()
 
@@ -183,7 +184,8 @@ extension HistoryActor {
             sourceWindowTitle: sourceWindowTitle,
             imagePath: imageURL,
             thumbnailPath: thumbnailURL,
-            isProtected: isProtected
+            isProtected: isProtected,
+            mockupStyleJSON: mockupStyleJSON
         )
         var sized = entry
         sized.pixelWidth = image.width

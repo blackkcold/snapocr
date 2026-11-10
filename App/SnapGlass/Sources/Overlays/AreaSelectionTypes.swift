@@ -4,8 +4,11 @@ import SharedKit
 
 enum AreaCaptureAction {
     case copy
+    case copyOriginal
     case edit
     case pin
+    case mockup
+    case mockupEdit
 }
 
 enum AreaSelectionPurpose: Equatable {

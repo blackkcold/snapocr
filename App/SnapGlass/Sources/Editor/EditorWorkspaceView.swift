@@ -27,7 +27,8 @@ struct EditorWorkspaceView: View {
         .background(
             EditorWindowCloseGuard(
                 isDirty: { workspace.hasAnyUnsavedChanges },
-                onBlocked: { workspace.requestCloseWindow() }
+                onBlocked: { workspace.requestCloseWindow() },
+                onWindowClose: { workspace.windowDidClose() }
             )
         )
         .onAppear {

@@ -35,8 +35,10 @@ struct ScreenshotShelfCard: Identifiable, Equatable {
     var decodedThumbnail: CGImage?
     var errorMessage: ScreenshotShelfMessage?
     var feedbackMessage: ScreenshotShelfMessage?
+    var mockupStyle: MockupStyle?
 
     var id: UUID { captureID }
+    var isMockup: Bool { mockupStyle != nil }
 
     static func == (lhs: ScreenshotShelfCard, rhs: ScreenshotShelfCard) -> Bool {
         lhs.captureID == rhs.captureID
@@ -47,6 +49,7 @@ struct ScreenshotShelfCard: Identifiable, Equatable {
             && lhs.thumbnailData == rhs.thumbnailData
             && lhs.errorMessage == rhs.errorMessage
             && lhs.feedbackMessage == rhs.feedbackMessage
+            && lhs.mockupStyle == rhs.mockupStyle
     }
 }
 
