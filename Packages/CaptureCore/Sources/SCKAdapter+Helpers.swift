@@ -57,7 +57,8 @@ extension SCKAdapter {
         return CaptureDisplayInfo(
             displayID: display.displayID,
             scaleFactor: scaleFactor,
-            frame: display.frame
+            frame: display.frame,
+            pointWidth: display.frame.width
         )
     }
 }

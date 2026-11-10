@@ -30,6 +30,27 @@ public final class CaptureViewModel: ObservableObject {
     
     /// Whether a capture is currently in progress
     @Published public var isCapturing = false
+
+    /// The current UI-facing screen-recording phase.
+    @Published var recordingStatus: RecordingSessionStatus = .idle
+
+    /// Owns source selection, countdown, stream capture, and writer finalization.
+    let recordingSessionController: RecordingSessionController
+
+    /// The manager for the session-only recent screenshot shelf.
+    let screenshotShelfManager = ScreenshotShelfManager()
+
+    /// Whether the recent screenshot shelf panel is currently visible.
+    @Published public internal(set) var isScreenshotShelfVisible = false
+
+    /// Whether at least one screenshot remains in the recent shelf.
+    @Published public internal(set) var hasScreenshotShelfItems = false
+
+    /// Whether the screenshot shelf is enabled in Preferences.
+    @Published public internal(set) var isScreenshotShelfEnabled = true
+
+    /// Whether the shelf can currently be toggled from the menu.
+    @Published public internal(set) var canToggleScreenshotShelf = false
     
     /// 编辑器窗口的多标签工作区：一个窗口承载多份文档。
     ///
@@ -67,6 +88,7 @@ public final class CaptureViewModel: ObservableObject {
     /// 之后每帧追加完即丢，稳态内存 = 画布 + 1 帧。
     var scrollSourceAppName: String?
     var scrollSourceWindowTitle: String?
+    var scrollSourcePointWidth: CGFloat?
     /// 本次会话是否已经提示过「已达尺寸上限」，避免每次采帧都刷同一条 toast。
     var scrollReachedSizeLimit = false
     /// 在途的采帧任务。取消时先 cancel，避免迟到的帧写进新会话。
@@ -105,7 +127,10 @@ public final class CaptureViewModel: ObservableObject {
         self.barcodeEngine = barcodeEngine
         self.scrollEngine = scrollEngine
         self.updateService = updateService
+        recordingSessionController = RecordingSessionController(captureOrchestrator: captureOrchestrator)
 
+        configureScreenshotShelf()
+        configureRecording()
         setupHotKeys()
         PinnedWindowManager.shared.setToastHandler { [weak self] message, type in
             self?.showToast(message: message, type: type)
@@ -128,6 +153,10 @@ public final class CaptureViewModel: ObservableObject {
         
         HotKeyManager.shared.onOCRFromClipboard = { [weak self] in
             self?.ocrFromClipboard()
+        }
+
+        HotKeyManager.shared.onScreenshotShelf = { [weak self] in
+            self?.toggleScreenshotShelf()
         }
     }
     

@@ -5,6 +5,9 @@ import AppKit
 /// The main application entry point for SnapGlass.
 @main
 struct SnapGlassApp: App {
+    @NSApplicationDelegateAdaptor(SnapGlassApplicationDelegate.self)
+    private var applicationDelegate
+
     /// The view model managing capture state and coordination.
     @StateObject private var viewModel = CaptureViewModel()
     /// Coordinates the selected Settings section and window opening.
@@ -36,14 +39,17 @@ struct SnapGlassApp: App {
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
         } label: {
-            Label(
-                "SnapGlass",
-                systemImage: viewModel.isCapturing
-                    ? "camera.viewfinder.circle.fill"
-                    : "camera.viewfinder"
+            MenuBarStatusLabel(
+                status: viewModel.recordingStatus,
+                isCapturing: viewModel.isCapturing
             )
-                .background {
-                    AppLifecycleBridge(viewModel: viewModel, router: router)
+            .environment(\.locale, locale)
+            .background {
+                    AppLifecycleBridge(
+                        viewModel: viewModel,
+                        router: router,
+                        applicationDelegate: applicationDelegate
+                    )
                 }
         }
 
@@ -128,12 +134,14 @@ private struct AppLifecycleBridge: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var viewModel: CaptureViewModel
     @ObservedObject var router: PreferencesRouter
+    let applicationDelegate: SnapGlassApplicationDelegate
     @State private var didInitialize = false
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
             .onAppear {
+                applicationDelegate.viewModel = viewModel
                 viewModel.openWindow = { id in
                     AppWindowPresenter.present(id: id) {
                         openWindow(id: id)

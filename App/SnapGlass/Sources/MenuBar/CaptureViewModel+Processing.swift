@@ -16,8 +16,15 @@ extension CaptureViewModel {
         sourceWindowTitle: String? = nil,
         historyModeOverride: String? = nil,
         destination: CaptureDestination = .configured,
-        pinRect: CGRect? = nil
+        pinRect: CGRect? = nil,
+        sourceDisplayID: CGDirectDisplayID? = nil,
+        displayScale: CGFloat? = nil
     ) async {
+        let shelfCaptureID = screenshotShelfManager.captureCompleted(
+            image,
+            sourceDisplayID: sourceDisplayID,
+            displayScale: displayScale
+        )
         let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
         let (shouldOpenEditor, shouldCopyImage) = resolveDestination(destination)
         let historyContext = HistorySaveContext(
@@ -45,10 +52,10 @@ extension CaptureViewModel {
         if shouldOpenEditor {
             openEditorAndFinish(
                 image: image,
-                modeDescription: modeDescription,
                 destination: destination,
                 historyContext: historyContext,
-                imageCopySucceeded: imageCopySucceeded
+                imageCopySucceeded: imageCopySucceeded,
+                shelfCaptureID: shelfCaptureID
             )
             return
         }
@@ -61,13 +68,16 @@ extension CaptureViewModel {
 
         // Save before finishing for non-editor destinations: the caller has no
         // window to show while this runs, and pinned captures need the record.
-        _ = await saveIfNeeded(
+        let historyID = await saveIfNeeded(
             image: image,
             ocrResult: ocrResult,
             destination: destination,
             imageCopySucceeded: imageCopySucceeded,
             context: historyContext
         )
+        if let shelfCaptureID, let historyID {
+            screenshotShelfManager.linkHistory(captureID: shelfCaptureID, historyID: historyID)
+        }
     }
 
     /// Links a history record that finished writing after the editor opened.
@@ -80,12 +90,16 @@ extension CaptureViewModel {
     /// "overwrite original" still works.
     private func openEditorAndFinish(
         image: CGImage,
-        modeDescription: String,
         destination: CaptureDestination,
         historyContext: HistorySaveContext,
-        imageCopySucceeded: Bool
+        imageCopySucceeded: Bool,
+        shelfCaptureID: UUID?
     ) {
-        let tabID = openEditor(with: image, captureMode: modeDescription, sourceEntryID: nil)
+        let tabID = openEditor(
+            with: image,
+            captureMode: historyContext.modeDescription,
+            sourceEntryID: nil
+        )
         Task { [weak self] in
             guard let self else { return }
             let ocrResult = await self.runOCRAndSuggestions(
@@ -100,6 +114,12 @@ extension CaptureViewModel {
                 imageCopySucceeded: imageCopySucceeded,
                 context: historyContext
             )
+            if let shelfCaptureID, let historyEntryID {
+                self.screenshotShelfManager.linkHistory(
+                    captureID: shelfCaptureID,
+                    historyID: historyEntryID
+                )
+            }
             if let historyEntryID, let tabID {
                 self.attachHistoryEntry(historyEntryID, to: tabID)
             }

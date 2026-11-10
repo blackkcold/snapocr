@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "1.0.1"
+    MARKETING_VERSION: "1.2.0"
     CURRENT_PROJECT_VERSION: "1"
   configs:
     Debug:
@@ -101,6 +101,7 @@ targets:
       - path: App/SnapGlass/Sources/ClipboardWriter.swift
       - path: App/SnapGlass/Sources/Pins/PinnedImageView.swift
       - path: App/SnapGlass/Sources/DesignSystem
+      - path: App/SnapGlass/Sources/ScreenshotShelf
       - path: App/SnapGlass/Sources/Editor
         excludes:
           - EditorView.swift
@@ -136,6 +137,8 @@ targets:
       - path: App/SnapGlass/Sources/WindowPresentationCoordinator.swift
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift
       - path: App/SnapGlass/Sources/MenuBar/UpdateInstallHandoff.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingQuitFlow.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingPermissionDecision.swift
     dependencies:
       - package: SharedKit
     settings:
@@ -155,6 +158,7 @@ targets:
       - path: App/SnapGlass/Sources/AppLanguage.swift
     dependencies:
       - package: SharedKit
+      - package: CaptureCore
       - package: BarcodeCore
     settings:
       base:

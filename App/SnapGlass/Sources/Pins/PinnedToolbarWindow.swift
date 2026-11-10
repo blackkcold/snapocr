@@ -1,5 +1,6 @@
 import AppKit
 import CaptureCore
+import SharedKit
 
 // MARK: - PinnedToolbarWindow
 
@@ -23,7 +24,7 @@ final class PinnedToolbarWindow: NSPanel {
         )
         // 与置顶面板同源：不进入录屏 / 系统截屏 / 后续 SnapGlass 截图。
         // `sharingType` 是**逐窗口**属性、不会被父窗口继承，必须显式设置。
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         // `level` 与 `collectionBehavior` 同样不继承，必须显式设置，
         // 否则切换 Space 或进入全屏时工具条会消失。
         level = NSWindow.Level(rawValue: parentLevel.rawValue + 1)
@@ -41,7 +42,7 @@ final class PinnedToolbarWindow: NSPanel {
 
     /// 排序操作可能重置 `sharingType`，排序后需重新确认内容保护。
     func reassertContentProtection() {
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
     }
 }
 

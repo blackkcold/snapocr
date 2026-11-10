@@ -258,6 +258,7 @@ extension HistoryActor {
         }
 
         logger.info("历史条目已删除: \(id)")
+        NotificationCenter.default.post(name: Self.imagesDidChange, object: self)
     }
 
     public func clear() async throws {
@@ -294,6 +295,7 @@ extension HistoryActor {
         }
 
         logger.warning("所有历史记录已清空")
+        NotificationCenter.default.post(name: Self.imagesDidChange, object: self)
     }
 
     public func recent(limit: Int) async throws -> [HistoryEntry] {

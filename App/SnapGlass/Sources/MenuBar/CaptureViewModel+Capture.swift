@@ -31,7 +31,9 @@ extension CaptureViewModel {
 
     private func startAreaCapture() {
         Task {
-            guard !isCapturing else { return }
+            guard !isCapturing,
+                  !isScrollCaptureActive,
+                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy) else { return }
             isCapturing = true
             defer { isCapturing = false }
 
@@ -48,9 +50,12 @@ extension CaptureViewModel {
                 preCaptureTask: setup.task
             )
             setup.task?.cancel()
-            guard let selection else { return }
+            guard let selection,
+                  case .capture(let captureSelection) = selection else {
+                return
+            }
             await performAreaSelection(
-                selection,
+                captureSelection,
                 overlayMode: overlayMode,
                 capturedDisplays: setup.displays
             )
@@ -116,7 +121,7 @@ extension CaptureViewModel {
     }
 
     private func performAreaSelection(
-        _ selection: AreaSelectionResult,
+        _ selection: AreaCaptureSelectionResult,
         overlayMode: CaptureOverlayMode,
         capturedDisplays: PreCapturedDisplays
     ) async {
@@ -158,6 +163,7 @@ extension CaptureViewModel {
             historyModeOverride: selection.isFreeform ? "freeform" : nil,
             destination: destination,
             pinRect: selection.appKitRect,
+            sourceDisplayID: selection.displayID,
             managesCaptureState: false
         )
     }
@@ -214,6 +220,9 @@ extension CaptureViewModel {
         }
         guard !displays.isEmpty else { return .empty }
         let displayFrames = Dictionary(uniqueKeysWithValues: displays.map { ($0.id, $0.bounds) })
+
+        screenshotShelfManager.beginCaptureSuppression()
+        defer { screenshotShelfManager.endCaptureSuppression() }
 
         let orchestrator = captureOrchestrator
         return await withTaskGroup(
@@ -285,7 +294,9 @@ extension CaptureViewModel {
 
     private func startWindowCapture(destination: CaptureDestination) {
         Task {
-            guard !isCapturing, !isScrollCaptureActive else { return }
+            guard !isCapturing,
+                  !isScrollCaptureActive,
+                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy) else { return }
             isCapturing = true
             defer { isCapturing = false }
 
@@ -385,10 +396,13 @@ extension CaptureViewModel {
         historyModeOverride: String? = nil,
         destination: CaptureDestination = .configured,
         pinRect: CGRect? = nil,
+        sourceDisplayID: CGDirectDisplayID? = nil,
         managesCaptureState: Bool = true
     ) async {
         if managesCaptureState {
-            guard !isCapturing else { return }
+            guard !isCapturing,
+                  !isScrollCaptureActive,
+                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy) else { return }
             isCapturing = true
         }
         defer {
@@ -400,14 +414,18 @@ extension CaptureViewModel {
         do {
             let captureMode: CaptureCore.CaptureMode
             let capturedImage: CGImage
+            var capturedDisplayID = sourceDisplayID
+            var livePointWidth: CGFloat?
             switch imageSource {
             case .live:
-                let result = try await captureOrchestrator.capture(
+                let result = try await captureWithoutScreenshotShelf(
                     mode: mode,
                     options: Self.currentCaptureOptions()
                 )
                 captureMode = result.captureMode
                 capturedImage = result.image
+                capturedDisplayID = result.displayInfo?.displayID ?? capturedDisplayID
+                livePointWidth = result.displayInfo?.pointWidth
             case .snapshot(let image):
                 captureMode = mode
                 capturedImage = image
@@ -417,14 +435,32 @@ extension CaptureViewModel {
             } else {
                 capturedImage
             }
-            await processCapturedImage(
+            let displayScale = (pinRect?.width ?? livePointWidth).map { pointWidth in
+                PinnedImageGeometry.displayScale(
+                    imagePixelWidth: CGFloat(image.width),
+                    pointWidth: pointWidth
+                )
+            }
+            let styledImage = WindowScreenshotStyling.applyIfNeeded(
                 image,
+                captureMode: captureMode,
+                isEnabled: Self.boolPreference(
+                    forKey: PreferenceKeys.captureWindowStyling,
+                    defaultValue: PreferenceDefaults.captureWindowStyling
+                ),
+                isPinning: pinRect != nil || destination == .pinOnly,
+                scale: displayScale ?? 2
+            )
+            await processCapturedImage(
+                styledImage,
                 captureMode: captureMode,
                 sourceAppName: sourceAppName,
                 sourceWindowTitle: sourceWindowTitle,
                 historyModeOverride: historyModeOverride,
                 destination: destination,
-                pinRect: pinRect
+                pinRect: pinRect,
+                sourceDisplayID: capturedDisplayID,
+                displayScale: displayScale
             )
         } catch CaptureError.permissionDenied {
             openWindow?("permission")
@@ -437,6 +473,7 @@ extension CaptureViewModel {
         scrollSession = nil
         scrollSourceAppName = nil
         scrollSourceWindowTitle = nil
+        scrollSourcePointWidth = nil
         scrollCapturedFrameCount = 0
         scrollReachedSizeLimit = false
         isScrollCaptureActive = false

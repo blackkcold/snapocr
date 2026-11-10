@@ -19,9 +19,8 @@ Thumbs.db
 *.dmg
 *.app
 
-# Release 归档例外：允许提交 release/ 下的 .dmg 产物
-!release/**/*.dmg
-!release/**/*.dmg.sha256
+# 构建产物不入库：发版附件只存在于 GitHub Release
+release/
 
 # Swift
 *.swp

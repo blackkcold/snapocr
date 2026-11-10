@@ -308,7 +308,8 @@ extension SCKAdapter {
         let displayInfo = CaptureDisplayInfo(
             displayID: 0,
             scaleFactor: options.preferredScaleFactor,
-            frame: window.frame
+            frame: window.frame,
+            pointWidth: window.frame.width
         )
 
         return CaptureResult(

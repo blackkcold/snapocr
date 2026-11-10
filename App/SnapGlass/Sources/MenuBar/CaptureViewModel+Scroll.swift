@@ -16,7 +16,7 @@ extension CaptureViewModel {
         do {
             let session = try await scrollEngine.startCapture(windowID: selectedWindow.windowID)
             startedSession = session
-            let result = try await captureOrchestrator.capture(
+            let result = try await captureWithoutScreenshotShelf(
                 mode: .window(selectedWindow.windowID),
                 options: Self.currentCaptureOptions()
             )
@@ -29,6 +29,7 @@ extension CaptureViewModel {
             scrollSession = session
             scrollSourceAppName = selectedWindow.appName
             scrollSourceWindowTitle = selectedWindow.windowTitle
+            scrollSourcePointWidth = result.displayInfo?.pointWidth
             scrollCapturedFrameCount = 1
             scrollReachedSizeLimit = false
             isScrollCaptureActive = true
@@ -52,13 +53,14 @@ extension CaptureViewModel {
         scrollCaptureTask?.cancel()
         let task = Task {
             guard !isCapturing,
+                  !isRecordingBusy,
                   let session = scrollSession,
                   scrollCapturedFrameCount >= 1 else { return }
             isCapturing = true
             defer { isCapturing = false }
 
             do {
-                let result = try await captureOrchestrator.capture(
+                let result = try await captureWithoutScreenshotShelf(
                     mode: .window(session.windowID),
                     options: Self.currentCaptureOptions()
                 )
@@ -118,7 +120,10 @@ extension CaptureViewModel {
     /// Finishes the active scrolling capture and sends the long image through the normal capture flow.
     public func finishScrollCapture() {
         Task {
-            guard !isCapturing, scrollCapturedFrameCount >= 2, let session = scrollSession else { return }
+            guard !isCapturing,
+                  !isRecordingBusy,
+                  scrollCapturedFrameCount >= 2,
+                  let session = scrollSession else { return }
             isCapturing = true
             defer { isCapturing = false }
 
@@ -128,13 +133,21 @@ extension CaptureViewModel {
                 guard scrollSession?.id == session.id else { return }
                 let sourceAppName = scrollSourceAppName
                 let sourceWindowTitle = scrollSourceWindowTitle
+                let sourcePointWidth = scrollSourcePointWidth
+                let displayScale = sourcePointWidth.map { pointWidth in
+                    PinnedImageGeometry.displayScale(
+                        imagePixelWidth: CGFloat(result.image.width),
+                        pointWidth: pointWidth
+                    )
+                }
                 resetScrollCaptureState()
                 await processCapturedImage(
                     result.image,
                     captureMode: .scroll,
                     sourceAppName: sourceAppName,
                     sourceWindowTitle: sourceWindowTitle,
-                    destination: .editorOnly
+                    destination: .editorOnly,
+                    displayScale: displayScale
                 )
                 if result.isTruncated {
                     let limitMessage = AppLocalization.string(

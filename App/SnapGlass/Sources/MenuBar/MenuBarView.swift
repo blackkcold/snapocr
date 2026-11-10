@@ -17,19 +17,29 @@ struct MenuBarView: View {
             viewModel.captureArea()
         }
         .globalKeyboardShortcut(.captureArea)
-        .disabled(viewModel.isCapturing)
+        .disabled(viewModel.isCapturing || viewModel.isRecordingBusy || viewModel.isScrollCaptureActive)
 
         Button("Window Capture") {
             viewModel.captureWindow()
         }
         .globalKeyboardShortcut(.captureWindow)
-        .disabled(viewModel.isCapturing)
+        .disabled(viewModel.isCapturing || viewModel.isRecordingBusy || viewModel.isScrollCaptureActive)
 
         Button("Fullscreen Capture") {
             viewModel.captureFullscreen()
         }
         .globalKeyboardShortcut(.captureFullscreen)
-        .disabled(viewModel.isCapturing)
+        .disabled(viewModel.isCapturing || viewModel.isRecordingBusy || viewModel.isScrollCaptureActive)
+
+        Divider()
+
+        Button(viewModel.isScreenshotShelfVisible ? "Hide Screenshot Shelf" : "Show Screenshot Shelf") {
+            viewModel.toggleScreenshotShelf()
+        }
+        .globalKeyboardShortcut(.screenshotShelf)
+        .disabled(!viewModel.canToggleScreenshotShelf)
+
+        recordingAction
 
         if viewModel.isScrollCaptureActive {
             Button {
@@ -86,5 +96,31 @@ struct MenuBarView: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
+    }
+
+    @ViewBuilder
+    private var recordingAction: some View {
+        switch viewModel.recordingStatus {
+        case .idle:
+            Button("Start Screen Recording") {
+                viewModel.startRecording()
+            }
+            .globalKeyboardShortcut(.screenRecording)
+            .disabled(!viewModel.canStartRecording)
+        case .selectingSource:
+            Button("Cancel Recording Setup") {
+                viewModel.cancelPendingRecordingStart()
+            }
+        case .countdown:
+            Button("Cancel Recording Countdown") {
+                viewModel.cancelPendingRecordingStart()
+            }
+        case .starting, .recording:
+            Button("Stop and Save") {
+                Task { _ = await viewModel.stopRecordingAndSave() }
+            }
+        case .saving:
+            Text("Saving Recording…")
+        }
     }
 }

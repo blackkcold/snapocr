@@ -18,20 +18,95 @@ struct CapturePreferencesView: View {
     private var overlayMode = PreferenceDefaults.captureOverlayMode
     @AppStorage(PreferenceKeys.captureHighResolution)
     private var highResolution = PreferenceDefaults.captureHighResolution
+    @AppStorage(PreferenceKeys.captureWindowStyling)
+    private var windowStyling = PreferenceDefaults.captureWindowStyling
     @AppStorage(PreferenceKeys.captureImageFormat)
     private var imageFormat = PreferenceDefaults.captureImageFormat
     @AppStorage(PreferenceKeys.captureJPEGQuality)
     private var jpegQuality = PreferenceDefaults.captureJPEGQuality
     @AppStorage(PreferenceKeys.pickerDominantColorCount)
     private var pickerDominantColorCount = PreferenceDefaults.pickerDominantColorCount
+    @AppStorage(PreferenceKeys.screenshotShelfEnabled)
+    private var screenshotShelfEnabled = PreferenceDefaults.screenshotShelfEnabled
+    @AppStorage(PreferenceKeys.screenshotShelfCount)
+    private var screenshotShelfCount = PreferenceDefaults.screenshotShelfCount
+    @AppStorage(PreferenceKeys.screenshotShelfCardHeight)
+    private var screenshotShelfCardHeight = PreferenceDefaults.screenshotShelfCardHeight
+    @AppStorage(PreferenceKeys.screenshotShelfImageOpacity)
+    private var screenshotShelfImageOpacity = PreferenceDefaults.screenshotShelfImageOpacity
+    @AppStorage(PreferenceKeys.screenshotShelfAnchor)
+    private var screenshotShelfAnchorRaw = PreferenceDefaults.screenshotShelfAnchor
+    @AppStorage(PreferenceKeys.screenshotShelfCollapseToRail)
+    private var screenshotShelfCollapseToRail = PreferenceDefaults.screenshotShelfCollapseToRail
+
+    private var screenshotShelfAnchor: Binding<ScreenshotShelfAnchor> {
+        Binding(
+            get: { ScreenshotShelfAnchor(rawValue: screenshotShelfAnchorRaw) ?? .top },
+            set: { screenshotShelfAnchorRaw = $0.rawValue }
+        )
+    }
 
     var body: some View {
         ScrollView {
             PreferencesCardGrid {
+                screenshotShelfCard
                 afterCaptureCard
 
                 imageCard
             }
+        }
+    }
+
+    private var screenshotShelfCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "rectangle.stack", title: "Screenshot Shelf")
+
+            Toggle("Enable screenshot shelf", isOn: $screenshotShelfEnabled)
+
+            Stepper(
+                "Number of screenshots: \(screenshotShelfCount)",
+                value: $screenshotShelfCount,
+                in: 1...6
+            )
+            .disabled(!screenshotShelfEnabled)
+
+            VStack(alignment: .leading) {
+                LabeledContent("Card height") {
+                    Text(screenshotShelfCardHeight, format: .number.precision(.fractionLength(0)))
+                        .monospacedDigit()
+                }
+                Slider(value: $screenshotShelfCardHeight, in: 64...160, step: 4)
+            }
+            .disabled(!screenshotShelfEnabled)
+
+            VStack(alignment: .leading) {
+                LabeledContent("Image opacity") {
+                    Text(screenshotShelfImageOpacity, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit()
+                }
+                Slider(value: $screenshotShelfImageOpacity, in: 0.2...1, step: 0.05)
+            }
+            .disabled(!screenshotShelfEnabled)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Position")
+                    .font(.subheadline.weight(.medium))
+                ShelfPositionPicker(selection: screenshotShelfAnchor)
+            }
+            .disabled(!screenshotShelfEnabled)
+
+            Toggle("Collapse to rail when idle", isOn: $screenshotShelfCollapseToRail)
+                .disabled(!screenshotShelfEnabled)
+
+            PreferencesCardCaption(
+                text: "The rail tab stays visible; move the pointer to it to expand again."
+            )
+            PreferencesCardCaption(
+                text: "The shelf hangs below the menu bar by default. Drag thumbnails to reorder."
+            )
+            PreferencesCardCaption(
+                text: "Shelf items are kept only for the current session unless saved to History."
+            )
         }
     }
 
@@ -62,6 +137,7 @@ struct CapturePreferencesView: View {
 
             Toggle("Include pointer", isOn: $includeCursor)
             Toggle("Native Retina resolution", isOn: $highResolution)
+            Toggle("Add rounded corners and shadow", isOn: $windowStyling)
 
             Picker("Selection style", selection: $selectionStyle) {
                 Text("Rectangle").tag(CaptureSelectionStyle.rectangle.rawValue)

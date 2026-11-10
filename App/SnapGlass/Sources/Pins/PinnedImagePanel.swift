@@ -1,4 +1,5 @@
 import AppKit
+import SharedKit
 
 // MARK: - PinnedImagePanel
 
@@ -24,7 +25,7 @@ final class PinnedImagePanel: NSPanel {
         isOpaque = false
         hasShadow = true
         // 决策 8：置顶内容不进入任何第三方录屏、系统截屏或后续 SnapGlass 截图。
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
     }
 
     /// ⌘W 需经 `performKeyEquivalent` 处理。
