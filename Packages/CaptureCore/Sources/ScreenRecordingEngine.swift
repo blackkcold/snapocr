@@ -268,7 +268,10 @@ public actor ScreenRecordingEngine {
         try sessionState.beginStop()
         guard let stream, let pipeline else {
             sessionState.fail()
-            throw ScreenRecordingEngineError.recordingFailed("The recording session is unavailable.", partialURL: partialOutputURL)
+            throw ScreenRecordingEngineError.recordingFailed(
+                "The recording session is unavailable.",
+                partialURL: partialOutputURL
+            )
         }
 
         var stopError: String?
@@ -321,7 +324,9 @@ public actor ScreenRecordingEngine {
         case let .window(windowID):
             guard let window = content.windows.first(where: { $0.windowID == windowID }),
                   let display = content.displays.first(where: { $0.frame.contains(window.frame) }) else {
-                throw ScreenRecordingEngineError.sourceUnavailable("The selected window is no longer fully visible on one display.")
+                throw ScreenRecordingEngineError.sourceUnavailable(
+                    "The selected window is no longer fully visible on one display."
+                )
             }
             let scale = Self.pixelScale(for: display)
             let sourceRect = CGRect(

@@ -531,16 +531,15 @@ final class AreaTrackingView: NSView {
             selectionRect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         }
     }
+}
 
+extension AreaTrackingView {
     private func boundingRect(for points: [CGPoint]) -> CGRect {
         guard let first = points.first else { return .zero }
         return points.dropFirst().reduce(CGRect(origin: first, size: .zero)) { rect, point in
             rect.union(CGRect(origin: point, size: .zero))
         }
     }
-}
-
-extension AreaTrackingView {
     /// 将当前选区同时映射为 AppKit 全局点矩形与 Quartz 全局矩形。
     ///
     /// AppKit 矩形直接透传用于置顶面板（面板 frame 即 AppKit 点坐标），

@@ -92,7 +92,11 @@ struct ScreenshotShelfPreferencesTests {
         try Data("keep this recording".utf8).write(to: existingFile)
 
         RecordingDestinationPreferences.setCustomDirectory(customDirectory, in: defaults)
-        #expect(RecordingDestinationPreferences.directory(in: defaults, moviesDirectory: moviesDirectory) == customDirectory)
+        let resolved = RecordingDestinationPreferences.directory(
+            in: defaults,
+            moviesDirectory: moviesDirectory
+        )
+        #expect(resolved == customDirectory)
 
         RecordingDestinationPreferences.reset(in: defaults)
         #expect(

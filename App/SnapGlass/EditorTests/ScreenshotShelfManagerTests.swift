@@ -6,7 +6,10 @@ struct ScreenshotShelfManagerTests {
     @Test func windowFrameParsesQuartzBoundsAndRejectsInvalidValues() {
         let bounds: [String: CGFloat] = ["X": 12, "Y": 24, "Width": 320, "Height": 180]
 
-        #expect(ScreenshotShelfScreenResolver.windowFrame(from: bounds) == CGRect(x: 12, y: 24, width: 320, height: 180))
+        #expect(
+            ScreenshotShelfScreenResolver.windowFrame(from: bounds)
+                == CGRect(x: 12, y: 24, width: 320, height: 180)
+        )
         #expect(ScreenshotShelfScreenResolver.windowFrame(from: ["Width": "not a number"]) == nil)
     }
 

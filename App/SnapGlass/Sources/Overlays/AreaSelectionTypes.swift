@@ -67,7 +67,6 @@ private final class AreaSelectionSession {
         session.present(
             on: screens,
             style: effectiveStyle,
-            purpose: purpose,
             overlayMode: effectiveOverlayMode,
             onColorPicked: onColorPicked,
             onRecaptureRegion: onRecaptureRegion
@@ -112,7 +111,6 @@ private final class AreaSelectionSession {
     private func present(
         on screens: [NSScreen],
         style: CaptureSelectionStyle,
-        purpose: AreaSelectionPurpose,
         overlayMode: CaptureOverlayMode,
         onColorPicked: ((SampledColor) -> Void)?,
         onRecaptureRegion: (@MainActor (CGRect) async -> CGImage?)?

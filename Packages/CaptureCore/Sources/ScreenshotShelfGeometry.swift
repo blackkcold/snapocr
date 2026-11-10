@@ -179,7 +179,7 @@ public enum ScreenshotShelfGeometry {
         case .trailing:
             proposedX = visibleFrame.maxX - metrics.screenMargin + metrics.shadowInset - width
         }
-        let x = min(max(proposedX, visibleFrame.minX), visibleFrame.maxX - width)
+        let clampedX = min(max(proposedX, visibleFrame.minX), visibleFrame.maxX - width)
 
         let proposedY: CGFloat
         if anchor.isTop {
@@ -188,9 +188,9 @@ public enum ScreenshotShelfGeometry {
         } else {
             proposedY = visibleFrame.minY + metrics.screenMargin - metrics.shadowInset
         }
-        let y = min(max(proposedY, visibleFrame.minY), visibleFrame.maxY - height)
+        let clampedY = min(max(proposedY, visibleFrame.minY), visibleFrame.maxY - height)
 
-        return CGRect(x: x, y: y, width: width, height: height)
+        return CGRect(x: clampedX, y: clampedY, width: width, height: height)
     }
 
     /// Reserves room for auto-hidden system bars that can reappear over the shelf.

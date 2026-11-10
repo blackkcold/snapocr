@@ -1,0 +1,174 @@
+import AppKit
+import CaptureCore
+import HistoryCore
+import SharedKit
+
+@MainActor
+extension ScreenshotShelfManager {
+    // MARK: - Observers and preferences
+
+    func installObservers() {
+        installWorkspaceObservers()
+        installAppObservers()
+        installLockStateObservers()
+    }
+
+    private func installWorkspaceObservers() {
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        notificationObservers.append(workspaceCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshFullScreenSuppression() }
+        })
+        notificationObservers.append(workspaceCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshFullScreenSuppression() }
+        })
+    }
+
+    private func installAppObservers() {
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.finishHideImmediately()
+                self?.refreshPresentation(immediate: true)
+            }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: defaults,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshPreferences() }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: HistoryActor.imagesDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.reconcileHistory() }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isMenuTracking = true
+                self?.cancelCollapseTask()
+            }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: NSMenu.didEndTrackingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isMenuTracking = false
+                self?.scheduleCollapseIfNeeded()
+            }
+        })
+    }
+
+    private func installLockStateObservers() {
+        let distributedCenter = DistributedNotificationCenter.default()
+        notificationObservers.append(distributedCenter.addObserver(
+            forName: Notification.Name("com.apple.screenIsLocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.setScreenLocked(true) }
+        })
+        notificationObservers.append(distributedCenter.addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.setScreenLocked(false) }
+        })
+    }
+
+    func setScreenLocked(_ isLocked: Bool) {
+        if isLocked {
+            modeState.reset()
+            presentationState.setScreenLocked(true)
+            cancelCollapseTasks()
+            finishHideImmediately()
+            removeGlobalMonitor()
+            publishState()
+        } else {
+            presentationState.setScreenLocked(false)
+        }
+    }
+
+    func refreshPreferences() {
+        let enabled = ScreenshotShelfPreferences.isEnabled(in: defaults)
+        if isEnabled && !enabled { presentationState.hide() }
+        isEnabled = enabled
+        cardHeight = CGFloat(ScreenshotShelfPreferences.cardHeight(in: defaults))
+        imageOpacity = ScreenshotShelfPreferences.imageOpacity(in: defaults)
+        let newAnchor = ScreenshotShelfPreferences.anchor(in: defaults)
+        let anchorChanged = newAnchor != anchor
+        anchor = newAnchor
+        let newCollapseToRail = ScreenshotShelfPreferences.collapseToRail(in: defaults)
+        let collapseChanged = newCollapseToRail != collapseToRail
+        collapseToRail = newCollapseToRail
+        if collapseToRail {
+            removeGlobalMonitor()
+        } else if collapseChanged, modeState.mode == .collapsed {
+            modeState.expand()
+            cancelCollapseTask()
+        }
+        let evictedIDs = state.setLimit(ScreenshotShelfPreferences.count(in: defaults))
+        removeCards(for: evictedIDs)
+        scheduleAssetRemoval(for: evictedIDs)
+        synchronizeCards()
+        if phase == .visible, anchorChanged || collapseChanged {
+            if let screen = displayScreen ?? NSScreen.screens.first {
+                let layout = makeLayout(for: screen)
+                if layout.panelFrame.width > 0 {
+                    if let panel, layout.panelFrame == panel.frame {
+                        updateViewModel(layout)
+                    } else {
+                        crossfade(to: layout)
+                    }
+                }
+            }
+            installClickDismissMonitorIfNeeded()
+        } else {
+            schedulePresentationUpdate()
+        }
+        if collapseToRail {
+            scheduleCollapseIfNeeded()
+        }
+    }
+
+    func refreshFullScreenSuppression() {
+        let targetDisplayID = (displayScreen ?? NSScreen.main)
+            .flatMap(ScreenshotShelfScreenResolver.displayID(for:))
+        let isCovered = ScreenshotShelfScreenResolver.frontmostAppCoversDisplay(
+            targetDisplayID: targetDisplayID
+        )
+        guard isCovered != isFullScreenSuppressed else { return }
+        isFullScreenSuppressed = isCovered
+        if isCovered {
+            presentationState.beginSuppression(.fullScreen)
+        } else {
+            presentationState.endSuppression(.fullScreen)
+        }
+        updateModeSuppression()
+        refreshPresentation(immediate: isCovered)
+        if !isCovered {
+            scheduleCollapseIfNeeded()
+        }
+    }
+
+}

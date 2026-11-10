@@ -10,7 +10,10 @@ struct RecordingOutputTransactionTests {
 
         let transaction = try makeTransaction(in: directory)
 
-        #expect(transaction.partialURL.deletingLastPathComponent().standardizedFileURL.path == directory.standardizedFileURL.path)
+        let partialDirectory = transaction.partialURL
+            .deletingLastPathComponent()
+            .standardizedFileURL
+        #expect(partialDirectory.path == directory.standardizedFileURL.path)
         #expect(transaction.partialURL.lastPathComponent.hasPrefix("."))
         #expect(FileManager.default.fileExists(atPath: transaction.partialURL.path))
         #expect(!FileManager.default.fileExists(atPath: transaction.finalURL.path))

@@ -52,7 +52,6 @@ extension CaptureViewModel {
         if shouldOpenEditor {
             openEditorAndFinish(
                 image: image,
-                modeDescription: modeDescription,
                 destination: destination,
                 historyContext: historyContext,
                 imageCopySucceeded: imageCopySucceeded,
@@ -91,13 +90,16 @@ extension CaptureViewModel {
     /// "overwrite original" still works.
     private func openEditorAndFinish(
         image: CGImage,
-        modeDescription: String,
         destination: CaptureDestination,
         historyContext: HistorySaveContext,
         imageCopySucceeded: Bool,
         shelfCaptureID: UUID?
     ) {
-        let tabID = openEditor(with: image, captureMode: modeDescription, sourceEntryID: nil)
+        let tabID = openEditor(
+            with: image,
+            captureMode: historyContext.modeDescription,
+            sourceEntryID: nil
+        )
         Task { [weak self] in
             guard let self else { return }
             let ocrResult = await self.runOCRAndSuggestions(

@@ -57,7 +57,10 @@ struct RecordingConfigurationTests {
         let nonSixteenByNineSource = CGSize(width: 2_560, height: 1_600)
         let fittedSize = configuration.outputDimensions(for: nonSixteenByNineSource)
         #expect(fittedSize == CGSize(width: 1_728, height: 1_080))
-        #expect(abs(fittedSize.width / fittedSize.height - nonSixteenByNineSource.width / nonSixteenByNineSource.height) < 0.001)
+        let aspectDelta =
+            fittedSize.width / fittedSize.height
+            - nonSixteenByNineSource.width / nonSixteenByNineSource.height
+        #expect(abs(aspectDelta) < 0.001)
     }
 
     @Test func rejectsCodecUnavailableFromTheEncoder() {
