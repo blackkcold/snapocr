@@ -132,7 +132,7 @@ private final class AreaSelectionSession {
         }
         for panel in panels {
             panel.orderFrontRegardless()
-            panel.sharingType = .none
+            panel.sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         }
         let mouseLocation = NSEvent.mouseLocation
         let initialPanel = panels.first { $0.frame.contains(mouseLocation) } ?? panels.first
@@ -263,7 +263,7 @@ final class AreaSelectionPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         // 决策 8 同族：遮罩面板不进入任何录屏、系统截屏或自己的截图。
         // `sharingType` 是逐窗口属性，排序后可能被重置，所以每次前置后重设。
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
         isMovableByWindowBackground = false
@@ -278,7 +278,7 @@ final class AreaSelectionPanel: NSPanel {
 
     override func orderFrontRegardless() {
         super.orderFrontRegardless()
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
     }
 
     override func close() { finish(with: nil) }

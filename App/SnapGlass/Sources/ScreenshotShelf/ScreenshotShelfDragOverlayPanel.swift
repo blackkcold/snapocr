@@ -1,5 +1,6 @@
 import AppKit
 import CaptureCore
+import SharedKit
 import SwiftUI
 
 /// Everything the standalone drag preview needs to render one card without clipping it to the
@@ -230,7 +231,7 @@ final class ScreenshotShelfDragOverlayPanel: NSPanel {
         isOpaque = false
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         ignoresMouseEvents = true
         animationBehavior = .none
         isReleasedWhenClosed = false
@@ -253,8 +254,9 @@ final class ScreenshotShelfDragOverlayPanel: NSPanel {
     }
 
     func assertSharingType() {
-        if sharingType != .none {
-            sharingType = .none
+        let resolved: NSWindow.SharingType = ShowcaseMode.isEnabled ? .readOnly : .none
+        if sharingType != resolved {
+            sharingType = resolved
         }
     }
 

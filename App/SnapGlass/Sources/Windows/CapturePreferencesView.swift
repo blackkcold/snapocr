@@ -18,6 +18,8 @@ struct CapturePreferencesView: View {
     private var overlayMode = PreferenceDefaults.captureOverlayMode
     @AppStorage(PreferenceKeys.captureHighResolution)
     private var highResolution = PreferenceDefaults.captureHighResolution
+    @AppStorage(PreferenceKeys.captureWindowStyling)
+    private var windowStyling = PreferenceDefaults.captureWindowStyling
     @AppStorage(PreferenceKeys.captureImageFormat)
     private var imageFormat = PreferenceDefaults.captureImageFormat
     @AppStorage(PreferenceKeys.captureJPEGQuality)
@@ -135,6 +137,7 @@ struct CapturePreferencesView: View {
 
             Toggle("Include pointer", isOn: $includeCursor)
             Toggle("Native Retina resolution", isOn: $highResolution)
+            Toggle("Add rounded corners and shadow", isOn: $windowStyling)
 
             Picker("Selection style", selection: $selectionStyle) {
                 Text("Rectangle").tag(CaptureSelectionStyle.rectangle.rawValue)

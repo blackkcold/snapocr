@@ -655,3 +655,14 @@
 "12 Mbps" = "12 Mbps";
 "16 Mbps" = "16 Mbps";
 "20 Mbps" = "20 Mbps";
+
+"Add rounded corners and shadow" = "为截图添加圆角与投影";
+"Link found in text" = "文本中发现链接";
+"Open" = "打开";
+"Email found in text" = "文本中发现邮箱";
+"Send Email" = "发送邮件";
+"Code found in text" = "文本中发现验证码";
+"Copy Code" = "复制验证码";
+"Keyboard Mode" = "键盘模式";
+"Screenshot saved" = "截图已保存";
+"Unable to save image" = "无法保存图片";

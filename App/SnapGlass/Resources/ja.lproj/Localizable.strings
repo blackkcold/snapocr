@@ -655,3 +655,14 @@
 "12 Mbps" = "12 Mbps";
 "16 Mbps" = "16 Mbps";
 "20 Mbps" = "20 Mbps";
+
+"Add rounded corners and shadow" = "スクリーンショットに角丸と影を追加";
+"Link found in text" = "テキスト内にリンクがあります";
+"Open" = "開く";
+"Email found in text" = "テキスト内にメールアドレスがあります";
+"Send Email" = "メールを送信";
+"Code found in text" = "テキスト内に確認コードがあります";
+"Copy Code" = "コードをコピー";
+"Keyboard Mode" = "キーボードモード";
+"Screenshot saved" = "スクリーンショットを保存しました";
+"Unable to save image" = "画像を保存できません";

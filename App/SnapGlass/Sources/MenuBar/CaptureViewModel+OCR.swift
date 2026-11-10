@@ -22,12 +22,50 @@ extension CaptureViewModel {
                 NSPasteboard.general.setString(result.text, forType: .string)
                 showToast(message: AppLocalization.string("Text copied to clipboard"), type: .success)
             } else {
-                showToast(message: AppLocalization.string("OCR completed"), type: .success)
+                presentOCRActionSuggestion(for: result.text)
             }
             return result
         } catch {
             showToast(message: AppLocalization.string("OCR failed: %@", error.localizedDescription), type: .error)
             return nil
+        }
+    }
+
+    /// Offers one action for the most useful thing in the recognized text, so a
+    /// link, address, or verification code does not have to be selected by hand.
+    private func presentOCRActionSuggestion(for text: String) {
+        guard let action = OCRTextActionDetector.candidates(in: text).first else {
+            showToast(message: AppLocalization.string("OCR completed"), type: .success)
+            return
+        }
+
+        switch action {
+        case .openURL(let url):
+            showToast(
+                message: AppLocalization.string("Link found in text"),
+                type: .info,
+                actionLabel: AppLocalization.string("Open")
+            ) {
+                NSWorkspace.shared.open(url)
+            }
+        case .composeEmail(let address):
+            showToast(
+                message: AppLocalization.string("Email found in text"),
+                type: .info,
+                actionLabel: AppLocalization.string("Send Email")
+            ) {
+                guard let url = URL(string: "mailto:\(address)") else { return }
+                NSWorkspace.shared.open(url)
+            }
+        case .copyCode(let code):
+            showToast(
+                message: AppLocalization.string("Code found in text"),
+                type: .info,
+                actionLabel: AppLocalization.string("Copy Code")
+            ) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(code, forType: .string)
+            }
         }
     }
 

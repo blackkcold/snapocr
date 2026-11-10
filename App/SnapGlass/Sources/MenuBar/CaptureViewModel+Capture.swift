@@ -441,8 +441,18 @@ extension CaptureViewModel {
                     pointWidth: pointWidth
                 )
             }
-            await processCapturedImage(
+            let styledImage = WindowScreenshotStyling.applyIfNeeded(
                 image,
+                captureMode: captureMode,
+                isEnabled: Self.boolPreference(
+                    forKey: PreferenceKeys.captureWindowStyling,
+                    defaultValue: PreferenceDefaults.captureWindowStyling
+                ),
+                isPinning: pinRect != nil || destination == .pinOnly,
+                scale: displayScale ?? 2
+            )
+            await processCapturedImage(
+                styledImage,
                 captureMode: captureMode,
                 sourceAppName: sourceAppName,
                 sourceWindowTitle: sourceWindowTitle,

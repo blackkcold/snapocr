@@ -105,6 +105,7 @@ enum ScreenshotShelfAction {
     case beginInteraction
     case endInteraction
     case move(UUID, Int)
+    case beginKeyboardMode
 }
 
 @MainActor
@@ -122,6 +123,7 @@ final class ScreenshotShelfViewModel: ObservableObject {
     @Published private(set) var isPointerInside = false
     @Published private(set) var pointerLocation: CGPoint?
     @Published private(set) var dragPreview: ScreenshotShelfDragPreview?
+    @Published private(set) var focusedCaptureID: UUID?
 
     weak var delegate: ScreenshotShelfViewModelDelegate?
     var onPointerInsideChanged: ((Bool) -> Void)?
@@ -133,6 +135,11 @@ final class ScreenshotShelfViewModel: ObservableObject {
 
     func perform(_ action: ScreenshotShelfAction) {
         delegate?.screenshotShelfViewModel(self, perform: action)
+    }
+
+    func setFocusedCapture(_ captureID: UUID?) {
+        guard focusedCaptureID != captureID else { return }
+        focusedCaptureID = captureID
     }
 
     func beginDrag(cardID: UUID, startIndex: Int, startX: CGFloat, width: CGFloat) {

@@ -38,6 +38,16 @@ final class ScreenshotShelfManager {
             try await self?.originalData(for: captureID)
         }
     )
+    private lazy var keyboardController = ScreenshotShelfKeyboardController(
+        model: viewModel,
+        onCopy: { [weak self] in self?.onCopy?($0) },
+        onOpen: { [weak self] in
+            self?.onEdit?($0)
+            self?.hide()
+        },
+        onSave: { [weak self] in self?.onSave?($0) },
+        onRemove: { [weak self] in self?.remove(captureID: $0) }
+    )
     private var phase: ScreenshotShelfPhase = .hidden
     private var presentationGeneration: UInt64 = 0
     private var pendingLayout: ScreenshotShelfLayout?
@@ -60,6 +70,7 @@ final class ScreenshotShelfManager {
     var onEdit: ((UUID) -> Void)?
     var onCopy: ((UUID) -> Void)?
     var onPin: ((UUID) -> Void)?
+    var onSave: ((UUID) -> Void)?
     var onStateChange: ((Bool, Bool, Bool, Bool) -> Void)?
     var onCacheFailure: ((String) -> Void)?
 
@@ -119,6 +130,11 @@ final class ScreenshotShelfManager {
             schedulePrewarm()
         }
         refreshPresentation(immediate: true)
+#if DEBUG
+        if observesSystemEvents {
+            ShowcaseShelfSeeder.schedule(manager: self)
+        }
+#endif
     }
 
     func publishCurrentState() {
@@ -571,7 +587,7 @@ final class ScreenshotShelfManager {
     private func showPanel(layout: ScreenshotShelfLayout, immediate: Bool) {
         let panel = self.panel ?? ScreenshotShelfPanel(contentRect: layout.panelFrame, model: viewModel)
         self.panel = panel
-        attachDragOutController(to: panel)
+        attachControllers(to: panel)
         panel.assertSharingType()
         dragOverlayController.cancel()
         dragOverlayController.prewarm()
@@ -639,6 +655,7 @@ final class ScreenshotShelfManager {
     private func hidePanel(immediate: Bool) {
         cancelCollapseTasks()
         modeState.cancelInteraction()
+        keyboardController.exit()
         dragOverlayController.cancel()
         guard let panel else {
             phase = .hidden
@@ -690,6 +707,7 @@ final class ScreenshotShelfManager {
         presentationGeneration &+= 1
         cancelCollapseTasks()
         modeState.cancelInteraction()
+        keyboardController.exit()
         dragOverlayController.cancel()
         panel?.orderOut(nil)
         panel?.alphaValue = 1
@@ -766,7 +784,7 @@ final class ScreenshotShelfManager {
         )
         let warmPanel = ScreenshotShelfPanel(contentRect: frame, model: viewModel)
         panel = warmPanel
-        attachDragOutController(to: warmPanel)
+        attachControllers(to: warmPanel)
         dragOverlayController.prewarm()
         warmPanel.orderFrontRegardless()
         warmPanel.assertSharingType()
@@ -1083,8 +1101,9 @@ final class ScreenshotShelfManager {
         cards = state.entries.compactMap { cardsByID[$0.captureID] }
     }
 
-    private func attachDragOutController(to panel: ScreenshotShelfPanel) {
+    private func attachControllers(to panel: ScreenshotShelfPanel) {
         dragOutController.attach(panel: panel)
+        keyboardController.attach(panel: panel)
         panel.dragOutController = dragOutController
     }
 
@@ -1128,6 +1147,8 @@ final class ScreenshotShelfManager {
             clear()
         case .hide:
             hide()
+        case .beginKeyboardMode:
+            keyboardController.enter()
         case .expand:
             setMode(.expanded)
         case .beginInteraction:

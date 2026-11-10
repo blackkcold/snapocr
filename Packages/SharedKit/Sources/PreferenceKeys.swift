@@ -20,6 +20,8 @@ public enum PreferenceKeys {
     public static let captureSelectionStyle = "capture_selectionStyle"
     public static let captureOverlayMode = "capture_overlayMode"
     public static let captureHighResolution = "capture_highResolution"
+    /// Whether window captures get rounded corners and a soft shadow.
+    public static let captureWindowStyling = "capture_windowStyling"
     public static let captureImageFormat = "capture_imageFormat"
     public static let captureJPEGQuality = "capture_jpegQuality"
     public static let pickerDominantColorCount = "capture_pickerDominantColorCount"
@@ -86,6 +88,7 @@ public enum PreferenceDefaults {
     public static let captureSelectionStyle = CaptureSelectionStyle.rectangle.rawValue
     public static let captureOverlayMode = CaptureOverlayMode.live.rawValue
     public static let captureHighResolution = true
+    public static let captureWindowStyling = true
     public static let captureImageFormat = "png"
     public static let captureJPEGQuality = 0.9
     public static let pickerDominantColorCount = 5

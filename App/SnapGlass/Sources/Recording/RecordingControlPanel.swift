@@ -1,4 +1,5 @@
 import AppKit
+import SharedKit
 import SwiftUI
 
 enum RecordingControlPanelState: Equatable {
@@ -133,7 +134,7 @@ final class RecordingControlPanel: NSPanel {
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         let hostingView = NSHostingView(rootView: makeRootView(state: .countdown(3)))
         self.hostingView = hostingView
         contentView = hostingView

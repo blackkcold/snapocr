@@ -655,3 +655,14 @@
 "12 Mbps" = "12 Mbps";
 "16 Mbps" = "16 Mbps";
 "20 Mbps" = "20 Mbps";
+
+"Add rounded corners and shadow" = "스크린샷에 둥근 모서리와 그림자 추가";
+"Link found in text" = "텍스트에서 링크를 찾았습니다";
+"Open" = "열기";
+"Email found in text" = "텍스트에서 이메일을 찾았습니다";
+"Send Email" = "이메일 보내기";
+"Code found in text" = "텍스트에서 인증 코드를 찾았습니다";
+"Copy Code" = "코드 복사";
+"Keyboard Mode" = "키보드 모드";
+"Screenshot saved" = "스크린샷이 저장되었습니다";
+"Unable to save image" = "이미지를 저장할 수 없습니다";

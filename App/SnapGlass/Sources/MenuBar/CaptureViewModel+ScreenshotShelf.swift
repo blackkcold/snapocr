@@ -2,6 +2,7 @@ import AppKit
 import CaptureCore
 import ImageIO
 import SharedKit
+import UniformTypeIdentifiers
 
 extension CaptureViewModel {
     /// Toggles the recent screenshot shelf when it can be shown.
@@ -40,6 +41,9 @@ extension CaptureViewModel {
         }
         screenshotShelfManager.onPin = { [weak self] in
             self?.pinScreenshotShelfItem(captureID: $0)
+        }
+        screenshotShelfManager.onSave = { [weak self] in
+            self?.saveScreenshotShelfItem(captureID: $0)
         }
         screenshotShelfManager.onStateChange = { [weak self] isVisible, hasItems, isEnabled, canToggle in
             self?.isScreenshotShelfVisible = isVisible
@@ -118,6 +122,50 @@ extension CaptureViewModel {
                 type: .success
             )
         }
+    }
+
+    private func saveScreenshotShelfItem(captureID: UUID) {
+        Task { [weak self] in
+            guard let self else { return }
+            guard let image = await loadScreenshotShelfImage(captureID: captureID) else {
+                reportScreenshotShelfFeedback(
+                    captureID: captureID,
+                    message: .localizedKey("Unable to load screenshot"),
+                    type: .error
+                )
+                return
+            }
+
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.png]
+            panel.canCreateDirectories = true
+            panel.nameFieldStringValue = Self.screenshotShelfFileName()
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try ImageEncoder.write(image, to: url, format: .png)
+                }.value
+                reportScreenshotShelfFeedback(
+                    captureID: captureID,
+                    message: .localizedKey("Screenshot saved"),
+                    type: .success
+                )
+            } catch {
+                reportScreenshotShelfFeedback(
+                    captureID: captureID,
+                    message: .localizedKey("Unable to save image"),
+                    type: .error
+                )
+            }
+        }
+    }
+
+    private static func screenshotShelfFileName() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        return "SnapGlass_\(formatter.string(from: Date())).png"
     }
 
     private func loadScreenshotShelfImage(captureID: UUID) async -> CGImage? {

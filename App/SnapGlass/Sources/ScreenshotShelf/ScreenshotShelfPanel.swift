@@ -1,4 +1,5 @@
 import AppKit
+import SharedKit
 import SwiftUI
 
 @MainActor
@@ -6,6 +7,10 @@ final class ScreenshotShelfPanel: NSPanel {
     let hostingView: ShelfHostingView
     /// Installed by the manager once the drag export store exists.
     var dragOutController: ScreenshotShelfDragOutController?
+    /// True while the shelf takes keystrokes; also gates `canBecomeKey`.
+    var isKeyboardMode = false
+    /// Set by the keyboard controller while keyboard mode is active.
+    var keyHandler: ((NSEvent) -> Bool)?
 
     init(contentRect: CGRect, model: ScreenshotShelfViewModel) {
         hostingView = ShelfHostingView(rootView: ScreenshotShelfView(model: model))
@@ -22,7 +27,7 @@ final class ScreenshotShelfPanel: NSPanel {
         isOpaque = false
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
-        sharingType = .none
+        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         acceptsMouseMovedEvents = true
         contentView = hostingView
         hostingView.wantsLayer = true
@@ -35,13 +40,16 @@ final class ScreenshotShelfPanel: NSPanel {
     /// pointer leaves its bounds, which is what lets an in-shelf reorder become a
     /// system file drag mid-gesture.
     override func sendEvent(_ event: NSEvent) {
+        if isKeyboardMode, event.type == .keyDown, keyHandler?(event) == true {
+            return
+        }
         if dragOutController?.handle(event) == true {
             return
         }
         super.sendEvent(event)
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { isKeyboardMode }
     override var canBecomeMain: Bool { false }
 
     override func orderFrontRegardless() {
@@ -56,8 +64,9 @@ final class ScreenshotShelfPanel: NSPanel {
 
     /// Re-assert capture exclusion after every ordering operation.
     func assertSharingType() {
-        if sharingType != .none {
-            sharingType = .none
+        let resolved: NSWindow.SharingType = ShowcaseMode.isEnabled ? .readOnly : .none
+        if sharingType != resolved {
+            sharingType = resolved
         }
     }
 

@@ -190,10 +190,25 @@ struct ScreenshotShelfView: View {
             },
             railEmphasis: model.isPointerInside
         )
+        .overlay {
+            if model.focusedCaptureID == card.captureID {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .padding(-3)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     private var endMenu: some View {
         Menu {
+            Button {
+                model.perform(.beginKeyboardMode)
+            } label: {
+                Label("Keyboard Mode", systemImage: "keyboard")
+            }
+            .disabled(layout.cards.isEmpty)
+
             Button {
                 model.perform(.clear)
             } label: {
