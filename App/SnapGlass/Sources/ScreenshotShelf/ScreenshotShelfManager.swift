@@ -15,7 +15,7 @@ final class ScreenshotShelfManager {
     private let sessionStore: ScreenshotShelfSessionStore?
     private let defaults: UserDefaults
     private let createsPanel: Bool
-    private let viewModel = ScreenshotShelfViewModel()
+    let viewModel = ScreenshotShelfViewModel()
     var state: ScreenshotShelfState
     private var presentationState = ScreenshotShelfPresentationState()
     var cardsByID: [UUID: ScreenshotShelfCard] = [:]

@@ -10,10 +10,25 @@ import SharedKit
 enum ShowcaseShelfSeeder {
     static func schedule(manager: ScreenshotShelfManager) {
         guard ShowcaseMode.isEnabled else { return }
+        guard ProcessInfo.processInfo.environment["SNAPGLASS_SHOWCASE_OUT"] == nil else { return }
+
+        let state = ProcessInfo.processInfo.environment["SNAPGLASS_SHOWCASE_STATE"] ?? "shelf"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             for index in 0..<3 {
                 guard let image = makeImage(index: index) else { continue }
                 _ = manager.captureCompleted(image)
+            }
+            manager.showcaseHoldOpen()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                switch state {
+                case "drag":
+                    manager.showcaseBeginDrag(index: 1)
+                case "keyboard":
+                    manager.showcaseFocus(index: 1)
+                default:
+                    break
+                }
             }
         }
     }

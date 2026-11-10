@@ -5,6 +5,12 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
     weak var viewModel: CaptureViewModel?
     private var recordingQuitFlow = RecordingQuitFlow()
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+#if DEBUG
+        ShowcaseImageExporter.runIfConfigured()
+#endif
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let viewModel else { return .terminateNow }
         let request = recordingQuitFlow.request(

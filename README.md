@@ -81,6 +81,10 @@
 
 截图完成后，右下角动作栏会给出复制、编辑、置顶、识别条码等去向；最近几张会挂在**截图架**上等你下一步。
 
+### 试一试
+
+把 [`Docs/demo/ocr-sample.png`](Docs/demo/ocr-sample.png) 拖进 SnapGlass：里面有一个取件码、一个链接和一个邮箱，识别后应该直接出现「复制验证码」等动作。
+
 ---
 
 ## 🧰 功能
@@ -92,6 +96,12 @@
 - 支持多显示器与混合缩放；默认 Retina 像素，可切换标准 1x
 - 输出 PNG / JPEG，JPEG 质量可调；透明内容强制 PNG
 
+<p align="center">
+  <img src="Docs/images/readme/action-bar.png" alt="选区动作栏：复制、识别条码、编辑、置顶" width="700">
+</p>
+
+<p align="center"><sub>选区松手后出现的动作栏，四个去向都带快捷键。</sub></p>
+
 ### 🗂 截图架
 
 最近截图按完成顺序挂在屏幕边缘，随时取用：
@@ -101,6 +111,18 @@
 - **键盘模式**：菜单里的「键盘模式」打开后，<kbd>←</kbd><kbd>→</kbd> 选择、<kbd>↵</kbd> 复制、<kbd>空格</kbd> 进编辑器、<kbd>⌘</kbd>+<kbd>S</kbd> 另存为、<kbd>⌫</kbd> 移除、<kbd>Esc</kbd> 退出
 - 卡片右键：编辑 / 复制 / 置顶 / 删除；数量、卡片高度、透明度、贴边位置可调，空闲可收成一条轨道
 
+<p align="center">
+  <img src="Docs/images/readme/shelf-drag.png" alt="架内拖动排序，圆角虚线标出排序区" width="720">
+</p>
+
+<p align="center"><sub>架内拖动：圆角虚线标出排序区，松手落位；拖出架体就变成系统文件拖拽。</sub></p>
+
+<p align="center">
+  <img src="Docs/images/readme/shelf-keyboard.png" alt="键盘模式高亮当前选中的截图" width="720">
+</p>
+
+<p align="center"><sub>键盘模式：← → 选择、↵ 复制、空格进编辑器、⌘S 另存为。</sub></p>
+
 ### 🪟 窗口截图美化
 
 窗口截图默认带**圆角与柔和投影**，粘贴到文档或聊天里就是一张能直接发的图，不用再进编辑器加工。
@@ -108,6 +130,12 @@
 - 投影与圆角按屏幕倍率等比生成
 - 可在「设置 → 截图 → 图像」关闭
 - 只在窗口截图生效；区域、全屏、滚动截图保持原始像素
+
+<p align="center">
+  <img src="Docs/images/readme/window-styled.png" alt="窗口截图自带圆角与柔和投影" width="620">
+</p>
+
+<p align="center"><sub>窗口截图默认带圆角与投影，粘贴到文档里就是一张能直接发的图。</sub></p>
 
 ### ✏️ 标注编辑器
 
@@ -123,6 +151,12 @@
 - 开发者模式可对比 Vision 与 Tesseract 双引擎
 - 识别结果一键复制
 - **智能动作**：识别到链接、邮箱或六位验证码时，提示条直接给出「打开 / 发邮件 / 复制验证码」，不用手动选中再复制
+
+<p align="center">
+  <img src="Docs/images/readme/ocr-actions.png" alt="识别到验证码时提示条直接给出复制按钮" width="560">
+</p>
+
+<p align="center"><sub>识别到验证码 / 链接 / 邮箱时，提示条直接给出对应动作。</sub></p>
 
 ### 📦 条码
 

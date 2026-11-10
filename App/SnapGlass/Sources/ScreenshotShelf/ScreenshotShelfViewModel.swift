@@ -142,6 +142,18 @@ final class ScreenshotShelfViewModel: ObservableObject {
         focusedCaptureID = captureID
     }
 
+#if DEBUG
+    /// Showcase hooks for the documentation exporter. Shipping code never calls these.
+    func setDragPreviewForShowcase(_ preview: ScreenshotShelfDragPreview?) {
+        dragPreview = preview
+    }
+
+    func setPointerForShowcase(inside: Bool, location: CGPoint?) {
+        isPointerInside = inside
+        pointerLocation = location
+    }
+#endif
+
     func beginDrag(cardID: UUID, startIndex: Int, startX: CGFloat, width: CGFloat) {
         delegate?.screenshotShelfViewModel(self, perform: .beginInteraction)
         let preview = ScreenshotShelfDragPreview(
