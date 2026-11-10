@@ -1,5 +1,6 @@
 import AnnotationCore
 import AppKit
+import CaptureCore
 import Testing
 
 /// 多标签的核心不变量：新截图不得销毁已有文档；同一历史条目只开一个标签。
@@ -39,6 +40,30 @@ struct EditorWorkspaceTests {
     #expect(first.id == again.id)
   }
 
+  @Test func reopeningSameEntryAdoptsTheLatestStyle() throws {
+    let workspace = EditorWorkspace()
+    let entryID = UUID()
+    let firstContext = EditorCaptureContext.capture(
+      image: try image(), captureMode: "window", sourceEntryID: entryID)
+    let first = try #require(workspace.open(image: try image(), context: firstContext))
+    let style = MockupPreset.dark.style
+    let reopenedImage = try image()
+    let reopenedContext = EditorCaptureContext.capture(
+      image: reopenedImage,
+      captureMode: "window",
+      sourceEntryID: entryID,
+      mockupStyle: style
+    )
+
+    let reopened = try #require(
+      workspace.open(image: reopenedImage, context: reopenedContext)
+    )
+
+    #expect(reopened.id == first.id)
+    #expect(reopened.viewModel.mockupStyle == style)
+    #expect(workspace.tabs.count == 1)
+  }
+
   @Test func dirtyTabWaitsForConfirmation() throws {
     let workspace = EditorWorkspace()
     let tab = try #require(workspace.open(image: try image(), context: .standard))
@@ -75,5 +100,16 @@ struct EditorWorkspaceTests {
 
     #expect(workspace.open(image: try image(), context: .standard) == nil)
     #expect(workspace.tabs.count == EditorWorkspace.maxTabs)
+  }
+
+  @Test func windowDidCloseForwardsToItsCallback() throws {
+    let workspace = EditorWorkspace()
+    var closes = 0
+    workspace.onWindowClosed = { closes += 1 }
+
+    workspace.windowDidClose()
+    workspace.windowDidClose()
+
+    #expect(closes == 2)
   }
 }

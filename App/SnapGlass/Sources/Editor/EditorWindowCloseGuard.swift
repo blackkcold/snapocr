@@ -11,14 +11,16 @@ import SwiftUI
 struct EditorWindowCloseGuard: NSViewRepresentable {
     let isDirty: () -> Bool
     let onBlocked: () -> Void
+    let onWindowClose: () -> Void
 
     func makeNSView(context: Context) -> GuardView {
-        GuardView(isDirty: isDirty, onBlocked: onBlocked)
+        GuardView(isDirty: isDirty, onBlocked: onBlocked, onWindowClose: onWindowClose)
     }
 
     func updateNSView(_ view: GuardView, context: Context) {
         view.isDirty = isDirty
         view.onBlocked = onBlocked
+        view.onWindowClose = onWindowClose
         // SwiftUI may replace the window delegate; re-install if that happened.
         view.installIfNeeded()
     }
@@ -26,11 +28,17 @@ struct EditorWindowCloseGuard: NSViewRepresentable {
     final class GuardView: NSView {
         var isDirty: () -> Bool
         var onBlocked: () -> Void
+        var onWindowClose: () -> Void
         private var proxy: WindowDelegateProxy?
 
-        init(isDirty: @escaping () -> Bool, onBlocked: @escaping () -> Void) {
+        init(
+            isDirty: @escaping () -> Bool,
+            onBlocked: @escaping () -> Void,
+            onWindowClose: @escaping () -> Void
+        ) {
             self.isDirty = isDirty
             self.onBlocked = onBlocked
+            self.onWindowClose = onWindowClose
             super.init(frame: .zero)
         }
 
@@ -88,6 +96,7 @@ struct EditorWindowCloseGuard: NSViewRepresentable {
 
         func windowWillClose(_ notification: Notification) {
             WindowDelegateProxy.release(self)
+            owner?.onWindowClose()
             originalDelegate?.windowWillClose?(notification)
         }
 

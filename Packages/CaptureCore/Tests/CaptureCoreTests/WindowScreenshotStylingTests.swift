@@ -24,6 +24,25 @@ struct WindowScreenshotStylingTests {
         )
     }
 
+    @Test func mockupStyleMatchesTheBakedWindowLook() throws {
+        let image = try makeImage(width: 800, height: 600)
+        let style = try #require(
+            WindowScreenshotStyling.mockupStyle(for: image, scale: 2)
+        )
+        let reference = MockupRenderer.referenceSide(
+            for: CGSize(width: 800, height: 600)
+        )
+
+        #expect(style.background == .transparent)
+        #expect(abs(style.paddingRatio - 28 / reference) < 0.000_001)
+        #expect(abs(style.cornerRadiusRatio - 20 / reference) < 0.000_001)
+        #expect(abs(style.shadowOpacity - 0.28) < 0.000_001)
+
+        let rendered = try #require(MockupRenderer.render(image, style: style))
+        #expect(rendered.width == 856)
+        #expect(rendered.height == 656)
+    }
+
     @Test func applyGrowsTheCanvasByThePadding() throws {
         let image = try makeImage(width: 40, height: 30)
         let style = WindowScreenshotStyling.Style(

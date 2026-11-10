@@ -95,9 +95,15 @@ public final class CaptureOrchestrator: Sendable {
         } catch CaptureError.invalidRegion {
             throw CaptureError.invalidRegion
         } catch let error as CaptureError {
+            if #available(macOS 15.0, *) {
+                throw error
+            }
             logger.warning("SCK capture failed: \(error), falling back to CG")
             return try await fallbackCapture(mode: mode, options: options)
         } catch {
+            if #available(macOS 15.0, *) {
+                throw error
+            }
             logger.warning("SCK capture threw unexpected error: \(error.localizedDescription), falling back to CG")
             return try await fallbackCapture(mode: mode, options: options)
         }
@@ -121,6 +127,158 @@ public final class CaptureOrchestrator: Sendable {
             content: content
         )
     }
+
+    // swiftlint:disable function_body_length
+    /// Captures every available display into one canvas.
+    ///
+    /// Compact modes place displays edge-to-edge (`gap` defaults to 0) and only
+    /// physical mode preserves the system's relative positions. The result is a
+    /// normal `.fullscreen` capture so history and the shelf stay unchanged.
+    public func captureAllDisplays(
+        mode: DisplayCanvasMode,
+        gap: CGFloat = 0,
+        alignment: DisplayCanvasAlignment = .start,
+        options: CaptureOptions = CaptureOptions()
+    ) async throws -> CaptureResult {
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            true,
+            onScreenWindowsOnly: true
+        )
+        guard !content.displays.isEmpty else {
+            throw CaptureError.displayUnavailable
+        }
+
+        let descriptors = content.displays.map { display in
+            let scale = Self.pixelScale(for: display)
+            return DisplayCanvasDisplay(
+                displayID: display.displayID,
+                frame: display.frame,
+                pixelSize: CGSize(
+                    width: display.frame.width * scale,
+                    height: display.frame.height * scale
+                )
+            )
+        }
+        guard let plan = DisplayCanvasPlan.make(
+            displays: descriptors,
+            mode: mode,
+            gap: gap,
+            alignment: alignment,
+            highResolution: options.highResolution
+        ) else {
+            throw CaptureError.displayUnavailable
+        }
+
+        let pixelCount = plan.outputPixelSize.width * plan.outputPixelSize.height
+        guard pixelCount <= 80_000_000 else {
+            throw CaptureError.captureFailed(
+                reason: "All-display canvas is too large (\(Int(pixelCount)) px). "
+                    + "Reduce the layout or disable Retina resolution."
+            )
+        }
+
+        let images = try await withThrowingTaskGroup(
+            of: (CGDirectDisplayID, CGImage).self
+        ) { group in
+            for display in content.displays {
+                group.addTask {
+                    let image = try await self.sckAdapter.captureDisplay(
+                        display,
+                        options: options
+                    )
+                    return (display.displayID, image)
+                }
+            }
+            var result: [CGDirectDisplayID: CGImage] = [:]
+            for try await (displayID, image) in group {
+                result[displayID] = image
+            }
+            return result
+        }
+
+        guard let composed = DisplayCanvasComposer.compose(
+            images: images,
+            plan: plan
+        ) else {
+            throw CaptureError.captureFailed(reason: "Unable to compose all displays")
+        }
+
+        let mainDisplay = content.displays.first {
+            $0.displayID == CGMainDisplayID()
+        } ?? content.displays[0]
+        let displayInfo = CaptureDisplayInfo(
+            displayID: mainDisplay.displayID,
+            scaleFactor: plan.commonScale,
+            frame: mainDisplay.frame,
+            pointWidth: plan.canvasSize.width
+        )
+        return CaptureResult(
+            image: composed,
+            captureMode: .fullscreen,
+            timestamp: Date(),
+            displayInfo: displayInfo
+        )
+    }
+
+    /// Captures each display as its own result for the "one per display" mode.
+    public func captureEachDisplay(
+        options: CaptureOptions = CaptureOptions()
+    ) async throws -> [CaptureResult] {
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            true,
+            onScreenWindowsOnly: true
+        )
+        guard !content.displays.isEmpty else {
+            throw CaptureError.displayUnavailable
+        }
+
+        return try await withThrowingTaskGroup(
+            of: (CGDirectDisplayID, CaptureResult).self
+        ) { group in
+            for display in content.displays {
+                group.addTask {
+                    let image = try await self.sckAdapter.captureDisplay(
+                        display,
+                        options: options
+                    )
+                    let info = CaptureDisplayInfo(
+                        displayID: display.displayID,
+                        scaleFactor: Self.pixelScale(for: display),
+                        frame: display.frame,
+                        pointWidth: display.frame.width
+                    )
+                    let result = CaptureResult(
+                        image: image,
+                        captureMode: .fullscreen,
+                        timestamp: Date(),
+                        displayInfo: info
+                    )
+                    return (display.displayID, result)
+                }
+            }
+            var results: [(CGDirectDisplayID, CaptureResult)] = []
+            for try await result in group {
+                results.append(result)
+            }
+            return results
+                .sorted { $0.0 < $1.0 }
+                .map(\.1)
+        }
+    }
+
+    private static func pixelScale(for display: SCDisplay) -> CGFloat {
+        if let screen = NSScreen.screens.first(where: { screen in
+            guard let number = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? UInt32 else { return false }
+            return number == display.displayID
+        }) {
+            return max(1, screen.backingScaleFactor)
+        }
+        return 1
+    }
+
+    // swiftlint:enable function_body_length
 
     /// 请求屏幕录制权限。
     ///
@@ -173,6 +331,15 @@ extension CaptureOrchestrator {
         mode: CaptureMode,
         options: CaptureOptions
     ) async throws -> CaptureResult {
+        // CGWindow/CGDisplay capture is obsoleted on macOS 15. Falling back
+        // there silently produced wallpaper or blank frames, which is worse
+        // than surfacing the ScreenCaptureKit failure and letting the user retry.
+        if #available(macOS 15.0, *) {
+            throw CaptureError.captureFailed(
+                reason: "Core Graphics capture fallback is unavailable on macOS 15+; retry ScreenCaptureKit"
+            )
+        }
+
         logger.info("Falling back to CGCompatAdapter (mode: \(describe(mode)))")
 
         let timestamp = Date()
@@ -237,28 +404,49 @@ extension CaptureOrchestrator {
                   let winID = firstWindow[kCGWindowNumber as String] as? UInt32 else {
                 throw CaptureError.windowNotFound
             }
-
-            guard let image = cgAdapter.captureWindow(winID, highResolution: options.highResolution) else {
-                throw CaptureError.captureFailed(reason: "CG fallback: failed to capture window \(winID)")
-            }
-
-            return CaptureResult(
-                image: image,
-                captureMode: .window(winID),
-                timestamp: timestamp,
-                displayInfo: nil
+            return try fallbackWindowResult(
+                windowID: winID,
+                options: options,
+                timestamp: timestamp
             )
         }
 
-        guard let image = cgAdapter.captureWindow(targetID, highResolution: options.highResolution) else {
-            throw CaptureError.captureFailed(reason: "CG fallback: failed to capture window \(targetID)")
+        return try fallbackWindowResult(
+            windowID: targetID,
+            options: options,
+            timestamp: timestamp
+        )
+    }
+
+    /// Builds a window result with the same display metadata shape as the SCK
+    /// path. Without it, the shelf falls back to the mouse display and window
+    /// styling uses an arbitrary 2x scale on 1x screens.
+    private func fallbackWindowResult(
+        windowID: CGWindowID,
+        options: CaptureOptions,
+        timestamp: Date
+    ) throws -> CaptureResult {
+        guard let image = cgAdapter.captureWindow(windowID, highResolution: options.highResolution) else {
+            throw CaptureError.captureFailed(reason: "CG fallback: failed to capture window \(windowID)")
+        }
+
+        let windowFrame = cgAdapter.frame(forWindow: windowID)
+        let displayInfo: CaptureDisplayInfo? = windowFrame.map { frame in
+            let point = CGPoint(x: frame.midX, y: frame.midY)
+            let displayID = cgAdapter.displayID(for: point)
+            return CaptureDisplayInfo(
+                displayID: displayID,
+                scaleFactor: cgAdapter.backingScaleFactor(for: displayID),
+                frame: cgAdapter.frame(for: displayID),
+                pointWidth: frame.width
+            )
         }
 
         return CaptureResult(
             image: image,
-            captureMode: .window(targetID),
+            captureMode: .window(windowID),
             timestamp: timestamp,
-            displayInfo: nil
+            displayInfo: displayInfo
         )
     }
 

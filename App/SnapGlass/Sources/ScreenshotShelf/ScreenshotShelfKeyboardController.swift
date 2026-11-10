@@ -7,21 +7,36 @@ enum ScreenshotShelfKeyboardCommand: Equatable {
     case copyFocused
     case openFocused
     case saveFocused
+    case openMockup
+    case toggleMockup
+    case cycleMockup
     case removeFocused
     case exit
     case ignore
 
+    // Key mapping is intentionally a flat lookup table; splitting it would
+    // make the reserved/ignored combinations harder to audit.
+    // swiftlint:disable:next cyclomatic_complexity
     static func command(
         characters: String,
         modifiers: NSEvent.ModifierFlags
     ) -> ScreenshotShelfKeyboardCommand {
         let flags = modifiers.intersection(.deviceIndependentFlagsMask)
         if flags.contains(.command) {
-            return characters.lowercased() == "s" ? .saveFocused : .ignore
+            switch characters.lowercased() {
+            case "s": return .saveFocused
+            case "b": return .openMockup
+            default: return .ignore
+            }
         }
         guard !flags.contains(.option), !flags.contains(.control) else { return .ignore }
+        if flags.contains(.shift), characters.lowercased() == "b" {
+            return .cycleMockup
+        }
 
         switch characters {
+        case "b":
+            return .toggleMockup
         case "\u{F702}":
             return .focusPrevious
         case "\u{F703}":
@@ -53,6 +68,9 @@ final class ScreenshotShelfKeyboardController {
     private let onCopy: (UUID) -> Void
     private let onOpen: (UUID) -> Void
     private let onSave: (UUID) -> Void
+    private let onOpenMockup: (UUID) -> Void
+    private let onToggleMockup: (UUID) -> Void
+    private let onCycleMockup: (UUID) -> Void
     private let onRemove: (UUID) -> Void
 
     private var isActive = false
@@ -63,12 +81,18 @@ final class ScreenshotShelfKeyboardController {
         onCopy: @escaping (UUID) -> Void,
         onOpen: @escaping (UUID) -> Void,
         onSave: @escaping (UUID) -> Void,
+        onOpenMockup: @escaping (UUID) -> Void,
+        onToggleMockup: @escaping (UUID) -> Void,
+        onCycleMockup: @escaping (UUID) -> Void,
         onRemove: @escaping (UUID) -> Void
     ) {
         self.model = model
         self.onCopy = onCopy
         self.onOpen = onOpen
         self.onSave = onSave
+        self.onOpenMockup = onOpenMockup
+        self.onToggleMockup = onToggleMockup
+        self.onCycleMockup = onCycleMockup
         self.onRemove = onRemove
     }
 
@@ -129,6 +153,12 @@ final class ScreenshotShelfKeyboardController {
             return performFocused(onOpen)
         case .saveFocused:
             return performFocused(onSave)
+        case .openMockup:
+            return performFocused(onOpenMockup)
+        case .toggleMockup:
+            return performFocused(onToggleMockup)
+        case .cycleMockup:
+            return performFocused(onCycleMockup)
         case .removeFocused:
             return performFocused(onRemove)
         }

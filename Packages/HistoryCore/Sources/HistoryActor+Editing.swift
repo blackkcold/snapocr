@@ -49,6 +49,19 @@ extension HistoryActor {
         NotificationCenter.default.post(name: Self.imagesDidChange, object: nil)
     }
 
+    /// Updates only the presentation metadata; the encrypted original and any
+    /// edit revision stay untouched.
+    public func updateMockupStyle(id: UUID, styleJSON: String?) throws {
+        guard var entry = entries[id] ?? diskCache[id] ?? loadEntryFromDiskSync(id: id) else {
+            throw HistoryError.entryNotFound(id: id)
+        }
+        entry.mockupStyleJSON = styleJSON
+        try persistEntry(entry)
+        entries[id] = entry
+        diskCache[id] = entry
+        NotificationCenter.default.post(name: Self.imagesDidChange, object: nil)
+    }
+
     public func restoreOriginal(id: UUID) throws {
         guard var entry = entries[id] ?? diskCache[id] ?? loadEntryFromDiskSync(id: id) else {
             throw HistoryError.entryNotFound(id: id)
@@ -61,8 +74,16 @@ extension HistoryActor {
         entry.imageRevision = nil
         entry.imagePath = originalURL
         entry.thumbnailPath = thumbnailURL
+        entry.mockupStyleJSON = nil
         entry.textContent = ""
         entry.ocrConfidence = 0
+        // A crop revision changes the pixel size; restoring must put the grid
+        // aspect ratio and pin scaling back to the original dimensions.
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            entry.pixelWidth = image.width
+            entry.pixelHeight = image.height
+        }
         try persistEntry(entry)
         entries[id] = entry
         diskCache[id] = entry

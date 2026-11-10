@@ -22,22 +22,29 @@ extension CaptureViewModel {
                 continuation.resume(returning: result)
             }
 
-            Task { @MainActor in
-                WindowSelectionPanel.show { result in
-                    resumeOnce(result)
+            let scheduleTimeout: () -> Void = {
+                timeoutTask?.cancel()
+                timeoutTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(60))
+                    guard !Task.isCancelled, !didResume else { return }
+                    WindowSelectionPanel.closeActivePanel()
+                    resumeOnce(nil)
+                    self?.showToast(
+                        message: AppLocalization.string("Window picker timed out; please try again"),
+                        type: .error
+                    )
                 }
             }
 
-            timeoutTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(60))
-                guard !Task.isCancelled, !didResume else { return }
-                WindowSelectionPanel.closeActivePanel()
-                resumeOnce(nil)
-                showToast(
-                    message: AppLocalization.string("Window picker timed out; please try again"),
-                    type: .error
+            Task { @MainActor in
+                WindowSelectionPanel.show(
+                    onComplete: { result in
+                        resumeOnce(result)
+                    },
+                    onActivity: scheduleTimeout
                 )
             }
+            scheduleTimeout()
         }
     }
 }

@@ -196,8 +196,8 @@ struct EditorView: View {
             } label: {
                 Label("Save to History", systemImage: "square.and.arrow.down.on.square")
             }
-            .keyboardShortcut("s", modifiers: [.command, .shift])
-            .help("Save the annotated image into history (⇧⌘S)")
+            .keyboardShortcut("s", modifiers: [.command, .option])
+            .help("Save the annotated image into history (⌥⌘S)")
             .disabled(editorVM.isEnteringText || editorVM.isApplyingCrop || editorVM.isWritingImage)
 
             Button("Copy") {

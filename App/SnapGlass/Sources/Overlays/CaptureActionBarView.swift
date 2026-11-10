@@ -6,11 +6,15 @@ import SwiftUI
 
 final class CaptureActionBarView: NSVisualEffectView {
     var onCopy: (() -> Void)?
+    var onCopyOriginal: (() -> Void)?
     var onEdit: (() -> Void)?
     var onPin: (() -> Void)?
     var onScan: (() -> Void)?
+    var onMockupCopy: (() -> Void)?
+    var onMockupEdit: (() -> Void)?
 
     private let copyButton = NSButton()
+    private let copyMenuButton = NSButton()
     private let scanButton = NSButton()
     private let editButton = NSButton()
     private let pinButton = NSButton()
@@ -32,7 +36,9 @@ final class CaptureActionBarView: NSVisualEffectView {
 
         configureActionButtons()
 
-        let stack = NSStackView(views: [copyButton, scanButton, editButton, pinButton])
+        let stack = NSStackView(
+            views: [copyButton, copyMenuButton, scanButton, editButton, pinButton]
+        )
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.distribution = .fill
@@ -64,6 +70,18 @@ final class CaptureActionBarView: NSVisualEffectView {
         )
         copyButton.keyEquivalent = "\r"
 
+        copyMenuButton.bezelStyle = .inline
+        copyMenuButton.isBordered = false
+        copyMenuButton.image = NSImage(
+            systemSymbolName: "chevron.down",
+            accessibilityDescription: AppLocalization.string("More copy options")
+        )
+        copyMenuButton.imagePosition = .imageOnly
+        copyMenuButton.target = self
+        copyMenuButton.action = #selector(showCopyMenu)
+        copyMenuButton.toolTip = AppLocalization.string("More copy options")
+        copyMenuButton.widthAnchor.constraint(equalToConstant: 18).isActive = true
+
         configure(
             scanButton,
             title: AppLocalization.string("Scan Selection"),
@@ -72,6 +90,9 @@ final class CaptureActionBarView: NSVisualEffectView {
             action: #selector(scanSelection)
         )
         scanButton.keyEquivalent = "s"
+        scanButton.title = ""
+        scanButton.imagePosition = .imageOnly
+        scanButton.setAccessibilityLabel(AppLocalization.string("Scan Selection"))
 
         configure(
             editButton,
@@ -81,6 +102,9 @@ final class CaptureActionBarView: NSVisualEffectView {
             action: #selector(editScreenshot)
         )
         editButton.keyEquivalent = "e"
+        editButton.title = ""
+        editButton.imagePosition = .imageOnly
+        editButton.setAccessibilityLabel(AppLocalization.string("Edit Screenshot"))
 
         configure(
             pinButton,
@@ -89,6 +113,9 @@ final class CaptureActionBarView: NSVisualEffectView {
             toolTip: AppLocalization.string("Pin the screenshot as a floating panel"),
             action: #selector(pinImage)
         )
+        pinButton.title = ""
+        pinButton.imagePosition = .imageOnly
+        pinButton.setAccessibilityLabel(AppLocalization.string("Pin Image"))
         // The pin shortcut is matched locally by `AreaTrackingView` so it can be
         // user-configured; a `keyEquivalent` here would bypass that and shadow it.
     }
@@ -108,14 +135,16 @@ final class CaptureActionBarView: NSVisualEffectView {
 
     /// 识别中：按钮文案换「识别中…」并禁用，避免重复起任务。
     func setScanning(_ isScanning: Bool) {
-        scanButton.title = isScanning
+        let label = isScanning
             ? AppLocalization.string("Scanning…")
             : AppLocalization.string("Scan Selection")
+        scanButton.toolTip = label
+        scanButton.setAccessibilityLabel(label)
         scanButton.isEnabled = !isScanning
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        for button in [copyButton, scanButton, editButton, pinButton]
+        for button in [copyButton, copyMenuButton, scanButton, editButton, pinButton]
         where button.convert(button.bounds, to: self).contains(point) {
             return button
         }
@@ -125,6 +154,7 @@ final class CaptureActionBarView: NSVisualEffectView {
     func performAction(at point: NSPoint) -> Bool {
         let actions: [(NSButton, () -> Void)] = [
             (copyButton, { [weak self] in self?.onCopy?() }),
+            (copyMenuButton, { [weak self] in self?.showCopyMenu() }),
             (scanButton, { [weak self] in self?.onScan?() }),
             (editButton, { [weak self] in self?.onEdit?() }),
             (pinButton, { [weak self] in self?.onPin?() }),
@@ -155,6 +185,46 @@ final class CaptureActionBarView: NSVisualEffectView {
     }
 
     @objc private func copyImage() { onCopy?() }
+
+    @objc private func showCopyMenu() {
+        let menu = NSMenu()
+        let copyOriginal = NSMenuItem(
+            title: AppLocalization.string("Copy Original"),
+            action: #selector(copyOriginalFromMenu),
+            keyEquivalent: ""
+        )
+        copyOriginal.target = self
+        menu.addItem(copyOriginal)
+
+        let copyMockup = NSMenuItem(
+            title: AppLocalization.string("Copy Beautified"),
+            action: #selector(copyMockupFromMenu),
+            keyEquivalent: "b"
+        )
+        copyMockup.keyEquivalentModifierMask = []
+        copyMockup.target = self
+        menu.addItem(copyMockup)
+
+        menu.addItem(.separator())
+        let editMockup = NSMenuItem(
+            title: AppLocalization.string("Beautify and Edit…"),
+            action: #selector(editMockupFromMenu),
+            keyEquivalent: ""
+        )
+        editMockup.target = self
+        menu.addItem(editMockup)
+
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: 0, y: copyMenuButton.bounds.height + 4),
+            in: copyMenuButton
+        )
+    }
+
+    @objc private func copyOriginalFromMenu() { onCopyOriginal?() }
+    @objc private func copyMockupFromMenu() { onMockupCopy?() }
+    @objc private func editMockupFromMenu() { onMockupEdit?() }
+
     @objc private func scanSelection() { onScan?() }
     @objc private func editScreenshot() { onEdit?() }
     @objc private func pinImage() { onPin?() }

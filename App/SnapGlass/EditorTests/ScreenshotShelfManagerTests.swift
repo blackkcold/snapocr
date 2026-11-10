@@ -1,4 +1,5 @@
 import AppKit
+import CaptureCore
 import Testing
 
 @MainActor
@@ -70,6 +71,24 @@ struct ScreenshotShelfManagerTests {
         ) == 1)
     }
 
+    @Test func captureCompletedCarriesMockupStyleForReEditAndBadge() throws {
+        let manager = try makeManager()
+        let image = try makeImage()
+        let style = MockupPreset.ocean.style
+
+        let captureID = try #require(
+            manager.captureCompleted(
+                image,
+                presentedImage: image,
+                mockupStyle: style
+            )
+        )
+        let card = try #require(manager.card(for: captureID))
+
+        #expect(card.isMockup)
+        #expect(card.mockupStyle == style)
+    }
+
     @Test func captureSuppressionRestoresShownIntentButManualHidePersists() throws {
         let manager = try makeManager()
         let image = try makeImage()
@@ -101,6 +120,31 @@ struct ScreenshotShelfManagerTests {
 
         manager.endCaptureSuppression()
         #expect(manager.shouldPresentPanel)
+    }
+
+    @Test func editingSuppressionRestoresShownIntentAfterEditorCloses() throws {
+        let manager = try makeManager()
+        let image = try makeImage()
+        _ = try #require(manager.captureCompleted(image))
+        manager.show()
+
+        manager.beginEditingSuppression()
+        #expect(!manager.shouldPresentPanel)
+
+        manager.endEditingSuppression()
+        #expect(manager.shouldPresentPanel)
+    }
+
+    @Test func editingSuppressionKeepsManualHideSticky() throws {
+        let manager = try makeManager()
+        let image = try makeImage()
+        _ = try #require(manager.captureCompleted(image))
+        manager.hide()
+
+        manager.beginEditingSuppression()
+        manager.endEditingSuppression()
+
+        #expect(!manager.shouldPresentPanel)
     }
 
     @Test func cacheFailureKeepsTheCompletedCaptureOnTheShelf() throws {

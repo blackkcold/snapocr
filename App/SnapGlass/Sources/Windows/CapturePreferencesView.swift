@@ -1,3 +1,5 @@
+import CaptureCore
+import CoreGraphics
 import SharedKit
 import SwiftUI
 
@@ -20,6 +22,16 @@ struct CapturePreferencesView: View {
     private var highResolution = PreferenceDefaults.captureHighResolution
     @AppStorage(PreferenceKeys.captureWindowStyling)
     private var windowStyling = PreferenceDefaults.captureWindowStyling
+    @AppStorage(PreferenceKeys.captureMockupEnabled)
+    private var mockupEnabled = PreferenceDefaults.captureMockupEnabled
+    @AppStorage(PreferenceKeys.captureMockupPreset)
+    private var mockupPreset = PreferenceDefaults.captureMockupPreset
+    @AppStorage(PreferenceKeys.displayCanvasMode)
+    private var displayCanvasMode = PreferenceDefaults.displayCanvasMode
+    @AppStorage(PreferenceKeys.displayCanvasGap)
+    private var displayCanvasGap = PreferenceDefaults.displayCanvasGap
+    @AppStorage(PreferenceKeys.displayCanvasAlignment)
+    private var displayCanvasAlignment = PreferenceDefaults.displayCanvasAlignment
     @AppStorage(PreferenceKeys.captureImageFormat)
     private var imageFormat = PreferenceDefaults.captureImageFormat
     @AppStorage(PreferenceKeys.captureJPEGQuality)
@@ -51,7 +63,8 @@ struct CapturePreferencesView: View {
             PreferencesCardGrid {
                 screenshotShelfCard
                 afterCaptureCard
-
+                appearanceCard
+                displaysCard
                 imageCard
             }
         }
@@ -131,6 +144,64 @@ struct CapturePreferencesView: View {
         }
     }
 
+    private var appearanceCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "sparkles", title: "Share-ready look")
+
+            Toggle("Add a background, padding, and shadow", isOn: $mockupEnabled)
+
+            Picker("Template", selection: $mockupPreset) {
+                ForEach(MockupPreset.allCases, id: \.self) { preset in
+                    Text(LocalizedStringKey(preset.localizedKey)).tag(preset.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(!mockupEnabled)
+
+            if mockupEnabled, let preset = MockupPreset(rawValue: mockupPreset) {
+                MockupPreview(preset: preset)
+            }
+
+            PreferencesCardCaption(
+                text: "Applies to area and fullscreen captures. Window captures keep the rounded-corner float look."
+            )
+        }
+    }
+
+    private var displaysCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "display.2", title: "All displays")
+
+            Picker("Layout", selection: $displayCanvasMode) {
+                Text("Horizontal").tag(DisplayCanvasMode.compactHorizontal.rawValue)
+                Text("Vertical").tag(DisplayCanvasMode.compactVertical.rawValue)
+                Text("Physical arrangement").tag(DisplayCanvasMode.physical.rawValue)
+            }
+            .pickerStyle(.segmented)
+
+            VStack(alignment: .leading) {
+                LabeledContent("Gap") {
+                    Text("\(Int(displayCanvasGap)) pt")
+                        .monospacedDigit()
+                }
+                Slider(value: $displayCanvasGap, in: 0...64, step: 1)
+            }
+            .disabled(displayCanvasMode == DisplayCanvasMode.physical.rawValue)
+
+            Picker("Canvas alignment", selection: $displayCanvasAlignment) {
+                Text("Start").tag(DisplayCanvasAlignment.start.rawValue)
+                Text("Center").tag(DisplayCanvasAlignment.center.rawValue)
+                Text("End").tag(DisplayCanvasAlignment.end.rawValue)
+            }
+            .pickerStyle(.segmented)
+            .disabled(displayCanvasMode == DisplayCanvasMode.physical.rawValue)
+
+            PreferencesCardCaption(
+                text: "Use the menu bar All Displays Capture to apply this layout."
+            )
+        }
+    }
+
     private var imageCard: some View {
         PreferencesCard {
             PreferencesCardHeader(systemImage: "photo", title: "Image")
@@ -183,5 +254,70 @@ struct CapturePreferencesView: View {
 
             PreferencesCardCaption(text: "Freeform captures always use PNG to preserve transparency.")
         }
+    }
+}
+
+private struct MockupPreview: View {
+    let preset: MockupPreset
+
+    var body: some View {
+        if let image = Self.render(preset) {
+            Image(decorative: image, scale: 1)
+                .resizable()
+                .scaledToFit()
+                .frame(maxHeight: 120)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityLabel(Text("Preview of the selected template"))
+        }
+    }
+
+    private static func render(_ preset: MockupPreset) -> CGImage? {
+        guard let sample = sampleImage() else { return nil }
+        return MockupRenderer.render(sample, style: preset.style)
+    }
+
+    private static func sampleImage() -> CGImage? {
+        let width = 360
+        let height = 220
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: colorSpace,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return nil }
+
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.setFillColor(CGColor(gray: 0.95, alpha: 1))
+        context.fill(CGRect(x: 0, y: height - 34, width: width, height: 34))
+
+        let lights: [(CGFloat, CGColor)] = [
+            (22, CGColor(red: 0.98, green: 0.37, blue: 0.34, alpha: 1)),
+            (40, CGColor(red: 0.98, green: 0.74, blue: 0.25, alpha: 1)),
+            (58, CGColor(red: 0.35, green: 0.79, blue: 0.35, alpha: 1)),
+        ]
+        for (offset, color) in lights {
+            context.setFillColor(color)
+            context.fillEllipse(in: CGRect(
+                x: offset,
+                y: CGFloat(height) - 24,
+                width: 9,
+                height: 9
+            ))
+        }
+
+        context.setFillColor(CGColor(gray: 0.88, alpha: 1))
+        context.fill(CGRect(x: 28, y: 122, width: 210, height: 14))
+        context.setFillColor(CGColor(gray: 0.94, alpha: 1))
+        context.fill(CGRect(x: 28, y: 96, width: 300, height: 10))
+        context.fill(CGRect(x: 28, y: 76, width: 252, height: 10))
+        context.setFillColor(CGColor(red: 0.24, green: 0.48, blue: 0.86, alpha: 1))
+        context.fill(CGRect(x: 28, y: 42, width: 72, height: 18))
+        return context.makeImage()
     }
 }

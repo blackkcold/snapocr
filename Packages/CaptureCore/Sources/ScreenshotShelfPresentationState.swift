@@ -6,6 +6,8 @@ public enum ScreenshotShelfSuppression: Hashable, Sendable {
     case recording
     /// Suppress the shelf while another app occupies the display full-screen.
     case fullScreen
+    /// Suppress the shelf while an editor window opened from it is on screen.
+    case editing
 }
 
 /// Tracks shelf show intent separately from temporary panel suppressions.

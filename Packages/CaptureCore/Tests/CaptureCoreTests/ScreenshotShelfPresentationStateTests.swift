@@ -57,4 +57,39 @@ struct ScreenshotShelfPresentationStateTests {
         state.endSuppression(.fullScreen)
         #expect(state.shouldPresentPanel)
     }
+
+    @Test func editingSuppressionRestoresPriorShownIntent() {
+        var state = ScreenshotShelfPresentationState()
+        state.captureCompleted()
+
+        state.beginSuppression(.editing)
+        #expect(!state.shouldPresentPanel)
+
+        state.endSuppression(.editing)
+        #expect(state.shouldPresentPanel)
+    }
+
+    @Test func editingSuppressionDoesNotResurrectManualHide() {
+        var state = ScreenshotShelfPresentationState()
+        state.captureCompleted()
+        state.hide()
+
+        state.beginSuppression(.editing)
+        state.endSuppression(.editing)
+
+        #expect(!state.shouldPresentPanel)
+    }
+
+    @Test func editingAndCaptureSuppressionsRestoreOnlyWhenBothEnd() {
+        var state = ScreenshotShelfPresentationState()
+        state.captureCompleted()
+
+        state.beginSuppression(.capture)
+        state.beginSuppression(.editing)
+        state.endSuppression(.capture)
+        #expect(!state.shouldPresentPanel)
+
+        state.endSuppression(.editing)
+        #expect(state.shouldPresentPanel)
+    }
 }

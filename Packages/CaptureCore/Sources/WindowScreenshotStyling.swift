@@ -103,6 +103,29 @@ public enum WindowScreenshotStyling {
         return context.makeImage()
     }
 
+    /// The same float look expressed as reusable presentation metadata.
+    ///
+    /// Baking the treatment into pixels makes history/shelf replays fall back
+    /// to a plain window after the raw image is linked. Returning a
+    /// `MockupStyle` keeps the raw capture untouched while every surface can
+    /// re-render the exact same padding, radius, and shadow on demand.
+    public static func mockupStyle(for image: CGImage, scale: CGFloat) -> MockupStyle? {
+        guard image.width > 0, image.height > 0 else { return nil }
+        let style = Style.standard(scale: scale)
+        let reference = MockupRenderer.referenceSide(
+            for: CGSize(width: image.width, height: image.height)
+        )
+        guard reference.isFinite, reference > 0 else { return nil }
+        return MockupStyle(
+            background: .transparent,
+            paddingRatio: style.padding / reference,
+            cornerRadiusRatio: style.cornerRadius / reference,
+            shadowBlurRatio: style.shadowRadius / reference,
+            shadowOpacity: style.shadowOpacity,
+            shadowOffsetRatio: style.shadowOffsetY / reference
+        )
+    }
+
     /// Applies the window look only where it is safe: window captures that are
     /// not being pinned. Pinning measures the image against the window's point
     /// size, so the shadow padding must not enter that path.

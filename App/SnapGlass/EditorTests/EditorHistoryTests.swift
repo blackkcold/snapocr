@@ -1,5 +1,6 @@
 import AnnotationCore
 import AppKit
+import CaptureCore
 import HistoryCore
 import Testing
 
@@ -19,6 +20,23 @@ final class HistoryRequestRecorder: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return entries
+  }
+}
+
+final class StyleRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var styles: [MockupStyle?] = []
+
+  func append(_ style: MockupStyle?) {
+    lock.lock()
+    styles.append(style)
+    lock.unlock()
+  }
+
+  var all: [MockupStyle?] {
+    lock.lock()
+    defer { lock.unlock() }
+    return styles
   }
 }
 
@@ -44,7 +62,7 @@ struct EditorHistoryTests {
         captureMode: "area", supportsVerticalTrim: false,
         startsInVerticalTrim: false, sourceEntryID: sourceID
       ),
-      historySaver: { image, mode, source in
+      historySaver: { image, mode, source, _ in
         #expect(image.width == 400)
         requests.append(mode, source)
       }
@@ -62,11 +80,29 @@ struct EditorHistoryTests {
     #expect(all[1].source == sourceID)
   }
 
+  @Test func saveForwardsPresentationStyle() async throws {
+    let style = MockupPreset.dark.style
+    let recorder = StyleRecorder()
+    let model = EditorViewModel(
+      image: try image(),
+      context: EditorCaptureContext(
+        captureMode: "area",
+        supportsVerticalTrim: false,
+        startsInVerticalTrim: false,
+        sourceEntryID: UUID(),
+        mockupStyle: style
+      ),
+      historySaver: { _, _, _, received in recorder.append(received) }
+    )
+    await model.saveToHistory(mode: .newRecord)
+    #expect(recorder.all == [style])
+  }
+
   @Test func overwriteWithoutSourceIsRejected() async throws {
     let requests = HistoryRequestRecorder()
     let model = EditorViewModel(
       image: try image(),
-      historySaver: { _, mode, source in requests.append(mode, source) }
+      historySaver: { _, mode, source, _ in requests.append(mode, source) }
     )
     await model.saveToHistory(mode: .overwriteOriginal)
     #expect(requests.all.isEmpty)
@@ -76,9 +112,28 @@ struct EditorHistoryTests {
   @Test func failedSaveSurfacesErrorToast() async throws {
     let model = EditorViewModel(
       image: try image(),
-      historySaver: { _, _, _ in throw HistoryError.entryNotFound(id: UUID()) }
+      historySaver: { _, _, _, _ in throw HistoryError.entryNotFound(id: UUID()) }
     )
     await model.saveToHistory(mode: .newRecord)
     #expect(model.toastMessage?.type == .error)
+  }
+
+  @Test func failedSaveKeepsAnnotationsDirty() async throws {
+    let model = EditorViewModel(
+      image: try image(),
+      historySaver: { _, _, _, _ in throw HistoryError.entryNotFound(id: UUID()) }
+    )
+    model.markSaved()
+    model.addNode(
+      AnnotationNode(
+        tool: .rect,
+        points: [CGPoint(x: 0.1, y: 0.1), CGPoint(x: 0.5, y: 0.5)]
+      ))
+    #expect(model.hasUnsavedChanges)
+
+    await model.saveToHistory(mode: .newRecord)
+
+    // The quit guard relies on this: a failed write must never look saved.
+    #expect(model.hasUnsavedChanges)
   }
 }

@@ -38,6 +38,15 @@ public final class EditorWorkspace: ObservableObject {
     /// 由窗口宿主注入，避免工作区直接依赖 App 层窗口定位。
     public var closeWindowAction: () -> Void = {}
 
+    /// 编辑器窗口真正关闭后回调；用于解除截图架等窗口级抑制。
+    public var onWindowClosed: (() -> Void)?
+
+    /// 关闭最后一个标签或用户关窗时都会走到窗口的 `windowWillClose`，
+    /// 由窗口宿主转发到这里。
+    public func windowDidClose() {
+        onWindowClosed?()
+    }
+
     private var nextTitleIndex = 1
 
     public init() {}
@@ -46,9 +55,14 @@ public final class EditorWorkspace: ObservableObject {
     @discardableResult
     public func open(image: CGImage, context: EditorCaptureContext) -> Tab? {
         if let entryID = context.sourceEntryID,
-            let existing = tabs.first(where: { $0.context.sourceEntryID == entryID }) {
-            activeTabID = existing.id
-            return existing
+            let index = tabs.firstIndex(where: { $0.context.sourceEntryID == entryID }) {
+            // Reusing the tab must still adopt the latest presentation style;
+            // otherwise an inspector change made after the tab opened would be
+            // overwritten with the stale style on "Overwrite Original".
+            tabs[index].context.mockupStyle = context.mockupStyle
+            tabs[index].viewModel.mockupStyle = context.mockupStyle
+            activeTabID = tabs[index].id
+            return tabs[index]
         }
         guard tabs.count < Self.maxTabs else { return nil }
         let tab = Tab(
@@ -103,6 +117,18 @@ public final class EditorWorkspace: ObservableObject {
         if activeTabID == id {
             activeTabID = tabs[min(index, tabs.count - 1)].id
         }
+    }
+
+    /// 保存所有未保存标签到历史但不关闭它们。任一保存失败返回 `false`。
+    @discardableResult
+    public func saveAllDirtyToHistory() async -> Bool {
+        for tab in dirtyTabs {
+            let mode: EditorHistorySaveMode =
+                tab.viewModel.canOverwriteOriginal ? .overwriteOriginal : .newRecord
+            await tab.viewModel.saveToHistory(mode: mode)
+            if tab.viewModel.hasUnsavedChanges { return false }
+        }
+        return true
     }
 
     /// 保存所有待关闭标签到历史，然后关闭。保存失败时保留确认框。

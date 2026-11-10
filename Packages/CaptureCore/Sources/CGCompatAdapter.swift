@@ -82,17 +82,26 @@ final class CGCompatAdapter: @unchecked Sendable {
     func captureWindow(_ windowID: CGWindowID, highResolution: Bool = true) -> CGImage? {
         logger.debug("Capturing window \(windowID) via CGWindowListCreateImage")
 
-        guard let windowInfo = windowInfo(for: windowID) else {
+        if #available(macOS 15.0, *) {
+            logger.error("CGWindowListCreateImage is unavailable on macOS 15+")
+            return nil
+        }
+
+        guard windowInfo(for: windowID) != nil else {
             logger.warning("Window \(windowID) not found")
             return nil
         }
 
-        let bounds = windowInfo.bounds
+        // `CGRect.null` asks Core Graphics to use the captured window's own
+        // bounds. Passing the global window rect would clip the window shadow
+        // and made the old fallback inconsistent with the ScreenCaptureKit path.
         let image = CGWindowListCreateImage(
-            bounds,
+            .null,
             .optionIncludingWindow,
             windowID,
-            highResolution ? [.bestResolution] : [.nominalResolution]
+            highResolution
+                ? [.bestResolution, .boundsIgnoreFraming]
+                : [.nominalResolution, .boundsIgnoreFraming]
         )
 
         guard let result = image else {
@@ -101,6 +110,11 @@ final class CGCompatAdapter: @unchecked Sendable {
         }
 
         return result
+    }
+
+    /// Returns the window's global Quartz bounds for metadata and fallback sizing.
+    func frame(forWindow windowID: CGWindowID) -> CGRect? {
+        windowInfo(for: windowID)?.bounds
     }
 
     /// 捕获指定区域的屏幕图像。
