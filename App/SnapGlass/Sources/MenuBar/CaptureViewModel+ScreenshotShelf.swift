@@ -69,7 +69,7 @@ extension CaptureViewModel {
             if openEditor(with: image, captureMode: "screenshot-shelf", sourceEntryID: historyID) != nil {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
-                    message: AppLocalization.string("Opened in editor"),
+                    message: .localizedKey("Opened in editor"),
                     type: .success
                 )
             }
@@ -82,13 +82,13 @@ extension CaptureViewModel {
             if await writeImageToClipboard(image) {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
-                    message: AppLocalization.string("Screenshot copied to clipboard"),
+                    message: .localizedKey("Screenshot copied to clipboard"),
                     type: .success
                 )
             } else {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
-                    message: AppLocalization.string("Unable to copy image"),
+                    message: .localizedKey("Unable to copy image"),
                     type: .error
                 )
             }
@@ -99,22 +99,22 @@ extension CaptureViewModel {
         Task { [weak self] in
             guard let self,
                   let image = await loadScreenshotShelfImage(captureID: captureID),
-                  let screen = screenshotShelfManager.displayScreen else { return }
-            let screenFrame = screen.visibleFrame
-            let fittedFrame = PinnedImageGeometry.fitToScreen(
-                CGRect(origin: .zero, size: CGSize(width: image.width, height: image.height)),
-                screenFrame: screenFrame
+                  let screen = screenshotShelfManager.displayScreen,
+                  let card = screenshotShelfManager.card(for: captureID) else { return }
+            let displayScale = ScreenshotShelfManager.displayScaleForPinning(
+                displayScale: card.displayScale,
+                scaleSourcePixelWidth: card.scaleSourcePixelWidth,
+                imagePixelWidth: CGFloat(image.width)
             )
-            let centeredFrame = CGRect(
-                x: screenFrame.midX - fittedFrame.width / 2,
-                y: screenFrame.midY - fittedFrame.height / 2,
-                width: fittedFrame.width,
-                height: fittedFrame.height
+            let centeredFrame = PinnedImageGeometry.shelfPinFrame(
+                imageSize: CGSize(width: image.width, height: image.height),
+                displayScale: displayScale,
+                screenFrame: screen.visibleFrame
             )
-            PinnedWindowManager.shared.pin(image: image, displayScale: 1, pinRect: centeredFrame)
+            PinnedWindowManager.shared.pin(image: image, displayScale: displayScale, pinRect: centeredFrame)
             reportScreenshotShelfFeedback(
                 captureID: captureID,
-                message: AppLocalization.string("Screenshot pinned"),
+                message: .localizedKey("Screenshot pinned"),
                 type: .success
             )
         }
@@ -127,7 +127,7 @@ extension CaptureViewModel {
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
-                    message: AppLocalization.string("Unable to load screenshot"),
+                    message: .localizedKey("Unable to load screenshot"),
                     type: .error
                 )
                 return nil
@@ -136,19 +136,23 @@ extension CaptureViewModel {
         } catch {
             reportScreenshotShelfFeedback(
                 captureID: captureID,
-                message: AppLocalization.string("Unable to load screenshot"),
+                message: .localizedKey("Unable to load screenshot"),
                 type: .error
             )
             return nil
         }
     }
 
-    private func reportScreenshotShelfFeedback(captureID: UUID, message: String, type: ToastType) {
+    private func reportScreenshotShelfFeedback(
+        captureID: UUID,
+        message: ScreenshotShelfMessage,
+        type: ToastType
+    ) {
         screenshotShelfManager.reportFeedback(
             captureID: captureID,
             message: message,
             isError: type == .error
         )
-        showToast(message: message, type: type)
+        showToast(message: message.resolved(using: { AppLocalization.string($0) }), type: type)
     }
 }

@@ -5,24 +5,6 @@ import SharedKit
 
 @preconcurrency import ScreenCaptureKit
 
-enum RecordingSessionStatus: Equatable {
-    case idle
-    case selectingSource
-    case countdown(Int)
-    case starting
-    case recording
-    case saving
-
-    var isBusy: Bool { self != .idle }
-
-    var needsQuitConfirmation: Bool {
-        switch self {
-        case .starting, .recording, .saving: true
-        case .idle, .selectingSource, .countdown: false
-        }
-    }
-}
-
 private struct RecordingPreferenceSnapshot: Sendable {
     let codec: RecordingVideoCodec
     let resolutionProfile: String
@@ -132,6 +114,7 @@ final class RecordingSessionController {
     private let defaults: UserDefaults
     private let fileManager: FileManager
     private(set) var status: RecordingSessionStatus = .idle
+    private var outcomeState = RecordingSessionOutcomeState()
 
     var onStatusChange: ((RecordingSessionStatus) -> Void)?
     var onScreenshotShelfRecordingChange: ((Bool) -> Void)?
@@ -147,9 +130,13 @@ final class RecordingSessionController {
     private var stopWhenStarted = false
     private var pendingStopReason: String?
     private var stopWaiters: [CheckedContinuation<Bool, Never>] = []
+    private var outcomeWaiters: [CheckedContinuation<RecordingSessionTerminalOutcome, Never>] = []
+    private var currentStartAttemptIdentifier: UUID?
 
     var isBusy: Bool { status.isBusy }
     var needsQuitConfirmation: Bool { status.needsQuitConfirmation }
+    var isSaving: Bool { status == .saving }
+    var terminalOutcome: RecordingSessionTerminalOutcome? { outcomeState.terminalOutcome }
 
     init(
         captureOrchestrator: CaptureOrchestrator,
@@ -160,26 +147,6 @@ final class RecordingSessionController {
         self.defaults = defaults
         self.fileManager = fileManager
         installLifecycleObservers()
-    }
-
-    func startRecording() {
-        guard status == .idle else { return }
-        let preferences = RecordingPreferenceSnapshot(defaults: defaults)
-        onScreenshotShelfRecordingChange?(true)
-        updateStatus(.selectingSource)
-
-        RecordingSourcePickerPanel.show(
-            onComplete: { [weak self] selection in
-                Task { @MainActor [weak self] in
-                    self?.sourcePickerCompleted(selection, preferences: preferences)
-                }
-            },
-            onFailure: { [weak self] message in
-                Task { @MainActor [weak self] in
-                    self?.onMessage?(message, .error)
-                }
-            }
-        )
     }
 
     func cancelPendingStart() {
@@ -215,11 +182,32 @@ final class RecordingSessionController {
         }
     }
 
+    func stopAndResolveForQuit(reason: String) async -> RecordingSessionTerminalOutcome {
+        switch status {
+        case .idle:
+            return outcomeState.terminalOutcome ?? .noActiveSession
+        case .selectingSource, .countdown:
+            cancelPendingStart()
+            return outcomeState.terminalOutcome ?? .noActiveSession
+        case .starting:
+            stopWhenStarted = true
+            pendingStopReason = reason
+            return await waitForTerminalOutcome()
+        case .recording:
+            _ = await finalizeRecording(reason: reason)
+            return outcomeState.terminalOutcome ?? .failed
+        case .saving:
+            return await waitForTerminalOutcome()
+        }
+    }
+
     private func sourcePickerCompleted(
         _ selection: RecordingSourceSelection?,
-        preferences: RecordingPreferenceSnapshot
+        preferences: RecordingPreferenceSnapshot,
+        attemptIdentifier: UUID
     ) {
-        guard status == .selectingSource else { return }
+        guard currentStartAttemptIdentifier == attemptIdentifier,
+              status == .selectingSource else { return }
         guard let selection else {
             finishSession(success: false)
             return
@@ -324,6 +312,7 @@ final class RecordingSessionController {
                     }
                 }
             )
+            outcomeState.markRecordingStarted()
             updateStatus(.recording)
             if stopWhenStarted {
                 _ = await finalizeRecording(reason: pendingStopReason)
@@ -535,6 +524,7 @@ final class RecordingSessionController {
     }
 
     private func finishSession(success: Bool) {
+        outcomeState.finishSession(wasSaved: success)
         countdownTask?.cancel()
         countdownTask = nil
         monitoringTask?.cancel()
@@ -551,7 +541,14 @@ final class RecordingSessionController {
         let waiters = stopWaiters
         stopWaiters.removeAll()
         for waiter in waiters {
-            waiter.resume(returning: success)
+            waiter.resume(returning: outcomeState.terminalOutcome == .saved)
+        }
+
+        let terminalOutcome = outcomeState.terminalOutcome ?? .failed
+        let outcomeWaiters = outcomeWaiters
+        self.outcomeWaiters.removeAll()
+        for waiter in outcomeWaiters {
+            waiter.resume(returning: terminalOutcome)
         }
     }
 
@@ -559,6 +556,80 @@ final class RecordingSessionController {
         await withCheckedContinuation { continuation in
             stopWaiters.append(continuation)
         }
+    }
+
+    private func waitForTerminalOutcome() async -> RecordingSessionTerminalOutcome {
+        await withCheckedContinuation { continuation in
+            outcomeWaiters.append(continuation)
+        }
+    }
+}
+
+extension RecordingSessionController {
+    func startRecording() {
+        guard status == .idle else { return }
+        outcomeState.beginSession()
+        let attemptIdentifier = UUID()
+        currentStartAttemptIdentifier = attemptIdentifier
+        let preferences = RecordingPreferenceSnapshot(defaults: defaults)
+        onScreenshotShelfRecordingChange?(true)
+        updateStatus(.selectingSource)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let accessAvailable = await self.captureOrchestrator.checkPermissionStatus()
+            let decision = RecordingPermissionDecision.beforePicker(
+                accessAvailable: accessAvailable,
+                isCurrentAttempt: self.currentStartAttemptIdentifier == attemptIdentifier,
+                isSelectingSource: self.status == .selectingSource
+            )
+
+            switch decision {
+            case .showPicker:
+                self.showSourcePicker(for: attemptIdentifier, preferences: preferences)
+            case .openPermissionGuide:
+                self.finishSession(success: false)
+                self.onOpenPermissionGuide?()
+            case .showPickerFailure, .ignore:
+                return
+            }
+        }
+    }
+
+    private func showSourcePicker(
+        for attemptIdentifier: UUID,
+        preferences: RecordingPreferenceSnapshot
+    ) {
+        RecordingSourcePickerPanel.show(
+            onComplete: { [weak self] selection in
+                Task { @MainActor [weak self] in
+                    self?.sourcePickerCompleted(
+                        selection,
+                        preferences: preferences,
+                        attemptIdentifier: attemptIdentifier
+                    )
+                }
+            },
+            onFailure: { [weak self] message in
+                let failedAttemptIdentifier = attemptIdentifier
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let accessAvailable = await self.captureOrchestrator.checkPermissionStatus()
+                    let decision = RecordingPermissionDecision.afterPickerFailure(
+                        accessAvailable: accessAvailable,
+                        isCurrentAttempt: self.currentStartAttemptIdentifier == failedAttemptIdentifier
+                    )
+                    switch decision {
+                    case .showPickerFailure:
+                        self.onMessage?(message, .error)
+                    case .openPermissionGuide:
+                        self.onOpenPermissionGuide?()
+                    case .showPicker, .ignore:
+                        break
+                    }
+                }
+            }
+        )
     }
 }
 

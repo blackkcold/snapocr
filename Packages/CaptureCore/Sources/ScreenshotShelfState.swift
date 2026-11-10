@@ -23,7 +23,7 @@ public struct ScreenshotShelfState: Equatable, Sendable {
     /// The configured number of visible screenshot entries.
     public private(set) var limit: Int
 
-    /// Current entries, ordered newest-first by completion sequence.
+    /// Current entries in display order. New captures enter at the front; users may reorder them.
     public private(set) var entries: [ScreenshotShelfEntry]
 
     /// Creates an empty shelf and clamps its capacity to the supported range.
@@ -50,16 +50,8 @@ public struct ScreenshotShelfState: Equatable, Sendable {
             captureID: captureID,
             completionSequence: completionSequence
         )
-        let insertionIndex = entries.firstIndex {
-            $0.completionSequence < completionSequence
-        } ?? entries.endIndex
-        entries.insert(entry, at: insertionIndex)
-
-        let excessCount = max(0, entries.count - limit)
-        guard excessCount > 0 else { return [] }
-        let evicted = entries.suffix(excessCount).map(\.captureID)
-        entries.removeLast(excessCount)
-        return evicted
+        entries.insert(entry, at: 0)
+        return evictOldestUntilWithinLimit()
     }
 
     /// Changes the capacity immediately and returns the oldest entries removed.
@@ -71,11 +63,24 @@ public struct ScreenshotShelfState: Equatable, Sendable {
     @discardableResult
     public mutating func setLimit(_ limit: Int) -> [UUID] {
         self.limit = Self.clampedLimit(limit)
-        let evicted = entries.dropFirst(self.limit).map(\.captureID)
-        if entries.count > self.limit {
-            entries.removeSubrange(self.limit..<entries.count)
-        }
-        return evicted
+        return evictOldestUntilWithinLimit()
+    }
+
+    /// Moves an existing capture to a new display index without changing its identity.
+    ///
+    /// The destination is clamped to the current entry range. Moving an entry to the front or
+    /// back does not affect eviction: capacity always removes the smallest completion sequence.
+    ///
+    /// - Parameters:
+    ///   - captureID: Existing shelf entry to move.
+    ///   - destinationIndex: Final zero-based index after the move.
+    public mutating func move(captureID: UUID, to destinationIndex: Int) {
+        guard let sourceIndex = entries.firstIndex(where: { $0.captureID == captureID }),
+              !entries.isEmpty else { return }
+        let destination = min(max(destinationIndex, 0), entries.count - 1)
+        guard sourceIndex != destination else { return }
+        let entry = entries.remove(at: sourceIndex)
+        entries.insert(entry, at: destination)
     }
 
     /// Links a persisted history record to an existing shelf identity without reordering it.
@@ -120,6 +125,17 @@ public struct ScreenshotShelfState: Equatable, Sendable {
         let removed = entries.map(\.captureID)
         entries.removeAll(keepingCapacity: true)
         return removed
+    }
+
+    private mutating func evictOldestUntilWithinLimit() -> [UUID] {
+        var evicted: [UUID] = []
+        while entries.count > limit,
+              let oldestIndex = entries.indices.min(by: {
+                  entries[$0].completionSequence < entries[$1].completionSequence
+              }) {
+            evicted.append(entries.remove(at: oldestIndex).captureID)
+        }
+        return evicted
     }
 
     private static func clampedLimit(_ limit: Int) -> Int {

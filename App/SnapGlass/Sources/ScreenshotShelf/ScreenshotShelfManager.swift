@@ -1,94 +1,58 @@
 import AppKit
 import CaptureCore
 import HistoryCore
-import ImageIO
+import QuartzCore
 import SharedKit
-import UniformTypeIdentifiers
-
-struct ScreenshotShelfCard: Identifiable, Equatable {
-    let captureID: UUID
-    var historyID: UUID?
-    var imagePixelSize: CGSize
-    var thumbnailData: Data?
-    var errorMessage: String?
-    var feedbackMessage: String?
-
-    var id: UUID { captureID }
-}
-
-private struct ScreenshotShelfEncodedAssets: Sendable {
-    let originalData: Data
-    let thumbnailData: Data
-}
-
-private enum ScreenshotShelfAssetEncoder {
-    static func encode(_ image: CGImage) -> ScreenshotShelfEncodedAssets? {
-        guard let originalData = imageData(image, type: .png) else { return nil }
-        let scale = min(1, 768 / CGFloat(max(1, max(image.width, image.height))))
-        let width = max(1, Int(CGFloat(image.width) * scale))
-        let height = max(1, Int(CGFloat(image.height) * scale))
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: colorSpace,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              ) else { return nil }
-
-        context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        guard let thumbnail = context.makeImage(),
-              let thumbnailData = imageData(thumbnail, type: .jpeg, quality: 0.82) else { return nil }
-        return ScreenshotShelfEncodedAssets(originalData: originalData, thumbnailData: thumbnailData)
-    }
-
-    static func displayThumbnail(from data: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let options: CFDictionary = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 768,
-        ] as CFDictionary
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
-        return imageData(thumbnail, type: .jpeg, quality: 0.82)
-    }
-
-    private static func imageData(_ image: CGImage, type: UTType, quality: Double? = nil) -> Data? {
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else {
-            return nil
-        }
-        let properties = quality.map { [kCGImageDestinationLossyCompressionQuality: $0] as CFDictionary }
-        CGImageDestinationAddImage(destination, image, properties)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return data as Data
-    }
-}
+import SwiftUI
 
 @MainActor
 final class ScreenshotShelfManager {
     private static let maximumThumbnailBytes = 16 * 1_024 * 1_024
     private static let maximumPendingAssetWrites = 2
+    private static let collapseDelay: TimeInterval = 2.8
+    private static let armExpansionDelay: TimeInterval = 0.6
 
     private let sessionStore: ScreenshotShelfSessionStore?
     private let defaults: UserDefaults
     private let createsPanel: Bool
-    private var state: ScreenshotShelfState
+    private let viewModel = ScreenshotShelfViewModel()
+    var state: ScreenshotShelfState
     private var presentationState = ScreenshotShelfPresentationState()
-    private var cardsByID: [UUID: ScreenshotShelfCard] = [:]
+    var cardsByID: [UUID: ScreenshotShelfCard] = [:]
     private var cachedThumbnailBytes = 0
     private var nextCompletionSequence: UInt64 = 0
     private var pendingAssetWrites = 0
     private var assetWorkTail: Task<Void, Never>?
     private var notificationObservers: [NSObjectProtocol] = []
     private var panel: ScreenshotShelfPanel?
+    private lazy var dragOverlayController = ScreenshotShelfDragOverlayController(
+        viewModel: viewModel,
+        panel: { [weak self] in self?.panel },
+        isShelfVisible: { [weak self] in self?.phase == .visible || self?.phase == .appearing }
+    )
+    let dragExportStore: ScreenshotShelfDragExportStore
+    private lazy var dragOutController = ScreenshotShelfDragOutController(
+        model: viewModel,
+        exportStore: dragExportStore,
+        dataProvider: { [weak self] captureID in
+            try await self?.originalData(for: captureID)
+        }
+    )
+    private var phase: ScreenshotShelfPhase = .hidden
+    private var presentationGeneration: UInt64 = 0
+    private var pendingLayout: ScreenshotShelfLayout?
+    private var presentationUpdateScheduled = false
+    private var globalMouseMonitor: Any?
+    private var modeState = ScreenshotShelfModeState()
+    private var collapseTask: Task<Void, Never>?
+    private var armExpansionTask: Task<Void, Never>?
+    private var isMenuTracking = false
     private var preferredDisplayID: CGDirectDisplayID?
     private var isEnabled: Bool
     private var cardHeight: CGFloat
     private var imageOpacity: Double
+    private var anchor: ScreenshotShelfAnchor
+    private var collapseToRail: Bool
     private var captureSuppressionCount = 0
     private var isRecordingActive = false
     private var isFullScreenSuppressed = false
@@ -109,12 +73,13 @@ final class ScreenshotShelfManager {
     }
     var hasItems: Bool { !state.entries.isEmpty }
     var canToggle: Bool { isEnabled && hasItems && !isRecordingActive }
-    var isVisible: Bool { panel?.isVisible == true && shouldPresentPanel }
+    var isVisible: Bool { phase == .visible || phase == .appearing }
     var shouldPresentPanel: Bool {
         isEnabled && hasItems && !isRecordingActive && presentationState.shouldPresentPanel
     }
     var displayScreen: NSScreen? {
-        Self.screen(for: preferredDisplayID) ?? Self.screen(underMouse: NSEvent.mouseLocation)
+        ScreenshotShelfScreenResolver.screen(for: preferredDisplayID)
+            ?? ScreenshotShelfScreenResolver.screen(underMouse: NSEvent.mouseLocation)
     }
 
     convenience init(defaults: UserDefaults = .standard) {
@@ -130,20 +95,30 @@ final class ScreenshotShelfManager {
         defaults: UserDefaults,
         sessionStore: ScreenshotShelfSessionStore?,
         observesSystemEvents: Bool,
-        createsPanel: Bool
+        createsPanel: Bool,
+        dragExportStore: ScreenshotShelfDragExportStore? = nil
     ) {
         self.defaults = defaults
         self.sessionStore = sessionStore
         self.createsPanel = createsPanel
+        self.dragExportStore = dragExportStore ?? ScreenshotShelfDragExportStore()
         state = ScreenshotShelfState(limit: ScreenshotShelfPreferences.count(in: defaults))
         isEnabled = ScreenshotShelfPreferences.isEnabled(in: defaults)
         cardHeight = CGFloat(ScreenshotShelfPreferences.cardHeight(in: defaults))
         imageOpacity = ScreenshotShelfPreferences.imageOpacity(in: defaults)
+        anchor = ScreenshotShelfPreferences.anchor(in: defaults)
+        collapseToRail = ScreenshotShelfPreferences.collapseToRail(in: defaults)
+        viewModel.delegate = self
+        viewModel.onPointerInsideChanged = { [weak self] inside in
+            self?.handlePointerInside(inside)
+        }
         if observesSystemEvents {
             installObservers()
             refreshFullScreenSuppression()
+            self.dragExportStore.sweepStale()
+            schedulePrewarm()
         }
-        updatePanel()
+        refreshPresentation(immediate: true)
     }
 
     func publishCurrentState() {
@@ -151,9 +126,18 @@ final class ScreenshotShelfManager {
     }
 
     @discardableResult
-    func captureCompleted(_ image: CGImage, sourceDisplayID: CGDirectDisplayID? = nil) -> UUID? {
+    func captureCompleted(
+        _ image: CGImage,
+        sourceDisplayID: CGDirectDisplayID? = nil,
+        displayScale: CGFloat? = nil
+    ) -> UUID? {
         refreshPreferences()
         guard isEnabled else { return nil }
+
+        if modeState.mode == .collapsed {
+            modeState.expand()
+            cancelCollapseTasks()
+        }
 
         nextCompletionSequence &+= 1
         let captureID = UUID()
@@ -167,23 +151,28 @@ final class ScreenshotShelfManager {
             captureID: captureID,
             historyID: nil,
             imagePixelSize: CGSize(width: image.width, height: image.height),
+            displayScale: displayScale ?? 1,
+            scaleSourcePixelWidth: displayScale == nil ? nil : CGFloat(image.width),
             thumbnailData: nil,
+            decodedThumbnail: nil,
             errorMessage: nil,
             feedbackMessage: nil
         )
         presentationState.captureCompleted()
         preferredDisplayID = sourceDisplayID
         synchronizeCards()
-        updatePanel()
+        refreshPresentation()
+        enqueuePreview(image, captureID: captureID)
         enqueueAssetWrite(image, captureID: captureID)
         return captureID
     }
 
     func toggle() {
         guard canToggle else { return }
-        if panel?.isVisible == true {
+        switch phase {
+        case .visible, .appearing:
             hide()
-        } else {
+        case .hidden, .disappearing:
             show()
         }
     }
@@ -191,28 +180,40 @@ final class ScreenshotShelfManager {
     func show() {
         refreshPreferences()
         guard isEnabled, hasItems, !isRecordingActive else { return }
+        cancelCollapseTasks()
+        modeState.expand()
         presentationState.show()
-        updatePanel()
+        refreshPresentation()
     }
 
     func hide() {
+        cancelCollapseTasks()
         presentationState.hide()
-        updatePanel()
+        refreshPresentation()
     }
 
     func beginCaptureSuppression() {
         captureSuppressionCount += 1
-        guard captureSuppressionCount == 1 else { return }
+        guard captureSuppressionCount == 1 else {
+            updateModeSuppression()
+            return
+        }
         presentationState.beginSuppression(.capture)
-        updatePanel()
+        updateModeSuppression()
+        refreshPresentation(immediate: true)
     }
 
     func endCaptureSuppression() {
         guard captureSuppressionCount > 0 else { return }
         captureSuppressionCount -= 1
-        guard captureSuppressionCount == 0 else { return }
+        guard captureSuppressionCount == 0 else {
+            updateModeSuppression()
+            return
+        }
         presentationState.endSuppression(.capture)
-        updatePanel()
+        updateModeSuppression()
+        refreshPresentation()
+        scheduleCollapseIfNeeded()
     }
 
     func setRecordingActive(_ active: Bool) {
@@ -223,7 +224,9 @@ final class ScreenshotShelfManager {
         } else {
             presentationState.endSuppression(.recording)
         }
-        updatePanel()
+        updateModeSuppression()
+        refreshPresentation(immediate: active)
+        if !active { scheduleCollapseIfNeeded() }
     }
 
     func remove(captureID: UUID) {
@@ -232,7 +235,7 @@ final class ScreenshotShelfManager {
         removeCards(for: [captureID])
         scheduleAssetRemoval(for: [captureID])
         synchronizeCards()
-        updatePanel()
+        schedulePresentationUpdate()
     }
 
     func clear() {
@@ -240,7 +243,8 @@ final class ScreenshotShelfManager {
         removeCards(for: captureIDs)
         synchronizeCards()
         enqueueAssetClear()
-        updatePanel()
+        dragExportStore.removeAll()
+        schedulePresentationUpdate()
     }
 
     func linkHistory(captureID: UUID, historyID: UUID) {
@@ -250,9 +254,12 @@ final class ScreenshotShelfManager {
             card.historyID = historyID
             cardsByID[captureID] = card
         }
+        // The session original is removed next, so the plaintext copy must go too;
+        // it is rebuilt from the history bytes once the card refresh completes.
+        dragExportStore.invalidate(captureID: captureID)
         scheduleAssetRemoval(for: [captureID])
         synchronizeCards()
-        updatePanel()
+        schedulePresentationUpdate()
         Task { @MainActor [weak self] in
             await self?.refreshHistoryCard(captureID: captureID, historyID: historyID)
         }
@@ -260,6 +267,24 @@ final class ScreenshotShelfManager {
 
     func historyID(for captureID: UUID) -> UUID? {
         state.entries.first(where: { $0.captureID == captureID })?.historyID
+    }
+
+    func card(for captureID: UUID) -> ScreenshotShelfCard? {
+        cardsByID[captureID]
+    }
+
+    static func displayScaleForPinning(
+        displayScale: CGFloat,
+        scaleSourcePixelWidth: CGFloat?,
+        imagePixelWidth: CGFloat
+    ) -> CGFloat {
+        guard displayScale.isFinite, displayScale > 0,
+              imagePixelWidth.isFinite, imagePixelWidth > 0,
+              let scaleSourcePixelWidth,
+              scaleSourcePixelWidth == imagePixelWidth else {
+            return 1
+        }
+        return displayScale
     }
 
     func originalData(for captureID: UUID) async throws -> Data? {
@@ -276,14 +301,488 @@ final class ScreenshotShelfManager {
         return try await sessionStore.originalData(for: captureID)
     }
 
-    func reportFeedback(captureID: UUID, message: String, isError: Bool = false) {
+    func reportFeedback(captureID: UUID, message: ScreenshotShelfMessage, isError: Bool = false) {
         guard var card = cardsByID[captureID] else { return }
         card.feedbackMessage = message
         if isError { card.errorMessage = message }
         cardsByID[captureID] = card
         synchronizeCards()
-        updatePanel()
+        schedulePresentationUpdate()
     }
+
+    // MARK: - Presentation
+
+    private func refreshPresentation(immediate: Bool = false) {
+        guard createsPanel else {
+            panel?.orderOut(nil)
+            phase = .hidden
+            removeGlobalMonitor()
+            cancelCollapseTasks()
+            publishState()
+            return
+        }
+
+        guard shouldPresentPanel,
+              let screen = displayScreen ?? NSScreen.screens.first else {
+            switch phase {
+            case .visible, .appearing:
+                hidePanel(immediate: immediate)
+            case .hidden, .disappearing:
+                break
+            }
+            publishState()
+            return
+        }
+
+        synchronizeCards()
+        let layout = makeLayout(for: screen)
+        guard layout.panelFrame.width > 0, layout.panelFrame.height > 0 else {
+            hidePanel(immediate: true)
+            publishState()
+            return
+        }
+
+        let modeChanged = layout.mode != viewModel.layout.mode
+        if phase == .visible, modeChanged {
+            crossfade(to: layout)
+            scheduleCollapseIfNeeded()
+            publishState()
+            return
+        }
+        if phase == .appearing {
+            pendingLayout = layout
+            if !modeChanged {
+                viewModel.layout = layout
+            }
+            publishState()
+            return
+        }
+
+        updateViewModel(layout)
+        switch phase {
+        case .hidden:
+            showPanel(layout: layout, immediate: immediate)
+        case .visible:
+            applyFrame(layout.panelFrame)
+        case .disappearing:
+            finishHideImmediately()
+            showPanel(layout: layout, immediate: immediate)
+        case .appearing:
+            break
+        }
+        publishState()
+    }
+
+    func schedulePresentationUpdate() {
+        guard !presentationUpdateScheduled else { return }
+        presentationUpdateScheduled = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.presentationUpdateScheduled = false
+            self.refreshPresentation()
+        }
+    }
+
+    // MARK: - Collapse timer and pointer
+
+    private func handlePointerInside(_ inside: Bool) {
+        if inside {
+            cancelCollapseTask()
+            modeState.pointerEntered()
+            if phase == .visible, viewModel.layout.mode != modeState.mode {
+                refreshPresentation()
+            }
+        } else if collapseToRail, phase == .visible {
+            modeState.pointerExited(now: Date(), delay: Self.collapseDelay)
+            scheduleCollapseIfNeeded()
+        }
+    }
+
+    private func scheduleCollapseIfNeeded() {
+        guard collapseToRail,
+              phase == .visible,
+              modeState.mode == .expanded,
+              !isMenuTracking,
+              !modeState.isSuppressed,
+              !viewModel.isPointerInside else { return }
+        let delay: TimeInterval
+        if let deadline = modeState.idleDeadline {
+            delay = max(0.05, deadline.timeIntervalSinceNow)
+        } else {
+            modeState.pointerExited(now: Date(), delay: Self.collapseDelay)
+            delay = Self.collapseDelay
+        }
+        collapseTask?.cancel()
+        collapseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.collapseIfIdle()
+        }
+    }
+
+    private func collapseIfIdle() {
+        guard collapseToRail,
+              phase == .visible,
+              modeState.mode == .expanded,
+              !isMenuTracking,
+              !viewModel.isPointerInside,
+              !modeState.isSuppressed else { return }
+        guard modeState.collapseIfIdle(now: Date()) else { return }
+        refreshPresentation()
+        scheduleArmExpansion()
+    }
+
+    private func scheduleArmExpansion() {
+        armExpansionTask?.cancel()
+        armExpansionTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.armExpansionDelay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.modeState.armExpansion()
+            if self.viewModel.isPointerInside,
+               self.modeState.mode == .collapsed,
+               self.phase == .visible {
+                self.modeState.expand()
+                self.refreshPresentation()
+            }
+        }
+    }
+
+    private func cancelCollapseTask() {
+        collapseTask?.cancel()
+        collapseTask = nil
+    }
+
+    private func cancelCollapseTasks() {
+        cancelCollapseTask()
+        armExpansionTask?.cancel()
+        armExpansionTask = nil
+    }
+
+    private func setMode(_ mode: ScreenshotShelfMode) {
+        guard modeState.mode != mode else { return }
+        switch mode {
+        case .expanded:
+            modeState.expand()
+        case .collapsed:
+            modeState.collapse()
+        }
+        cancelCollapseTask()
+        if mode == .collapsed {
+            scheduleArmExpansion()
+        }
+        refreshPresentation()
+    }
+
+    private func updateModeSuppression() {
+        let suppressed = captureSuppressionCount > 0 || isRecordingActive || isFullScreenSuppressed
+        modeState.setSuppressed(suppressed, now: Date(), delay: Self.collapseDelay)
+        if suppressed {
+            cancelCollapseTask()
+        }
+    }
+
+    /// Updates the SwiftUI model atomically. Content changes on a visible shelf animate; the
+    /// first appearance stays static so the window slide is the only entry motion.
+    private func updateViewModel(_ layout: ScreenshotShelfLayout) {
+        let oldIDs = viewModel.layout.cards.map(\.id)
+        let newIDs = layout.cards.map(\.id)
+        if phase == .visible, layout.mode == .expanded, oldIDs != newIDs {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) {
+                viewModel.layout = layout
+            }
+        } else {
+            viewModel.layout = layout
+        }
+    }
+
+    /// Crossfades a visible shelf to a new layout while the panel is transparent.
+    ///
+    /// AppKit window-frame animation and SwiftUI layout animation must never run together: the
+    /// cards would be clipped by the shrinking window. Fading out first lets the frame and the
+    /// model change atomically, then fades the new layout back in.
+    private func crossfade(to layout: ScreenshotShelfLayout) {
+        guard phase == .visible, let panel else {
+            updateViewModel(layout)
+            applyFrame(layout.panelFrame)
+            return
+        }
+        dragOverlayController.cancel()
+        presentationGeneration &+= 1
+        let generation = presentationGeneration
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.10
+            panel.animator().alphaValue = 0
+        } completionHandler: {
+            Task { @MainActor [weak self, weak panel] in
+                guard let self, let panel,
+                      self.phase == .visible,
+                      generation == self.presentationGeneration else { return }
+                panel.setFrame(layout.panelFrame, display: true)
+                panel.assertSharingType()
+                self.viewModel.layout = layout
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.12
+                    panel.animator().alphaValue = 1
+                }
+            }
+        }
+    }
+
+    private func makeLayout(for screen: NSScreen) -> ScreenshotShelfLayout {
+        let metrics = ScreenshotShelfMetrics()
+        let naturalWidths = cards.map { card -> CGFloat in
+            guard card.imagePixelSize.width > 0, card.imagePixelSize.height > 0 else {
+                return cardHeight * 4 / 3
+            }
+            return cardHeight * card.imagePixelSize.width / card.imagePixelSize.height
+        }
+        let visible = ScreenshotShelfGeometry.effectiveVisibleFrame(
+            visibleFrame: screen.visibleFrame,
+            screenFrame: screen.frame
+        )
+        let fitted = ScreenshotShelfGeometry.fittedCardWidths(
+            naturalWidths: naturalWidths,
+            availableWidth: visible.width,
+            metrics: metrics
+        )
+        let expandedFrame = ScreenshotShelfGeometry.panelFrame(
+            visibleFrame: visible,
+            cardWidths: fitted,
+            cardHeight: cardHeight,
+            anchor: anchor,
+            metrics: metrics
+        )
+        let frame = modeState.mode == .collapsed
+            ? ScreenshotShelfGeometry.collapsedFrame(expandedFrame: expandedFrame)
+            : expandedFrame
+        return ScreenshotShelfLayout(
+            cards: cards,
+            cardWidths: fitted,
+            panelFrame: frame,
+            cardHeight: cardHeight,
+            imageOpacity: imageOpacity,
+            locale: AppLocalization.locale(in: defaults),
+            metrics: metrics,
+            anchor: anchor,
+            mode: modeState.mode
+        )
+    }
+
+    private func showPanel(layout: ScreenshotShelfLayout, immediate: Bool) {
+        let panel = self.panel ?? ScreenshotShelfPanel(contentRect: layout.panelFrame, model: viewModel)
+        self.panel = panel
+        attachDragOutController(to: panel)
+        panel.assertSharingType()
+        dragOverlayController.cancel()
+        dragOverlayController.prewarm()
+
+        if immediate {
+            presentationGeneration &+= 1
+            panel.alphaValue = 1
+            panel.setFrame(layout.panelFrame, display: true)
+            panel.orderFrontRegardless()
+            panel.assertSharingType()
+            panel.prepareForDisplay()
+            phase = .visible
+            installClickDismissMonitorIfNeeded()
+            scheduleCollapseIfNeeded()
+            if modeState.mode == .collapsed {
+                scheduleArmExpansion()
+            }
+            return
+        }
+
+        presentationGeneration &+= 1
+        let generation = presentationGeneration
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let startFrame = reduceMotion ? layout.panelFrame : offscreenFrame(for: layout.panelFrame)
+        panel.alphaValue = 0.01
+        panel.setFrame(startFrame, display: false)
+        panel.orderFrontRegardless()
+        panel.assertSharingType()
+        panel.prepareForDisplay()
+        phase = .appearing
+        installClickDismissMonitorIfNeeded()
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = reduceMotion ? 0.14 : 0.30
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+            if !reduceMotion {
+                panel.animator().setFrameOrigin(layout.panelFrame.origin)
+            }
+            panel.animator().alphaValue = 1
+        } completionHandler: {
+            Task { @MainActor [weak self, weak panel] in
+                guard let self, let panel,
+                      generation == self.presentationGeneration else { return }
+                self.phase = .visible
+                panel.alphaValue = 1
+                panel.assertSharingType()
+                if self.modeState.mode == .collapsed {
+                    self.scheduleArmExpansion()
+                }
+                if let pending = self.pendingLayout {
+                    self.pendingLayout = nil
+                    if pending.mode != self.viewModel.layout.mode {
+                        self.crossfade(to: pending)
+                    } else {
+                        self.applyFrame(pending.panelFrame)
+                        self.viewModel.layout = pending
+                    }
+                }
+                self.scheduleCollapseIfNeeded()
+                self.publishState()
+            }
+        }
+    }
+
+    private func hidePanel(immediate: Bool) {
+        cancelCollapseTasks()
+        modeState.cancelInteraction()
+        dragOverlayController.cancel()
+        guard let panel else {
+            phase = .hidden
+            resetPointerState()
+            removeGlobalMonitor()
+            return
+        }
+        if !immediate, phase == .disappearing { return }
+
+        presentationGeneration &+= 1
+        let generation = presentationGeneration
+        removeGlobalMonitor()
+        NSCursor.arrow.set()
+
+        if immediate {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            phase = .hidden
+            pendingLayout = nil
+            resetPointerState()
+            return
+        }
+
+        phase = .disappearing
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let endFrame = offscreenFrame(for: panel.frame)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = reduceMotion ? 0.12 : 0.20
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            if !reduceMotion {
+                panel.animator().setFrameOrigin(endFrame.origin)
+            }
+            panel.animator().alphaValue = 0
+        } completionHandler: {
+            Task { @MainActor [weak self, weak panel] in
+                guard let self, let panel,
+                      generation == self.presentationGeneration else { return }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+                self.phase = .hidden
+                self.pendingLayout = nil
+                self.resetPointerState()
+                self.publishState()
+            }
+        }
+    }
+
+    private func finishHideImmediately() {
+        presentationGeneration &+= 1
+        cancelCollapseTasks()
+        modeState.cancelInteraction()
+        dragOverlayController.cancel()
+        panel?.orderOut(nil)
+        panel?.alphaValue = 1
+        phase = .hidden
+        pendingLayout = nil
+        resetPointerState()
+        removeGlobalMonitor()
+        NSCursor.arrow.set()
+    }
+
+    private func resetPointerState() {
+        viewModel.setPointerInside(false)
+        viewModel.setPointerLocation(nil)
+    }
+
+    private func applyFrame(_ frame: CGRect) {
+        guard let panel, phase == .visible, panel.frame != frame else { return }
+        if panel.frame.size != frame.size {
+            panel.setFrame(frame, display: true)
+        } else if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            panel.setFrame(frame, display: true)
+        } else {
+            panel.setFrame(frame, display: true, animate: true)
+        }
+        panel.assertSharingType()
+    }
+
+    private func offscreenFrame(for frame: CGRect) -> CGRect {
+        let offset = frame.height + 12
+        let dy = anchor.isTop ? offset : -offset
+        return frame.offsetBy(dx: 0, dy: dy)
+    }
+
+    private func installClickDismissMonitorIfNeeded() {
+        guard !collapseToRail,
+              globalMouseMonitor == nil,
+              phase == .visible || phase == .appearing else { return }
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.hide()
+            }
+        }
+    }
+
+    private func removeGlobalMonitor() {
+        guard let monitor = globalMouseMonitor else { return }
+        NSEvent.removeMonitor(monitor)
+        globalMouseMonitor = nil
+    }
+
+    private func prewarm() {
+        guard createsPanel, isEnabled, panel == nil,
+              let screen = displayScreen ?? NSScreen.main else { return }
+
+        let metrics = ScreenshotShelfMetrics()
+        let frame = CGRect(
+            x: screen.visibleFrame.maxX + 80,
+            y: screen.visibleFrame.maxY + 80,
+            width: 240,
+            height: metrics.panelHeight(cardHeight: cardHeight)
+        )
+        viewModel.layout = ScreenshotShelfLayout(
+            cards: [],
+            cardWidths: [],
+            panelFrame: frame,
+            cardHeight: cardHeight,
+            imageOpacity: imageOpacity,
+            locale: AppLocalization.locale(in: defaults),
+            metrics: metrics,
+            anchor: anchor,
+            mode: .expanded
+        )
+        let warmPanel = ScreenshotShelfPanel(contentRect: frame, model: viewModel)
+        panel = warmPanel
+        attachDragOutController(to: warmPanel)
+        dragOverlayController.prewarm()
+        warmPanel.orderFrontRegardless()
+        warmPanel.assertSharingType()
+        warmPanel.prepareForDisplay()
+        warmPanel.orderOut(nil)
+    }
+
+    private func schedulePrewarm() {
+        guard createsPanel else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            self?.prewarm()
+        }
+    }
+
+    // MARK: - Observers and preferences
 
     private func installObservers() {
         let workspaceCenter = NSWorkspace.shared.notificationCenter
@@ -307,8 +806,8 @@ final class ScreenshotShelfManager {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.refreshFullScreenSuppression()
-                self?.updatePanel()
+                self?.finishHideImmediately()
+                self?.refreshPresentation(immediate: true)
             }
         })
         notificationObservers.append(NotificationCenter.default.addObserver(
@@ -324,6 +823,26 @@ final class ScreenshotShelfManager {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in await self?.reconcileHistory() }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isMenuTracking = true
+                self?.cancelCollapseTask()
+            }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: NSMenu.didEndTrackingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isMenuTracking = false
+                self?.scheduleCollapseIfNeeded()
+            }
         })
 
         let distributedCenter = DistributedNotificationCenter.default()
@@ -344,8 +863,16 @@ final class ScreenshotShelfManager {
     }
 
     private func setScreenLocked(_ isLocked: Bool) {
-        presentationState.setScreenLocked(isLocked)
-        updatePanel()
+        if isLocked {
+            modeState.reset()
+            presentationState.setScreenLocked(true)
+            cancelCollapseTasks()
+            finishHideImmediately()
+            removeGlobalMonitor()
+            publishState()
+        } else {
+            presentationState.setScreenLocked(false)
+        }
     }
 
     private func refreshPreferences() {
@@ -354,15 +881,48 @@ final class ScreenshotShelfManager {
         isEnabled = enabled
         cardHeight = CGFloat(ScreenshotShelfPreferences.cardHeight(in: defaults))
         imageOpacity = ScreenshotShelfPreferences.imageOpacity(in: defaults)
+        let newAnchor = ScreenshotShelfPreferences.anchor(in: defaults)
+        let anchorChanged = newAnchor != anchor
+        anchor = newAnchor
+        let newCollapseToRail = ScreenshotShelfPreferences.collapseToRail(in: defaults)
+        let collapseChanged = newCollapseToRail != collapseToRail
+        collapseToRail = newCollapseToRail
+        if collapseToRail {
+            removeGlobalMonitor()
+        } else if collapseChanged, modeState.mode == .collapsed {
+            modeState.expand()
+            cancelCollapseTask()
+        }
         let evictedIDs = state.setLimit(ScreenshotShelfPreferences.count(in: defaults))
         removeCards(for: evictedIDs)
         scheduleAssetRemoval(for: evictedIDs)
         synchronizeCards()
-        updatePanel()
+        if phase == .visible, (anchorChanged || collapseChanged) {
+            if let screen = displayScreen ?? NSScreen.screens.first {
+                let layout = makeLayout(for: screen)
+                if layout.panelFrame.width > 0 {
+                    if let panel, layout.panelFrame == panel.frame {
+                        updateViewModel(layout)
+                    } else {
+                        crossfade(to: layout)
+                    }
+                }
+            }
+            installClickDismissMonitorIfNeeded()
+        } else {
+            schedulePresentationUpdate()
+        }
+        if collapseToRail {
+            scheduleCollapseIfNeeded()
+        }
     }
 
     private func refreshFullScreenSuppression() {
-        let isCovered = Self.frontmostAppCoversDisplay()
+        let targetDisplayID = (displayScreen ?? NSScreen.main)
+            .flatMap(ScreenshotShelfScreenResolver.displayID(for:))
+        let isCovered = ScreenshotShelfScreenResolver.frontmostAppCoversDisplay(
+            targetDisplayID: targetDisplayID
+        )
         guard isCovered != isFullScreenSuppressed else { return }
         isFullScreenSuppressed = isCovered
         if isCovered {
@@ -370,81 +930,28 @@ final class ScreenshotShelfManager {
         } else {
             presentationState.endSuppression(.fullScreen)
         }
-        updatePanel()
-    }
-
-    private func reconcileHistory() async {
-        guard let history = HistoryActor.shared else { return }
-        let historyEntries = await history.allEntries()
-        let entriesByID = Dictionary(uniqueKeysWithValues: historyEntries.map { ($0.id, $0) })
-        let removedIDs = state.reconcileHistory(existingHistoryIDs: Set(entriesByID.keys))
-        removeCards(for: removedIDs)
-        scheduleAssetRemoval(for: removedIDs)
-
-        for entry in state.entries {
-            guard let historyID = entry.historyID,
-                  let historyEntry = entriesByID[historyID] else { continue }
-            updateHistoryCard(
-                captureID: entry.captureID,
-                historyID: historyID,
-                pixelWidth: historyEntry.pixelWidth,
-                pixelHeight: historyEntry.pixelHeight
-            )
-            await refreshHistoryThumbnail(captureID: entry.captureID, historyID: historyID, from: history)
-        }
-        synchronizeCards()
-        updatePanel()
-    }
-
-    private func refreshHistoryCard(captureID: UUID, historyID: UUID) async {
-        guard let history = HistoryActor.shared else { return }
-        do {
-            guard let historyEntry = try await history.load(id: historyID) else { return }
-            updateHistoryCard(
-                captureID: captureID,
-                historyID: historyID,
-                pixelWidth: historyEntry.pixelWidth,
-                pixelHeight: historyEntry.pixelHeight
-            )
-            await refreshHistoryThumbnail(captureID: captureID, historyID: historyID, from: history)
-            synchronizeCards()
-            updatePanel()
-        } catch {
-            return
+        updateModeSuppression()
+        refreshPresentation(immediate: isCovered)
+        if !isCovered {
+            scheduleCollapseIfNeeded()
         }
     }
 
-    private func updateHistoryCard(
-        captureID: UUID,
-        historyID: UUID,
-        pixelWidth: Int?,
-        pixelHeight: Int?
-    ) {
-        guard state.entries.contains(where: { $0.captureID == captureID && $0.historyID == historyID }),
-              var card = cardsByID[captureID] else { return }
-        if let pixelWidth, let pixelHeight, pixelWidth > 0, pixelHeight > 0 {
-            card.imagePixelSize = CGSize(width: pixelWidth, height: pixelHeight)
-        }
-        cardsByID[captureID] = card
-    }
+    // MARK: - Assets
 
-    private func refreshHistoryThumbnail(
-        captureID: UUID,
-        historyID: UUID,
-        from history: HistoryActor
-    ) async {
-        guard state.entries.contains(where: { $0.captureID == captureID && $0.historyID == historyID }) else {
-            return
-        }
-        do {
-            guard let data = try await history.thumbnailData(for: historyID),
-                  let thumbnailData = ScreenshotShelfAssetEncoder.displayThumbnail(from: data),
-                  state.entries.contains(where: { $0.captureID == captureID && $0.historyID == historyID }) else {
-                return
-            }
-            setThumbnail(thumbnailData, for: captureID)
-        } catch {
-            return
+    private func enqueuePreview(_ image: CGImage, captureID: UUID) {
+        Task { @MainActor [weak self] in
+            let preview = await Task.detached(priority: .userInitiated) {
+                ScreenshotShelfAssetEncoder.previewImage(from: image)
+            }.value
+            guard let self, let preview,
+                  self.state.entries.contains(where: { $0.captureID == captureID }),
+                  var card = self.cardsByID[captureID],
+                  card.decodedThumbnail == nil else { return }
+            card.decodedThumbnail = preview
+            self.cardsByID[captureID] = card
+            self.synchronizeCards()
+            self.schedulePresentationUpdate()
         }
     }
 
@@ -479,6 +986,15 @@ final class ScreenshotShelfManager {
             return
         }
 
+        // Reuse the encoded PNG the session store is about to seal: dragging a
+        // card out needs a plaintext file, and this is the only place the bytes
+        // already exist without a second encode.
+        await dragExportStore.prepare(
+            captureID: captureID,
+            data: assets.originalData,
+            sourceTypeIdentifier: "public.png"
+        )
+
         do {
             let evictedIDs = try await sessionStore.store(
                 originalData: assets.originalData,
@@ -488,36 +1004,49 @@ final class ScreenshotShelfManager {
             for evictedID in evictedIDs { state.remove(captureID: evictedID) }
             removeCards(for: evictedIDs)
             if state.entries.contains(where: { $0.captureID == captureID }) {
-                setThumbnail(assets.thumbnailData, for: captureID)
+                await setThumbnail(assets.thumbnailData, for: captureID)
             } else {
                 try? await sessionStore.remove(captureID: captureID)
             }
             synchronizeCards()
-            updatePanel()
+            schedulePresentationUpdate()
         } catch {
             cacheFailed(captureID: captureID)
         }
     }
 
     private func cacheFailed(captureID: UUID) {
-        let message = AppLocalization.string("Screenshot preview unavailable")
+        let message = ScreenshotShelfMessage.localizedKey("Screenshot preview unavailable")
         guard var card = cardsByID[captureID] else { return }
         card.errorMessage = message
         cardsByID[captureID] = card
         synchronizeCards()
-        onCacheFailure?(message)
-        updatePanel()
+        onCacheFailure?(message.resolved(using: { AppLocalization.string($0) }))
+        schedulePresentationUpdate()
     }
 
-    private func setThumbnail(_ data: Data, for captureID: UUID) {
+    func setThumbnail(_ data: Data, for captureID: UUID) async {
         guard data.count <= Self.maximumThumbnailBytes,
-              var card = cardsByID[captureID] else {
+              cardsByID[captureID] != nil else {
             cacheFailed(captureID: captureID)
             return
         }
+        let decoded = await Task.detached(priority: .utility) {
+            ScreenshotShelfAssetEncoder.decodeThumbnail(from: data)
+        }.value
+        guard let decoded else {
+            cacheFailed(captureID: captureID)
+            return
+        }
+        applyThumbnail(data, decoded: decoded, for: captureID)
+    }
+
+    private func applyThumbnail(_ data: Data, decoded: CGImage, for captureID: UUID) {
+        guard var card = cardsByID[captureID] else { return }
         let oldCount = card.thumbnailData?.count ?? 0
         cachedThumbnailBytes = max(0, cachedThumbnailBytes - oldCount)
         card.thumbnailData = nil
+        card.decodedThumbnail = nil
         cardsByID[captureID] = card
 
         for entry in state.entries.reversed() where cachedThumbnailBytes + data.count > Self.maximumThumbnailBytes {
@@ -526,30 +1055,41 @@ final class ScreenshotShelfManager {
                   let oldThumbnail = otherCard.thumbnailData else { continue }
             cachedThumbnailBytes = max(0, cachedThumbnailBytes - oldThumbnail.count)
             otherCard.thumbnailData = nil
-            otherCard.errorMessage = AppLocalization.string("Screenshot preview unavailable")
+            otherCard.decodedThumbnail = nil
+            otherCard.errorMessage = .localizedKey("Screenshot preview unavailable")
             cardsByID[entry.captureID] = otherCard
         }
 
         guard var updatedCard = cardsByID[captureID] else { return }
         updatedCard.thumbnailData = data
+        updatedCard.decodedThumbnail = decoded
         updatedCard.errorMessage = nil
         cardsByID[captureID] = updatedCard
         cachedThumbnailBytes += data.count
+        synchronizeCards()
+        schedulePresentationUpdate()
     }
 
-    private func removeCards(for captureIDs: [UUID]) {
+    func removeCards(for captureIDs: [UUID]) {
         for captureID in captureIDs {
+            dragExportStore.invalidate(captureID: captureID)
             if let card = cardsByID.removeValue(forKey: captureID) {
                 cachedThumbnailBytes = max(0, cachedThumbnailBytes - (card.thumbnailData?.count ?? 0))
             }
         }
     }
 
-    private func synchronizeCards() {
+    func synchronizeCards() {
         cards = state.entries.compactMap { cardsByID[$0.captureID] }
     }
 
-    private func scheduleAssetRemoval(for captureIDs: [UUID]) {
+    private func attachDragOutController(to panel: ScreenshotShelfPanel) {
+        dragOutController.attach(panel: panel)
+        panel.dragOutController = dragOutController
+    }
+
+    /// Rebuilds the plaintext copy from the card's current bytes.
+    func scheduleAssetRemoval(for captureIDs: [UUID]) {
         guard !captureIDs.isEmpty, let sessionStore else { return }
         let previous = assetWorkTail
         let task = Task { @MainActor in
@@ -571,117 +1111,45 @@ final class ScreenshotShelfManager {
         assetWorkTail = task
     }
 
-    private func updatePanel() {
-        guard createsPanel else {
-            panel?.orderOut(nil)
-            publishState()
-            return
-        }
-        guard shouldPresentPanel,
-              let screen = displayScreen ?? NSScreen.screens.first else {
-            panel?.orderOut(nil)
-            publishState()
-            return
-        }
+    // MARK: - Actions
 
-        let widths = cards.map { card -> CGFloat in
-            guard card.imagePixelSize.width > 0, card.imagePixelSize.height > 0 else {
-                return cardHeight * 4 / 3
-            }
-            return cardHeight * card.imagePixelSize.width / card.imagePixelSize.height
+    private func handle(_ action: ScreenshotShelfAction) {
+        switch action {
+        case .edit(let captureID):
+            onEdit?(captureID)
+            hide()
+        case .copy(let captureID):
+            onCopy?(captureID)
+        case .pin(let captureID):
+            onPin?(captureID)
+        case .remove(let captureID):
+            remove(captureID: captureID)
+        case .clear:
+            clear()
+        case .hide:
+            hide()
+        case .expand:
+            setMode(.expanded)
+        case .beginInteraction:
+            modeState.beginInteraction()
+            cancelCollapseTask()
+        case .endInteraction:
+            modeState.endInteraction(now: Date(), delay: Self.collapseDelay)
+            scheduleCollapseIfNeeded()
+        case .move(let captureID, let destination):
+            state.move(captureID: captureID, to: destination)
+            synchronizeCards()
+            refreshPresentation()
         }
-        let frame = ScreenshotShelfGeometry.panelFrame(
-            visibleFrame: Self.safeVisibleFrame(for: screen),
-            cardWidths: widths,
-            cardHeight: cardHeight + 34,
-            spacing: 12,
-            horizontalInset: 14,
-            topInset: 12,
-            verticalInset: 10
-        )
-        guard !frame.isEmpty else {
-            panel?.orderOut(nil)
-            publishState()
-            return
-        }
-
-        let rootView = ScreenshotShelfView(
-            cards: cards,
-            panelWidth: frame.width,
-            panelHeight: frame.height,
-            cardHeight: cardHeight,
-            imageOpacity: imageOpacity,
-            onEdit: { [weak self] in self?.onEdit?($0) },
-            onCopy: { [weak self] in self?.onCopy?($0) },
-            onPin: { [weak self] in self?.onPin?($0) },
-            onRemove: { [weak self] in self?.remove(captureID: $0) },
-            onClear: { [weak self] in self?.clear() },
-            onHide: { [weak self] in self?.hide() }
-        )
-        if let panel {
-            panel.update(rootView: rootView)
-            panel.setFrame(frame, display: true)
-        } else {
-            panel = ScreenshotShelfPanel(contentRect: frame, rootView: rootView)
-        }
-        panel?.orderFrontRegardless()
-        publishState()
     }
 
     private func publishState() {
         onStateChange?(isVisible, hasItems, isEnabled, canToggle)
     }
-
-    private static func screen(for displayID: CGDirectDisplayID?) -> NSScreen? {
-        guard let displayID else { return nil }
-        return NSScreen.screens.first {
-            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == displayID
-        }
-    }
-
-    private static func screen(underMouse point: CGPoint) -> NSScreen? {
-        NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main
-    }
-
-    private static func safeVisibleFrame(for screen: NSScreen) -> CGRect {
-        let visible = screen.visibleFrame
-        let insets = screen.safeAreaInsets
-        return CGRect(
-            x: visible.minX + insets.left,
-            y: visible.minY + insets.bottom,
-            width: max(0, visible.width - insets.left - insets.right),
-            height: max(0, visible.height - insets.top - insets.bottom)
-        )
-    }
-
-    private static func frontmostAppCoversDisplay() -> Bool {
-        guard let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
-              frontmostPID != ProcessInfo.processInfo.processIdentifier,
-              let windows = CGWindowListCopyWindowInfo(
-                [.optionOnScreenOnly, .excludeDesktopElements],
-                kCGNullWindowID
-              ) as? [[String: Any]] else { return false }
-
-        let displayFrames = NSScreen.screens.compactMap { screen -> CGRect? in
-            guard let displayID = screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")
-            ] as? CGDirectDisplayID else { return nil }
-            return CGDisplayBounds(displayID)
-        }
-        return windows.contains { window in
-            guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == frontmostPID,
-                  let windowFrame = windowFrame(from: window[kCGWindowBounds as String]) else { return false }
-            return displayFrames.contains { windowFrame.insetBy(dx: -2, dy: -2).contains($0) }
-        }
-    }
-
-    static func windowFrame(from value: Any?) -> CGRect? {
-        guard let bounds = value as? [String: CGFloat] else { return nil }
-        return CGRect(dictionaryRepresentation: bounds as CFDictionary)
-    }
 }
 
-private enum ScreenshotShelfAssetError: Error {
-    case historyUnavailable
-    case sessionStorageUnavailable
+extension ScreenshotShelfManager: ScreenshotShelfViewModelDelegate {
+    func screenshotShelfViewModel(_ model: ScreenshotShelfViewModel, perform action: ScreenshotShelfAction) {
+        handle(action)
+    }
 }

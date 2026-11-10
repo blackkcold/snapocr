@@ -33,6 +33,10 @@ public enum PreferenceKeys {
     public static let screenshotShelfCardHeight = "screenshotShelf_cardHeight"
     /// Opacity applied to screenshot shelf images.
     public static let screenshotShelfImageOpacity = "screenshotShelf_imageOpacity"
+    /// Screen anchor used to place the screenshot shelf.
+    public static let screenshotShelfAnchor = "screenshotShelf_anchor"
+    /// Whether the shelf folds down to a rail tab when idle.
+    public static let screenshotShelfCollapseToRail = "screenshotShelf_collapseToRail"
     /// Video codec used for new screen recordings.
     public static let recordingVideoCodec = "recording_videoCodec"
     /// Resolution ceiling used for new screen recordings.
@@ -93,6 +97,10 @@ public enum PreferenceDefaults {
     public static let screenshotShelfCardHeight = 96.0
     /// Render shelf images at 90% opacity by default.
     public static let screenshotShelfImageOpacity = 0.9
+    /// Keep the shelf centered below the menu bar by default.
+    public static let screenshotShelfAnchor = ScreenshotShelfAnchor.top.rawValue
+    /// Collapse the shelf to its rail tab after the pointer leaves.
+    public static let screenshotShelfCollapseToRail = true
     /// Use H.264 for new recordings by default.
     public static let recordingVideoCodec = "h264"
     /// Limit new recordings to 1080p by default.
@@ -168,6 +176,29 @@ public enum ScreenshotShelfPreferences {
         )
     }
 
+    /// Returns the screen anchor for the shelf, falling back to `top` when the stored value is invalid.
+    ///
+    /// Invalid legacy values are written back so the Settings picker always has a visible selection.
+    public static func anchor(in defaults: UserDefaults = .standard) -> ScreenshotShelfAnchor {
+        let key = PreferenceKeys.screenshotShelfAnchor
+        guard let rawValue = defaults.string(forKey: key) else {
+            return ScreenshotShelfAnchor.top
+        }
+        guard let anchor = ScreenshotShelfAnchor(rawValue: rawValue) else {
+            defaults.set(ScreenshotShelfAnchor.top.rawValue, forKey: key)
+            return .top
+        }
+        return anchor
+    }
+
+    /// Returns whether the shelf folds down to its rail tab when idle, defaulting to `true`.
+    public static func collapseToRail(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: PreferenceKeys.screenshotShelfCollapseToRail) != nil else {
+            return PreferenceDefaults.screenshotShelfCollapseToRail
+        }
+        return defaults.bool(forKey: PreferenceKeys.screenshotShelfCollapseToRail)
+    }
+
     private static func normalizedDouble(
         forKey key: String,
         defaultValue: Double,
@@ -236,6 +267,51 @@ public enum RecordingDestinationPreferences {
     /// Clears the custom directory and restores the Movies default.
     public static func reset(in defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: PreferenceKeys.recordingCustomOutputDirectory)
+    }
+}
+
+/// Screen anchors supported by the floating screenshot shelf.
+public enum ScreenshotShelfAnchor: String, CaseIterable, Sendable {
+    case topLeading
+    case top
+    case topTrailing
+    case bottomLeading
+    case bottom
+    case bottomTrailing
+
+    /// Whether the shelf hangs from the top edge of the usable screen.
+    public var isTop: Bool {
+        switch self {
+        case .topLeading, .top, .topTrailing: true
+        case .bottomLeading, .bottom, .bottomTrailing: false
+        }
+    }
+
+    /// Horizontal placement within the usable screen.
+    public enum HorizontalPlacement: Sendable {
+        case leading
+        case center
+        case trailing
+    }
+
+    public var horizontalPlacement: HorizontalPlacement {
+        switch self {
+        case .topLeading, .bottomLeading: .leading
+        case .top, .bottom: .center
+        case .topTrailing, .bottomTrailing: .trailing
+        }
+    }
+
+    /// Localization key used by the Settings position picker.
+    public var localizationKey: String {
+        switch self {
+        case .topLeading: "Top Left"
+        case .top: "Top Center"
+        case .topTrailing: "Top Right"
+        case .bottomLeading: "Bottom Left"
+        case .bottom: "Bottom Center"
+        case .bottomTrailing: "Bottom Right"
+        }
     }
 }
 

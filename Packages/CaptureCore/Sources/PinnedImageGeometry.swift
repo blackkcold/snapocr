@@ -302,6 +302,30 @@ public enum PinnedImageGeometry {
         return imagePixelWidth / pointWidth
     }
 
+    /// 将截图像素尺寸按来源显示缩放换算为点尺寸，适配屏幕并居中。
+    ///
+    /// 无效的 `displayScale` 回退为 `1`，与缺少来源点宽度时的兼容行为一致。
+    /// - Parameters:
+    ///   - imageSize: 截图像素尺寸。
+    ///   - displayScale: 来源截图的像素/点比例。
+    ///   - screenFrame: 目标屏幕可见 frame（AppKit 点坐标）。
+    /// - Returns: 适配屏幕后居中的 AppKit 点坐标 frame。
+    public static func shelfPinFrame(
+        imageSize: CGSize,
+        displayScale: CGFloat,
+        screenFrame: CGRect
+    ) -> CGRect {
+        let scale = displayScale.isFinite && displayScale > 0 ? displayScale : 1
+        let pointSize = CGSize(width: imageSize.width / scale, height: imageSize.height / scale)
+        let fittedFrame = fitToScreen(CGRect(origin: .zero, size: pointSize), screenFrame: screenFrame)
+        return CGRect(
+            x: screenFrame.midX - fittedFrame.width / 2,
+            y: screenFrame.midY - fittedFrame.height / 2,
+            width: fittedFrame.width,
+            height: fittedFrame.height
+        )
+    }
+
     /// 计算第 `index` 张置顶图相对首张的级联偏移。
     ///
     /// - Parameter index: 从 0 开始的置顶序号。

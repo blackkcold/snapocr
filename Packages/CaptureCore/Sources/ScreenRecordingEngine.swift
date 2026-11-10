@@ -9,11 +9,13 @@ enum RecordingStreamSettings {
         configuration: RecordingConfiguration,
         sourceDimensions: CGSize,
         sourceRect: CGRect? = nil
-    ) -> SCStreamConfiguration {
-        let dimensions = configuration.outputDimensions(for: sourceDimensions)
+    ) throws -> SCStreamConfiguration {
+        guard let dimensions = configuration.validatedEvenOutputDimensions(for: sourceDimensions) else {
+            throw ScreenRecordingEngineError.invalidOutputDimensions
+        }
         let streamConfiguration = SCStreamConfiguration()
-        streamConfiguration.width = max(1, Int(dimensions.width.rounded()))
-        streamConfiguration.height = max(1, Int(dimensions.height.rounded()))
+        streamConfiguration.width = Int(dimensions.width)
+        streamConfiguration.height = Int(dimensions.height)
         streamConfiguration.minimumFrameInterval = CMTime(
             value: 1,
             timescale: Int32(clamping: configuration.frameRateLimit)
@@ -32,6 +34,48 @@ enum RecordingStreamSettings {
     }
 }
 
+enum RecordingWriterFinalizationDecision: Equatable {
+    case discardPartial(reason: String)
+    case retainPartial(reason: String)
+    case finishWriting
+    case publish
+
+    static func beforeFinishing(
+        hasAcceptedVideoSample: Bool,
+        writerIsWriting: Bool,
+        failureMessage: String?,
+        writerError: String?
+    ) -> Self {
+        guard hasAcceptedVideoSample else {
+            return .discardPartial(reason: failureMessage ?? "No video frame was captured.")
+        }
+        guard writerIsWriting else {
+            return .retainPartial(
+                reason: writerError ?? failureMessage ?? "The media writer did not finish successfully."
+            )
+        }
+        return .finishWriting
+    }
+
+    static func afterFinishing(
+        hasAcceptedVideoSample: Bool,
+        writerCompleted: Bool,
+        failureMessage: String?,
+        writerError: String?
+    ) -> Self {
+        guard hasAcceptedVideoSample else {
+            return .discardPartial(reason: failureMessage ?? "No video frame was captured.")
+        }
+        guard writerCompleted else {
+            return .retainPartial(
+                reason: writerError ?? failureMessage ?? "The media writer did not finish successfully."
+            )
+        }
+        guard let failureMessage else { return .publish }
+        return .retainPartial(reason: failureMessage)
+    }
+}
+
 /// Errors raised while starting, stopping, or finalizing one recording session.
 public enum ScreenRecordingEngineError: LocalizedError, Equatable, Sendable {
     /// The selected display or window is no longer available.
@@ -40,6 +84,8 @@ public enum ScreenRecordingEngineError: LocalizedError, Equatable, Sendable {
     case invalidRegion
     /// The source does not provide usable pixel dimensions.
     case invalidSourceDimensions
+    /// The source cannot produce valid even-sized output pixels.
+    case invalidOutputDimensions
     /// AVAssetWriter rejected one of the requested output inputs.
     case writerInputUnavailable(String)
     /// The capture stream or writer failed before a usable video sample was accepted.
@@ -56,6 +102,8 @@ public enum ScreenRecordingEngineError: LocalizedError, Equatable, Sendable {
             "The recording region is outside the selected display."
         case .invalidSourceDimensions:
             "The recording source has invalid dimensions."
+        case .invalidOutputDimensions:
+            "The recording source cannot produce valid even-sized output dimensions."
         case let .writerInputUnavailable(mediaType):
             "The media writer cannot encode the requested \(mediaType) format."
         case let .recordingFailed(reason, partialURL):
@@ -67,7 +115,7 @@ public enum ScreenRecordingEngineError: LocalizedError, Equatable, Sendable {
 
     private static func message(reason: String, partialURL: URL?) -> String {
         guard let partialURL else { return reason }
-        return "\(reason) Recoverable partial: \(partialURL.path)"
+        return "\(reason) Retained partial: \(partialURL.path)"
     }
 }
 
@@ -98,7 +146,7 @@ public actor ScreenRecordingEngine {
         sessionState.phase
     }
 
-    /// Existing hidden partial output, if a failed session left recoverable media.
+    /// Existing hidden partial output, if one remains after a failed session.
     public var partialOutputURL: URL? {
         guard let transaction,
               FileManager.default.fileExists(atPath: transaction.partialURL.path) else {
@@ -143,13 +191,13 @@ public actor ScreenRecordingEngine {
                 throw ScreenRecordingEngineError.invalidSourceDimensions
             }
 
-            let transaction = try RecordingOutputTransaction(destinationDirectory: destinationDirectory)
-            self.transaction = transaction
-            let streamConfiguration = RecordingStreamSettings.make(
+            let streamConfiguration = try RecordingStreamSettings.make(
                 configuration: configuration,
                 sourceDimensions: resolvedSource.dimensions,
                 sourceRect: resolvedSource.sourceRect
             )
+            let transaction = try RecordingOutputTransaction(destinationDirectory: destinationDirectory)
+            self.transaction = transaction
             let pipeline = try RecordingWriterPipeline(
                 transaction: transaction,
                 configuration: configuration,
@@ -173,22 +221,49 @@ public actor ScreenRecordingEngine {
             }
             try await stream.startCapture()
             try sessionState.recordingDidStart()
-        } catch {
-            if let stream {
-                try? await stream.stopCapture()
+        } catch let startError {
+            if let cleanupError = await cleanupAfterStartFailure(startError) {
+                throw cleanupError
             }
-            pipeline?.stopAcceptingSamples()
-            sampleQueue.sync {}
-            sessionState.fail()
-            throw error
+            throw startError
         }
+    }
+
+    private func cleanupAfterStartFailure(_ startError: any Error) async -> ScreenRecordingEngineError? {
+        if let stream {
+            try? await stream.stopCapture()
+        }
+        pipeline?.stopAcceptingSamples()
+        sampleQueue.sync {}
+
+        var cleanupFailed = false
+        do {
+            if let activePipeline = pipeline {
+                try sampleQueue.sync {
+                    try activePipeline.discardUnpublishedOutput()
+                }
+            } else if let transaction {
+                try transaction.discardPartial()
+            }
+        } catch {
+            cleanupFailed = true
+        }
+
+        let retainedPartialURL = cleanupFailed ? partialOutputURL : nil
+        sessionState.fail()
+        self.stream = nil
+        output = nil
+        pipeline = nil
+        transaction = nil
+        guard let retainedPartialURL else { return nil }
+        return .recordingFailed(startError.localizedDescription, partialURL: retainedPartialURL)
     }
 
     /// Stops capture, drains queued samples, finalizes the writer, and publishes the MP4.
     ///
     /// - Returns: The unique final recording URL.
-    /// - Throws: A lifecycle, stream, writer, or safe-publication error. Any recoverable
-    ///   partial remains at `partialOutputURL`.
+    /// - Throws: A lifecycle, stream, writer, or safe-publication error. Any retained
+    ///   partial remains at `partialOutputURL`; its playability is not guaranteed.
     public func stopAndSave() async throws -> URL {
         try sessionState.beginStop()
         guard let stream, let pipeline else {
@@ -323,6 +398,7 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
     private let sampleQueue: DispatchQueue
     private var sessionStartTime: CMTime?
     private var hasStartedWriting = false
+    private var hasAcceptedVideoSample = false
     private var acceptsSamples = true
     private var failureRelay: RecordingFailureRelay
 
@@ -424,30 +500,53 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
                 if let stopError {
                     self.setFailure("The capture stream could not stop cleanly: \(stopError)")
                 }
-                guard self.hasStartedWriting else {
-                    let error: ScreenRecordingEngineError
-                    if let failureMessage = self.failureMessage {
-                        error = .recordingFailed(failureMessage, partialURL: self.existingPartialURL)
-                    } else {
-                        error = .recordingFailed("No video frame was captured.", partialURL: self.existingPartialURL)
+                let decision = RecordingWriterFinalizationDecision.beforeFinishing(
+                    hasAcceptedVideoSample: self.hasAcceptedVideoSample,
+                    writerIsWriting: self.writer.status == .writing,
+                    failureMessage: self.failureMessage,
+                    writerError: self.writer.error?.localizedDescription
+                )
+                switch decision {
+                case .discardPartial(let reason):
+                    do {
+                        try self.discardUnpublishedOutput()
+                        continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
+                            reason,
+                            partialURL: nil
+                        ))
+                    } catch {
+                        continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
+                            reason,
+                            partialURL: self.existingPartialURL
+                        ))
                     }
-                    continuation.resume(throwing: error)
-                    return
-                }
-                guard self.writer.status == .writing else {
+                case .retainPartial(let reason):
+                    continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
+                        reason,
+                        partialURL: self.existingPartialURL
+                    ))
+                case .finishWriting:
+                    self.videoInput.markAsFinished()
+                    self.audioInput?.markAsFinished()
+                    self.writer.finishWriting {
+                        self.sampleQueue.async {
+                            self.completeWriting(continuation: continuation)
+                        }
+                    }
+                case .publish:
                     continuation.resume(throwing: self.writerFailure())
-                    return
-                }
-
-                self.videoInput.markAsFinished()
-                self.audioInput?.markAsFinished()
-                self.writer.finishWriting {
-                    self.sampleQueue.async {
-                        self.completeWriting(continuation: continuation)
-                    }
                 }
             }
         }
+    }
+
+    func discardUnpublishedOutput() throws {
+        dispatchPrecondition(condition: .onQueue(sampleQueue))
+        acceptsSamples = false
+        if writer.status == .writing {
+            writer.cancelWriting()
+        }
+        try transaction.discardPartial()
     }
 
     private var existingPartialURL: URL? {
@@ -474,6 +573,7 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
             setFailure(writer.error?.localizedDescription ?? "The media writer rejected a video sample.")
             return
         }
+        hasAcceptedVideoSample = true
     }
 
     private func appendAudio(_ sampleBuffer: CMSampleBuffer) {
@@ -496,27 +596,44 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
     }
 
     private func completeWriting(continuation: CheckedContinuation<URL, any Error>) {
-        guard writer.status == .completed else {
+        let decision = RecordingWriterFinalizationDecision.afterFinishing(
+            hasAcceptedVideoSample: hasAcceptedVideoSample,
+            writerCompleted: writer.status == .completed,
+            failureMessage: failureMessage,
+            writerError: writer.error?.localizedDescription
+        )
+        switch decision {
+        case .discardPartial(let reason):
+            do {
+                try discardUnpublishedOutput()
+                continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(reason, partialURL: nil))
+            } catch {
+                continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
+                    reason,
+                    partialURL: existingPartialURL
+                ))
+            }
+        case .retainPartial(let reason):
+            let error: ScreenRecordingEngineError
+            if writer.status == .completed, failureMessage != nil {
+                error = .recordingFailed(reason, partialURL: existingPartialURL)
+            } else {
+                error = .finalizationFailed(reason, partialURL: existingPartialURL)
+            }
+            continuation.resume(throwing: error)
+        case .finishWriting:
             continuation.resume(throwing: writerFailure())
-            return
-        }
-        if let failureMessage {
-            continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
-                failureMessage,
-                partialURL: existingPartialURL
-            ))
-            return
-        }
-
-        do {
-            try transaction.markWriterFinished()
-            let finalURL = try transaction.publish()
-            continuation.resume(returning: finalURL)
-        } catch {
-            continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
-                error.localizedDescription,
-                partialURL: existingPartialURL
-            ))
+        case .publish:
+            do {
+                try transaction.markWriterFinished()
+                let finalURL = try transaction.publish()
+                continuation.resume(returning: finalURL)
+            } catch {
+                continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
+                    error.localizedDescription,
+                    partialURL: existingPartialURL
+                ))
+            }
         }
     }
 

@@ -35,6 +35,31 @@ struct PinnedImageGeometryTests {
         #expect(frame == CGRect(x: 0, y: 0, width: 800, height: 400))
     }
 
+    @Test func shelfPinFrameConvertsPixelsToPointsAndCentersOnNonzeroScreenOrigin() {
+        let screenFrame = CGRect(x: 100, y: 200, width: 1_440, height: 900)
+        let frame = PinnedImageGeometry.shelfPinFrame(
+            imageSize: CGSize(width: 800, height: 600),
+            displayScale: 2,
+            screenFrame: screenFrame
+        )
+
+        #expect(frame == CGRect(x: 620, y: 500, width: 400, height: 300))
+        #expect(frame.width * 2 == 800)
+    }
+
+    @Test func shelfPinFrameDefaultsInvalidDisplayScaleToOne() {
+        let screenFrame = CGRect(x: 100, y: 200, width: 1_440, height: 900)
+        for displayScale: CGFloat in [0, -2, .infinity, .nan] {
+            let frame = PinnedImageGeometry.shelfPinFrame(
+                imageSize: CGSize(width: 800, height: 600),
+                displayScale: displayScale,
+                screenFrame: screenFrame
+            )
+
+            #expect(frame == CGRect(x: 420, y: 350, width: 800, height: 600))
+        }
+    }
+
     @Test func displayScaleUsesPixelWidthOverPointWidth() {
         #expect(PinnedImageGeometry.displayScale(imagePixelWidth: 1000, pointWidth: 500) == 2)
         #expect(PinnedImageGeometry.displayScale(imagePixelWidth: 640, pointWidth: 640) == 1)

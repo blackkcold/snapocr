@@ -7,10 +7,18 @@ import SharedKit
 /// SwiftUI views already track the injected `\.locale`; this serves the
 /// Foundation paths that cannot: toasts, alerts, panels, and AppKit menus.
 enum AppLocalization {
-    private static func bundle() -> Bundle {
-        let language = UserDefaults.standard.string(forKey: PreferenceKeys.appLanguage)
+    private static func language(in defaults: UserDefaults) -> AppLanguage {
+        let rawValue = defaults.string(forKey: PreferenceKeys.appLanguage)
             ?? PreferenceDefaults.appLanguage
-        guard let identifier = AppLanguage(rawValue: language)?.resourceIdentifier,
+        return AppLanguage(rawValue: rawValue) ?? .system
+    }
+
+    static func locale(in defaults: UserDefaults = .standard) -> Locale {
+        language(in: defaults).locale
+    }
+
+    private static func bundle() -> Bundle {
+        guard let identifier = language(in: .standard).resourceIdentifier,
               let path = Bundle.main.path(forResource: identifier, ofType: "lproj"),
               let languageBundle = Bundle(path: path) else {
             return .main
@@ -61,6 +69,8 @@ enum AppLocalization {
             return localize("The recording region is outside the selected display.")
         case .invalidSourceDimensions:
             return localize("The recording source has invalid dimensions.")
+        case .invalidOutputDimensions:
+            return localize("The recording source cannot produce valid even-sized output dimensions.")
         case let .writerInputUnavailable(mediaType):
             return formatted(
                 "The media writer cannot encode the requested %@ format.",
@@ -70,12 +80,12 @@ enum AppLocalization {
         case let .recordingFailed(reason, partialURL), let .finalizationFailed(reason, partialURL):
             let localizedReason = localizedRecordingReason(reason, localize: localize)
             guard let partialURL else { return localizedReason }
-            let recoverablePartial = formatted(
-                "Recoverable partial: %@",
+            let retainedPartial = formatted(
+                "Retained partial: %@",
                 arguments: [partialURL.path],
                 localize: localize
             )
-            return "\(localizedReason) \(recoverablePartial)"
+            return "\(localizedReason) \(retainedPartial)"
         }
     }
 

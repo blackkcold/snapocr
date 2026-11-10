@@ -30,7 +30,7 @@ struct RecordingErrorLocalizationTests {
         #expect(result == "localized: The recording region is outside the selected display.")
     }
 
-    @Test func localizesFailureReasonAndRecoverablePartialPath() {
+    @Test func localizesFailureReasonAndRetainedPartialPath() {
         let partialURL = URL(fileURLWithPath: "/recordings/recoverable.partial")
         let result = AppLocalization.recordingErrorDescription(
             .recordingFailed("No video frame was captured.", partialURL: partialURL)
@@ -38,14 +38,28 @@ struct RecordingErrorLocalizationTests {
             switch key {
             case "No video frame was captured.":
                 "没有捕获到视频帧。"
-            case "Recoverable partial: %@":
-                "可恢复的临时文件：%@"
+            case "Retained partial: %@":
+                "已保留的临时文件：%@"
             default:
                 key
             }
         }
 
-        #expect(result == "没有捕获到视频帧。 可恢复的临时文件：/recordings/recoverable.partial")
+        #expect(result == "没有捕获到视频帧。 已保留的临时文件：/recordings/recoverable.partial")
+    }
+
+    @Test func localizesAtomicPublicationFailures() {
+        let reason = RecordingOutputTransactionError.unsupportedDestination.localizedDescription
+        let result = AppLocalization.recordingErrorDescription(
+            .finalizationFailed(reason, partialURL: nil)
+        ) { key in
+            if key == "This destination does not support safe recording publication. Choose another destination." {
+                return "此位置不支持安全发布录屏文件，请选择其他保存位置。"
+            }
+            return key
+        }
+
+        #expect(result == "此位置不支持安全发布录屏文件，请选择其他保存位置。")
     }
 
     @Test func preservesUnknownSystemErrorDescriptions() {

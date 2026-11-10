@@ -96,6 +96,15 @@ public struct CaptureDisplayInfo: Sendable {
     public let scaleFactor: CGFloat
     /// 显示器在全局坐标系中的帧
     public let frame: CGRect
+    /// 由捕获后端确认的来源宽度（点）；缺失时不能从 `frame` 推断缩放比例。
+    public let pointWidth: CGFloat?
+
+    init(displayID: UInt32, scaleFactor: CGFloat, frame: CGRect, pointWidth: CGFloat? = nil) {
+        self.displayID = displayID
+        self.scaleFactor = scaleFactor
+        self.frame = frame
+        self.pointWidth = pointWidth
+    }
 }
 
 // MARK: - CaptureResult

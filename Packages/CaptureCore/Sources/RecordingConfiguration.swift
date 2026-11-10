@@ -82,6 +82,29 @@ public struct RecordingConfiguration: Equatable, Sendable {
         )
     }
 
+    func validatedEvenOutputDimensions(for sourceDimensions: CGSize) -> CGSize? {
+        let fittedDimensions = outputDimensions(for: sourceDimensions)
+        let width = (fittedDimensions.width / 2).rounded(.down) * 2
+        let height = (fittedDimensions.height / 2).rounded(.down) * 2
+
+        guard fittedDimensions.width.isFinite,
+              fittedDimensions.height.isFinite,
+              width.isFinite,
+              height.isFinite,
+              width >= 2,
+              height >= 2,
+              width < CGFloat(Int.max),
+              height < CGFloat(Int.max),
+              width <= sourceDimensions.width,
+              height <= sourceDimensions.height,
+              width <= resolutionLimit.width,
+              height <= resolutionLimit.height else {
+            return nil
+        }
+
+        return CGSize(width: width, height: height)
+    }
+
     /// Validates the requested settings against the capabilities of an encoder.
     ///
     /// - Parameters:

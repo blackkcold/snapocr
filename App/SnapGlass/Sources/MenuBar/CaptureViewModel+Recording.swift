@@ -15,6 +15,10 @@ extension CaptureViewModel {
         recordingSessionController.needsQuitConfirmation
     }
 
+    var isRecordingSaving: Bool {
+        recordingSessionController.isSaving
+    }
+
     /// Starts a screen-recording session after checking capture mutual exclusion.
     public func startRecording() {
         guard canStartRecording else { return }
@@ -33,6 +37,10 @@ extension CaptureViewModel {
     @discardableResult
     public func stopRecordingAndSave(reason: String? = nil) async -> Bool {
         await recordingSessionController.stopAndSave(reason: reason)
+    }
+
+    func stopRecordingAndResolveQuit(reason: String) async -> RecordingSessionTerminalOutcome {
+        await recordingSessionController.stopAndResolveForQuit(reason: reason)
     }
 
     func configureRecording() {

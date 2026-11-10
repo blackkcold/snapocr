@@ -415,6 +415,7 @@ extension CaptureViewModel {
             let captureMode: CaptureCore.CaptureMode
             let capturedImage: CGImage
             var capturedDisplayID = sourceDisplayID
+            var livePointWidth: CGFloat?
             switch imageSource {
             case .live:
                 let result = try await captureWithoutScreenshotShelf(
@@ -424,6 +425,7 @@ extension CaptureViewModel {
                 captureMode = result.captureMode
                 capturedImage = result.image
                 capturedDisplayID = result.displayInfo?.displayID ?? capturedDisplayID
+                livePointWidth = result.displayInfo?.pointWidth
             case .snapshot(let image):
                 captureMode = mode
                 capturedImage = image
@@ -433,6 +435,12 @@ extension CaptureViewModel {
             } else {
                 capturedImage
             }
+            let displayScale = (pinRect?.width ?? livePointWidth).map { pointWidth in
+                PinnedImageGeometry.displayScale(
+                    imagePixelWidth: CGFloat(image.width),
+                    pointWidth: pointWidth
+                )
+            }
             await processCapturedImage(
                 image,
                 captureMode: captureMode,
@@ -441,7 +449,8 @@ extension CaptureViewModel {
                 historyModeOverride: historyModeOverride,
                 destination: destination,
                 pinRect: pinRect,
-                sourceDisplayID: capturedDisplayID
+                sourceDisplayID: capturedDisplayID,
+                displayScale: displayScale
             )
         } catch CaptureError.permissionDenied {
             openWindow?("permission")
@@ -454,6 +463,7 @@ extension CaptureViewModel {
         scrollSession = nil
         scrollSourceAppName = nil
         scrollSourceWindowTitle = nil
+        scrollSourcePointWidth = nil
         scrollCapturedFrameCount = 0
         scrollReachedSizeLimit = false
         isScrollCaptureActive = false

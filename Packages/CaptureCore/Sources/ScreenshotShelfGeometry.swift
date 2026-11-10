@@ -1,30 +1,151 @@
 import CoreGraphics
+import SharedKit
 
-/// Geometry helpers for the single, horizontally scrolling screenshot-shelf panel.
+/// Layout constants shared by the shelf panel, its SwiftUI content, and Settings previews.
+public struct ScreenshotShelfMetrics: Equatable, Sendable {
+    /// Transparent room above the rail for the thread, ring, and shadow.
+    public var topInset: CGFloat
+    /// Vertical room reserved for the rail, thread, and ring above the card.
+    public var railZone: CGFloat
+    /// Gap between the rail zone and the top edge of the card.
+    public var railGap: CGFloat
+    /// Transparent room around the visual content for card shadows and drag scale.
+    public var shadowInset: CGFloat
+    /// Distance from the visible screen edge to the visual content.
+    public var screenMargin: CGFloat
+    /// Horizontal gap between cards.
+    public var cardSpacing: CGFloat
+    /// Trailing room for the shelf action menu.
+    public var endMenuWidth: CGFloat
+    /// Maximum displayed card width before cropping a very wide capture.
+    public var maxCardWidth: CGFloat
+    /// Minimum preferred card width; the fitter may go lower on extremely narrow displays.
+    public var minCardWidth: CGFloat
+
+    /// Ring diameter shared by the rail, card hanger, and drag preview.
+    public static let ringDiameter: CGFloat = 6
+    /// Length of the thread between the ring and the attachment dot.
+    public static let threadLength: CGFloat = 15
+    /// Diameter of the dot where the thread meets the card.
+    public static let attachmentDotDiameter: CGFloat = 2
+    /// Total hanger height above the card's top edge.
+    public static let hangerHeight: CGFloat = ringDiameter + threadLength + attachmentDotDiameter
+    /// Distance from the card's top edge to the ring centre.
+    public static let ringCenterAboveCard: CGFloat = hangerHeight - ringDiameter / 2
+    /// Vertical offset of the rail line below `topInset`.
+    public static let railLineOffset: CGFloat = 2
+
+    public init(
+        topInset: CGFloat = 8,
+        railZone: CGFloat = 16,
+        railGap: CGFloat = 6,
+        shadowInset: CGFloat = 16,
+        screenMargin: CGFloat = 16,
+        cardSpacing: CGFloat = 12,
+        endMenuWidth: CGFloat = 28,
+        maxCardWidth: CGFloat = 220,
+        minCardWidth: CGFloat = 56
+    ) {
+        self.topInset = topInset
+        self.railZone = railZone
+        self.railGap = railGap
+        self.shadowInset = shadowInset
+        self.screenMargin = screenMargin
+        self.cardSpacing = cardSpacing
+        self.endMenuWidth = endMenuWidth
+        self.maxCardWidth = maxCardWidth
+        self.minCardWidth = minCardWidth
+    }
+
+    /// Distance from the panel's top edge to the card's top edge.
+    public var cardTopOffset: CGFloat {
+        topInset + railZone + railGap
+    }
+
+    /// Panel-local y of the rail line.
+    public var railLineY: CGFloat {
+        topInset + Self.railLineOffset
+    }
+
+    /// Height of the panel for a given card height.
+    public func panelHeight(cardHeight: CGFloat) -> CGFloat {
+        topInset + railZone + railGap + cardHeight + shadowInset
+    }
+
+    /// Width of the visible rail/card/menu content for the supplied card widths.
+    public func visualWidth(cardWidths: [CGFloat]) -> CGFloat {
+        guard !cardWidths.isEmpty else { return 0 }
+        return cardWidths.reduce(0, +)
+            + cardSpacing * CGFloat(max(0, cardWidths.count - 1))
+            + endMenuWidth
+    }
+
+    /// Width of the transparent panel that hosts the visible content.
+    public func panelWidth(cardWidths: [CGFloat]) -> CGFloat {
+        visualWidth(cardWidths: cardWidths) + shadowInset * 2
+    }
+}
+
+/// Geometry helpers for the single, chromeless screenshot-shelf panel.
 public enum ScreenshotShelfGeometry {
-    /// Computes a top-centered viewport while preserving each card's supplied width.
+    /// Fits card widths into the usable screen while preserving each capture's relative width.
     ///
-    /// `visibleFrame` must already exclude the menu bar, notch safe areas, and other unusable
-    /// screen regions. If the cards do not fit horizontally, the viewport is constrained while
-    /// the caller keeps the original card widths in its scroll content.
+    /// Very wide cards are capped first. If the row still does not fit, every width is scaled
+    /// down; extremely narrow displays may go below `minCardWidth` so the panel never overflows.
     ///
     /// - Parameters:
-    ///   - visibleFrame: Safe screen frame in AppKit global point coordinates.
-    ///   - cardWidths: Per-image widths at `cardHeight`, preserving each image's aspect ratio.
+    ///   - naturalWidths: Widths derived from each capture's aspect ratio at the configured height.
+    ///   - availableWidth: Full width of the usable screen frame.
+    ///   - metrics: Shared shelf layout constants.
+    /// - Returns: Widths for the visible cards, or an empty array when no usable row fits.
+    public static func fittedCardWidths(
+        naturalWidths: [CGFloat],
+        availableWidth: CGFloat,
+        metrics: ScreenshotShelfMetrics
+    ) -> [CGFloat] {
+        guard availableWidth.isFinite, availableWidth > 0,
+              !naturalWidths.isEmpty else { return [] }
+
+        let validWidths = naturalWidths.filter { $0.isFinite && $0 > 0 }
+        guard validWidths.count == naturalWidths.count else { return [] }
+
+        let contentLimit = availableWidth
+            - metrics.screenMargin * 2
+            - metrics.endMenuWidth
+            - metrics.cardSpacing * CGFloat(max(0, validWidths.count - 1))
+        guard contentLimit.isFinite, contentLimit >= 1 else { return [] }
+
+        let capped = validWidths.map {
+            min(max($0, metrics.minCardWidth), metrics.maxCardWidth)
+        }
+        let total = capped.reduce(0, +)
+        guard total > 0 else { return [] }
+        guard total > contentLimit else { return capped }
+
+        let scale = contentLimit / total
+        return capped.map { max(1, $0 * scale) }
+    }
+
+    /// Computes the panel frame for the requested screen anchor.
+    ///
+    /// The visual rail/card content sits `screenMargin` inside the usable frame. The panel is
+    /// larger by `shadowInset` on each side so card shadows and the drag scale are not clipped.
+    /// For the default `.top` anchor the panel's top edge is 8 pt below the usable top (16 pt
+    /// screen margin minus 8 pt top inset), and the rail itself is 16 pt below it.
+    ///
+    /// - Parameters:
+    ///   - visibleFrame: Usable screen frame already excluding the menu bar, Dock, and notch.
+    ///   - cardWidths: Fitted widths returned by `fittedCardWidths`.
     ///   - cardHeight: Configured card height in points.
-    ///   - spacing: Horizontal spacing between cards.
-    ///   - horizontalInset: Minimum distance from either horizontal screen edge.
-    ///   - topInset: Distance below the safe frame's top edge.
-    ///   - verticalInset: Vertical padding around the card row.
-    /// - Returns: Panel frame bounded by `visibleFrame`; `.zero` for invalid screen geometry.
+    ///   - anchor: Requested screen anchor.
+    ///   - metrics: Shared shelf layout constants.
+    /// - Returns: Panel frame bounded by `visibleFrame`; `.zero` for invalid geometry.
     public static func panelFrame(
         visibleFrame: CGRect,
         cardWidths: [CGFloat],
         cardHeight: CGFloat,
-        spacing: CGFloat,
-        horizontalInset: CGFloat,
-        topInset: CGFloat,
-        verticalInset: CGFloat
+        anchor: ScreenshotShelfAnchor,
+        metrics: ScreenshotShelfMetrics = ScreenshotShelfMetrics()
     ) -> CGRect {
         guard visibleFrame.minX.isFinite,
               visibleFrame.minY.isFinite,
@@ -33,31 +154,166 @@ public enum ScreenshotShelfGeometry {
               visibleFrame.width > 0,
               visibleFrame.height > 0,
               cardHeight.isFinite,
-              cardHeight > 0 else { return .zero }
+              cardHeight > 0,
+              !cardWidths.isEmpty else { return .zero }
 
-        let sideInset = nonnegative(horizontalInset)
-        let verticalPadding = nonnegative(verticalInset)
-        let safeSpacing = nonnegative(spacing)
-        let validCardWidths = cardWidths.filter { $0.isFinite && $0 > 0 }
-        let contentWidth = validCardWidths.reduce(0, +)
-            + safeSpacing * CGFloat(max(0, validCardWidths.count - 1))
-            + sideInset * 2
-        let maximumWidth = max(0, visibleFrame.width - sideInset * 2)
-        let width = min(contentWidth, maximumWidth)
+        // A frame that cannot even hold the action menu and shadow inset is not a usable shelf.
+        let minimumWidth = metrics.shadowInset * 2 + metrics.endMenuWidth
+        let minimumHeight = metrics.topInset + metrics.railZone + metrics.railGap
+            + metrics.shadowInset + 1
+        guard visibleFrame.width >= minimumWidth,
+              visibleFrame.height >= minimumHeight else { return .zero }
 
-        let height = min(cardHeight + verticalPadding * 2, visibleFrame.height)
-        let availableTopInset = max(0, visibleFrame.height - height)
-        let safeTopInset = min(nonnegative(topInset), availableTopInset)
-        let frame = CGRect(
-            x: visibleFrame.midX - width / 2,
-            y: visibleFrame.maxY - safeTopInset - height,
-            width: width,
-            height: height
-        )
+        let panelWidth = metrics.panelWidth(cardWidths: cardWidths)
+        let panelHeight = metrics.panelHeight(cardHeight: cardHeight)
+        let width = min(panelWidth, visibleFrame.width)
+        let height = min(panelHeight, visibleFrame.height)
+        guard width > 0, height > 0 else { return .zero }
+
+        let proposedX: CGFloat
+        switch anchor.horizontalPlacement {
+        case .leading:
+            proposedX = visibleFrame.minX + metrics.screenMargin - metrics.shadowInset
+        case .center:
+            proposedX = visibleFrame.midX - width / 2
+        case .trailing:
+            proposedX = visibleFrame.maxX - metrics.screenMargin + metrics.shadowInset - width
+        }
+        let x = min(max(proposedX, visibleFrame.minX), visibleFrame.maxX - width)
+
+        let proposedY: CGFloat
+        if anchor.isTop {
+            let panelTop = visibleFrame.maxY - metrics.screenMargin + metrics.topInset
+            proposedY = panelTop - height
+        } else {
+            proposedY = visibleFrame.minY + metrics.screenMargin - metrics.shadowInset
+        }
+        let y = min(max(proposedY, visibleFrame.minY), visibleFrame.maxY - height)
+
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// Reserves room for auto-hidden system bars that can reappear over the shelf.
+    ///
+    /// `visibleFrame` normally already excludes a visible menu bar and Dock. When either bar is
+    /// set to auto-hide, macOS can report a `visibleFrame` equal to the display frame; in that
+    /// case the shelf must stay clear of the 28 pt menu-bar reveal and the 70 pt Dock reveal.
+    public static func effectiveVisibleFrame(
+        visibleFrame: CGRect,
+        screenFrame: CGRect
+    ) -> CGRect {
+        guard visibleFrame.width.isFinite,
+              visibleFrame.height.isFinite,
+              screenFrame.width.isFinite,
+              screenFrame.height.isFinite else { return .zero }
+
+        var frame = visibleFrame
+        if frame.maxY >= screenFrame.maxY - 1 {
+            frame.size.height = max(0, frame.height - 28)
+        }
+        if frame.minY <= screenFrame.minY + 1 {
+            frame.origin.y += 70
+            frame.size.height = max(0, frame.height - 70)
+        }
         return frame
     }
 
-    private static func nonnegative(_ value: CGFloat) -> CGFloat {
-        value.isFinite ? max(0, value) : 0
+    /// The small always-visible halo that hosts the collapsed rail tab.
+    ///
+    /// The collapsed frame keeps the expanded frame's top edge and horizontal center, so the rail
+    /// stays at exactly the same screen y while the cards fold up underneath it.
+    ///
+    /// - Parameters:
+    ///   - expandedFrame: The expanded panel frame.
+    ///   - haloWidth: Width of the transparent hover/click halo.
+    ///   - haloHeight: Height of the transparent hover/click halo.
+    /// - Returns: A frame with the same `maxY` and `midX`, or `.zero` for invalid input.
+    public static func collapsedFrame(
+        expandedFrame: CGRect,
+        haloWidth: CGFloat = 80,
+        haloHeight: CGFloat = 20
+    ) -> CGRect {
+        guard expandedFrame.minX.isFinite,
+              expandedFrame.minY.isFinite,
+              expandedFrame.width.isFinite,
+              expandedFrame.height.isFinite,
+              expandedFrame.width > 0,
+              expandedFrame.height > 0,
+              haloWidth.isFinite,
+              haloHeight.isFinite,
+              haloWidth > 0,
+              haloHeight > 0 else { return .zero }
+
+        let width = min(haloWidth, expandedFrame.width)
+        let height = min(haloHeight, expandedFrame.height)
+        return CGRect(
+            x: expandedFrame.midX - width / 2,
+            y: expandedFrame.maxY - height,
+            width: width,
+            height: height
+        )
+    }
+
+    /// Converts a point in the shelf panel's top-left-origin SwiftUI space to AppKit screen
+    /// coordinates (origin bottom-left).
+    ///
+    /// - Parameters:
+    ///   - panelFrame: The shelf panel's screen frame.
+    ///   - localX: Horizontal offset from the panel's leading edge.
+    ///   - localY: Vertical offset from the panel's top edge, in SwiftUI's y-down space.
+    /// - Returns: The point in screen coordinates, or `.zero` for non-finite input.
+    public static func shelfScreenTopLeft(
+        panelFrame: CGRect,
+        localX: CGFloat,
+        localY: CGFloat
+    ) -> CGPoint {
+        guard panelFrame.minX.isFinite,
+              panelFrame.maxY.isFinite,
+              localX.isFinite,
+              localY.isFinite else { return .zero }
+
+        return CGPoint(
+            x: panelFrame.minX + localX,
+            y: panelFrame.maxY - localY
+        )
+    }
+
+    /// Frame for the standalone drag-preview window.
+    ///
+    /// `cardTopLeft` is in AppKit screen coordinates (origin bottom-left). The preview window
+    /// leaves `padding` on every side and reserves `hangerHeight` above the card so the ring,
+    /// thread, lift scale, tilt, and shadow cannot be clipped by the preview window itself.
+    ///
+    /// - Parameters:
+    ///   - cardTopLeft: Screen position of the dragged card's top-left corner.
+    ///   - cardWidth: Width of the card.
+    ///   - cardHeight: Height of the card.
+    ///   - padding: Transparent margin around the card.
+    ///   - hangerHeight: Extra room above the card for the ring and thread.
+    /// - Returns: A frame in screen coordinates, or `.zero` for invalid input.
+    public static func dragPreviewFrame(
+        cardTopLeft: CGPoint,
+        cardWidth: CGFloat,
+        cardHeight: CGFloat,
+        padding: CGFloat,
+        hangerHeight: CGFloat
+    ) -> CGRect {
+        guard cardTopLeft.x.isFinite,
+              cardTopLeft.y.isFinite,
+              cardWidth.isFinite,
+              cardHeight.isFinite,
+              padding.isFinite,
+              hangerHeight.isFinite,
+              cardWidth > 0,
+              cardHeight > 0,
+              padding >= 0,
+              hangerHeight >= 0 else { return .zero }
+
+        return CGRect(
+            x: cardTopLeft.x - padding,
+            y: cardTopLeft.y - padding - cardHeight,
+            width: cardWidth + padding * 2,
+            height: cardHeight + hangerHeight + padding * 2
+        )
     }
 }

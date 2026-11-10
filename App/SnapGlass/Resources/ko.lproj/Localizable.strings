@@ -170,6 +170,20 @@
 "Pin the screenshot as a floating panel" = "스크린샷을 플로팅 패널로 고정";
 "Screenshot Shelf" = "스크린샷 보관함";
 "Enable screenshot shelf" = "스크린샷 보관함 사용";
+"Position" = "위치";
+"Top Left" = "왼쪽 위";
+"Top Center" = "위쪽 가운데";
+"Top Right" = "오른쪽 위";
+"Bottom Left" = "왼쪽 아래";
+"Bottom Center" = "아래쪽 가운데";
+"Bottom Right" = "오른쪽 아래";
+"Screenshot shelf position" = "보관함 위치";
+"Collapse to rail when idle" = "유휴 시 레일로 접기";
+"The rail tab stays visible; move the pointer to it to expand again." = "레일 탭은 계속 표시됩니다. 포인터를 가져가면 다시 펼쳐집니다.";
+"The shelf hangs below the menu bar by default. Drag thumbnails to reorder." = "보관함은 기본적으로 메뉴 막대 아래에 표시됩니다. 썸네일을 드래그하여 순서를 바꿀 수 있습니다.";
+"Screenshot Shelf Actions" = "보관함 동작";
+"Move Left" = "왼쪽으로 이동";
+"Move Right" = "오른쪽으로 이동";
 "Number of screenshots: %lld" = "스크린샷 개수: %lld";
 "Card height" = "카드 높이";
 "Image opacity" = "이미지 불투명도";
@@ -231,6 +245,7 @@
 "Choose a window to capture" = "캡처할 창 선택";
 "Select a preview, then choose a still or scrolling capture." = "미리 보기를 선택한 다음 정지 또는 스크롤 캡처를 선택합니다.";
 "Capture Window" = "창 캡처";
+"Capturing" = "캡처 중";
 "Scrolling Capture" = "스크롤 캡처";
 "Trim Ends" = "상하 트림";
 "Adjust only the top and bottom edges of a long screenshot" = "긴 스크린샷의 상단과 하단 가장자리만 조정";
@@ -245,7 +260,10 @@
 
 "Permission granted" = "권한이 부여되었습니다";
 "Screen Capture Required" = "화면 녹화 권한 필요";
-"SnapGlass needs screen recording permission to capture screenshots and perform OCR." = "SnapGlass는 스크린샷 캡처와 OCR 실행을 위해 화면 녹화 권한이 필요합니다.";
+"Screen Recording" = "화면 기록";
+"Screen Recording permission allows screenshots, OCR, and screen recording." = "화면 기록 권한으로 스크린샷, OCR, 화면 녹화를 사용할 수 있습니다.";
+"Screen Capture Access Unavailable" = "화면 캡처에 접근할 수 없습니다";
+"Screen capture access is currently unavailable. Check System Settings or try again later." = "현재 화면 캡처에 접근할 수 없습니다. 시스템 설정을 확인하거나 나중에 다시 시도하세요.";
 "Open System Settings" = "시스템 설정 열기";
 "Remind Later" = "나중에 알림";
 "Requesting permission..." = "권한 요청 중…";
@@ -600,11 +618,15 @@
 "The recording session is unavailable." = "녹화 세션을 사용할 수 없습니다.";
 "The recording settings are invalid." = "녹화 설정이 올바르지 않습니다.";
 "The recording source has invalid dimensions." = "녹화 소스 크기가 올바르지 않습니다.";
+"The recording source cannot produce valid even-sized output dimensions." = "녹화 소스 크기로 유효한 짝수 픽셀 영상 출력을 만들 수 없습니다.";
 "The selected system audio format is unavailable." = "선택한 시스템 오디오 형식을 사용할 수 없습니다.";
 "The selected video codec is not supported by the media writer." = "미디어 작성기가 선택한 비디오 코덱을 지원하지 않습니다.";
 "The selected window is no longer fully visible on one display." = "선택한 윈도우가 한 디스플레이에 완전히 표시되지 않습니다.";
 "No video frame was captured." = "비디오 프레임을 캡처하지 못했습니다.";
-"Recoverable partial: %@" = "복구 가능한 부분 파일: %@";
+"Retained partial: %@" = "부분 녹화 파일을 보존했습니다: %@";
+"This destination does not support safe recording publication. Choose another destination." = "이 저장 위치는 녹화 파일을 안전하게 저장할 수 없습니다. 다른 위치를 선택하세요.";
+"A recording with this name already exists. The existing file was not changed." = "같은 이름의 녹화 파일이 이미 있습니다. 기존 파일은 변경되지 않았습니다.";
+"The recording could not be published without overwriting an existing file." = "기존 파일을 덮어쓰지 않고 녹화를 저장할 수 없습니다.";
 "AAC audio" = "AAC 오디오";
 "video" = "비디오";
 "The selected display changed size; the recording is being finalized." = "선택한 디스플레이 크기가 변경되어 녹화를 마무리하는 중입니다.";

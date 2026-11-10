@@ -6,8 +6,8 @@ struct ScreenshotShelfManagerTests {
     @Test func windowFrameParsesQuartzBoundsAndRejectsInvalidValues() {
         let bounds: [String: CGFloat] = ["X": 12, "Y": 24, "Width": 320, "Height": 180]
 
-        #expect(ScreenshotShelfManager.windowFrame(from: bounds) == CGRect(x: 12, y: 24, width: 320, height: 180))
-        #expect(ScreenshotShelfManager.windowFrame(from: ["Width": "not a number"]) == nil)
+        #expect(ScreenshotShelfScreenResolver.windowFrame(from: bounds) == CGRect(x: 12, y: 24, width: 320, height: 180))
+        #expect(ScreenshotShelfScreenResolver.windowFrame(from: ["Width": "not a number"]) == nil)
     }
 
     @Test func captureCompletionIsSynchronousAndHistoryLinkDoesNotReorder() throws {
@@ -27,6 +27,44 @@ struct ScreenshotShelfManagerTests {
 
         #expect(manager.orderedCaptureIDs == [secondID])
         #expect(manager.historyID(for: firstID) == nil)
+    }
+
+    @Test func captureCompletionStoresMeasuredScaleWithItsSourcePixelWidth() throws {
+        let manager = try makeManager()
+        let image = try makeImage()
+        let captureID = try #require(manager.captureCompleted(image, displayScale: 2))
+        let card = try #require(manager.card(for: captureID))
+
+        #expect(card.displayScale == 2)
+        #expect(card.scaleSourcePixelWidth == CGFloat(image.width))
+    }
+
+    @Test func captureCompletionWithoutMeasuredScaleUsesScaleOneWithoutSourceWidth() throws {
+        let manager = try makeManager()
+        let image = try makeImage()
+        let captureID = try #require(manager.captureCompleted(image))
+        let card = try #require(manager.card(for: captureID))
+
+        #expect(card.displayScale == 1)
+        #expect(card.scaleSourcePixelWidth == nil)
+    }
+
+    @Test func staleCaptureScaleFallsBackToOneWhenImageWidthChanges() {
+        #expect(ScreenshotShelfManager.displayScaleForPinning(
+            displayScale: 2,
+            scaleSourcePixelWidth: 800,
+            imagePixelWidth: 800
+        ) == 2)
+        #expect(ScreenshotShelfManager.displayScaleForPinning(
+            displayScale: 2,
+            scaleSourcePixelWidth: 800,
+            imagePixelWidth: 640
+        ) == 1)
+        #expect(ScreenshotShelfManager.displayScaleForPinning(
+            displayScale: 2,
+            scaleSourcePixelWidth: nil,
+            imagePixelWidth: 800
+        ) == 1)
     }
 
     @Test func captureSuppressionRestoresShownIntentButManualHidePersists() throws {
@@ -73,6 +111,26 @@ struct ScreenshotShelfManagerTests {
         #expect(manager.orderedCaptureIDs == [captureID])
         #expect(manager.cards.first?.errorMessage != nil)
         #expect(reportedFailure != nil)
+    }
+
+    @Test func shelfFeedbackResolvesForCurrentLocaleAndPreservesVerbatimErrors() throws {
+        let manager = try makeManager()
+        let image = try makeImage()
+        let captureID = try #require(manager.captureCompleted(image))
+        let key = "Screenshot copied to clipboard"
+
+        manager.reportFeedback(captureID: captureID, message: .localizedKey(key))
+
+        let localizedCard = try #require(manager.card(for: captureID))
+        #expect(localizedCard.feedbackMessage?.resolved(using: { _ in "Copied (English)" }) == "Copied (English)")
+        #expect(localizedCard.feedbackMessage?.resolved(using: { _ in "已复制" }) == "已复制")
+
+        let dynamicError = "The image provider returned an unexpected error."
+        manager.reportFeedback(captureID: captureID, message: .verbatim(dynamicError), isError: true)
+
+        let errorCard = try #require(manager.card(for: captureID))
+        #expect(errorCard.errorMessage?.resolved(using: { _ in "must not replace dynamic text" }) == dynamicError)
+        #expect(errorCard.feedbackMessage?.resolved(using: { _ in "must not replace dynamic text" }) == dynamicError)
     }
 
     private func makeManager() throws -> ScreenshotShelfManager {

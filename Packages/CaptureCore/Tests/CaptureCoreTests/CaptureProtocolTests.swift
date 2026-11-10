@@ -66,6 +66,21 @@ struct CaptureProtocolTests {
         #expect(info.frame == frame)
     }
 
+    @Test func captureDisplayInfoRequiresExplicitPointWidthMetadata() {
+        let frame = CGRect(x: 10, y: 20, width: 300, height: 200)
+        let fallbackInfo = CaptureDisplayInfo(displayID: 42, scaleFactor: 2, frame: frame)
+        let screenCaptureKitInfo = CaptureDisplayInfo(
+            displayID: 42,
+            scaleFactor: 2,
+            frame: frame,
+            pointWidth: frame.width
+        )
+
+        #expect(fallbackInfo.pointWidth == nil)
+        #expect(screenCaptureKitInfo.pointWidth == 300)
+        #expect(fallbackInfo.frame.width == 300)
+    }
+
     @Test func pixelScale_usesCapturedPixelWidth() {
         let frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
         #expect(SCKAdapter.pixelScale(imageWidth: 1920, displayFrame: frame) == 1)

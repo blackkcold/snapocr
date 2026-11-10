@@ -212,7 +212,8 @@ extension CaptureOrchestrator {
         let displayInfo = CaptureDisplayInfo(
             displayID: mainDisplayID,
             scaleFactor: scaleFactor,
-            frame: frame
+            frame: frame,
+            pointWidth: nil
         )
 
         return CaptureResult(
@@ -290,7 +291,8 @@ extension CaptureOrchestrator {
         let displayInfo = CaptureDisplayInfo(
             displayID: displayID,
             scaleFactor: scaleFactor,
-            frame: frame
+            frame: frame,
+            pointWidth: nil
         )
 
         return CaptureResult(

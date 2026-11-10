@@ -19,7 +19,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: "General"
         case .appearance: "Appearance"
         case .capture: "Capture"
-        case .recording: "Recording"
+        case .recording: "Screen Recording"
         case .ocr: "OCR"
         case .shortcuts: "Shortcuts"
         case .history: "History"

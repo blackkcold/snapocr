@@ -67,6 +67,64 @@ struct ScreenshotShelfStateTests {
         #expect(maximumState.entries.map(\.captureID) == Array(ids.dropFirst().reversed()))
     }
 
+    @Test func movingAnEntryChangesOnlyDisplayOrder() {
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        var state = ScreenshotShelfState(limit: 3)
+        _ = state.insert(captureID: first, completionSequence: 1)
+        _ = state.insert(captureID: second, completionSequence: 2)
+        _ = state.insert(captureID: third, completionSequence: 3)
+
+        state.move(captureID: first, to: 0)
+
+        #expect(state.entries.map(\.captureID) == [first, third, second])
+        #expect(state.entries.map(\.completionSequence) == [1, 3, 2])
+        #expect(state.entries.first?.captureID == first)
+
+        state.move(captureID: first, to: 99)
+        #expect(state.entries.map(\.captureID) == [third, second, first])
+
+        state.move(captureID: second, to: -4)
+        #expect(state.entries.map(\.captureID) == [second, third, first])
+
+        state.move(captureID: second, to: 0)
+        #expect(state.entries.map(\.captureID) == [second, third, first])
+    }
+
+    @Test func evictionStillRemovesTheOldestCaptureAfterManualReordering() {
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        let fourth = UUID()
+        var state = ScreenshotShelfState(limit: 3)
+        _ = state.insert(captureID: first, completionSequence: 1)
+        _ = state.insert(captureID: second, completionSequence: 2)
+        _ = state.insert(captureID: third, completionSequence: 3)
+        state.move(captureID: first, to: 0)
+
+        let evicted = state.insert(captureID: fourth, completionSequence: 4)
+
+        #expect(evicted == [first])
+        #expect(state.entries.map(\.captureID) == [fourth, third, second])
+    }
+
+    @Test func loweringLimitAfterReorderingStillRemovesTheOldestCapture() {
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        var state = ScreenshotShelfState(limit: 3)
+        _ = state.insert(captureID: first, completionSequence: 1)
+        _ = state.insert(captureID: second, completionSequence: 2)
+        _ = state.insert(captureID: third, completionSequence: 3)
+        state.move(captureID: first, to: 0)
+
+        let evicted = state.setLimit(2)
+
+        #expect(evicted == [first])
+        #expect(state.entries.map(\.captureID) == [third, second])
+    }
+
     @Test func removeAndClearReturnOnlyAssetsThatLeaveTheShelf() {
         let first = UUID()
         let second = UUID()

@@ -170,6 +170,20 @@
 "Pin the screenshot as a floating panel" = "Pin the screenshot as a floating panel";
 "Screenshot Shelf" = "Screenshot Shelf";
 "Enable screenshot shelf" = "Enable screenshot shelf";
+"Position" = "Position";
+"Top Left" = "Top Left";
+"Top Center" = "Top Center";
+"Top Right" = "Top Right";
+"Bottom Left" = "Bottom Left";
+"Bottom Center" = "Bottom Center";
+"Bottom Right" = "Bottom Right";
+"Screenshot shelf position" = "Screenshot shelf position";
+"Collapse to rail when idle" = "Collapse to rail when idle";
+"The rail tab stays visible; move the pointer to it to expand again." = "The rail tab stays visible; move the pointer to it to expand again.";
+"The shelf hangs below the menu bar by default. Drag thumbnails to reorder." = "The shelf hangs below the menu bar by default. Drag thumbnails to reorder.";
+"Screenshot Shelf Actions" = "Screenshot Shelf Actions";
+"Move Left" = "Move Left";
+"Move Right" = "Move Right";
 "Number of screenshots: %lld" = "Number of screenshots: %lld";
 "Card height" = "Card height";
 "Image opacity" = "Image opacity";
@@ -231,6 +245,7 @@
 "Choose a window to capture" = "Choose a window to capture";
 "Select a preview, then choose a still or scrolling capture." = "Select a preview, then choose a still or scrolling capture.";
 "Capture Window" = "Capture Window";
+"Capturing" = "Capturing";
 "Scrolling Capture" = "Scrolling Capture";
 "Trim Ends" = "Trim Ends";
 "Adjust only the top and bottom edges of a long screenshot" = "Adjust only the top and bottom edges of a long screenshot";
@@ -245,7 +260,10 @@
 
 "Permission granted" = "Permission granted";
 "Screen Capture Required" = "Screen Capture Required";
-"SnapGlass needs screen recording permission to capture screenshots and perform OCR." = "SnapGlass needs screen recording permission to capture screenshots and perform OCR.";
+"Screen Recording" = "Screen Recording";
+"Screen Recording permission allows screenshots, OCR, and screen recording." = "Screen Recording permission allows screenshots, OCR, and screen recording.";
+"Screen Capture Access Unavailable" = "Screen Capture Access Unavailable";
+"Screen capture access is currently unavailable. Check System Settings or try again later." = "Screen capture access is currently unavailable. Check System Settings or try again later.";
 "Open System Settings" = "Open System Settings";
 "Remind Later" = "Remind Later";
 "Requesting permission..." = "Requesting permission...";
@@ -600,11 +618,15 @@
 "The recording session is unavailable." = "The recording session is unavailable.";
 "The recording settings are invalid." = "The recording settings are invalid.";
 "The recording source has invalid dimensions." = "The recording source has invalid dimensions.";
+"The recording source cannot produce valid even-sized output dimensions." = "The recording source cannot produce valid even-sized output dimensions.";
 "The selected system audio format is unavailable." = "The selected system audio format is unavailable.";
 "The selected video codec is not supported by the media writer." = "The selected video codec is not supported by the media writer.";
 "The selected window is no longer fully visible on one display." = "The selected window is no longer fully visible on one display.";
 "No video frame was captured." = "No video frame was captured.";
-"Recoverable partial: %@" = "Recoverable partial: %@";
+"Retained partial: %@" = "Retained partial: %@";
+"This destination does not support safe recording publication. Choose another destination." = "This destination does not support safe recording publication. Choose another destination.";
+"A recording with this name already exists. The existing file was not changed." = "A recording with this name already exists. The existing file was not changed.";
+"The recording could not be published without overwriting an existing file." = "The recording could not be published without overwriting an existing file.";
 "AAC audio" = "AAC audio";
 "video" = "video";
 "The selected display changed size; the recording is being finalized." = "The selected display changed size; the recording is being finalized.";

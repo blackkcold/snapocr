@@ -170,6 +170,20 @@
 "Pin the screenshot as a floating panel" = "スクリーンショットをフローティングパネルとしてピン留め";
 "Screenshot Shelf" = "スクリーンショットシェルフ";
 "Enable screenshot shelf" = "スクリーンショットシェルフを有効にする";
+"Position" = "位置";
+"Top Left" = "左上";
+"Top Center" = "上部中央";
+"Top Right" = "右上";
+"Bottom Left" = "左下";
+"Bottom Center" = "下部中央";
+"Bottom Right" = "右下";
+"Screenshot shelf position" = "シェルフの位置";
+"Collapse to rail when idle" = "アイドル時にレールへ折りたたむ";
+"The rail tab stays visible; move the pointer to it to expand again." = "レールタブは表示されたままです。ポインタを近づけると再び展開します。";
+"The shelf hangs below the menu bar by default. Drag thumbnails to reorder." = "シェルフは既定でメニューバーの下に表示されます。サムネイルをドラッグして並べ替えられます。";
+"Screenshot Shelf Actions" = "シェルフの操作";
+"Move Left" = "左へ移動";
+"Move Right" = "右へ移動";
 "Number of screenshots: %lld" = "スクリーンショットの表示数：%lld";
 "Card height" = "カードの高さ";
 "Image opacity" = "画像の不透明度";
@@ -231,6 +245,7 @@
 "Choose a window to capture" = "撮影するウィンドウを選択";
 "Select a preview, then choose a still or scrolling capture." = "プレビューを選択し、静止画またはスクロール撮影を選択します。";
 "Capture Window" = "ウィンドウを撮影";
+"Capturing" = "キャプチャ中";
 "Scrolling Capture" = "スクロール撮影";
 "Trim Ends" = "上下をトリム";
 "Adjust only the top and bottom edges of a long screenshot" = "長いスクリーンショットの上下の端のみを調整";
@@ -245,7 +260,10 @@
 
 "Permission granted" = "権限が付与されました";
 "Screen Capture Required" = "画面収録の権限が必要です";
-"SnapGlass needs screen recording permission to capture screenshots and perform OCR." = "SnapGlassはスクリーンショット撮影とOCR実行に画面収録の権限を必要とします。";
+"Screen Recording" = "画面収録";
+"Screen Recording permission allows screenshots, OCR, and screen recording." = "「画面収録」権限でスクリーンショット、OCR、画面収録を利用できます。";
+"Screen Capture Access Unavailable" = "画面キャプチャを利用できません";
+"Screen capture access is currently unavailable. Check System Settings or try again later." = "現在、画面キャプチャを利用できません。システム設定を確認するか、後でもう一度お試しください。";
 "Open System Settings" = "システム設定を開く";
 "Remind Later" = "後で通知";
 "Requesting permission..." = "権限をリクエスト中…";
@@ -600,11 +618,15 @@
 "The recording session is unavailable." = "収録セッションを利用できません。";
 "The recording settings are invalid." = "収録設定が無効です。";
 "The recording source has invalid dimensions." = "収録ソースのサイズが無効です。";
+"The recording source cannot produce valid even-sized output dimensions." = "録画ソースの寸法では、有効な偶数ピクセルの映像を生成できません。";
 "The selected system audio format is unavailable." = "選択したシステム音声形式を利用できません。";
 "The selected video codec is not supported by the media writer." = "選択したビデオコーデックはメディアライターでサポートされていません。";
 "The selected window is no longer fully visible on one display." = "選択したウインドウが1台のディスプレイに完全に表示されなくなりました。";
 "No video frame was captured." = "映像フレームをキャプチャできませんでした。";
-"Recoverable partial: %@" = "復旧可能な部分ファイル：%@";
+"Retained partial: %@" = "録画の一部ファイルを保持しました：%@";
+"This destination does not support safe recording publication. Choose another destination." = "この保存先では録画ファイルを安全に保存できません。別の保存先を選択してください。";
+"A recording with this name already exists. The existing file was not changed." = "同じ名前の録画ファイルが既にあります。既存のファイルは変更されていません。";
+"The recording could not be published without overwriting an existing file." = "既存のファイルを上書きせずに録画を保存できませんでした。";
 "AAC audio" = "AAC 音声";
 "video" = "ビデオ";
 "The selected display changed size; the recording is being finalized." = "選択したディスプレイのサイズが変わりました。収録を確定しています。";

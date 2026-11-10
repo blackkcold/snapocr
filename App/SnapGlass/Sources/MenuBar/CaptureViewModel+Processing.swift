@@ -17,11 +17,13 @@ extension CaptureViewModel {
         historyModeOverride: String? = nil,
         destination: CaptureDestination = .configured,
         pinRect: CGRect? = nil,
-        sourceDisplayID: CGDirectDisplayID? = nil
+        sourceDisplayID: CGDirectDisplayID? = nil,
+        displayScale: CGFloat? = nil
     ) async {
         let shelfCaptureID = screenshotShelfManager.captureCompleted(
             image,
-            sourceDisplayID: sourceDisplayID
+            sourceDisplayID: sourceDisplayID,
+            displayScale: displayScale
         )
         let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
         let (shouldOpenEditor, shouldCopyImage) = resolveDestination(destination)

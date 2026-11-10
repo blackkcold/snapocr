@@ -137,6 +137,8 @@ targets:
       - path: App/SnapGlass/Sources/WindowPresentationCoordinator.swift
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift
       - path: App/SnapGlass/Sources/MenuBar/UpdateInstallHandoff.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingQuitFlow.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingPermissionDecision.swift
     dependencies:
       - package: SharedKit
     settings:

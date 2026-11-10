@@ -12,6 +12,31 @@ struct ScreenshotShelfPreferencesTests {
         #expect(ScreenshotShelfPreferences.count(in: defaults) == 3)
         #expect(ScreenshotShelfPreferences.cardHeight(in: defaults) == 96)
         #expect(ScreenshotShelfPreferences.imageOpacity(in: defaults) == 0.9)
+        #expect(ScreenshotShelfPreferences.anchor(in: defaults) == .top)
+        #expect(ScreenshotShelfPreferences.collapseToRail(in: defaults))
+    }
+
+    @Test func persistedCollapseToRailRoundTrips() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(false, forKey: PreferenceKeys.screenshotShelfCollapseToRail)
+        #expect(!ScreenshotShelfPreferences.collapseToRail(in: defaults))
+
+        defaults.set(true, forKey: PreferenceKeys.screenshotShelfCollapseToRail)
+        #expect(ScreenshotShelfPreferences.collapseToRail(in: defaults))
+    }
+
+    @Test func persistedAnchorRoundTripsAndInvalidValuesFallBackToTop() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(ScreenshotShelfAnchor.bottomTrailing.rawValue, forKey: PreferenceKeys.screenshotShelfAnchor)
+        #expect(ScreenshotShelfPreferences.anchor(in: defaults) == .bottomTrailing)
+
+        defaults.set("left-ish", forKey: PreferenceKeys.screenshotShelfAnchor)
+        #expect(ScreenshotShelfPreferences.anchor(in: defaults) == .top)
+        #expect(defaults.string(forKey: PreferenceKeys.screenshotShelfAnchor) == ScreenshotShelfAnchor.top.rawValue)
     }
 
     @Test func persistedValuesAreClampedAndNormalizedOnRead() throws {

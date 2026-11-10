@@ -170,6 +170,20 @@
 "Pin the screenshot as a floating panel" = "将截图置顶为浮动面板";
 "Screenshot Shelf" = "截图架";
 "Enable screenshot shelf" = "启用截图架";
+"Position" = "位置";
+"Top Left" = "左上";
+"Top Center" = "顶部居中";
+"Top Right" = "右上";
+"Bottom Left" = "左下";
+"Bottom Center" = "底部居中";
+"Bottom Right" = "右下";
+"Screenshot shelf position" = "截图架位置";
+"Collapse to rail when idle" = "空闲时收成挂杆";
+"The rail tab stays visible; move the pointer to it to expand again." = "挂杆标签会一直可见；把指针移过去即可重新展开。";
+"The shelf hangs below the menu bar by default. Drag thumbnails to reorder." = "截图架默认挂在菜单栏下方。拖动缩略图可调整顺序。";
+"Screenshot Shelf Actions" = "截图架操作";
+"Move Left" = "左移";
+"Move Right" = "右移";
 "Number of screenshots: %lld" = "截图数量：%lld";
 "Card height" = "卡片高度";
 "Image opacity" = "图片不透明度";
@@ -231,6 +245,7 @@
 "Choose a window to capture" = "选择要截取的窗口";
 "Select a preview, then choose a still or scrolling capture." = "选择窗口预览，然后选择窗口截图或滚动截图。";
 "Capture Window" = "截取窗口";
+"Capturing" = "正在截图";
 "Scrolling Capture" = "滚动截图";
 "Trim Ends" = "裁切首尾";
 "Adjust only the top and bottom edges of a long screenshot" = "仅调整长截图的顶部和底部边界";
@@ -245,7 +260,10 @@
 
 "Permission granted" = "已授予权限";
 "Screen Capture Required" = "需要屏幕录制权限";
-"SnapGlass needs screen recording permission to capture screenshots and perform OCR." = "SnapGlass 需要屏幕录制权限才能进行截图和文字识别。";
+"Screen Recording" = "录屏";
+"Screen Recording permission allows screenshots, OCR, and screen recording." = "“屏幕录制”权限可用于截图、OCR 和录制屏幕。";
+"Screen Capture Access Unavailable" = "屏幕捕获功能暂不可用";
+"Screen capture access is currently unavailable. Check System Settings or try again later." = "当前无法使用屏幕捕获功能。请检查系统设置，或稍后重试。";
 "Open System Settings" = "打开系统设置";
 "Remind Later" = "稍后再说";
 "Requesting permission..." = "正在请求权限…";
@@ -600,11 +618,15 @@
 "The recording session is unavailable." = "录屏会话不可用。";
 "The recording settings are invalid." = "录屏设置无效。";
 "The recording source has invalid dimensions." = "录制来源的尺寸无效。";
+"The recording source cannot produce valid even-sized output dimensions." = "录制来源尺寸无法生成有效的偶数像素视频输出。";
 "The selected system audio format is unavailable." = "所选系统音频格式不可用。";
 "The selected video codec is not supported by the media writer." = "媒体写入器不支持所选视频编码格式。";
 "The selected window is no longer fully visible on one display." = "所选窗口已无法完整显示在同一台显示器上。";
 "No video frame was captured." = "未捕获到视频帧。";
-"Recoverable partial: %@" = "可恢复的部分文件：%@";
+"Retained partial: %@" = "已保留部分录制文件：%@";
+"This destination does not support safe recording publication. Choose another destination." = "此位置不支持安全发布录屏文件，请选择其他保存位置。";
+"A recording with this name already exists. The existing file was not changed." = "同名录屏文件已存在，现有文件未被更改。";
+"The recording could not be published without overwriting an existing file." = "无法在不覆盖现有文件的情况下发布录屏文件。";
 "AAC audio" = "AAC 音频";
 "video" = "视频";
 "The selected display changed size; the recording is being finalized." = "所选显示器尺寸已变化，正在完成录屏写入。";

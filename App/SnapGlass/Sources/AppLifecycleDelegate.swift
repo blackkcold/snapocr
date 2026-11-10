@@ -3,32 +3,46 @@ import AppKit
 @MainActor
 final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
     weak var viewModel: CaptureViewModel?
-    private var isWaitingForRecordingToFinish = false
+    private var recordingQuitFlow = RecordingQuitFlow()
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let viewModel, viewModel.needsRecordingQuitConfirmation else { return .terminateNow }
-        guard !isWaitingForRecordingToFinish else { return .terminateCancel }
+        guard let viewModel else { return .terminateNow }
+        let request = recordingQuitFlow.request(
+            needsConfirmation: viewModel.needsRecordingQuitConfirmation,
+            isSaving: viewModel.isRecordingSaving
+        )
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = AppLocalization.string("A screen recording is in progress.")
-        alert.informativeText = AppLocalization.string("Stop and save the recording before quitting?")
-        alert.addButton(withTitle: AppLocalization.string("Stop and Save, then Quit"))
-        alert.addButton(withTitle: AppLocalization.string("Cancel"))
+        switch request {
+        case .terminateNow:
+            return .terminateNow
+        case .terminateCancel:
+            return .terminateCancel
+        case .confirm:
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = AppLocalization.string("A screen recording is in progress.")
+            alert.informativeText = AppLocalization.string("Stop and save the recording before quitting?")
+            alert.addButton(withTitle: AppLocalization.string("Stop and Save, then Quit"))
+            alert.addButton(withTitle: AppLocalization.string("Cancel"))
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+            guard alert.runModal() == .alertFirstButtonReturn else {
+                recordingQuitFlow.cancel()
+                return .terminateCancel
+            }
+        case .waitForRecording:
+            break
+        }
 
-        isWaitingForRecordingToFinish = true
         Task { @MainActor [weak self] in
-            guard let self, let viewModel = self.viewModel else {
+            guard let self else {
                 sender.reply(toApplicationShouldTerminate: false)
                 return
             }
-            let didSave = await viewModel.stopRecordingAndSave(
+            let outcome = await viewModel.stopRecordingAndResolveQuit(
                 reason: AppLocalization.string("Quit requested")
             )
-            self.isWaitingForRecordingToFinish = false
-            sender.reply(toApplicationShouldTerminate: didSave)
+            let shouldTerminate = self.recordingQuitFlow.complete(with: outcome)
+            sender.reply(toApplicationShouldTerminate: shouldTerminate)
         }
         return .terminateLater
     }

@@ -29,6 +29,7 @@ extension CaptureViewModel {
             scrollSession = session
             scrollSourceAppName = selectedWindow.appName
             scrollSourceWindowTitle = selectedWindow.windowTitle
+            scrollSourcePointWidth = result.displayInfo?.pointWidth
             scrollCapturedFrameCount = 1
             scrollReachedSizeLimit = false
             isScrollCaptureActive = true
@@ -132,13 +133,21 @@ extension CaptureViewModel {
                 guard scrollSession?.id == session.id else { return }
                 let sourceAppName = scrollSourceAppName
                 let sourceWindowTitle = scrollSourceWindowTitle
+                let sourcePointWidth = scrollSourcePointWidth
+                let displayScale = sourcePointWidth.map { pointWidth in
+                    PinnedImageGeometry.displayScale(
+                        imagePixelWidth: CGFloat(result.image.width),
+                        pointWidth: pointWidth
+                    )
+                }
                 resetScrollCaptureState()
                 await processCapturedImage(
                     result.image,
                     captureMode: .scroll,
                     sourceAppName: sourceAppName,
                     sourceWindowTitle: sourceWindowTitle,
-                    destination: .editorOnly
+                    destination: .editorOnly,
+                    displayScale: displayScale
                 )
                 if result.isTruncated {
                     let limitMessage = AppLocalization.string(

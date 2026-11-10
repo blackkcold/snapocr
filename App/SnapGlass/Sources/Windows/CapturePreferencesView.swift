@@ -32,6 +32,17 @@ struct CapturePreferencesView: View {
     private var screenshotShelfCardHeight = PreferenceDefaults.screenshotShelfCardHeight
     @AppStorage(PreferenceKeys.screenshotShelfImageOpacity)
     private var screenshotShelfImageOpacity = PreferenceDefaults.screenshotShelfImageOpacity
+    @AppStorage(PreferenceKeys.screenshotShelfAnchor)
+    private var screenshotShelfAnchorRaw = PreferenceDefaults.screenshotShelfAnchor
+    @AppStorage(PreferenceKeys.screenshotShelfCollapseToRail)
+    private var screenshotShelfCollapseToRail = PreferenceDefaults.screenshotShelfCollapseToRail
+
+    private var screenshotShelfAnchor: Binding<ScreenshotShelfAnchor> {
+        Binding(
+            get: { ScreenshotShelfAnchor(rawValue: screenshotShelfAnchorRaw) ?? .top },
+            set: { screenshotShelfAnchorRaw = $0.rawValue }
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -75,6 +86,22 @@ struct CapturePreferencesView: View {
             }
             .disabled(!screenshotShelfEnabled)
 
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Position")
+                    .font(.subheadline.weight(.medium))
+                ShelfPositionPicker(selection: screenshotShelfAnchor)
+            }
+            .disabled(!screenshotShelfEnabled)
+
+            Toggle("Collapse to rail when idle", isOn: $screenshotShelfCollapseToRail)
+                .disabled(!screenshotShelfEnabled)
+
+            PreferencesCardCaption(
+                text: "The rail tab stays visible; move the pointer to it to expand again."
+            )
+            PreferencesCardCaption(
+                text: "The shelf hangs below the menu bar by default. Drag thumbnails to reorder."
+            )
             PreferencesCardCaption(
                 text: "Shelf items are kept only for the current session unless saved to History."
             )

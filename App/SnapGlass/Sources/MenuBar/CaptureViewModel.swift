@@ -88,6 +88,7 @@ public final class CaptureViewModel: ObservableObject {
     /// 之后每帧追加完即丢，稳态内存 = 画布 + 1 帧。
     var scrollSourceAppName: String?
     var scrollSourceWindowTitle: String?
+    var scrollSourcePointWidth: CGFloat?
     /// 本次会话是否已经提示过「已达尺寸上限」，避免每次采帧都刷同一条 toast。
     var scrollReachedSizeLimit = false
     /// 在途的采帧任务。取消时先 cancel，避免迟到的帧写进新会话。

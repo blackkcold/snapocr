@@ -91,7 +91,7 @@ struct PermissionGuideView: View {
                 .fontWeight(.semibold)
 
             // 说明文案
-            Text("SnapGlass needs screen recording permission to capture screenshots and perform OCR.")
+            Text("Screen Recording permission allows screenshots, OCR, and screen recording.")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 24)
@@ -151,13 +151,13 @@ struct PermissionGuideView: View {
         }
     }
 
-    /// 权限被拒绝后的引导
+    /// 屏幕捕获访问不可用时的引导；状态检查也可能因临时或无显示器错误失败。
     private var deniedView: some View {
         VStack(spacing: 12) {
-            Label("Permission Denied", systemImage: "xmark.circle.fill")
+            Label("Screen Capture Access Unavailable", systemImage: "xmark.circle.fill")
                 .foregroundColor(.red)
 
-            Text("Please manually enable screen recording permission in System Settings.")
+            Text("Screen capture access is currently unavailable. Check System Settings or try again later.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
