@@ -111,7 +111,7 @@ enum RecordingStorage {
 @MainActor
 final class RecordingSessionController {
     private let captureOrchestrator: CaptureOrchestrator
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
     private let fileManager: FileManager
     private(set) var status: RecordingSessionStatus = .idle
     private var outcomeState = RecordingSessionOutcomeState()
@@ -120,10 +120,17 @@ final class RecordingSessionController {
     var onScreenshotShelfRecordingChange: ((Bool) -> Void)?
     var onMessage: ((String, ToastType) -> Void)?
     var onOpenPermissionGuide: (() -> Void)?
+    var onFailureChange: ((RecordingControlPanelFailure?) -> Void)?
 
     private var activeSession: RecordingSessionSnapshot?
-    private var engine: ScreenRecordingEngine?
-    private var controlPanel: RecordingControlPanel?
+    var sessionScreen: NSScreen?
+    var engine: ScreenRecordingEngine?
+    var controlPanel: RecordingControlPanel?
+    var captureFramePanel: RecordingCaptureFramePanel?
+    var recordingStartedAt: Date?
+    var panelHiddenByUser = false
+    var watchdogReported = false
+    var retainedFailure: (engine: ScreenRecordingEngine, payload: RecordingControlPanelFailure)?
     private var countdownTask: Task<Void, Never>?
     private var monitoringTask: Task<Void, Never>?
     private var notificationObservers: [NSObjectProtocol] = []
@@ -264,17 +271,14 @@ final class RecordingSessionController {
     }
 
     private func beginCountdown(for selection: RecordingSourceSelection) {
-        let panel = RecordingControlPanel(
-            on: screen(for: selection.displayID),
-            onCancel: { [weak self] in self?.cancelPendingStart() },
-            onStop: { [weak self] in
-                Task { @MainActor [weak self] in
-                    _ = await self?.stopAndSave()
-                }
-            }
-        )
+        let screen = screen(for: selection.displayID)
+        sessionScreen = screen
+        let panel = makeControlPanel(on: screen)
         controlPanel = panel
-        panel.present(state: .countdown(3))
+        if !RecordingHUDPreferences.isHidden(in: defaults) {
+            panel.present(state: .countdown(3))
+        }
+        showCaptureFrame(for: selection)
         updateStatus(.countdown(3))
 
         countdownTask = Task { @MainActor [weak self] in
@@ -304,7 +308,7 @@ final class RecordingSessionController {
                 source: activeSession.selection.source,
                 configuration: activeSession.configuration,
                 destinationDirectory: activeSession.destinationDirectory,
-                excludedWindowIDs: controlPanel?.excludedWindowIDs ?? [],
+                excludedWindowIDs: excludedWindowIDs,
                 onFailure: { [weak self] _ in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
@@ -349,13 +353,12 @@ final class RecordingSessionController {
             }
             onMessage?(message, .success)
             finishSession(success: true)
+            if RecordingHUDPreferences.revealsOnFinish(in: defaults) {
+                revealInFinder(finalURL)
+            }
             return true
         } catch {
-            onMessage?(
-                AppLocalization.string("Recording failed: %@", AppLocalization.recordingErrorDescription(error)),
-                .error
-            )
-            finishSession(success: false)
+            await handleRecordingFailure(error, engine: engine)
             return false
         }
     }
@@ -370,6 +373,7 @@ final class RecordingSessionController {
                     return
                 }
                 guard let self, self.status == .recording else { return }
+                await self.reportMissingFramesIfNeeded()
                 if let reason = await self.recordingInterruptionReason() {
                     _ = await self.stopAndSave(reason: reason)
                     return
@@ -507,7 +511,7 @@ final class RecordingSessionController {
         }
     }
 
-    private func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
+    func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
         NSScreen.screens.first { screen in
             (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID)
                 == displayID
@@ -522,21 +526,24 @@ final class RecordingSessionController {
     private func updateStatus(_ status: RecordingSessionStatus) {
         self.status = status
         onStatusChange?(status)
+        guard !panelHiddenByUser else { return }
         switch status {
         case .countdown(let seconds):
             controlPanel?.update(state: .countdown(seconds))
         case .starting:
             controlPanel?.update(state: .starting)
         case .recording:
-            controlPanel?.update(state: .recording)
+            let startedAt = recordingStartedAt ?? Date()
+            recordingStartedAt = startedAt
+            controlPanel?.update(state: .recording(startedAt: startedAt))
         case .saving:
-            controlPanel?.update(state: .saving)
+            controlPanel?.update(state: .saving(fileName: nil))
         case .idle, .selectingSource:
             break
         }
     }
 
-    private func finishSession(success: Bool) {
+    func finishSession(success: Bool) {
         outcomeState.finishSession(wasSaved: success)
         countdownTask?.cancel()
         countdownTask = nil
@@ -544,6 +551,11 @@ final class RecordingSessionController {
         monitoringTask = nil
         controlPanel?.dismiss()
         controlPanel = nil
+        captureFramePanel?.dismiss()
+        captureFramePanel = nil
+        recordingStartedAt = nil
+        panelHiddenByUser = false
+        watchdogReported = false
         engine = nil
         activeSession = nil
         stopWhenStarted = false
@@ -581,6 +593,7 @@ final class RecordingSessionController {
 extension RecordingSessionController {
     func startRecording() {
         guard status == .idle else { return }
+        dismissFailurePanel()
         outcomeState.beginSession()
         let attemptIdentifier = UUID()
         currentStartAttemptIdentifier = attemptIdentifier

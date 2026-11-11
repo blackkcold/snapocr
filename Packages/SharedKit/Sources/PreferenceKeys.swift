@@ -61,6 +61,18 @@ public enum PreferenceKeys {
     public static let recordingSystemAudio = "recording_systemAudio"
     /// Optional user-selected screen-recording destination directory.
     public static let recordingCustomOutputDirectory = "recording_customOutputDirectory"
+    /// Opacity applied to the floating recording control panel surface.
+    public static let recordingHUDOpacity = "recording_hudOpacity"
+    /// Whether the recording control panel restores full opacity while the pointer is inside it.
+    public static let recordingHUDHoverRestore = "recording_hudHoverRestore"
+    /// Whether the floating recording control panel is suppressed during recordings.
+    public static let recordingHUDHidden = "recording_hudHidden"
+    /// Whether a recording draws a frame around the captured area.
+    public static let recordingShowCaptureFrame = "recording_showCaptureFrame"
+    /// Whether a finished recording is revealed in Finder.
+    public static let recordingRevealOnFinish = "recording_revealOnFinish"
+    /// Screen corner used by the floating recording control panel.
+    public static let recordingHUDCorner = "recording_hudCorner"
 
     public static let ocrLanguagePriority = "ocr_languagePriority"
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"
@@ -129,6 +141,18 @@ public enum PreferenceDefaults {
     public static let recordingAverageVideoBitrate = 8_000_000
     /// Exclude system audio from new recordings by default.
     public static let recordingSystemAudio = false
+    /// Render the recording control panel surface at 85% opacity by default.
+    public static let recordingHUDOpacity = 0.85
+    /// Restore full panel opacity while the pointer is inside it.
+    public static let recordingHUDHoverRestore = true
+    /// Show the floating recording control panel by default.
+    public static let recordingHUDHidden = false
+    /// Draw a frame around the captured area by default.
+    public static let recordingShowCaptureFrame = true
+    /// Keep Finder closed when a recording finishes by default.
+    public static let recordingRevealOnFinish = false
+    /// Keep the recording control panel in the top-trailing corner by default.
+    public static let recordingHUDCorner = "topTrailing"
 
     public static let ocrLanguagePriority = "auto"
     public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]
@@ -233,6 +257,71 @@ public enum ScreenshotShelfPreferences {
             defaults.set(normalizedValue, forKey: key)
         }
         return normalizedValue
+    }
+}
+
+/// Reads the appearance preferences of the floating recording control panel.
+public enum RecordingHUDPreferences {
+    /// Allowed surface opacity range for the floating control panel.
+    public static let opacityRange: ClosedRange<Double> = 0.30...1
+
+    /// Returns the panel surface opacity, clamped to `opacityRange` and persisted when corrected.
+    public static func opacity(in defaults: UserDefaults = .standard) -> Double {
+        let key = PreferenceKeys.recordingHUDOpacity
+        guard let storedValue = defaults.object(forKey: key) as? NSNumber else {
+            return PreferenceDefaults.recordingHUDOpacity
+        }
+        let rawValue = storedValue.doubleValue
+        let normalizedValue = rawValue.isNaN
+            ? PreferenceDefaults.recordingHUDOpacity
+            : min(max(rawValue, opacityRange.lowerBound), opacityRange.upperBound)
+        if rawValue != normalizedValue {
+            defaults.set(normalizedValue, forKey: key)
+        }
+        return normalizedValue
+    }
+
+    /// Returns whether the panel restores full opacity while hovered, defaulting to `true`.
+    public static func hoverRestore(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: PreferenceKeys.recordingHUDHoverRestore) != nil else {
+            return PreferenceDefaults.recordingHUDHoverRestore
+        }
+        return defaults.bool(forKey: PreferenceKeys.recordingHUDHoverRestore)
+    }
+
+    /// Returns whether the floating panel is suppressed, defaulting to `false`.
+    public static func isHidden(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: PreferenceKeys.recordingHUDHidden) != nil else {
+            return PreferenceDefaults.recordingHUDHidden
+        }
+        return defaults.bool(forKey: PreferenceKeys.recordingHUDHidden)
+    }
+
+    /// Returns whether a recording frame is drawn around the captured area, defaulting to `true`.
+    public static func showsCaptureFrame(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: PreferenceKeys.recordingShowCaptureFrame) != nil else {
+            return PreferenceDefaults.recordingShowCaptureFrame
+        }
+        return defaults.bool(forKey: PreferenceKeys.recordingShowCaptureFrame)
+    }
+
+    /// Returns whether a finished recording is revealed in Finder, defaulting to `false`.
+    public static func revealsOnFinish(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: PreferenceKeys.recordingRevealOnFinish) != nil else {
+            return PreferenceDefaults.recordingRevealOnFinish
+        }
+        return defaults.bool(forKey: PreferenceKeys.recordingRevealOnFinish)
+    }
+
+    /// Returns the stored panel corner identifier, defaulting to `topTrailing`.
+    ///
+    /// The value is validated by `CaptureCore`, which owns the corner model.
+    public static func cornerIdentifier(in defaults: UserDefaults = .standard) -> String {
+        guard let rawValue = defaults.string(forKey: PreferenceKeys.recordingHUDCorner),
+              !rawValue.isEmpty else {
+            return PreferenceDefaults.recordingHUDCorner
+        }
+        return rawValue
     }
 }
 

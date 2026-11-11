@@ -41,7 +41,8 @@ struct SnapGlassApp: App {
         } label: {
             MenuBarStatusLabel(
                 status: viewModel.recordingStatus,
-                isCapturing: viewModel.isCapturing
+                isCapturing: viewModel.isCapturing,
+                hasFailure: viewModel.recordingFailure != nil
             )
             .environment(\.locale, locale)
             .background {

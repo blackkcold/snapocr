@@ -16,6 +16,8 @@ struct GlassSurface<S: InsettableShape>: ViewModifier {
     var castsShadow: Bool = true
     /// 贴在窗口边缘的条/栏不需要四周高光。
     var showsStroke: Bool = true
+    /// 表面自身的透明度；文字与按钮始终保持满对比。
+    var surfaceOpacity: Double = 1
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -24,6 +26,7 @@ struct GlassSurface<S: InsettableShape>: ViewModifier {
             .background {
                 surface
                     .modifier(ElevationShadow(elevation: elevation, isEnabled: castsShadow))
+                    .opacity(surfaceOpacity)
             }
             .overlay {
                 if showsStroke {
@@ -82,14 +85,16 @@ extension View {
         _ shape: S,
         elevation: DS.Elevation,
         castsShadow: Bool = true,
-        showsStroke: Bool = true
+        showsStroke: Bool = true,
+        surfaceOpacity: Double = 1
     ) -> some View {
         modifier(
             GlassSurface(
                 shape: shape,
                 elevation: elevation,
                 castsShadow: castsShadow,
-                showsStroke: showsStroke
+                showsStroke: showsStroke,
+                surfaceOpacity: surfaceOpacity
             )
         )
     }

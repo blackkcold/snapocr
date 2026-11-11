@@ -2,6 +2,7 @@ import AVFoundation
 import CoreGraphics
 import CoreMedia
 import Foundation
+import SharedKit
 @preconcurrency import ScreenCaptureKit
 
 enum RecordingStreamSettings {
@@ -131,6 +132,7 @@ public actor ScreenRecordingEngine {
         label: "com.snapglass.capture.recording-samples",
         qos: .userInitiated
     )
+    private let logger = Logger(category: "recording")
 
     private var sessionState = RecordingSessionState()
     private var stream: SCStream?
@@ -153,6 +155,19 @@ public actor ScreenRecordingEngine {
             return nil
         }
         return transaction.partialURL
+    }
+
+    /// Whether the active session has written at least one video frame.
+    ///
+    /// Used by the control panel watchdog to distinguish "recording" from "recording but the
+    /// source delivers no frames", which otherwise looks identical to the user.
+    public var hasAcceptedVideoFrame: Bool {
+        pipeline?.hasAcceptedVideoSample ?? false
+    }
+
+    /// Whether the retained partial of a failed session can be published again.
+    public var canRetryPublish: Bool {
+        transaction?.isPublishable ?? false
     }
 
     /// Starts capture for one display, one window, or a display-local region.
@@ -303,6 +318,31 @@ public actor ScreenRecordingEngine {
         }
     }
 
+    /// Publishes the retained partial of a failed session without capturing again.
+    ///
+    /// - Returns: The unique final recording URL.
+    /// - Throws: `ScreenRecordingEngineError.finalizationFailed` when nothing is publishable or the
+    ///   destination still refuses the file.
+    public func retryPublish() async throws -> URL {
+        guard let transaction, transaction.isPublishable else {
+            throw ScreenRecordingEngineError.finalizationFailed(
+                "The retained recording cannot be published.",
+                partialURL: partialOutputURL
+            )
+        }
+        do {
+            let url = try transaction.publish()
+            logger.info("recording: republished retained partial to \(url.path)")
+            self.transaction = nil
+            return url
+        } catch {
+            throw ScreenRecordingEngineError.finalizationFailed(
+                error.localizedDescription,
+                partialURL: transaction.partialURL
+            )
+        }
+    }
+
     private func resolve(
         _ source: RecordingSource,
         in content: SCShareableContent,
@@ -395,15 +435,20 @@ private final class RecordingSampleOutput: NSObject, SCStreamOutput, SCStreamDel
     }
 }
 
-private final class RecordingWriterPipeline: @unchecked Sendable {
+/// Writes one recording session's samples into the transaction's partial file.
+///
+/// Internal rather than file-private so `RecordingWriterPipelineTests` can drive the real
+/// `AVAssetWriter` with synthetic frames; nothing outside `CaptureCore` can see it.
+final class RecordingWriterPipeline: @unchecked Sendable {
     private let transaction: RecordingOutputTransaction
     private let writer: AVAssetWriter
     private let videoInput: AVAssetWriterInput
     private let audioInput: AVAssetWriterInput?
     private let sampleQueue: DispatchQueue
+    private let logger = Logger(category: "recording")
     private var sessionStartTime: CMTime?
     private var hasStartedWriting = false
-    private var hasAcceptedVideoSample = false
+    private(set) var hasAcceptedVideoSample = false
     private var acceptsSamples = true
     private var failureRelay: RecordingFailureRelay
 
@@ -513,6 +558,7 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
                 )
                 switch decision {
                 case .discardPartial(let reason):
+                    self.logger.error("recording: discarding partial — \(reason)")
                     do {
                         try self.discardUnpublishedOutput()
                         continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
@@ -526,11 +572,18 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
                         ))
                     }
                 case .retainPartial(let reason):
+                    self.logger.error("recording: retaining partial — \(reason)")
+                    // Release the open file handle; a retained partial must not stay locked by a
+                    // writer that was never finalized. `cancelWriting` keeps the file on disk.
+                    if self.writer.status == .writing {
+                        self.writer.cancelWriting()
+                    }
                     continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
                         reason,
                         partialURL: self.existingPartialURL
                     ))
                 case .finishWriting:
+                    self.logger.info("recording: finishing writer")
                     self.videoInput.markAsFinished()
                     self.audioInput?.markAsFinished()
                     self.writer.finishWriting {
@@ -562,7 +615,6 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
         guard sampleBuffer.imageBuffer != nil else { return }
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         guard presentationTime.isValid, presentationTime.isNumeric else { return }
-        guard videoInput.isReadyForMoreMediaData else { return }
 
         if !hasStartedWriting {
             guard writer.startWriting() else {
@@ -572,11 +624,21 @@ private final class RecordingWriterPipeline: @unchecked Sendable {
             writer.startSession(atSourceTime: presentationTime)
             sessionStartTime = presentationTime
             hasStartedWriting = true
+            logger.info("recording: writer started at first video frame, pts=\(presentationTime.seconds)")
         }
+
+        // Readiness is only meaningful after `startWriting()`; before that it is always false.
+        // Treat a not-ready input as backpressure and drop the frame rather than failing the session.
+        guard videoInput.isReadyForMoreMediaData else { return }
 
         guard videoInput.append(sampleBuffer) else {
             setFailure(writer.error?.localizedDescription ?? "The media writer rejected a video sample.")
             return
+        }
+        if !hasAcceptedVideoSample {
+            logger.info(
+                "recording: first video frame accepted at pts=\(presentationTime.seconds)"
+            )
         }
         hasAcceptedVideoSample = true
     }

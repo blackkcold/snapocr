@@ -33,6 +33,7 @@ public enum RecordingMenuBarIndicator: Equatable, Sendable, CaseIterable {
     case preparing
     case recording
     case saving
+    case failed
 
     /// SF Symbol used by the menu-bar label. Kept here so every indicator has one testable name.
     public var systemImage: String {
@@ -47,6 +48,8 @@ public enum RecordingMenuBarIndicator: Equatable, Sendable, CaseIterable {
             "record.circle.fill"
         case .saving:
             "arrow.down.circle"
+        case .failed:
+            "exclamationmark.triangle.fill"
         }
     }
 
@@ -58,8 +61,13 @@ public enum RecordingMenuBarIndicator: Equatable, Sendable, CaseIterable {
 
 public extension RecordingSessionStatus {
     /// Resolves the menu-bar indicator, giving an in-progress area capture precedence.
-    func menuBarIndicator(isCapturing: Bool) -> RecordingMenuBarIndicator {
+    ///
+    /// - Parameters:
+    ///   - isCapturing: Whether an area capture is currently in progress.
+    ///   - hasFailure: Whether a failed recording is still awaiting the user's attention.
+    func menuBarIndicator(isCapturing: Bool, hasFailure: Bool = false) -> RecordingMenuBarIndicator {
         if isCapturing { return .capturing }
+        if hasFailure { return .failed }
         switch self {
         case .idle:
             return .camera

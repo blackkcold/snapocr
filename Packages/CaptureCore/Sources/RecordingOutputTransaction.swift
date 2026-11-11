@@ -188,6 +188,11 @@ public final class RecordingOutputTransaction {
     private let publisher: AtomicRecordingOutputPublisher
     private var state = State.reserved
 
+    /// Whether the writer finished and the partial file is still on disk, so publication can be retried.
+    public var isPublishable: Bool {
+        state == .finished && fileManager.fileExists(atPath: partialURL.path)
+    }
+
     /// Reserves a hidden partial file and a unique final filename.
     ///
     /// The destination directory must already exist. The first final name is

@@ -34,6 +34,9 @@ public final class CaptureViewModel: ObservableObject {
     /// The current UI-facing screen-recording phase.
     @Published var recordingStatus: RecordingSessionStatus = .idle
 
+    /// A failed recording that is still awaiting the user's attention.
+    @Published var recordingFailure: RecordingControlPanelFailure?
+
     /// Owns source selection, countdown, stream capture, and writer finalization.
     let recordingSessionController: RecordingSessionController
 
