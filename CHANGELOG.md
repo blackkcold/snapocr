@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-11
+
+### Performance
+- 截图架：禁用或空架时不再在每次切换应用/空间时枚举窗口列表；首次出现卡片或重新启用时重新对齐全屏抑制，避免陈旧状态。
+- 录屏：中断轮询每 2 秒只枚举一次 `SCShareableContent`，复用同一结果完成权限与来源校验。
+- 历史：保存路径复用单次持久化快照；磁盘配额扫描改为 30 秒节流（策略变更与扫描失败时立即重试）；内存压力驱逐改为一次排名判定，不再逐条重测内存与重排序。
+- 编辑器：预览复用画布已缓存的基底位图，标注变更不再重复降采样 5K 原图（尺寸不完全匹配时自动回退，输出保持逐像素一致）。
+
 ## [1.3.0] - 2026-11-10
 
 ### Added
@@ -464,7 +472,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/blackkcold/snapocr/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/blackkcold/snapocr/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/blackkcold/snapocr/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/blackkcold/snapocr/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/blackkcold/snapocr/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/blackkcold/snapocr/compare/v0.9.9...v1.0.0
 [0.9.9]: https://github.com/blackkcold/snapocr/compare/v0.9.8...v0.9.9

@@ -243,6 +243,7 @@ extension EditableAnnotationCanvasNSView {
         renderedPreview = nil
         renderedPreviewNodes = nil
         renderedPreviewSource = nil
+        renderedPreviewBase = nil
         renderedPreviewMaxDimension = 0
     }
 
@@ -262,7 +263,7 @@ extension EditableAnnotationCanvasNSView {
     ///
     /// The dragged node is drawn live on top of this bitmap (see
     /// `drawInteractiveNode`), so moving a node never re-renders the whole image.
-    func previewImage(for image: CGImage) -> CGImage? {
+    func previewImage(for image: CGImage, baseImage: CGImage) -> CGImage? {
         // Blur needs the underlying pixels, so it cannot be drawn standalone:
         // keep it in the rendered preview and let it re-render while dragged.
         var previewNodes = nodes
@@ -278,6 +279,7 @@ extension EditableAnnotationCanvasNSView {
             renderedPreview = nil
             renderedPreviewNodes = nil
             renderedPreviewSource = nil
+            renderedPreviewBase = nil
             return nil
         }
 
@@ -290,16 +292,22 @@ extension EditableAnnotationCanvasNSView {
         if let renderedPreview,
            renderedPreviewNodes == previewNodes,
            renderedPreviewSource === image,
+           renderedPreviewBase === baseImage,
            abs(renderedPreviewMaxDimension - maximumDimension) <= 1 {
             return renderedPreview
         }
 
         var document = AnnotationDocument(baseImage: image)
         document.nodes = previewNodes
-        let rendered = try? Renderer().render(document, maximumDimension: maximumDimension)
+        let rendered = try? Renderer().render(
+            document,
+            maximumDimension: maximumDimension,
+            baseImage: baseImage
+        )
         renderedPreview = rendered
         renderedPreviewNodes = rendered == nil ? nil : previewNodes
         renderedPreviewSource = image
+        renderedPreviewBase = rendered == nil ? nil : baseImage
         renderedPreviewMaxDimension = maximumDimension
         return rendered
     }

@@ -19,11 +19,14 @@ public struct Renderer: Sendable {
     /// - Parameters:
     ///   - document: 标注文档
     ///   - maximumDimension: 预览最大边长；为 `nil` 时保持原始分辨率
+    ///   - baseImage: 调用方已缓存的预览基底位图。仅当它与 `downsample` 会生成的
+    ///     尺寸完全一致时才会被采用，否则回退到内部降采样（输出保持逐像素一致）。
     /// - Returns: 带有标注的合成图片
     /// - Throws: `AnnotationError.renderFailed` 当渲染失败时
     public func render(
         _ document: AnnotationDocument,
-        maximumDimension: CGFloat? = nil
+        maximumDimension: CGFloat? = nil,
+        baseImage suppliedBase: CGImage? = nil
     ) throws -> CGImage {
         let baseImage = document.baseImage
         let imageSize = CGSize(width: baseImage.width, height: baseImage.height)
@@ -33,11 +36,21 @@ public struct Renderer: Sendable {
         if let maximumDimension,
            maximumDimension > 0,
            max(imageSize.width, imageSize.height) > maximumDimension {
-            guard let previewImage = downsample(baseImage, maxDimension: maximumDimension) else {
-                throw AnnotationError.renderFailed(reason: "预览图降采样失败")
+            if let suppliedBase,
+               Self.matchesDownsampleSize(
+                   suppliedBase,
+                   sourceSize: imageSize,
+                   maximumDimension: maximumDimension
+               ) {
+                workingImage = suppliedBase
+                workingSize = CGSize(width: suppliedBase.width, height: suppliedBase.height)
+            } else {
+                guard let previewImage = downsample(baseImage, maxDimension: maximumDimension) else {
+                    throw AnnotationError.renderFailed(reason: "预览图降采样失败")
+                }
+                workingImage = previewImage
+                workingSize = CGSize(width: previewImage.width, height: previewImage.height)
             }
-            workingImage = previewImage
-            workingSize = CGSize(width: previewImage.width, height: previewImage.height)
         } else {
             workingImage = baseImage
             workingSize = imageSize
@@ -177,6 +190,23 @@ public struct Renderer: Sendable {
             // 裁剪操作在此不执行，由上层调用 CropTool.crop() 处理
             logger.warning("裁剪节点应在文档级处理，而非渲染时处理: \(scaledNode.id)")
         }
+    }
+
+    /// 已提供的基底是否正是 `downsample` 会生成的尺寸。
+    ///
+    /// 只做整数尺寸比较：`baseDisplayImage` 用向上取整，`downsample` 用截断，
+    /// 非整除比例下两者会差 1px；此时必须回退，才能保证输出逐像素不变。
+    private static func matchesDownsampleSize(
+        _ candidate: CGImage,
+        sourceSize: CGSize,
+        maximumDimension: CGFloat
+    ) -> Bool {
+        let maxSource = max(sourceSize.width, sourceSize.height)
+        guard maxSource > 0 else { return false }
+        let scale = maximumDimension / maxSource
+        let expectedWidth = Int(sourceSize.width * scale)
+        let expectedHeight = Int(sourceSize.height * scale)
+        return candidate.width == expectedWidth && candidate.height == expectedHeight
     }
 
     /// 将大图降采样到安全尺寸以控制内存。

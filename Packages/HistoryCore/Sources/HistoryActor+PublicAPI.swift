@@ -108,8 +108,18 @@ extension HistoryActor {
         guard pressure > .normal else { return }
 
         let sortedEntries = entries.values.sorted { $0.timestamp > $1.timestamp }
-        let toEvict = sortedEntries.filter { entry in
-            cleanupPolicy.shouldEvictFromCache(entry, among: sortedEntries)
+        let limit = cleanupPolicy.cacheLimit(for: pressure) ?? 0
+
+        var toEvict: [HistoryEntry] = []
+        toEvict.reserveCapacity(sortedEntries.count)
+        for (rank, entry) in sortedEntries.enumerated()
+        where cleanupPolicy.shouldEvictFromCache(
+            rank: rank,
+            isFavourite: entry.isFavourite,
+            pressure: pressure,
+            cacheLimit: limit
+        ) {
+            toEvict.append(entry)
         }
 
         for entry in toEvict {
@@ -163,6 +173,8 @@ extension HistoryActor {
         let policy = Self.configuredCleanupPolicy()
         cleanupPolicy = policy
         maxEntries = policy.maxEntries
+        // 新上限必须立刻生效：跳过扫描会让「将删除 N 条」的预演与实际不一致。
+        lastDiskQuotaScan = nil
         try await enforceCleanup()
     }
 }

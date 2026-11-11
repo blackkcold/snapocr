@@ -137,6 +137,64 @@ struct AnnotationCoreTests {
     #expect(rendered.height == 50)
   }
 
+  @Test func suppliedBaseMatchesInternalDownsamplePixelForPixel() throws {
+    let image = try makeImage(width: 200, height: 100)
+    var document = AnnotationDocument(baseImage: image)
+    document.addNode(
+      AnnotationNode(
+        tool: .rect,
+        normalizedRect: CGRect(x: 0.2, y: 0.2, width: 0.3, height: 0.3)
+      ))
+
+    let expected = try Renderer().render(document, maximumDimension: 100)
+
+    guard
+      let context = CGContext(
+        data: nil,
+        width: 100,
+        height: 50,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+      )
+    else {
+      throw AnnotationError.renderFailed(reason: "Unable to create preview base")
+    }
+    context.interpolationQuality = .high
+    context.draw(image, in: CGRect(x: 0, y: 0, width: 100, height: 50))
+    let base = try #require(context.makeImage())
+
+    let actual = try Renderer().render(
+      document,
+      maximumDimension: 100,
+      baseImage: base
+    )
+
+    #expect(actual.width == expected.width)
+    #expect(actual.height == expected.height)
+    let expectedBytes = try #require(expected.dataProvider?.data) as Data
+    let actualBytes = try #require(actual.dataProvider?.data) as Data
+    #expect(actualBytes == expectedBytes)
+  }
+
+  @Test func mismatchedSuppliedBaseFallsBackToInternalDownsample() throws {
+    let image = try makeImage(width: 200, height: 100)
+    let document = AnnotationDocument(baseImage: image)
+    let expected = try Renderer().render(document, maximumDimension: 100)
+
+    // 99x50 is not the bitmap `downsample` would produce; the renderer must ignore it.
+    let wrongBase = try makeImage(width: 99, height: 50)
+    let actual = try Renderer().render(
+      document,
+      maximumDimension: 100,
+      baseImage: wrongBase
+    )
+
+    #expect(actual.width == expected.width)
+    #expect(actual.height == expected.height)
+  }
+
   @Test func nodeStyleCanBeUpdatedAndUndone() throws {
     let image = try makeImage(width: 200, height: 100)
     var document = AnnotationDocument(baseImage: image)

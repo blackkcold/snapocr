@@ -156,6 +156,7 @@ final class EditableAnnotationCanvasNSView: NSView {
     var renderedPreview: CGImage?
     var renderedPreviewNodes: [AnnotationNode]?
     var renderedPreviewSource: CGImage?
+    var renderedPreviewBase: CGImage?
     var renderedPreviewMaxDimension: CGFloat = 0
     var baseDisplayCache: CanvasBaseDisplayCache?
     var contextualOCRLine: OCRLine?
@@ -409,8 +410,8 @@ final class EditableAnnotationCanvasNSView: NSView {
             let targetMaxDimension = CanvasRenderScale.quantize(
                 max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
             )
-            let displayImage = previewImage(for: image)
-                ?? baseDisplayImage(for: image, targetMaxDimension: targetMaxDimension)
+            let baseImage = baseDisplayImage(for: image, targetMaxDimension: targetMaxDimension)
+            let displayImage = previewImage(for: image, baseImage: baseImage) ?? baseImage
             context.draw(displayImage, in: imageDisplayRect)
 
             // The node being dragged or resized is excluded from the cached

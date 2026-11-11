@@ -6,8 +6,11 @@ import SharedKit
 
 extension HistoryActor {
     public func save(_ entry: HistoryEntry) async throws {
-        if allPersistedEntries().count >= maxEntries, entries[entry.id] == nil {
-            try await evictOldest()
+        // One snapshot per save: the capacity pre-check and the eviction share it.
+        // Nothing mutates `entries` between the check and `evictOldest`.
+        let existing = allPersistedEntries()
+        if existing.count >= maxEntries, entries[entry.id] == nil {
+            try await evictOldest(in: existing)
         }
 
         var mutableEntry = entry
