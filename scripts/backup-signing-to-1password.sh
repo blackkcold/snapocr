@@ -18,8 +18,10 @@ if ! command -v op >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! op whoami >/dev/null 2>&1; then
-    echo "1Password CLI is not signed in. Run: op signin" >&2
+# `op whoami` can report "not signed in" while delegated sessions still work
+# for item and vault commands, so probe a command the backup actually needs.
+if ! op vault list >/dev/null 2>&1; then
+    echo "1Password CLI has no active session. Run: op signin" >&2
     exit 1
 fi
 
