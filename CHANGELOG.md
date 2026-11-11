@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-11
+
+### Changed
+- 代码签名从 ad-hoc 改为固定自签名证书 `SnapGlass Code Signing`。Bundle ID `com.snapglass.app` 与证书身份被冻结，升级后屏幕录制授权不再每次重置（从 1.4.x 升到本版会重置一次）。
+- 自动更新迁移到 Sparkle 2.10.1：EdDSA 校验更新包与 feed、原地替换、失败保留旧版；存在未保存标注或正在录屏时自动推迟安装。
+- 「更新」设置页重做：显示当前版本、可用版本与下载/安装状态，可开关自动检查与自动安装；菜单栏图标发现新版本时显示提示点。
+- 发布流水线在 CI 内导入签名证书与 EdDSA 私钥，发布前校验签名身份、构建号递增、feed 签名与包签名。
+
+### Removed
+- 移除自研 `UpdateService`、安装器交接与「强制最新版本」开发者开关。`SnapGlass-update.json` 仍会为 1.4.x 客户端保留，直到 1.6.0。
+
 ## [1.4.2] - 2026-11-11
 
 ### Added

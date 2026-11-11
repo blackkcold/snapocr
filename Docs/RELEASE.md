@@ -12,13 +12,16 @@
 - **MINOR (Y)**：新功能
 - **PATCH (Z)**：Bug 修复
 
-版本号同步更新于三处：
+版本号同步更新于四处：
 
 | 文件 | 字段 |
 |------|------|
 | `version.txt` | 单行纯版本号（无 `v` 前缀） |
+| `build.txt` | 单调整数构建号，写入 `CFBundleVersion`；Sparkle 用它判断新旧 |
 | `project.yml` | `settings.base.MARKETING_VERSION` |
 | `CHANGELOG.md` | `## [vX.Y.Z] - YYYY-MM-DD` |
+
+`scripts/bump-version.sh` 会同时自增 `build.txt`。构建号只能增加：Sparkle 不做降级，回退会让这批用户永久收不到更新。
 
 ---
 
@@ -75,6 +78,7 @@ release/
 - `release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg`
 - `release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg.sha256`
 - `release/vX.Y.Z/SnapGlass-update.json`
+- `release/vX.Y.Z/appcast.xml`
 - `release/vX.Y.Z/BUILD_INFO.json`
 
 ### 忽略产物（.gitignore）
@@ -107,11 +111,13 @@ release/.DS_Store
 # 构建后打开 Finder
 ./scripts/build.sh --open
 
-# 同时生成带背景和 Applications 拖放入口的 DMG
+# 同时生成带背景和 Applications 拖放入口的 DMG，并用固定证书签名
 python3 -m venv .build/dmg-tools
 .build/dmg-tools/bin/python -m pip install dmgbuild
-DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
+DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg --sign
 ```
+
+`--sign` 会打开临时钥匙串、按「内层先、容器后」重签 Sparkle 嵌套代码，然后比对 DR 与 `CFBundleVersion`。缺少证书时直接失败；`--no-sign` 仅供本地调试，产物无法自动更新。
 
 构建脚本行为：
 
@@ -124,7 +130,7 @@ DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
 4. `xcodegen generate` → 分别构建 arm64 与 x86_64 Release
 5. 使用 `lipo` 合并主程序并验证 Universal 架构
 6. `ditto` 拷贝 `.app` 到产物目录
-7. 本地 ad-hoc 签名 + 严格验证
+7. 用固定证书按「内层先、容器后」签名，并断言身份、DR 与 `CFBundleVersion`（`--no-sign` 时为 ad-hoc）
 8. 使用 `--dmg` 时，通过 `dmgbuild` 生成品牌背景、Applications 拖放入口与 SHA-256
 9. 更新 `release/latest/SnapGlass.app` 软链，指向最近一次打包的 app
 10. 输出 `✅ App packaged: <产物目录>/SnapGlass.app`
@@ -140,10 +146,12 @@ DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg
 3. 打 tag：`git tag -a vX.Y.Z -m "vX.Y.Z — 简要描述"`
 4. 推送：`git push origin main && git push origin vX.Y.Z`
 5. GitHub Actions `release.yml` 自动触发：
-   - 构建 Release 配置
+   - 导入签名证书与 EdDSA 私钥，构建并签名 Release
+   - 校验签名身份、构建号递增、`CFBundleVersion`
    - 生成 `.dmg` + `.sha256`
+   - 生成签名 `appcast.xml`，并用 App 内置公钥验证 DMG 的 EdDSA 签名
    - 创建 GitHub Release 并上传产物
-6. CI 自动生成并上传固定名称的 `SnapGlass-update.json`，供 App 检查更新
+6. CI 同时生成并上传固定名称的 `SnapGlass-update.json`，供 1.4.x 客户端过渡使用
 
 ### 方式二：本地构建 + 手动上传
 

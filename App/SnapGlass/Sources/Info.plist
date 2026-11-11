@@ -27,6 +27,29 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!--
+		Sparkle 2. Sparkle checks the feed once a day only after the user
+		allows automatic checks (that prompt appears because
+		SUEnableAutomaticChecks is intentionally absent). Declining keeps the
+		app offline until the user asks from the menu.
+
+		SURequireSignedFeed is enabled from the first signed release because
+		generate_appcast only signs the feed when the app inside the archive
+		declares it. Shipping it disabled would produce an unsigned feed that
+		can never be retroactively signed for already installed copies.
+	-->
+	<key>SUFeedURL</key>
+	<string>https://github.com/blackkcold/snapocr/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>p42P65Q1D3b8IUFkUu6RMjiibnkR6n5X7dCwZb9BgDA=</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SURequireSignedFeed</key>
+	<true/>
 	<key>LSUIElement</key>
 	<true/>
 </dict>

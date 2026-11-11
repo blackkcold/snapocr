@@ -175,11 +175,14 @@ public struct TextAnonymizer {
 
 | 要求 | 说明 |
 |------|------|
-| 签名类型 | ad-hoc（`codesign --force --deep --sign -`），无 Developer ID |
-| 运行时 | 未启用 Hardened Runtime |
+| 签名类型 | 固定自签名证书 `SnapGlass Code Signing`（无 Developer ID） |
+| 签名身份 | Bundle ID `com.snapglass.app` + 证书根哈希；DR 固化在 `scripts/signing/identity.requirement.txt` |
+| 运行时 | 未启用 Hardened Runtime（自签路线下开启会导致 Sparkle 无法加载） |
 | 公证 | 未公证；首次安装需在「系统设置 → 隐私与安全性」中允许打开 |
-| 升级注意 | ad-hoc 没有稳定的 Team ID，升级后屏幕录制授权可能需要重新授予 |
+| 升级信任 | Sparkle 2 + EdDSA；更新包与 feed 均签名，私钥离线保存 |
+| 升级注意 | 从 ad-hoc 版本升到首个签名版会重置一次屏幕录制授权；之后的版本保持不变 |
 | macOS 15+ | ScreenCaptureKit 需要屏幕录制权限，由系统按代码身份记录 |
+| 细节 | 证书、密钥托管与恢复流程见 `Docs/SIGNING.md` |
 
 ---
 

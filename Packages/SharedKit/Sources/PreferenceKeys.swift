@@ -90,7 +90,6 @@ public enum PreferenceKeys {
 
     public static let developerMode = "dev_devMode"
     public static let engineComparison = "dev_engineComparison"
-    public static let forceUpdateAvailable = "dev_forceUpdateAvailable"
 }
 
 /// Defaults used when a preference has not been written yet.
@@ -170,7 +169,6 @@ public enum PreferenceDefaults {
 
     public static let developerMode = false
     public static let engineComparison = false
-    public static let forceUpdateAvailable = false
 }
 
 /// Reads and normalizes the persisted screenshot-shelf preferences.

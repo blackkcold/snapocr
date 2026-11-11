@@ -10,6 +10,9 @@ struct MenuBarStatusLabel: View {
     let status: RecordingSessionStatus
     let isCapturing: Bool
     var hasFailure: Bool = false
+    /// A verified update is waiting; the dot is only shown when no recording
+    /// indicator occupies the slot.
+    var hasUpdate: Bool = false
 
     private var indicator: RecordingMenuBarIndicator {
         status.menuBarIndicator(isCapturing: isCapturing, hasFailure: hasFailure)
@@ -22,6 +25,8 @@ struct MenuBarStatusLabel: View {
 
             if indicator.showsRecordingDot {
                 recordingDot
+            } else if hasUpdate {
+                updateDot
             } else {
                 // Keep the slot reserved so the status item does not shift when a recording
                 // starts or stops.
@@ -36,20 +41,30 @@ struct MenuBarStatusLabel: View {
     }
 
     private var accessibilityValue: Text {
+        if hasUpdate && !indicator.showsRecordingDot {
+            return Text("Update available")
+        }
         switch indicator {
         case .camera:
-            Text("")
+            return Text("")
         case .capturing:
-            Text("Capturing")
+            return Text("Capturing")
         case .preparing:
-            Text("Preparing the recording stream.")
+            return Text("Preparing the recording stream.")
         case .recording:
-            Text("Recording")
+            return Text("Recording")
         case .saving:
-            Text("Saving Recording…")
+            return Text("Saving Recording…")
         case .failed:
-            Text("Recording failed")
+            return Text("Recording failed")
         }
+    }
+
+    private var updateDot: some View {
+        Circle()
+            .fill(Color.accentColor)
+            .frame(width: 5, height: 5)
+            .accessibilityHidden(true)
     }
 
     private var recordingDot: some View {

@@ -1,5 +1,5 @@
 {
   "repo": "blackkcold/snapocr",
-  "build_command": "bash scripts/build.sh --version 1.4.2 --dmg",
+  "build_command": "bash scripts/build.sh --version 1.5.0 --dmg --sign",
   "ignore_dirty": ["release/", ".build/"]
 }

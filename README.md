@@ -57,7 +57,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v1.4.2-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v1.5.0-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -65,9 +65,11 @@
 
 - `SnapGlass-vX.Y.Z.dmg` — 安装包
 - `SnapGlass-vX.Y.Z.dmg.sha256` — SHA-256 校验文件
+- `appcast.xml` — 自动更新源，应用自行读取，无需手动下载
 
 > [!WARNING]
-> 首次安装需在「系统设置 → 隐私与安全性」中允许打开（未签名应用）。
+> SnapGlass 使用固定的自签名证书，没有 Apple Developer ID，因此首次安装需在「系统设置 → 隐私与安全性」中允许打开。
+> 从这一版起，后续版本通过 Sparkle 自动更新，不再重复这一步。
 > 截图、录屏与滚动截图都需要「屏幕录制」权限。
 
 ---
@@ -243,8 +245,11 @@ brew install xcodegen swiftlint
 # 生成 Xcode 工程
 xcodegen generate
 
-# 构建 Release 产物
-./scripts/build.sh --version 1.4.2
+# 构建 Release 产物（用固定证书签名）
+./scripts/build.sh --version 1.5.0 --sign
+
+# 只做本地调试构建（ad-hoc，无法自动更新）
+./scripts/build.sh --no-sign
 
 # 本地实验打包：每次生成唯一目录，永不覆盖，用于多轮产物对比
 ./scripts/build.sh --experimental

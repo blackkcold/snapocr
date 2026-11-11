@@ -40,18 +40,31 @@
 
 `.github/workflows/release.yml` 在推送 `v*` tag 时触发：
 
-1. 检出代码
+1. 检出代码（完整历史，用于校验构建号递增）
 2. 从 tag 名提取版本号
-3. `xcodegen generate`
-4. `xcodebuild -configuration Release build`（ad-hoc 签名）
-5. 通过 `dmgbuild` 打包 `.app` → `.dmg`
-6. 生成 `.sha256` 校验文件
-7. 生成并校验 `SnapGlass-update.json` 静态更新清单
-8. 创建 GitHub Release：
-   - 标题：`vX.Y.Z`
-   - Body：从 tag message 或 `CHANGELOG.md` 对应条目生成
-   - 上传 `.dmg` + `.sha256` + `SnapGlass-update.json` 作为 Release assets
-9. 发布后复核三个必需资产，缺少任意资产则工作流失败
+3. 安装 XcodeGen、dmgbuild、cryptography
+4. 从 secrets 导入签名证书与 EdDSA 私钥到临时目录（权限 `600`）
+5. 本地化校验 + SharedKit 单测
+6. `scripts/build.sh --sign`：双架构构建、lipo、按内层→外层用固定证书签名，并断言身份与构建号
+7. 通过 `dmgbuild` 打包 `.app` → `.dmg`
+8. 生成 `.sha256` 校验文件
+9. 生成签名 `appcast.xml`，并用 App 内置 `SUPublicEDKey` 对 DMG 做 Ed25519 校验
+10. 生成并校验 `SnapGlass-update.json`（1.4.x 兼容清单）
+11. 创建 GitHub Release：
+    - 标题：`vX.Y.Z`
+    - Body：从 tag message 或 `CHANGELOG.md` 对应条目生成
+    - 上传 `.dmg` + `.sha256` + `appcast.xml` + `release-notes.md` + `SnapGlass-update.json`
+12. 发布后复核五个必需资产，缺少任意资产则工作流失败
+
+### Release secrets
+
+| Secret | 内容 |
+|---|---|
+| `SNAPGLASS_CERT_P12_BASE64` | 自签名证书 `.p12` 的 base64（单行） |
+| `SNAPGLASS_CERT_P12_PASSWORD` | `.p12` 导出密码 |
+| `SPARKLE_ED_PRIVATE_KEY` | Sparkle EdDSA seed 的 base64（单行） |
+
+证书与密钥的生成、托管和恢复见 [`SIGNING.md`](SIGNING.md)。
 
 ### 触发方式
 

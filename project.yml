@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "1.4.2"
+    MARKETING_VERSION: "1.5.0"
     CURRENT_PROJECT_VERSION: "1"
   configs:
     Debug:
@@ -45,6 +45,9 @@ packages:
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
     from: 2.0.0
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 targets:
   SnapGlass:
     type: application
@@ -71,6 +74,9 @@ targets:
         PRODUCT_NAME: SnapGlass
         CODE_SIGN_ENTITLEMENTS: App/SnapGlass/SnapGlass.entitlements
         ENABLE_HARDENED_RUNTIME: NO
+        # Sparkle is linked as @rpath/Sparkle.framework/... and lives in
+        # Contents/Frameworks next to the executable.
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
         DEVELOPMENT_TEAM: "${DEVELOPMENT_TEAM}"
         CODE_SIGN_IDENTITY: "${CODE_SIGN_IDENTITY:--}"
     dependencies:
@@ -82,6 +88,16 @@ targets:
       - package: ScrollCore
       - package: HistoryCore
       - package: KeyboardShortcuts
+      - package: Sparkle
+        product: Sparkle
+        # XcodeGen's automatic embed looks for $(BUILT_PRODUCTS_DIR)/Sparkle,
+        # but Sparkle ships as an xcframework; the framework is copied by the
+        # "Embed Sparkle" script phase below instead.
+        embed: false
+        link: true
+        # Xcode must not sign it: the release script signs every nested piece
+        # of Sparkle with the stable self-signed identity, inside out.
+        codeSign: false
     preBuildScripts:
       - name: "SwiftLint"
         basedOnDependencyAnalysis: false
@@ -91,6 +107,31 @@ targets:
           else
             echo "warning: SwiftLint not installed"
           fi
+    postBuildScripts:
+      # Sparkle is a binary xcframework target. XcodeGen's automatic embed
+      # cannot resolve it, so copy the macOS slice ourselves. Signing happens
+      # later in scripts/build.sh, after the universal binary is assembled.
+      - name: "Embed Sparkle"
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          source_framework=""
+          for candidate in \
+            "${BUILT_PRODUCTS_DIR}/PackageFrameworks/Sparkle.framework" \
+            "${BUILD_DIR}/../../SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"; do
+            if [ -d "$candidate" ]; then
+              source_framework="$candidate"
+              break
+            fi
+          done
+          if [ -z "$source_framework" ]; then
+            echo "error: Sparkle.framework not found; resolve packages first" >&2
+            exit 1
+          fi
+          destination="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+          mkdir -p "$destination"
+          rm -rf "${destination}/Sparkle.framework"
+          ditto "$source_framework" "${destination}/Sparkle.framework"
   EditorInteractionTests:
     type: bundle.unit-test
     platform: macOS
@@ -137,7 +178,6 @@ targets:
       - path: App/SnapGlass/Sources/AppWindowPresenter.swift
       - path: App/SnapGlass/Sources/WindowPresentationCoordinator.swift
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift
-      - path: App/SnapGlass/Sources/MenuBar/UpdateInstallHandoff.swift
       - path: App/SnapGlass/Sources/Recording/RecordingQuitFlow.swift
       - path: App/SnapGlass/Sources/Recording/RecordingPermissionDecision.swift
     dependencies:

@@ -12,6 +12,8 @@ struct SnapGlassApp: App {
     @StateObject private var viewModel = CaptureViewModel()
     /// Coordinates the selected Settings section and window opening.
     @StateObject private var router = PreferencesRouter()
+    /// Owns Sparkle and the install-deferral state.
+    @StateObject private var updater = UpdaterManager()
     @AppStorage(PreferenceKeys.appLanguage)
     private var appLanguage = PreferenceDefaults.appLanguage
     @AppStorage(PreferenceKeys.appearanceMode)
@@ -36,19 +38,22 @@ struct SnapGlassApp: App {
             MenuBarView()
                 .environmentObject(viewModel)
                 .environmentObject(router)
+                .environmentObject(updater)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
         } label: {
             MenuBarStatusLabel(
                 status: viewModel.recordingStatus,
                 isCapturing: viewModel.isCapturing,
-                hasFailure: viewModel.recordingFailure != nil
+                hasFailure: viewModel.recordingFailure != nil,
+                hasUpdate: updater.hasAvailableUpdate
             )
             .environment(\.locale, locale)
             .background {
                     AppLifecycleBridge(
                         viewModel: viewModel,
                         router: router,
+                        updater: updater,
                         applicationDelegate: applicationDelegate
                     )
                 }
@@ -60,6 +65,7 @@ struct SnapGlassApp: App {
                 .environmentObject(router)
                 .toast(message: $viewModel.toastMessage, edge: .bottom)
                 .environmentObject(viewModel)
+                .environmentObject(updater)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "preferences", appearanceMode: appearanceMode))
@@ -135,6 +141,7 @@ private struct AppLifecycleBridge: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var viewModel: CaptureViewModel
     @ObservedObject var router: PreferencesRouter
+    @ObservedObject var updater: UpdaterManager
     let applicationDelegate: SnapGlassApplicationDelegate
     @State private var didInitialize = false
 
@@ -143,6 +150,14 @@ private struct AppLifecycleBridge: View {
             .frame(width: 0, height: 0)
             .onAppear {
                 applicationDelegate.viewModel = viewModel
+                applicationDelegate.updater = updater
+                updater.attach(to: viewModel)
+                updater.onInstallPostponed = { [weak viewModel] blocker in
+                    viewModel?.showToast(
+                        message: AppLocalization.string(blocker.message),
+                        type: .info
+                    )
+                }
                 viewModel.openWindow = { id in
                     AppWindowPresenter.present(id: id) {
                         openWindow(id: id)
@@ -151,6 +166,7 @@ private struct AppLifecycleBridge: View {
                 router.openWindow = viewModel.openWindow
                 guard !didInitialize else { return }
                 didInitialize = true
+                updater.start()
                 viewModel.checkPermissionsOnLaunch()
             }
     }

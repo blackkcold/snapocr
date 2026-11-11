@@ -9,6 +9,7 @@ OUTPUT_DIR=""
 OPEN_FINDER=false
 CREATE_DMG=false
 EXPERIMENTAL=false
+SIGN_MODE="auto"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -37,16 +38,28 @@ while [[ $# -gt 0 ]]; do
             CREATE_DMG=true
             shift
             ;;
+        --sign)
+            SIGN_MODE="required"
+            shift
+            ;;
+        --no-sign)
+            SIGN_MODE="adhoc"
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--version X.Y.Z] [--release-dir PATH] [--experimental] [--dmg] [--open]"
+            echo "Usage: $0 [--version X.Y.Z] [--release-dir PATH] [--experimental] [--dmg] [--sign|--no-sign] [--open]"
             echo ""
             echo "Options:"
             echo "  --version X.Y.Z      指定版本号（默认读取 version.txt）"
             echo "  --release-dir PATH   指定输出目录（默认 release/vX.Y.Z/）"
             echo "  --experimental|--exp 本地实验打包：输出唯一目录 release/exp-vX.Y.Z-<时间戳>-<随机码>/，永不覆盖，用于多轮产物对比测试"
+            echo "  --sign               用固定的 SnapGlass Code Signing 证书签名；缺少证书即失败（发版必用）"
+            echo "  --no-sign            强制 ad-hoc 签名，仅供本地调试；这种产物无法自动更新"
             echo "  --open               构建后在 Finder 中显示产物"
             echo "  --dmg                同时生成品牌 DMG 与 SHA-256"
             echo ""
+            echo "缺省（auto）：本机存在签名材料时用证书签名，否则退回 ad-hoc 并给出警告。"
+            echo "构建号取自 build.txt，写入 CFBundleVersion；发版前由 bump-version.sh 自增。"
             echo "产物统一输出到 release/ 目录。正式发版用 release/vX.Y.Z/，本地实验打包用 release/exp-*/。详见 Docs/RELEASE.md。"
             exit 0
             ;;
@@ -64,6 +77,18 @@ fi
 
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Invalid version: $VERSION" >&2
+    exit 1
+fi
+
+# Sparkle compares CFBundleVersion, not the marketing version. The counter must
+# be strictly increasing across releases; bump-version.sh maintains it.
+if [[ ! -f "build.txt" ]]; then
+    echo "Missing build.txt (monotonic build number)" >&2
+    exit 1
+fi
+BUILD_NUMBER="$(tr -d '[:space:]' < build.txt)"
+if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+    echo "Invalid build number in build.txt: $BUILD_NUMBER" >&2
     exit 1
 fi
 
@@ -112,6 +137,7 @@ build_architecture() {
         ARCHS="$architecture" \
         ONLY_ACTIVE_ARCH=YES \
         MARKETING_VERSION="$VERSION" \
+        CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
         CODE_SIGN_IDENTITY="" \
         CODE_SIGNING_REQUIRED=NO
 }
@@ -136,18 +162,64 @@ lipo -create \
 mv "$UNIVERSAL_EXECUTABLE" "$OUTPUT_EXECUTABLE"
 lipo "$OUTPUT_EXECUTABLE" -verify_arch arm64 x86_64
 
-echo "▸ Applying local ad-hoc signature"
-codesign --force --deep --sign - "$OUTPUT_APP"
-codesign --verify --deep --strict "$OUTPUT_APP"
+source "$PROJECT_DIR/scripts/lib/signing.sh"
+
+sign_with_certificate() {
+    open_signing_keychain
+    trap close_signing_keychain EXIT
+    echo "▸ Signing with \"$SIGN_IDENTITY\""
+    sign_app "$OUTPUT_APP"
+    close_signing_keychain
+    trap - EXIT
+    assert_signed "$OUTPUT_APP"
+    bash "$PROJECT_DIR/scripts/verify-build.sh" \
+        --app "$OUTPUT_APP" \
+        --version "$VERSION" \
+        --build "$BUILD_NUMBER" \
+        --require-ed-key
+}
+
+sign_adhoc() {
+    echo "▸ Applying ad-hoc signature (development only; cannot auto-update)"
+    codesign --force --sign - "$OUTPUT_APP"
+    codesign --verify --deep --strict "$OUTPUT_APP"
+}
+
+case "$SIGN_MODE" in
+    required)
+        sign_with_certificate
+        ;;
+    adhoc)
+        sign_adhoc
+        ;;
+    auto)
+        if [[ -f "$SIGNING_DIR/$P12_FILE" ]]; then
+            sign_with_certificate
+        else
+            echo "⚠️  No signing certificate at $SIGNING_DIR/$P12_FILE" >&2
+            echo "⚠️  Falling back to ad-hoc. This build cannot install updates." >&2
+            sign_adhoc
+        fi
+        ;;
+esac
+
+SIGNATURE_KIND="ad-hoc"
+if codesign -dv --verbose=4 "$OUTPUT_APP" 2>&1 | grep -q "Signature=adhoc"; then
+    SIGNATURE_KIND="ad-hoc"
+else
+    SIGNATURE_KIND="self-signed"
+fi
 
 cat > "$OUTPUT_DIR/BUILD_INFO.json" <<EOF
 {
   "version": "$VERSION",
+  "build": $BUILD_NUMBER,
   "buildDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "kind": "$([[ "$EXPERIMENTAL" == true ]] && echo "experimental" || echo "release")",
   "buildId": "$([[ "$EXPERIMENTAL" == true ]] && basename "$OUTPUT_DIR" || echo "release/v${VERSION}")",
   "app": "${APP_NAME}.app",
   "configuration": "Release",
+  "signature": "$SIGNATURE_KIND",
   "architectures": ["arm64", "x86_64"]
 }
 EOF

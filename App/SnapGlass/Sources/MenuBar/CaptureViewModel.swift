@@ -71,18 +71,6 @@ public final class CaptureViewModel: ObservableObject {
     /// Number of unique frames currently collected for scrolling capture.
     @Published public internal(set) var scrollCapturedFrameCount = 0
 
-    /// The window-backed state of the user-triggered update flow.
-    ///
-    /// Results live here instead of in modal alerts so they survive the user
-    /// switching away, closing Preferences, or returning minutes later.
-    @Published public internal(set) var updateCheckState: UpdateCheckState = .idle
-
-    /// Whether a user-triggered update check is running.
-    public var isCheckingForUpdates: Bool { updateCheckState.isChecking }
-
-    /// Whether a verified update DMG is being downloaded.
-    public var isDownloadingUpdate: Bool { updateCheckState.isDownloading }
-    
     /// Closure to open a specific window by ID
     public var openWindow: ((String) -> Void)?
 
@@ -96,13 +84,6 @@ public final class CaptureViewModel: ObservableObject {
     var scrollReachedSizeLimit = false
     /// 在途的采帧任务。取消时先 cancel，避免迟到的帧写进新会话。
     var scrollCaptureTask: Task<Void, Never>?
-    let updateService: UpdateService
-    /// 下载完成后的「打开安装包 → 退出」交接；脏标签会阻止自动退出。
-    lazy var updateInstallHandoff = UpdateInstallHandoff(
-        hasUnsavedWork: { [weak self] in
-            self?.editorWorkspace.hasAnyUnsavedChanges ?? false
-        }
-    )
     let logger = Logger(category: "capture")
 
     enum CaptureDestination {
@@ -122,14 +103,12 @@ public final class CaptureViewModel: ObservableObject {
         captureOrchestrator: CaptureOrchestrator = CaptureOrchestrator(),
         ocrPipeline: OCRPipeline = OCRPipeline(),
         barcodeEngine: VisionBarcodeEngine = VisionBarcodeEngine(),
-        scrollEngine: ScrollStitchActor = ScrollStitchActor(),
-        updateService: UpdateService = UpdateService()
+        scrollEngine: ScrollStitchActor = ScrollStitchActor()
     ) {
         self.captureOrchestrator = captureOrchestrator
         self.ocrPipeline = ocrPipeline
         self.barcodeEngine = barcodeEngine
         self.scrollEngine = scrollEngine
-        self.updateService = updateService
         recordingSessionController = RecordingSessionController(captureOrchestrator: captureOrchestrator)
 
         configureScreenshotShelf()
@@ -173,40 +152,6 @@ public final class CaptureViewModel: ObservableObject {
         }
     }
 
-    /// Checks GitHub Releases after an explicit user action and offers a verified DMG download.
-    ///
-    /// The result is published as `updateCheckState` rather than presented modally:
-    /// the request may outlive the user's attention, and a background `NSAlert`
-    /// would block the app and fight for the key window.
-    public func checkForUpdates() {
-        guard !isCheckingForUpdates, !isDownloadingUpdate else { return }
-        // Do not throw away an already downloaded, verified installer just
-        // because the menu item was clicked again.
-        guard updateCheckState.downloadedFileURL == nil else { return }
-        updateCheckState = .checking
-
-        Task {
-            do {
-                let forceUpdate = Self.boolPreference(
-                    forKey: PreferenceKeys.forceUpdateAvailable,
-                    defaultValue: PreferenceDefaults.forceUpdateAvailable
-                )
-                let result = try await updateService.check(
-                    currentVersion: Self.currentVersion,
-                    force: forceUpdate
-                )
-                switch result {
-                case .upToDate(let latestVersion):
-                    updateCheckState = .upToDate(latestVersion)
-                case .updateAvailable(let release):
-                    updateCheckState = .available(release)
-                }
-            } catch {
-                updateCheckState = .checkFailed(error.localizedDescription)
-            }
-        }
-    }
-    
     /// Shows a toast notification.
     ///
     /// - Parameters:

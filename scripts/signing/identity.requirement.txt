@@ -1,0 +1,1 @@
+identifier "com.snapglass.app" and certificate root = H"9077f02336cb662c4f982de4b4873c7e870483a1"

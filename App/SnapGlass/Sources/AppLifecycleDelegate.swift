@@ -9,6 +9,7 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     weak var viewModel: CaptureViewModel?
+    weak var updater: UpdaterManager?
     private var recordingQuitFlow = RecordingQuitFlow()
     private var isSavingEditorForQuit = false
 
@@ -19,6 +20,12 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Sparkle already waited for unsaved edits and recordings to clear
+        // before invoking its install handler. Prompting again would stall the
+        // relaunch behind a modal the user cannot see.
+        if updater?.isInstallingUpdate == true {
+            return .terminateNow
+        }
         guard let viewModel else { return .terminateNow }
         // A second ⌘Q while the save runs must not start another termination pass.
         guard !isSavingEditorForQuit else {

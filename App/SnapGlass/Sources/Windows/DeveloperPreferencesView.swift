@@ -8,8 +8,6 @@ struct DeveloperPreferencesView: View {
     private var devMode = PreferenceDefaults.developerMode
     @AppStorage(PreferenceKeys.engineComparison)
     private var engineComparison = PreferenceDefaults.engineComparison
-    @AppStorage(PreferenceKeys.forceUpdateAvailable)
-    private var forceUpdateAvailable = PreferenceDefaults.forceUpdateAvailable
 
     var body: some View {
         ScrollView {
@@ -26,12 +24,6 @@ struct DeveloperPreferencesView: View {
                         PreferencesCardHeader(systemImage: "gearshape.2", title: "Diagnostics")
 
                         Toggle("Enable Engine Comparison", isOn: $engineComparison)
-                        Toggle("Force Latest Release as Update", isOn: $forceUpdateAvailable)
-
-                        PreferencesCardCaption(text: LocalizedStringKey(
-                            "When enabled, Check for Updates shows the latest GitHub Release "
-                                + "even if its version is not newer."
-                        ))
                     }
                 }
             }

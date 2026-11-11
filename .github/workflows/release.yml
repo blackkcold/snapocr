@@ -13,6 +13,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the build-number check can read the previous tag,
+          # and so release notes can compute the previous tag.
+          fetch-depth: 0
 
       - name: Extract version from tag
         id: version
@@ -29,13 +33,48 @@ jobs:
       - name: Install DMG tooling
         run: |
           python3 -m venv .build/dmg-tools
-          .build/dmg-tools/bin/python -m pip install dmgbuild
+          .build/dmg-tools/bin/python -m pip install dmgbuild cryptography
+
+      - name: Import signing material
+        env:
+          CERT_P12_BASE64: ${{ secrets.SNAPGLASS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.SNAPGLASS_CERT_P12_PASSWORD }}
+          ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          SIGNING_DIR="$RUNNER_TEMP/snapglass-signing"
+          mkdir -p "$SIGNING_DIR"
+          python3 - "$SIGNING_DIR" <<'PY'
+          import base64, os, pathlib, sys
+          target = pathlib.Path(sys.argv[1])
+          (target / "SnapGlass.p12").write_bytes(base64.b64decode(os.environ["CERT_P12_BASE64"]))
+          (target / "SnapGlass.p12.password").write_text(os.environ["CERT_PASSWORD"])
+          (target / "sparkle_ed25519.key").write_text(os.environ["ED_PRIVATE_KEY"].strip())
+          PY
+          chmod 600 "$SIGNING_DIR"/*
+          echo "SIGNING_DIR=$SIGNING_DIR" >> "$GITHUB_ENV"
+          echo "SPARKLE_ED_KEY=$SIGNING_DIR/sparkle_ed25519.key" >> "$GITHUB_ENV"
+
+      - name: Verify sources
+        run: |
+          bash scripts/check-localization.sh
+          swift test --package-path Packages/SharedKit
+
+          CURRENT_BUILD="$(tr -d '[:space:]' < build.txt)"
+          PREV_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+          if [ -n "$PREV_TAG" ] && git cat-file -e "$PREV_TAG:build.txt" 2>/dev/null; then
+            PREV_BUILD="$(git show "$PREV_TAG:build.txt" | tr -d '[:space:]')"
+            if [ "$CURRENT_BUILD" -le "$PREV_BUILD" ]; then
+              echo "build.txt must increase: $PREV_BUILD -> $CURRENT_BUILD" >&2
+              exit 1
+            fi
+          fi
 
       - name: Build Universal Release
         run: |
           bash scripts/build.sh \
             --version "${{ steps.version.outputs.version }}" \
-            --release-dir .build/release-output
+            --release-dir .build/release-output \
+            --sign
 
       - name: Package .app into .dmg
         run: |
@@ -147,6 +186,22 @@ jobs:
 
           echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
+      - name: Generate signed appcast
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD="$(tr -d '[:space:]' < build.txt)"
+          bash scripts/make-appcast.sh \
+            --version "$VERSION" \
+            --build "$BUILD" \
+            --dmg "$DMG_PATH" \
+            --notes "${{ steps.notes.outputs.notes_file }}" \
+            --output-dir . \
+            --download-prefix "https://github.com/blackkcold/snapocr/releases/download/${{ steps.version.outputs.tag }}/" \
+            --key-file "$SPARKLE_ED_KEY" \
+            --require-signed-feed
+          echo "APPCAST_PATH=appcast.xml" >> "$GITHUB_ENV"
+          echo "NOTES_PATH=${{ steps.notes.outputs.notes_file }}" >> "$GITHUB_ENV"
+
       - name: Generate update manifest
         run: |
           python3 scripts/generate-update-manifest.py \
@@ -169,7 +224,9 @@ jobs:
              --notes-file "${{ steps.notes.outputs.notes_file }}" \
              "$DMG_PATH" \
              "$SHA_PATH" \
-             "$UPDATE_MANIFEST_PATH"
+             "$UPDATE_MANIFEST_PATH" \
+             "$APPCAST_PATH" \
+             "$NOTES_PATH"
 
       - name: Verify release assets
         env:
@@ -177,7 +234,7 @@ jobs:
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-          for expected in "$DMG_PATH" "$SHA_PATH" "$UPDATE_MANIFEST_PATH"; do
+          for expected in "$DMG_PATH" "$SHA_PATH" "$UPDATE_MANIFEST_PATH" "$APPCAST_PATH" "$NOTES_PATH"; do
             if ! grep -Fxq "$expected" <<< "$ASSETS"; then
               echo "Missing release asset: $expected" >&2
               exit 1

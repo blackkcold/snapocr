@@ -6,8 +6,21 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var viewModel: CaptureViewModel
     @EnvironmentObject private var router: PreferencesRouter
+    @EnvironmentObject private var updater: UpdaterManager
     
     var body: some View {
+        if let update = updater.availableUpdate {
+            Button {
+                updater.presentUpdate()
+            } label: {
+                Label(
+                    AppLocalization.string("Update to %@", update.displayVersion),
+                    systemImage: "arrow.down.circle.fill"
+                )
+            }
+            Divider()
+        }
+
         if viewModel.isCapturing {
             Text("Capturing…")
             Divider()
@@ -93,12 +106,9 @@ struct MenuBarView: View {
         .keyboardShortcut(",", modifiers: .command)
 
         Button("Check for Updates...") {
-            // The result is rendered in the Updates settings page. Opening it
-            // first keeps the menu-bar action useful even when the 30-second
-            // lookup outlives the menu (or the user's attention).
-            router.presentUpdates()
-            viewModel.checkForUpdates()
+            updater.presentUpdate()
         }
+        .disabled(updater.state.isChecking)
 
         Divider()
 

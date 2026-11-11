@@ -40,7 +40,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .history: "Manage encrypted history, retention, and storage."
         case .updates: "Check for new releases and download updates."
         case .about: "Version, credits, and project links."
-        case .developer: "Configure diagnostics and update testing."
+        case .developer: "Configure diagnostics."
         }
     }
 
