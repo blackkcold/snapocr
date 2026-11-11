@@ -9,9 +9,10 @@ import SwiftUI
 struct MenuBarStatusLabel: View {
     let status: RecordingSessionStatus
     let isCapturing: Bool
+    var hasFailure: Bool = false
 
     private var indicator: RecordingMenuBarIndicator {
-        status.menuBarIndicator(isCapturing: isCapturing)
+        status.menuBarIndicator(isCapturing: isCapturing, hasFailure: hasFailure)
     }
 
     var body: some View {
@@ -46,6 +47,8 @@ struct MenuBarStatusLabel: View {
             Text("Recording")
         case .saving:
             Text("Saving Recording…")
+        case .failed:
+            Text("Recording failed")
         }
     }
 

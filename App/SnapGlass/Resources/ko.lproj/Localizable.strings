@@ -718,3 +718,13 @@
 "Preset Transparent" = "투명";
 "Beautified" = "미화됨";
 "Preview of the selected template" = "선택한 템플릿 미리보기";
+"Control panel" = "컨트롤 패널";
+"Panel opacity" = "패널 불투명도";
+"Restore full opacity while hovering" = "마우스를 올리면 불투명도 100%로 복원";
+"Hide the floating panel during recordings" = "녹화 중 플로팅 패널 숨기기";
+"Show a frame around the captured area" = "녹화 영역 테두리 표시";
+"Reveal in Finder when a recording finishes" = "녹화가 끝나면 Finder에서 보기";
+"The panel never covers the captured area; drag it to another corner at any time." = "패널은 녹화 영역을 가리지 않습니다. 언제든 다른 모서리로 드래그할 수 있습니다.";
+"No frames are arriving from the selected source." = "선택한 소스에서 프레임이 도착하지 않습니다.";
+"Recording failed" = "녹화 실패";
+"The retained recording cannot be published." = "보관된 녹화를 게시할 수 없습니다.";

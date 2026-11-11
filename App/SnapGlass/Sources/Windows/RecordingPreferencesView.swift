@@ -13,6 +13,16 @@ struct RecordingPreferencesView: View {
     private var averageVideoBitrate = PreferenceDefaults.recordingAverageVideoBitrate
     @AppStorage(PreferenceKeys.recordingSystemAudio)
     private var systemAudio = PreferenceDefaults.recordingSystemAudio
+    @AppStorage(PreferenceKeys.recordingHUDOpacity)
+    private var hudOpacity = PreferenceDefaults.recordingHUDOpacity
+    @AppStorage(PreferenceKeys.recordingHUDHoverRestore)
+    private var hudHoverRestore = PreferenceDefaults.recordingHUDHoverRestore
+    @AppStorage(PreferenceKeys.recordingHUDHidden)
+    private var hudHidden = PreferenceDefaults.recordingHUDHidden
+    @AppStorage(PreferenceKeys.recordingShowCaptureFrame)
+    private var showCaptureFrame = PreferenceDefaults.recordingShowCaptureFrame
+    @AppStorage(PreferenceKeys.recordingRevealOnFinish)
+    private var revealOnFinish = PreferenceDefaults.recordingRevealOnFinish
     @AppStorage(PreferenceKeys.recordingCustomOutputDirectory)
     private var customOutputDirectoryPath = ""
     @State private var availableSpace: Int64?
@@ -21,6 +31,7 @@ struct RecordingPreferencesView: View {
         ScrollView {
             PreferencesCardGrid {
                 videoCard
+                controlPanelCard
                 destinationCard
             }
         }
@@ -70,6 +81,41 @@ struct RecordingPreferencesView: View {
             )
             PreferencesCardCaption(text: "Estimated size per minute: \(estimatedSize)")
         }
+    }
+
+    private var controlPanelCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "rectangle.inset.filled", title: "Control panel")
+
+            HStack(spacing: 10) {
+                Text("Panel opacity")
+                Slider(value: hudOpacityBinding, in: RecordingHUDPreferences.opacityRange, step: 0.05)
+                Text("\(Int((hudOpacity * 100).rounded()))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 38, alignment: .trailing)
+            }
+            .disabled(hudHidden)
+
+            Toggle("Restore full opacity while hovering", isOn: $hudHoverRestore)
+                .disabled(hudHidden)
+            Toggle("Hide the floating panel during recordings", isOn: $hudHidden)
+            Toggle("Show a frame around the captured area", isOn: $showCaptureFrame)
+            Toggle("Reveal in Finder when a recording finishes", isOn: $revealOnFinish)
+
+            PreferencesCardCaption(
+                text: "The panel never covers the captured area; drag it to another corner at any time."
+            )
+        }
+    }
+
+    private var hudOpacityBinding: Binding<Double> {
+        Binding(
+            get: { hudOpacity },
+            set: { newValue in
+                hudOpacity = min(max(newValue, RecordingHUDPreferences.opacityRange.lowerBound), 1)
+            }
+        )
     }
 
     private var destinationCard: some View {

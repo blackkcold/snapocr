@@ -718,3 +718,13 @@
 "Preset Transparent" = "透明";
 "Beautified" = "已美化";
 "Preview of the selected template" = "所选模板预览";
+"Control panel" = "控制台";
+"Panel opacity" = "面板不透明度";
+"Restore full opacity while hovering" = "悬停时恢复为完全不透明";
+"Hide the floating panel during recordings" = "录制时隐藏浮动面板";
+"Show a frame around the captured area" = "显示录制范围边框";
+"Reveal in Finder when a recording finishes" = "录制完成后在访达中显示";
+"The panel never covers the captured area; drag it to another corner at any time." = "面板不会遮挡录制区域；随时可拖到其他角落。";
+"No frames are arriving from the selected source." = "未从所选源收到画面。";
+"Recording failed" = "录制失败";
+"The retained recording cannot be published." = "保留的录制无法发布。";

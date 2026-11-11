@@ -40,6 +40,16 @@ struct RecordingMenuBarIndicatorTests {
         }
     }
 
+    @Test func failureOutranksStatusUntilItIsDismissed() {
+        #expect(RecordingSessionStatus.idle.menuBarIndicator(isCapturing: false, hasFailure: true) == .failed)
+        #expect(RecordingSessionStatus.recording.menuBarIndicator(isCapturing: false, hasFailure: true) == .failed)
+        #expect(RecordingSessionStatus.idle.menuBarIndicator(isCapturing: false, hasFailure: false) == .camera)
+    }
+
+    @Test func areaCaptureOutranksFailure() {
+        #expect(RecordingSessionStatus.idle.menuBarIndicator(isCapturing: true, hasFailure: true) == .capturing)
+    }
+
     @Test func everyIndicatorUsesAnAvailableSystemSymbol() {
         for indicator in RecordingMenuBarIndicator.allCases {
             #expect(

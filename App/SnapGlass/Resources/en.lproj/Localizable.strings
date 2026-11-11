@@ -718,3 +718,13 @@
 "Preset Transparent" = "Transparent";
 "Beautified" = "Beautified";
 "Preview of the selected template" = "Preview of the selected template";
+"Control panel" = "Control panel";
+"Panel opacity" = "Panel opacity";
+"Restore full opacity while hovering" = "Restore full opacity while hovering";
+"Hide the floating panel during recordings" = "Hide the floating panel during recordings";
+"Show a frame around the captured area" = "Show a frame around the captured area";
+"Reveal in Finder when a recording finishes" = "Reveal in Finder when a recording finishes";
+"The panel never covers the captured area; drag it to another corner at any time." = "The panel never covers the captured area; drag it to another corner at any time.";
+"No frames are arriving from the selected source." = "No frames are arriving from the selected source.";
+"Recording failed" = "Recording failed";
+"The retained recording cannot be published." = "The retained recording cannot be published.";

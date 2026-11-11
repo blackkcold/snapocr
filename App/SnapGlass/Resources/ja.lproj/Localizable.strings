@@ -718,3 +718,13 @@
 "Preset Transparent" = "透明";
 "Beautified" = "美化済み";
 "Preview of the selected template" = "選択したテンプレートのプレビュー";
+"Control panel" = "コントロールパネル";
+"Panel opacity" = "パネルの不透明度";
+"Restore full opacity while hovering" = "ホバー時に不透明度を100%に戻す";
+"Hide the floating panel during recordings" = "録画中はフローティングパネルを隠す";
+"Show a frame around the captured area" = "録画範囲の枠を表示";
+"Reveal in Finder when a recording finishes" = "録画完了時にFinderで表示";
+"The panel never covers the captured area; drag it to another corner at any time." = "パネルは録画範囲を覆いません。いつでも別の隅へドラッグできます。";
+"No frames are arriving from the selected source." = "選択したソースからフレームが届いていません。";
+"Recording failed" = "録画に失敗しました";
+"The retained recording cannot be published." = "保持された録画を公開できません。";

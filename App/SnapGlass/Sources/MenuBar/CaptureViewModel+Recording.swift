@@ -56,6 +56,9 @@ extension CaptureViewModel {
         recordingSessionController.onOpenPermissionGuide = { [weak self] in
             self?.openWindow?("permission")
         }
+        recordingSessionController.onFailureChange = { [weak self] failure in
+            self?.recordingFailure = failure
+        }
         HotKeyManager.shared.onScreenRecording = { [weak self] in
             self?.startRecording()
         }

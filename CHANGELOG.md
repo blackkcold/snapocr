@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-11
+
+### Added
+- 录屏控制台重做为可拖动胶囊 HUD：倒计时、计时、保存、失败与「未收到画面」各自独立状态；悬停恢复不透明度，阴影改由系统窗口绘制，不再被窗口边界裁切。
+- 新增录制范围红框（不进入录制画面）、保存可转入后台继续、失败持久化（重试发布 / 在 Finder 中显示）。
+- 设置 → 屏幕录制新增「控制台」卡片：面板不透明度、悬停恢复、隐藏浮动面板、录制范围边框、完成后在 Finder 显示。
+
+### Fixed
+- 修复录屏文件从未保存：writer 在 `isReadyForMoreMediaData` 判断之后才启动，而该值在 `startWriting()` 之前恒为 false，导致零帧写入、停止时清理 partial。改为首帧到达即 `startWriting`/`startSession`，readiness 仅用于背压丢帧；新增真实 `AVAssetWriter` 端到端测试（合成帧 → 可播放 MP4）。
+- 录屏失败不再只闪一个会自动消失的 Toast：面板保留失败原因与 partial 路径，菜单栏同步警告，可重试发布。
+
 ## [1.3.1] - 2026-11-11
 
 ### Performance
@@ -473,6 +484,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
 [Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.3.1...HEAD
+[1.4.0]: https://github.com/blackkcold/snapocr/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/blackkcold/snapocr/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/blackkcold/snapocr/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/blackkcold/snapocr/compare/v1.1.0...v1.2.0
