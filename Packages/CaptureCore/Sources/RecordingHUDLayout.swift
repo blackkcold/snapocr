@@ -57,19 +57,19 @@ public enum RecordingHUDPlacement {
         in screenFrame: CGRect,
         margin: CGFloat = RecordingHUDMetrics.screenMargin
     ) -> CGPoint {
-        let x: CGFloat
-        let y: CGFloat
+        let originX: CGFloat
+        let originY: CGFloat
         if corner.isTrailing {
-            x = screenFrame.maxX - size.width - margin
+            originX = screenFrame.maxX - size.width - margin
         } else {
-            x = screenFrame.minX + margin
+            originX = screenFrame.minX + margin
         }
         if corner.isTop {
-            y = screenFrame.maxY - size.height - margin
+            originY = screenFrame.maxY - size.height - margin
         } else {
-            y = screenFrame.minY + margin
+            originY = screenFrame.minY + margin
         }
-        return CGPoint(x: x, y: y)
+        return CGPoint(x: originX, y: originY)
     }
 
     /// Returns the panel frame for one corner inside a screen's visible frame.
@@ -125,9 +125,9 @@ public enum RecordingHUDPlacement {
         var bestDistance = CGFloat.greatestFiniteMagnitude
         for corner in cornerOrder {
             let candidate = frame(for: corner, size: size, in: screenFrame, margin: margin)
-            let dx = candidate.midX - center.x
-            let dy = candidate.midY - center.y
-            let distance = dx * dx + dy * dy
+            let deltaX = candidate.midX - center.x
+            let deltaY = candidate.midY - center.y
+            let distance = deltaX * deltaX + deltaY * deltaY
             if distance < bestDistance {
                 bestDistance = distance
                 best = corner
