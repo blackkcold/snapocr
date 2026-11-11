@@ -69,6 +69,9 @@ final class ScreenshotShelfDragOutController {
     private var sessionSource: ScreenshotShelfDraggingSource?
     private var lastPointerLocal: CGPoint?
 
+    /// True while a native file-drag session started from the shelf is in flight.
+    var isNativeDragSessionActive: Bool { handoffActive }
+
     /// How long a card may wait for its plaintext copy before the next pointer
     /// event retries the preparation.
     private let preparationTimeout: TimeInterval = 1.5

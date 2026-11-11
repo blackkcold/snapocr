@@ -17,18 +17,30 @@ struct ScreenshotShelfGeometryTests {
             metrics: metrics
         )
 
-        // Visual content: 160 + 240 + 12 spacing + 28 menu = 440; panel adds 16 pt shadow each side.
+        // Visual content: 160 + 240 + 12 spacing + 28 menu = 440; the panel adds 16 pt
+        // of shadow room on each side and 24 pt below the cards.
         #expect(frame.width == 472)
-        #expect(frame.height == 142)
+        #expect(frame.height == 150)
         #expect(frame.midX == visibleFrame.midX)
         #expect(frame.maxY == visibleFrame.maxY - 8)
-        #expect(frame.minY == visibleFrame.maxY - 150)
+        #expect(frame.minY == visibleFrame.maxY - 158)
 
         // Rail is 16 pt below the usable top; card top is 22 pt below the rail.
         let railY = frame.maxY - metrics.topInset
         #expect(railY == visibleFrame.maxY - 16)
         let cardTopY = frame.maxY - metrics.cardTopOffset
         #expect(cardTopY == railY - (metrics.railZone + metrics.railGap))
+    }
+
+    @Test func panelReservesRoomForTheStrongestHoverShadow() {
+        for cardHeight in [64.0, 96.0, 160.0] {
+            let bottomRoom = metrics.panelHeight(cardHeight: cardHeight)
+                - (metrics.cardTopOffset + cardHeight)
+            #expect(
+                bottomRoom >= ScreenshotShelfMetrics.hoverShadowBottomExtent,
+                "cardHeight \(cardHeight)"
+            )
+        }
     }
 
     @Test func allAnchorsKeepThePanelInsideTheUsableFrame() {
@@ -137,7 +149,7 @@ struct ScreenshotShelfGeometryTests {
         )
         #expect(frame.width > 0)
         #expect(frame.width <= 300)
-        #expect(frame.height == 142)
+        #expect(frame.height == 150)
     }
 
     @Test func invalidGeometryReturnsZero() {

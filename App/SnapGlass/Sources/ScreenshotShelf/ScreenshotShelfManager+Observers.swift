@@ -46,8 +46,15 @@ extension ScreenshotShelfManager {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.finishHideImmediately()
-                self?.refreshPresentation(immediate: true)
+                guard let self else { return }
+                if let activeDisplayID = self.activeDisplayID,
+                   ScreenshotShelfScreenResolver.screen(for: activeDisplayID) == nil {
+                    self.activeDisplayID = ScreenshotShelfScreenResolver.displayID(
+                        underMouse: NSEvent.mouseLocation
+                    )
+                }
+                self.finishHideImmediately()
+                self.refreshPresentation(immediate: true)
             }
         })
         notificationObservers.append(NotificationCenter.default.addObserver(

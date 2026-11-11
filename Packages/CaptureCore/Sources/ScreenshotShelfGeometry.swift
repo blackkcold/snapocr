@@ -9,8 +9,16 @@ public struct ScreenshotShelfMetrics: Equatable, Sendable {
     public var railZone: CGFloat
     /// Gap between the rail zone and the top edge of the card.
     public var railGap: CGFloat
-    /// Transparent room around the visual content for card shadows and drag scale.
+    /// Transparent room on the sides of the visual content for card shadows and drag scale.
+    ///
+    /// The bottom has its own, larger inset (`shadowBottomInset`) because the hover state
+    /// tilts the card and deepens its shadow.
     public var shadowInset: CGFloat
+    /// Transparent room below the card row for the hover shadow.
+    ///
+    /// The strongest hover state (shadow radius + y offset plus the tilted card's lowest
+    /// corner) needs about 21.7 pt; 24 pt keeps the shadow fully inside the panel window.
+    public var shadowBottomInset: CGFloat
     /// Distance from the visible screen edge to the visual content.
     public var screenMargin: CGFloat
     /// Horizontal gap between cards.
@@ -40,11 +48,20 @@ public struct ScreenshotShelfMetrics: Equatable, Sendable {
     /// Height of the collapsed handle window.
     public static let collapsedHandleHeight: CGFloat = 14
 
+    /// Card hover presentation shared by the card view and the panel geometry.
+    public static let hoverTiltDegrees: Double = 2
+    public static let hoverContentTiltDegrees: Double = 0.5
+    public static let hoverShadowRadius: CGFloat = 12
+    public static let hoverShadowYOffset: CGFloat = 5
+    /// Room the strongest hover shadow needs below the card, before the safety margin.
+    public static let hoverShadowBottomExtent: CGFloat = 22
+
     public init(
         topInset: CGFloat = 8,
         railZone: CGFloat = 16,
         railGap: CGFloat = 6,
         shadowInset: CGFloat = 16,
+        shadowBottomInset: CGFloat = 24,
         screenMargin: CGFloat = 16,
         cardSpacing: CGFloat = 12,
         endMenuWidth: CGFloat = 28,
@@ -55,6 +72,7 @@ public struct ScreenshotShelfMetrics: Equatable, Sendable {
         self.railZone = railZone
         self.railGap = railGap
         self.shadowInset = shadowInset
+        self.shadowBottomInset = shadowBottomInset
         self.screenMargin = screenMargin
         self.cardSpacing = cardSpacing
         self.endMenuWidth = endMenuWidth
@@ -74,7 +92,7 @@ public struct ScreenshotShelfMetrics: Equatable, Sendable {
 
     /// Height of the panel for a given card height.
     public func panelHeight(cardHeight: CGFloat) -> CGFloat {
-        topInset + railZone + railGap + cardHeight + shadowInset
+        topInset + railZone + railGap + cardHeight + shadowBottomInset
     }
 
     /// Width of the visible rail/card/menu content for the supplied card widths.
@@ -165,7 +183,7 @@ public enum ScreenshotShelfGeometry {
         // A frame that cannot even hold the action menu and shadow inset is not a usable shelf.
         let minimumWidth = metrics.shadowInset * 2 + metrics.endMenuWidth
         let minimumHeight = metrics.topInset + metrics.railZone + metrics.railGap
-            + metrics.shadowInset + 1
+            + metrics.shadowBottomInset + 1
         guard visibleFrame.width >= minimumWidth,
               visibleFrame.height >= minimumHeight else { return .zero }
 

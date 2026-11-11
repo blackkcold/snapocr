@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-11
+
+### Added
+- 截图架支持 Dock 式跨屏跟随：指针切换到另一块显示器并短暂停留后，截图架以淡出/淡入跟随（展开态带 4pt 下落）；卡片拖拽、原生拖拽、菜单、键盘模式、全屏/录制/编辑抑制与鼠标按下期间不移动。
+
+### Fixed
+- 修复截图架拖出失效：拖拽用的明文缓存目录改为按进程 PID 归属清理，第二个实例、调试构建或测试不再删除运行中实例的目录；目录被外部删除后写入时自动重建，不再永久拖不出去。
+- 修复截图架悬停阴影被面板底边裁切：底部单独预留 24pt，覆盖 2° + 0.5° 倾斜、radius 12 / y 5 的最强悬停态（约 21.7pt）。
+- 多屏切换时指针落在两块屏幕的空隙带不再回退到主屏：按最近屏幕解析，避免截图架跳回主屏。
+
 ## [1.4.1] - 2026-11-11
 
 ### Changed
@@ -491,7 +501,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/blackkcold/snapocr/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/blackkcold/snapocr/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/blackkcold/snapocr/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/blackkcold/snapocr/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/blackkcold/snapocr/compare/v1.2.0...v1.3.0

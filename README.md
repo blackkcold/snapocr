@@ -57,7 +57,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v1.4.1-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v1.4.2-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -244,7 +244,7 @@ brew install xcodegen swiftlint
 xcodegen generate
 
 # 构建 Release 产物
-./scripts/build.sh --version 1.4.1
+./scripts/build.sh --version 1.4.2
 
 # 本地实验打包：每次生成唯一目录，永不覆盖，用于多轮产物对比
 ./scripts/build.sh --experimental

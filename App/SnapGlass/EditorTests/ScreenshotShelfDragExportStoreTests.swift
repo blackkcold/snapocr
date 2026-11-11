@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 import Testing
 
@@ -167,7 +168,7 @@ struct ScreenshotShelfDragExportStoreTests {
         #expect(!FileManager.default.fileExists(atPath: abandoned.path))
     }
 
-    @Test func sweepStaleDeletesARecentlyAbandonedSession() async throws {
+    @Test func sweepStaleDeletesARecentlyAbandonedOwnedSession() async throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = makeStore(root: root)
@@ -178,7 +179,13 @@ struct ScreenshotShelfDragExportStoreTests {
                 sourceTypeIdentifier: "public.png"
             )
         )
-        let abandoned = root.appendingPathComponent("session-recent", isDirectory: true)
+        let abandoned = root.appendingPathComponent(
+            ScreenshotShelfSessionDirectoryPolicy.directoryName(
+                ownerPID: deadProcessID(),
+                sessionID: UUID()
+            ),
+            isDirectory: true
+        )
         try FileManager.default.createDirectory(at: abandoned, withIntermediateDirectories: true)
         try FileManager.default.setAttributes(
             [.modificationDate: fixedDate.addingTimeInterval(-120)],
@@ -205,6 +212,84 @@ struct ScreenshotShelfDragExportStoreTests {
         store.sweepStale()
 
         #expect(FileManager.default.fileExists(atPath: artifact.url.path))
+    }
+
+    @Test func prepareRecreatesASessionDirectoryThatDisappeared() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = makeStore(root: root)
+        let captureID = UUID()
+        let data = Data(repeating: 0x22, count: 16)
+        _ = try #require(
+            await store.prepare(
+                captureID: captureID,
+                data: data,
+                sourceTypeIdentifier: "public.png"
+            )
+        )
+        let sessionDirectory = try #require(
+            try FileManager.default.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: nil
+            ).first(where: { $0.lastPathComponent.hasPrefix("session-") })
+        )
+        try FileManager.default.removeItem(at: sessionDirectory)
+
+        let artifact = try #require(
+            await store.prepare(
+                captureID: captureID,
+                data: data,
+                sourceTypeIdentifier: "public.png"
+            )
+        )
+
+        #expect(FileManager.default.fileExists(atPath: artifact.url.path))
+        #expect(store.artifact(for: captureID) == artifact)
+    }
+
+    @Test func sweepKeepsLiveSessionsAndRemovesDeadOnes() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ScreenshotShelfDragExportStore(rootDirectory: root)
+        let liveDirectory = root.appendingPathComponent(
+            ScreenshotShelfSessionDirectoryPolicy.directoryName(
+                ownerPID: getpid(),
+                sessionID: UUID()
+            ),
+            isDirectory: true
+        )
+        let deadDirectory = root.appendingPathComponent(
+            ScreenshotShelfSessionDirectoryPolicy.directoryName(
+                ownerPID: deadProcessID(),
+                sessionID: UUID()
+            ),
+            isDirectory: true
+        )
+        for directory in [liveDirectory, deadDirectory] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date().addingTimeInterval(-3_600)],
+                ofItemAtPath: directory.path
+            )
+        }
+
+        store.sweepStale()
+
+        #expect(FileManager.default.fileExists(atPath: liveDirectory.path))
+        #expect(!FileManager.default.fileExists(atPath: deadDirectory.path))
+    }
+
+    /// Returns a process id that is guaranteed to be dead: a child that already exited.
+    private func deadProcessID() -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.processIdentifier
+        } catch {
+            return Int32.max
+        }
     }
 
     private func makeStore(root: URL) -> ScreenshotShelfDragExportStore {
