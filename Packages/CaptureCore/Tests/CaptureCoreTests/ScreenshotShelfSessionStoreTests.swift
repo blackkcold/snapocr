@@ -169,14 +169,37 @@ struct ScreenshotShelfSessionStoreTests {
         #expect(refusedOriginal == nil)
     }
 
-    @Test func initializationRemovesOnlyStaleFeatureSessionDirectories() throws {
+    @Test func initializationRemovesOnlyDeadSessionDirectories() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let staleDirectory = root.appendingPathComponent("session-stale", isDirectory: true)
+        let now = Date()
+        let liveDirectory = root.appendingPathComponent(
+            ScreenshotShelfSessionDirectoryPolicy.directoryName(
+                ownerPID: getpid(),
+                sessionID: UUID()
+            ),
+            isDirectory: true
+        )
+        let deadDirectory = root.appendingPathComponent(
+            ScreenshotShelfSessionDirectoryPolicy.directoryName(
+                ownerPID: deadProcessID(),
+                sessionID: UUID()
+            ),
+            isDirectory: true
+        )
+        let legacyDirectory = root.appendingPathComponent(
+            "session-\(UUID().uuidString)",
+            isDirectory: true
+        )
         let unrelatedFile = root.appendingPathComponent("notes.txt")
-        try FileManager.default.createDirectory(at: staleDirectory, withIntermediateDirectories: true)
-        try Data("stale".utf8).write(to: staleDirectory.appendingPathComponent("asset.bin"))
+        for directory in [liveDirectory, deadDirectory, legacyDirectory] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data("asset".utf8).write(to: directory.appendingPathComponent("asset.bin"))
+        }
         try Data("keep".utf8).write(to: unrelatedFile)
+        try setModificationDate(now.addingTimeInterval(-3_600), for: liveDirectory)
+        try setModificationDate(now.addingTimeInterval(-3_600), for: deadDirectory)
+        try setModificationDate(now.addingTimeInterval(-25 * 60 * 60), for: legacyDirectory)
 
         _ = try ScreenshotShelfSessionStore(
             sessionRootURL: root,
@@ -186,10 +209,68 @@ struct ScreenshotShelfSessionStoreTests {
 
         let remainingItems = try FileManager.default.contentsOfDirectory(atPath: root.path)
 
-        #expect(!FileManager.default.fileExists(atPath: staleDirectory.path))
+        #expect(FileManager.default.fileExists(atPath: liveDirectory.path))
+        #expect(!FileManager.default.fileExists(atPath: deadDirectory.path))
+        #expect(!FileManager.default.fileExists(atPath: legacyDirectory.path))
         #expect(FileManager.default.fileExists(atPath: unrelatedFile.path))
-        #expect(remainingItems.count == 2)
-        #expect(remainingItems.contains(where: { $0.hasPrefix("session-") }))
+        // The live directory, the unrelated file, and this store's own directory.
+        #expect(remainingItems.count == 3)
+    }
+
+    @Test func recreatesTheSessionDirectoryAfterItDisappears() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ScreenshotShelfSessionStore(
+            sessionRootURL: root,
+            originalByteBudget: 1_024,
+            thumbnailByteBudget: 1_024
+        )
+        let firstID = UUID()
+        let firstOriginal = Data("first-original".utf8)
+        try await store.store(
+            originalData: firstOriginal,
+            thumbnailData: Data("thumb".utf8),
+            captureID: firstID
+        )
+        let sessionDirectory = try #require(
+            try FileManager.default.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: nil
+            ).first(where: { $0.lastPathComponent.hasPrefix("session-") })
+        )
+        try FileManager.default.removeItem(at: sessionDirectory)
+
+        let secondID = UUID()
+        let secondOriginal = Data("second-original".utf8)
+        try await store.store(
+            originalData: secondOriginal,
+            thumbnailData: Data("thumb".utf8),
+            captureID: secondID
+        )
+
+        #expect(try await store.originalData(for: secondID) == secondOriginal)
+        // The first asset's file disappeared with the directory; it must not be
+        // advertised anymore.
+        #expect(try await store.originalData(for: firstID) == nil)
+    }
+
+    private func setModificationDate(_ date: Date, for url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.modificationDate: date],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func deadProcessID() -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.processIdentifier
+        } catch {
+            return Int32.max
+        }
     }
 
     private func makeTemporaryDirectory() throws -> URL {

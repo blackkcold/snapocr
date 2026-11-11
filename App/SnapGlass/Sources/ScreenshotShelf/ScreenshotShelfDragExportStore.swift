@@ -1,6 +1,13 @@
+import CaptureCore
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
+import os
+
+private let shelfDragExportLog = Logger(
+    subsystem: "com.snapglass.app",
+    category: "screenshot-shelf"
+)
 
 /// Reads the uniform type identifier from encoded image bytes.
 enum ScreenshotShelfImageTypeIdentifier {
@@ -77,7 +84,10 @@ final class ScreenshotShelfDragExportStore {
         if let task = tasks[captureID], dataDigests[captureID] == digest {
             return await task.value
         }
-        guard let sessionDirectory else { return nil }
+        guard let sessionDirectory else {
+            shelfDragExportLog.error("Shelf drag export directory is unavailable")
+            return nil
+        }
 
         // A new data version supersedes any old write immediately. The old task
         // may still finish, but its generation check below rejects the result.
@@ -144,6 +154,9 @@ final class ScreenshotShelfDragExportStore {
     func artifact(for captureID: UUID) -> Artifact? {
         guard let artifact = artifacts[captureID] else { return nil }
         guard FileManager.default.fileExists(atPath: artifact.url.path) else {
+            shelfDragExportLog.error(
+                "Shelf drag artifact disappeared for \(captureID.uuidString, privacy: .public)"
+            )
             artifacts[captureID] = nil
             revisions[captureID] = nil
             return nil
@@ -190,13 +203,15 @@ final class ScreenshotShelfDragExportStore {
 
     /// Deletes export directories left behind by earlier launches.
     ///
-    /// Anything but this process's own session directory is dead by definition.
-    /// The short grace window only protects a second instance that started
-    /// moments ago from having its files deleted underneath it.
+    /// Anything owned by a live process is kept: this store's own directory, a debug
+    /// build running side by side, or another copy of the app. Only dead owners and
+    /// legacy (owner-less) directories that are old enough are removed. That prevents a
+    /// second launch from deleting the plaintext files the running app needs for
+    /// drag-and-drop.
     func sweepStale(olderThan maxAge: TimeInterval = 60) {
         guard let rootDirectory, let sessionDirectory else { return }
         let fileManager = FileManager.default
-        let cutoff = now().addingTimeInterval(-maxAge)
+        let now = now()
         let currentName = sessionDirectory.lastPathComponent
         guard
             let entries = try? fileManager.contentsOfDirectory(
@@ -205,15 +220,31 @@ final class ScreenshotShelfDragExportStore {
             )
         else { return }
 
+        var removedCount = 0
         for entry in entries where entry.lastPathComponent.hasPrefix("session-") {
             guard entry.lastPathComponent != currentName else { continue }
             let values = try? entry.resourceValues(
                 forKeys: [.contentModificationDateKey, .isDirectoryKey]
             )
             guard values?.isDirectory == true else { continue }
-            let modified = values?.contentModificationDate ?? .distantPast
-            guard modified < cutoff else { continue }
-            try? fileManager.removeItem(at: entry)
+            guard ScreenshotShelfSessionDirectoryPolicy.shouldSweep(
+                directoryName: entry.lastPathComponent,
+                modifiedAt: values?.contentModificationDate ?? .distantPast,
+                now: now,
+                grace: maxAge,
+                legacyGrace: 24 * 60 * 60
+            ) else { continue }
+            do {
+                try fileManager.removeItem(at: entry)
+                removedCount += 1
+            } catch {
+                shelfDragExportLog.error(
+                    "Shelf export session sweep failed: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+        if removedCount > 0 {
+            shelfDragExportLog.info("Swept \(removedCount) stale shelf export session(s)")
         }
     }
 
@@ -241,7 +272,10 @@ final class ScreenshotShelfDragExportStore {
             try? directory.setResourceValues(values)
 
             let session = root.appendingPathComponent(
-                "session-\(UUID().uuidString)",
+                ScreenshotShelfSessionDirectoryPolicy.directoryName(
+                    ownerPID: ProcessInfo.processInfo.processIdentifier,
+                    sessionID: UUID()
+                ),
                 isDirectory: true
             )
             try fileManager.createDirectory(
@@ -268,6 +302,23 @@ private actor ScreenshotShelfDragExportWriter {
         in directory: URL
     ) -> ScreenshotShelfDragExportStore.Artifact? {
         let fileManager = FileManager.default
+        // The session directory can disappear while this store is alive (another
+        // instance, a manual cleanup, a test run). Recreate it at the write point so a
+        // lost directory degrades to one failed write instead of permanently breaking
+        // drag-out until the app restarts.
+        do {
+            try fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            shelfDragExportLog.error(
+                "Shelf drag export directory could not be recreated: \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
+
         let fileExtension = resolvedExtension(for: sourceTypeIdentifier)
         let baseName = baseName(for: date, timeZone: timeZone)
 
@@ -282,6 +333,9 @@ private actor ScreenshotShelfDragExportWriter {
             try data.write(to: url, options: .atomic)
             return ScreenshotShelfDragExportStore.Artifact(url: url, byteCount: data.count)
         } catch {
+            shelfDragExportLog.error(
+                "Shelf drag export write failed: \(error.localizedDescription, privacy: .public)"
+            )
             return nil
         }
     }

@@ -1,4 +1,5 @@
 import AppKit
+import CaptureCore
 import CoreGraphics
 
 /// Display and window-list lookups used by the shelf's placement and full-screen suppression.
@@ -8,8 +9,24 @@ enum ScreenshotShelfScreenResolver {
         return NSScreen.screens.first { self.displayID(for: $0) == displayID }
     }
 
+    /// The display nearest to a pointer location.
+    ///
+    /// Displays with different heights leave gaps that belong to no screen. Returning
+    /// `NSScreen.main` there would make the shelf jump back to the main display while the
+    /// pointer is only crossing the seam, so the nearest frame wins instead.
     static func screen(underMouse point: CGPoint) -> NSScreen? {
-        NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return NSScreen.main }
+        let frames = screens.map(\.frame)
+        guard let index = ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+            for: point,
+            displayFrames: frames
+        ) else { return NSScreen.main }
+        return screens[index]
+    }
+
+    static func displayID(underMouse point: CGPoint) -> CGDirectDisplayID? {
+        screen(underMouse: point).flatMap(displayID(for:))
     }
 
     static func displayID(for screen: NSScreen) -> CGDirectDisplayID? {

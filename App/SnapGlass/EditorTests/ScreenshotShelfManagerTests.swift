@@ -217,7 +217,14 @@ struct ScreenshotShelfManagerTests {
             defaults: defaults,
             sessionStore: nil,
             observesSystemEvents: false,
-            createsPanel: false
+            createsPanel: false,
+            dragExportStore: ScreenshotShelfDragExportStore(
+                rootDirectory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent(
+                        "ScreenshotShelfManagerTests-\(UUID().uuidString)",
+                        isDirectory: true
+                    )
+            )
         )
         // Real window enumeration depends on whichever app is frontmost in the
         // test process; pin it so suppression assertions are repeatable.

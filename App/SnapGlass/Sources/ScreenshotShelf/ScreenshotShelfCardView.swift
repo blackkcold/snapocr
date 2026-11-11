@@ -26,7 +26,10 @@ struct ScreenshotShelfCardView: View {
     var body: some View {
         ZStack(alignment: .top) {
             cardContent
-                .rotationEffect(.degrees(isLifted ? 0.5 : 0), anchor: .top)
+                .rotationEffect(
+                    .degrees(isLifted ? ScreenshotShelfMetrics.hoverContentTiltDegrees : 0),
+                    anchor: .top
+                )
 
             if showsHanger {
                 ThreadHangerView(railEmphasis: railEmphasis)
@@ -37,14 +40,16 @@ struct ScreenshotShelfCardView: View {
         // The ring is the pendulum pivot: the card and its thread swing around the point where
         // the ring hangs on the rail, so the ring cannot drift away from the rail on hover.
         .rotationEffect(
-            .degrees(isLifted ? 2 : 0),
+            .degrees(isLifted ? ScreenshotShelfMetrics.hoverTiltDegrees : 0),
             anchor: UnitPoint(x: 0.5, y: -ScreenshotShelfMetrics.ringCenterAboveCard / max(cardHeight, 1))
         )
         .shadow(
             color: .black.opacity(isDragging ? 0.25 : (isLifted ? 0.18 : 0.12)),
-            radius: isDragging ? 16 : (isLifted ? 12 : 8),
+            radius: isDragging
+                ? 16
+                : (isLifted ? ScreenshotShelfMetrics.hoverShadowRadius : 8),
             x: 0,
-            y: isDragging ? 8 : (isLifted ? 5 : 2)
+            y: isDragging ? 8 : (isLifted ? ScreenshotShelfMetrics.hoverShadowYOffset : 2)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onTapGesture { onOpen() }

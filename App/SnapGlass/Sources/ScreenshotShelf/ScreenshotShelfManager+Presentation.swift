@@ -13,6 +13,8 @@ extension ScreenshotShelfManager {
             phase = .hidden
             removeGlobalMonitor()
             cancelCollapseTasks()
+            displayFollower.stop()
+            isDisplayHandoff = false
             publishState()
             return
         }
@@ -25,6 +27,7 @@ extension ScreenshotShelfManager {
             case .hidden, .disappearing:
                 break
             }
+            displayFollower.stop()
             publishState()
             return
         }
@@ -264,8 +267,21 @@ extension ScreenshotShelfManager {
     /// AppKit window-frame animation and SwiftUI layout animation must never run together: the
     /// cards would be clipped by the shrinking window. Fading out first lets the frame and the
     /// model change atomically, then fades the new layout back in.
-    func crossfade(to layout: ScreenshotShelfLayout) {
+    ///
+    /// - Parameters:
+    ///   - layout: The layout to commit.
+    ///   - fadeOutDuration: Time to fade the old layout out.
+    ///   - fadeInDuration: Time to fade the new layout in.
+    ///   - settleOffset: Extra points above the final origin where the appearance starts, so
+    ///     the shelf settles into place. Zero for in-place changes such as expanding.
+    func crossfade(
+        to layout: ScreenshotShelfLayout,
+        fadeOutDuration: TimeInterval = 0.10,
+        fadeInDuration: TimeInterval = 0.12,
+        settleOffset: CGFloat = 0
+    ) {
         guard phase == .visible, let panel else {
+            isDisplayHandoff = false
             updateViewModel(layout)
             applyFrame(layout.panelFrame)
             return
@@ -274,22 +290,94 @@ extension ScreenshotShelfManager {
         presentationGeneration &+= 1
         let generation = presentationGeneration
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.10
+            context.duration = fadeOutDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
         } completionHandler: {
             Task { @MainActor [weak self, weak panel] in
                 guard let self, let panel,
                       self.phase == .visible,
-                      generation == self.presentationGeneration else { return }
+                      generation == self.presentationGeneration else {
+                    self?.isDisplayHandoff = false
+                    return
+                }
                 panel.setFrame(layout.panelFrame, display: true)
                 panel.assertSharingType()
+                panel.prepareForDisplay()
                 self.viewModel.layout = layout
+
+                let finalOrigin = layout.panelFrame.origin
+                if settleOffset > 0 {
+                    panel.setFrameOrigin(
+                        CGPoint(x: finalOrigin.x, y: finalOrigin.y + settleOffset)
+                    )
+                }
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.12
+                    context.duration = fadeInDuration
+                    context.timingFunction = CAMediaTimingFunction(
+                        controlPoints: 0.16, 1, 0.3, 1
+                    )
+                    if settleOffset > 0 {
+                        panel.animator().setFrameOrigin(finalOrigin)
+                    }
                     panel.animator().alphaValue = 1
+                } completionHandler: {
+                    Task { @MainActor [weak self] in
+                        self?.isDisplayHandoff = false
+                    }
                 }
             }
         }
+    }
+
+    /// Starts the pointer-display follower with the pointer's current display as its baseline.
+    ///
+    /// A capture or a manual show has just chosen where the shelf belongs; baselining the
+    /// pointer means the follower waits for a real display change instead of undoing that
+    /// placement on its first tick.
+    func startDisplayFollower() {
+        displayFollower.start(
+            baselineDisplayID: ScreenshotShelfScreenResolver.displayID(
+                underMouse: NSEvent.mouseLocation
+            )
+        )
+    }
+
+    /// Moves the shelf to another display with a short crossfade and a small settle.
+    ///
+    /// The window frame is never animated across the desktop: the two displays can have
+    /// different widths, heights, and backing scales, so a flying window would clip cards,
+    /// pass through the seam, and be recorded while it travels. Fading out first keeps every
+    /// frame drawn at the correct size and scale.
+    func movePanel(to screen: NSScreen) {
+        guard let panel, phase == .visible, shouldPresentPanel else { return }
+        let layout = makeLayout(for: screen)
+        guard layout.panelFrame.width > 0, layout.panelFrame.height > 0 else { return }
+        if panel.frame == layout.panelFrame {
+            viewModel.layout = layout
+            isDisplayHandoff = false
+            return
+        }
+
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            presentationGeneration &+= 1
+            panel.setFrame(layout.panelFrame, display: true)
+            panel.assertSharingType()
+            panel.prepareForDisplay()
+            panel.alphaValue = 1
+            viewModel.layout = layout
+            isDisplayHandoff = false
+            return
+        }
+
+        isDisplayHandoff = true
+        let isCollapsed = modeState.mode == .collapsed
+        crossfade(
+            to: layout,
+            fadeOutDuration: 0.10,
+            fadeInDuration: isCollapsed ? 0.12 : 0.16,
+            settleOffset: isCollapsed ? 0 : 4
+        )
     }
 
     func makeLayout(for screen: NSScreen) -> ScreenshotShelfLayout {
@@ -339,6 +427,7 @@ extension ScreenshotShelfManager {
         panel.assertSharingType()
         dragOverlayController.cancel()
         dragOverlayController.prewarm()
+        isDisplayHandoff = false
 
         if immediate {
             presentationGeneration &+= 1
@@ -353,6 +442,7 @@ extension ScreenshotShelfManager {
             if modeState.mode == .collapsed {
                 scheduleArmExpansion()
             }
+            startDisplayFollower()
             return
         }
 
@@ -382,6 +472,7 @@ extension ScreenshotShelfManager {
                 self.phase = .visible
                 panel.alphaValue = 1
                 panel.assertSharingType()
+                self.startDisplayFollower()
                 if self.modeState.mode == .collapsed {
                     self.scheduleArmExpansion()
                 }
@@ -408,6 +499,8 @@ extension ScreenshotShelfManager {
         modeState.cancelInteraction()
         keyboardController.exit()
         dragOverlayController.cancel()
+        displayFollower.stop()
+        isDisplayHandoff = false
         guard let panel else {
             phase = .hidden
             resetPointerState()
@@ -460,6 +553,8 @@ extension ScreenshotShelfManager {
         modeState.cancelInteraction()
         keyboardController.exit()
         dragOverlayController.cancel()
+        displayFollower.stop()
+        isDisplayHandoff = false
         panel?.orderOut(nil)
         panel?.alphaValue = 1
         phase = .hidden
@@ -475,7 +570,7 @@ extension ScreenshotShelfManager {
     }
 
     func applyFrame(_ frame: CGRect) {
-        guard let panel, phase == .visible, panel.frame != frame else { return }
+        guard let panel, phase == .visible, !isDisplayHandoff, panel.frame != frame else { return }
         if panel.frame.size != frame.size {
             panel.setFrame(frame, display: true)
         } else if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {

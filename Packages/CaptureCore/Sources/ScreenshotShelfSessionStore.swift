@@ -22,7 +22,7 @@ public actor ScreenshotShelfSessionStore {
         let sequence: UInt64
     }
 
-    private static let processSessionID = UUID().uuidString
+    private static let ownerPID = ProcessInfo.processInfo.processIdentifier
     private static let defaultOriginalByteBudget = 512 * 1_024 * 1_024
     private static let defaultThumbnailByteBudget = 16 * 1_024 * 1_024
 
@@ -78,6 +78,7 @@ public actor ScreenshotShelfSessionStore {
         thumbnailData: Data,
         captureID: UUID
     ) throws -> [UUID] {
+        try ensureSessionDirectory()
         guard thumbnailData.count <= thumbnailByteBudget else {
             throw ScreenshotShelfSessionStoreError.thumbnailExceedsBudget
         }
@@ -200,7 +201,13 @@ public actor ScreenshotShelfSessionStore {
         do {
             try FileManager.default.removeItem(at: asset.fileURL)
         } catch {
-            throw ScreenshotShelfSessionStoreError.storageFailure
+            // The directory may have been removed by an older build or by the user.
+            // Treat an already-missing file as removed; anything else is a real failure.
+            let nsError = error as NSError
+            guard nsError.domain == NSCocoaErrorDomain,
+                  nsError.code == NSFileNoSuchFileError else {
+                throw ScreenshotShelfSessionStoreError.storageFailure
+            }
         }
 
         assets.removeValue(forKey: captureID)
@@ -208,26 +215,81 @@ public actor ScreenshotShelfSessionStore {
         storedThumbnailBytes -= asset.thumbnailData.count
     }
 
+    /// Recreates the session directory when something removed it while this store was alive.
+    ///
+    /// Any assets whose files disappeared with the directory are dropped from memory so the
+    /// store never advertises a thumbnail it can no longer read back.
+    private func ensureSessionDirectory() throws {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(
+            atPath: sessionDirectoryURL.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue {
+            return
+        }
+
+        do {
+            try fileManager.createDirectory(
+                at: sessionDirectoryURL,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            throw ScreenshotShelfSessionStoreError.storageFailure
+        }
+        pruneMissingAssets()
+    }
+
+    private func pruneMissingAssets() {
+        let fileManager = FileManager.default
+        let missingIDs = assets
+            .filter { !fileManager.fileExists(atPath: $0.value.fileURL.path) }
+            .map(\.key)
+        for captureID in missingIDs {
+            guard let asset = assets.removeValue(forKey: captureID) else { continue }
+            storedOriginalBytes -= asset.encryptedByteCount
+            storedThumbnailBytes -= asset.thumbnailData.count
+        }
+    }
+
     private static func makeSessionDirectory(under rootURL: URL) throws -> URL {
         let fileManager = FileManager.default
-        let currentSessionPrefix = "session-\(processSessionID)-"
+        let now = Date()
 
         do {
             try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
             let entries = try fileManager.contentsOfDirectory(
                 at: rootURL,
-                includingPropertiesForKeys: nil
+                includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey]
             )
-            for entry in entries where entry.lastPathComponent.hasPrefix("session-")
-                && !entry.lastPathComponent.hasPrefix(currentSessionPrefix) {
-                try fileManager.removeItem(at: entry)
+            for entry in entries {
+                let values = try? entry.resourceValues(
+                    forKeys: [.contentModificationDateKey, .isDirectoryKey]
+                )
+                guard values?.isDirectory == true else { continue }
+                guard ScreenshotShelfSessionDirectoryPolicy.shouldSweep(
+                    directoryName: entry.lastPathComponent,
+                    modifiedAt: values?.contentModificationDate ?? .distantPast,
+                    now: now,
+                    grace: 60,
+                    legacyGrace: 24 * 60 * 60
+                ) else { continue }
+                try? fileManager.removeItem(at: entry)
             }
 
             let sessionDirectory = rootURL.appendingPathComponent(
-                currentSessionPrefix + UUID().uuidString,
+                ScreenshotShelfSessionDirectoryPolicy.directoryName(
+                    ownerPID: ownerPID,
+                    sessionID: UUID()
+                ),
                 isDirectory: true
             )
-            try fileManager.createDirectory(at: sessionDirectory, withIntermediateDirectories: false)
+            try fileManager.createDirectory(
+                at: sessionDirectory,
+                withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700]
+            )
             return sessionDirectory
         } catch {
             throw ScreenshotShelfSessionStoreError.storageFailure

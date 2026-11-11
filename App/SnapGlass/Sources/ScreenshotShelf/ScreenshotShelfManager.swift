@@ -65,7 +65,13 @@ final class ScreenshotShelfManager {
     var dwellTask: Task<Void, Never>?
     var armExpansionTask: Task<Void, Never>?
     var isMenuTracking = false
-    var preferredDisplayID: CGDirectDisplayID?
+    /// The display the shelf is committed to. Updated by a capture (when the shelf is
+    /// hidden), by a manual show, and by the pointer-display follower.
+    var activeDisplayID: CGDirectDisplayID?
+    /// True while the shelf is fading between displays; window-frame changes from other
+    /// paths are held back so two animations never fight over the same panel.
+    var isDisplayHandoff = false
+    lazy var displayFollower = ScreenshotShelfDisplayFollower()
     var isEnabled: Bool
     var cardHeight: CGFloat
     var imageOpacity: Double
@@ -103,8 +109,22 @@ final class ScreenshotShelfManager {
         isEnabled && hasItems && !isRecordingActive && presentationState.shouldPresentPanel
     }
     var displayScreen: NSScreen? {
-        ScreenshotShelfScreenResolver.screen(for: preferredDisplayID)
+        ScreenshotShelfScreenResolver.screen(for: activeDisplayID)
             ?? ScreenshotShelfScreenResolver.screen(underMouse: NSEvent.mouseLocation)
+    }
+
+    /// Whether the follower may move the shelf right now.
+    var canFollowPointerDisplay: Bool {
+        var conditions = ScreenshotShelfFollowConditions()
+        conditions.isShelfVisible = phase == .visible
+        conditions.hasActiveCardDrag = viewModel.dragPreview != nil
+        conditions.hasActiveNativeDrag = dragOutController.isNativeDragSessionActive
+        conditions.isMenuTracking = isMenuTracking
+        conditions.isKeyboardMode = panel?.isKeyboardMode == true
+        conditions.isSuppressed = modeState.isSuppressed || isEditingSuppressed
+        conditions.isPointerButtonDown = NSEvent.pressedMouseButtons != 0
+        conditions.isPointerOnShelf = viewModel.isPointerInside
+        return ScreenshotShelfDisplayFollowPolicy.shouldFollow(conditions)
     }
 
     convenience init(defaults: UserDefaults = .standard) {
@@ -139,6 +159,11 @@ final class ScreenshotShelfManager {
         }
         viewModel.onPointerMoved = { [weak self] location in
             self?.handlePointerMoved(location)
+        }
+        displayFollower.shelfDisplayID = { [weak self] in self?.activeDisplayID }
+        displayFollower.canFollow = { [weak self] in self?.canFollowPointerDisplay ?? false }
+        displayFollower.onFollow = { [weak self] displayID in
+            self?.followPointerDisplay(displayID)
         }
         if observesSystemEvents {
             installObservers()
@@ -195,7 +220,9 @@ final class ScreenshotShelfManager {
             mockupStyle: mockupStyle
         )
         presentationState.captureCompleted()
-        preferredDisplayID = sourceDisplayID
+        if phase != .visible {
+            activeDisplayID = sourceDisplayID ?? activeDisplayID
+        }
         synchronizeCards()
         // Re-align suppression before the panel can appear: an empty or disabled
         // shelf does not track full-screen changes, so the first visible card must
@@ -306,6 +333,14 @@ final class ScreenshotShelfManager {
         cancelCollapseTasks()
         modeState.expand()
         presentationState.show()
+        // A manual show picks the pointer's display only when the shelf is not already
+        // on screen. Moving a visible shelf here would go through the plain frame path,
+        // which can slide the window across the desktop; the follower owns that motion.
+        if phase == .hidden || phase == .disappearing {
+            activeDisplayID = ScreenshotShelfScreenResolver.displayID(
+                underMouse: NSEvent.mouseLocation
+            ) ?? activeDisplayID
+        }
         refreshPresentation()
     }
 
@@ -476,6 +511,19 @@ final class ScreenshotShelfManager {
         cardsByID[captureID] = card
         synchronizeCards()
         schedulePresentationUpdate()
+    }
+
+    /// Hands the settled pointer display over to the shelf with a short crossfade.
+    ///
+    /// Full-screen suppression is re-evaluated for the target display first; if a
+    /// full-screen app covers it, the shelf hides instead of appearing on top of it.
+    func followPointerDisplay(_ displayID: CGDirectDisplayID) {
+        guard let screen = ScreenshotShelfScreenResolver.screen(for: displayID),
+              canFollowPointerDisplay else { return }
+        activeDisplayID = displayID
+        refreshFullScreenSuppression()
+        guard phase == .visible, shouldPresentPanel else { return }
+        movePanel(to: screen)
     }
 
 }
