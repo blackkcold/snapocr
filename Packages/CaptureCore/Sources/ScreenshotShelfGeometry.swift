@@ -34,6 +34,11 @@ public struct ScreenshotShelfMetrics: Equatable, Sendable {
     public static let ringCenterAboveCard: CGFloat = hangerHeight - ringDiameter / 2
     /// Vertical offset of the rail line below `topInset`.
     public static let railLineOffset: CGFloat = 2
+    /// Width of the collapsed handle window. Kept tight to the drawn handle so the
+    /// always-on-top window swallows as little pointer input as possible.
+    public static let collapsedHandleWidth: CGFloat = 56
+    /// Height of the collapsed handle window.
+    public static let collapsedHandleHeight: CGFloat = 14
 
     public init(
         topInset: CGFloat = 8,
@@ -181,23 +186,18 @@ public enum ScreenshotShelfGeometry {
         }
         let clampedX = min(max(proposedX, visibleFrame.minX), visibleFrame.maxX - width)
 
-        let proposedY: CGFloat
-        if anchor.isTop {
-            let panelTop = visibleFrame.maxY - metrics.screenMargin + metrics.topInset
-            proposedY = panelTop - height
-        } else {
-            proposedY = visibleFrame.minY + metrics.screenMargin - metrics.shadowInset
-        }
+        let panelTop = visibleFrame.maxY - metrics.screenMargin + metrics.topInset
+        let proposedY = panelTop - height
         let clampedY = min(max(proposedY, visibleFrame.minY), visibleFrame.maxY - height)
 
         return CGRect(x: clampedX, y: clampedY, width: width, height: height)
     }
 
-    /// Reserves room for auto-hidden system bars that can reappear over the shelf.
+    /// Reserves room for an auto-hidden menu bar that can reappear over the shelf.
     ///
-    /// `visibleFrame` normally already excludes a visible menu bar and Dock. When either bar is
-    /// set to auto-hide, macOS can report a `visibleFrame` equal to the display frame; in that
-    /// case the shelf must stay clear of the 28 pt menu-bar reveal and the 70 pt Dock reveal.
+    /// `visibleFrame` normally already excludes a visible menu bar. When it is set to auto-hide,
+    /// macOS can report a `visibleFrame` equal to the display frame; in that case the shelf must
+    /// stay clear of the 28 pt menu-bar reveal so the cards are not covered when it slides down.
     public static func effectiveVisibleFrame(
         visibleFrame: CGRect,
         screenFrame: CGRect
@@ -211,27 +211,29 @@ public enum ScreenshotShelfGeometry {
         if frame.maxY >= screenFrame.maxY - 1 {
             frame.size.height = max(0, frame.height - 28)
         }
-        if frame.minY <= screenFrame.minY + 1 {
-            frame.origin.y += 70
-            frame.size.height = max(0, frame.height - 70)
-        }
         return frame
     }
 
-    /// The small always-visible halo that hosts the collapsed rail tab.
+    /// The compact always-visible handle that replaces the shelf while it is idle.
     ///
-    /// The collapsed frame keeps the expanded frame's top edge and horizontal center, so the rail
-    /// stays at exactly the same screen y while the cards fold up underneath it.
+    /// The collapsed frame keeps the expanded frame's top edge and horizontal center, so the
+    /// handle stays inside the expanded panel after it opens. That invariant matters: a handle
+    /// above the expanded top edge would leave the pointer outside the panel and immediately
+    /// re-collapse it.
+    ///
+    /// The window is kept tight to the drawn handle because macOS routes pointer events to the
+    /// whole window frame, transparent pixels included. A smaller frame is the only way to reduce
+    /// the pointer input the idle shelf swallows from the app underneath.
     ///
     /// - Parameters:
     ///   - expandedFrame: The expanded panel frame.
-    ///   - haloWidth: Width of the transparent hover/click halo.
-    ///   - haloHeight: Height of the transparent hover/click halo.
+    ///   - handleWidth: Width of the handle window.
+    ///   - handleHeight: Height of the handle window.
     /// - Returns: A frame with the same `maxY` and `midX`, or `.zero` for invalid input.
     public static func collapsedFrame(
         expandedFrame: CGRect,
-        haloWidth: CGFloat = 80,
-        haloHeight: CGFloat = 20
+        handleWidth: CGFloat = ScreenshotShelfMetrics.collapsedHandleWidth,
+        handleHeight: CGFloat = ScreenshotShelfMetrics.collapsedHandleHeight
     ) -> CGRect {
         guard expandedFrame.minX.isFinite,
               expandedFrame.minY.isFinite,
@@ -239,13 +241,13 @@ public enum ScreenshotShelfGeometry {
               expandedFrame.height.isFinite,
               expandedFrame.width > 0,
               expandedFrame.height > 0,
-              haloWidth.isFinite,
-              haloHeight.isFinite,
-              haloWidth > 0,
-              haloHeight > 0 else { return .zero }
+              handleWidth.isFinite,
+              handleHeight.isFinite,
+              handleWidth > 0,
+              handleHeight > 0 else { return .zero }
 
-        let width = min(haloWidth, expandedFrame.width)
-        let height = min(haloHeight, expandedFrame.height)
+        let width = min(handleWidth, expandedFrame.width)
+        let height = min(handleHeight, expandedFrame.height)
         return CGRect(
             x: expandedFrame.midX - width / 2,
             y: expandedFrame.maxY - height,

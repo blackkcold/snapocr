@@ -174,13 +174,10 @@
 "Top Left" = "左上";
 "Top Center" = "顶部居中";
 "Top Right" = "右上";
-"Bottom Left" = "左下";
-"Bottom Center" = "底部居中";
-"Bottom Right" = "右下";
 "Screenshot shelf position" = "截图架位置";
 "Collapse to rail when idle" = "空闲时收成挂杆";
-"The rail tab stays visible; move the pointer to it to expand again." = "挂杆标签会一直可见；把指针移过去即可重新展开。";
-"The shelf hangs below the menu bar by default. Drag thumbnails to reorder." = "截图架默认挂在菜单栏下方。拖动缩略图可调整顺序。";
+"The rail stays visible; rest the pointer on it for a moment to expand the shelf." = "挂杆会一直可见；把指针在挂杆上停留片刻即可重新展开。";
+"The shelf hangs below the menu bar. Drag thumbnails to reorder." = "截图架挂在菜单栏下方。拖动缩略图可调整顺序。";
 "Screenshot Shelf Actions" = "截图架操作";
 "Move Left" = "左移";
 "Move Right" = "右移";

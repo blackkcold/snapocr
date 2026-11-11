@@ -208,8 +208,9 @@ extension ScreenshotShelfManager {
         case .beginInteraction:
             modeState.beginInteraction()
             cancelCollapseTask()
+            cancelDwellTask()
         case .endInteraction:
-            modeState.endInteraction(now: Date(), delay: Self.collapseDelay)
+            modeState.endInteraction(now: Date(), delay: Self.interactionResumeDelay)
             scheduleCollapseIfNeeded()
         case .move(let captureID, let destination):
             state.move(captureID: captureID, to: destination)

@@ -20,14 +20,22 @@ extension ScreenshotShelfManager {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refreshFullScreenSuppression() }
+            Task { @MainActor [weak self] in
+                // A Space switch changes the context under a parked pointer; do not let a
+                // pending dwell pop the shelf open on the new Space.
+                self?.cancelDwellTask()
+                self?.refreshFullScreenSuppression()
+            }
         })
         notificationObservers.append(workspaceCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refreshFullScreenSuppression() }
+            Task { @MainActor [weak self] in
+                self?.cancelDwellTask()
+                self?.refreshFullScreenSuppression()
+            }
         })
     }
 
@@ -64,6 +72,7 @@ extension ScreenshotShelfManager {
             Task { @MainActor [weak self] in
                 self?.isMenuTracking = true
                 self?.cancelCollapseTask()
+                self?.cancelDwellTask()
             }
         })
         notificationObservers.append(NotificationCenter.default.addObserver(
@@ -72,8 +81,20 @@ extension ScreenshotShelfManager {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.isMenuTracking = false
-                self?.scheduleCollapseIfNeeded()
+                guard let self else { return }
+                self.isMenuTracking = false
+                self.scheduleCollapseIfNeeded()
+                // A pointer still resting on the handle resumes its dwell after the menu closes.
+                if self.viewModel.isPointerInside,
+                   self.modeState.mode == .collapsed,
+                   self.phase == .visible {
+                    self.modeState.pointerEntered(
+                        at: self.viewModel.pointerLocation,
+                        now: Date(),
+                        dwell: Self.dwellDelay
+                    )
+                    self.scheduleDwellIfNeeded()
+                }
             }
         })
     }

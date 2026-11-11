@@ -69,32 +69,60 @@ struct ScreenshotShelfView: View {
         return layout.visualWidth + 12
     }
 
-    /// The collapsed state is a small rail segment plus a count badge. It stays visible and
-    /// expands on approach, so the shelf never disappears just because the pointer left.
+    /// The collapsed state is a compact handle that stays visible and expands once the pointer
+    /// rests on it. It is deliberately small: the always-on-top panel routes pointer events for
+    /// its whole frame, so every unused margin would steal clicks from the app underneath.
+    ///
+    /// The content below is 50×12 and must stay inside the 56×14 handle window.
     private var collapsedView: some View {
-        ZStack {
-            Capsule()
-                .fill(Color.primary.opacity(model.isPointerInside ? 0.55 : 0.35))
-                .frame(width: 46, height: 8)
-                .overlay {
-                    Capsule()
-                        .strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)
-                }
-                .offset(x: -7)
-
-            Text("\(layout.cards.count)")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 14, height: 14)
-                .background(Circle().fill(Color.accentColor))
-                .offset(x: 23)
+        HStack(spacing: 4) {
+            collapsedRail
+            collapsedCountBadge
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture { model.perform(.expand) }
+        .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text("Screenshot Shelf"))
         .accessibilityValue(Text("\(layout.cards.count)"))
+        .accessibilityAction { model.perform(.expand) }
+        .animation(.easeOut(duration: 0.14), value: model.isPointerInside)
+    }
+
+    /// A miniature of the expanded rail so the collapsed shelf still reads as the same object.
+    private var collapsedRail: some View {
+        let opacity = model.isPointerInside ? 0.46 : 0.26
+        let thickness: CGFloat = model.isPointerInside ? 2.5 : 2
+        return ZStack {
+            Capsule()
+                .fill(Color.primary.opacity(opacity))
+                .frame(width: 32, height: thickness)
+            HStack(spacing: 0) {
+                Capsule()
+                    .fill(Color.primary.opacity(opacity))
+                    .frame(width: 1.5, height: 5)
+                Spacer(minLength: 0)
+                Capsule()
+                    .fill(Color.primary.opacity(opacity))
+                    .frame(width: 1.5, height: 5)
+            }
+            .frame(width: 33)
+        }
+        .frame(width: 34, height: 8)
+    }
+
+    private var collapsedCountBadge: some View {
+        Text("\(layout.cards.count)")
+            .font(.system(size: 8, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: 12, height: 12)
+            .background(Circle().fill(Color.accentColor))
+            .overlay {
+                Circle()
+                    .strokeBorder(Color.white.opacity(model.isPointerInside ? 0.35 : 0), lineWidth: 0.5)
+            }
+            .scaleEffect(model.isPointerInside ? 1.06 : 1)
     }
 
     private var railColor: Color {

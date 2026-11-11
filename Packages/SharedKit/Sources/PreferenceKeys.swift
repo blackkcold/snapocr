@@ -220,7 +220,8 @@ public enum ScreenshotShelfPreferences {
 
     /// Returns the screen anchor for the shelf, falling back to `top` when the stored value is invalid.
     ///
-    /// Invalid legacy values are written back so the Settings picker always has a visible selection.
+    /// Removed `bottom*` anchors and other invalid legacy values are written back as `top` so the
+    /// Settings picker always has a visible selection.
     public static func anchor(in defaults: UserDefaults = .standard) -> ScreenshotShelfAnchor {
         let key = PreferenceKeys.screenshotShelfAnchor
         guard let rawValue = defaults.string(forKey: key) else {
@@ -377,22 +378,14 @@ public enum RecordingDestinationPreferences {
     }
 }
 
-/// Screen anchors supported by the floating screenshot shelf.
+/// Top-edge anchors supported by the floating screenshot shelf.
+///
+/// The shelf always hangs from the top edge, just below the menu bar. Legacy
+/// `bottom*` values are normalized to `.top` when read by `ScreenshotShelfPreferences`.
 public enum ScreenshotShelfAnchor: String, CaseIterable, Sendable {
     case topLeading
     case top
     case topTrailing
-    case bottomLeading
-    case bottom
-    case bottomTrailing
-
-    /// Whether the shelf hangs from the top edge of the usable screen.
-    public var isTop: Bool {
-        switch self {
-        case .topLeading, .top, .topTrailing: true
-        case .bottomLeading, .bottom, .bottomTrailing: false
-        }
-    }
 
     /// Horizontal placement within the usable screen.
     public enum HorizontalPlacement: Sendable {
@@ -403,9 +396,9 @@ public enum ScreenshotShelfAnchor: String, CaseIterable, Sendable {
 
     public var horizontalPlacement: HorizontalPlacement {
         switch self {
-        case .topLeading, .bottomLeading: .leading
-        case .top, .bottom: .center
-        case .topTrailing, .bottomTrailing: .trailing
+        case .topLeading: .leading
+        case .top: .center
+        case .topTrailing: .trailing
         }
     }
 
@@ -415,9 +408,6 @@ public enum ScreenshotShelfAnchor: String, CaseIterable, Sendable {
         case .topLeading: "Top Left"
         case .top: "Top Center"
         case .topTrailing: "Top Right"
-        case .bottomLeading: "Bottom Left"
-        case .bottom: "Bottom Center"
-        case .bottomTrailing: "Bottom Right"
         }
     }
 }

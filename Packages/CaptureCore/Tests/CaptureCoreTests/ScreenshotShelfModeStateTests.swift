@@ -13,7 +13,7 @@ struct ScreenshotShelfModeStateTests {
         let earlyCollapse = state.collapseIfIdle(now: start.addingTimeInterval(1))
         #expect(!earlyCollapse)
 
-        state.pointerEntered(now: start.addingTimeInterval(1))
+        state.pointerEntered(now: start.addingTimeInterval(1), dwell: 0.25)
         #expect(state.idleDeadline == nil)
         #expect(state.mode == .expanded)
     }
@@ -53,22 +53,27 @@ struct ScreenshotShelfModeStateTests {
     }
 
     @Test func expansionIsArmedOnlyAfterCollapseAndCanBeRearmed() {
+        let start = Date(timeIntervalSinceReferenceDate: 4_000)
         var state = ScreenshotShelfModeState()
         #expect(state.isExpansionArmed)
-        state.pointerExited(now: Date(timeIntervalSinceReferenceDate: 4_000), delay: 1)
-        state.pointerEntered()
+        state.pointerExited(now: start, delay: 1)
+        state.pointerEntered(now: start, dwell: 0.25)
         #expect(state.mode == .expanded)
 
-        state.pointerExited(now: Date(timeIntervalSinceReferenceDate: 4_100), delay: 1)
-        let collapsed = state.collapseIfIdle(now: Date(timeIntervalSinceReferenceDate: 4_101))
+        state.pointerExited(now: start.addingTimeInterval(1), delay: 1)
+        let collapsed = state.collapseIfIdle(now: start.addingTimeInterval(2))
         #expect(collapsed)
         #expect(!state.isExpansionArmed)
 
-        state.pointerEntered()
+        state.pointerEntered(now: start.addingTimeInterval(3), dwell: 0.25)
         #expect(state.mode == .collapsed, "unarmed hover must not expand")
+        #expect(state.dwellDeadline == nil)
 
         state.armExpansion()
-        state.pointerEntered()
+        state.pointerEntered(now: start.addingTimeInterval(3), dwell: 0.25)
+        #expect(state.mode == .collapsed, "armed entry still waits for the dwell")
+        let expanded = state.expandIfDwellElapsed(now: start.addingTimeInterval(3.25))
+        #expect(expanded)
         #expect(state.mode == .expanded)
     }
 

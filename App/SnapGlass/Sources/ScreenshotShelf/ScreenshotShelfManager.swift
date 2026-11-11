@@ -10,8 +10,13 @@ import SwiftUI
 final class ScreenshotShelfManager {
     static let maximumThumbnailBytes = 16 * 1_024 * 1_024
     static let maximumPendingAssetWrites = 2
-    static let collapseDelay: TimeInterval = 2.8
+    /// Grace period after the pointer leaves the shelf before it folds back to the handle.
+    static let pointerExitCollapseDelay: TimeInterval = 0.7
+    /// Grace period after a drag, menu, or suppression ends before the shelf may fold.
+    static let interactionResumeDelay: TimeInterval = 2.8
     static let armExpansionDelay: TimeInterval = 0.6
+    /// Time the pointer must rest on the collapsed handle before the shelf expands.
+    static let dwellDelay: TimeInterval = 0.25
 
     let sessionStore: ScreenshotShelfSessionStore?
     let defaults: UserDefaults
@@ -57,6 +62,7 @@ final class ScreenshotShelfManager {
     var globalMouseMonitor: Any?
     var modeState = ScreenshotShelfModeState()
     var collapseTask: Task<Void, Never>?
+    var dwellTask: Task<Void, Never>?
     var armExpansionTask: Task<Void, Never>?
     var isMenuTracking = false
     var preferredDisplayID: CGDirectDisplayID?
@@ -130,6 +136,9 @@ final class ScreenshotShelfManager {
         viewModel.delegate = self
         viewModel.onPointerInsideChanged = { [weak self] inside in
             self?.handlePointerInside(inside)
+        }
+        viewModel.onPointerMoved = { [weak self] location in
+            self?.handlePointerMoved(location)
         }
         if observesSystemEvents {
             installObservers()
