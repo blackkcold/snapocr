@@ -180,6 +180,32 @@ struct ScreenshotShelfManagerTests {
         #expect(errorCard.feedbackMessage?.resolved(using: { _ in "must not replace dynamic text" }) == dynamicError)
     }
 
+    @Test func fullScreenSuppressionReevaluatesWhenShelfGainsItsFirstCard() throws {
+        let manager = try makeManager()
+        var covered = true
+        manager.frontmostAppCoversDisplay = { _ in covered }
+
+        // 0 → 1 card must re-align suppression before the panel can appear.
+        _ = try #require(manager.captureCompleted(try makeImage()))
+        #expect(manager.isFullScreenSuppressed)
+        #expect(!manager.shouldPresentPanel)
+
+        covered = false
+        manager.refreshFullScreenSuppression()
+        #expect(!manager.isFullScreenSuppressed)
+        #expect(manager.shouldPresentPanel)
+
+        covered = true
+        manager.refreshFullScreenSuppression()
+        #expect(manager.isFullScreenSuppressed)
+
+        manager.clear()
+        covered = false
+        _ = try #require(manager.captureCompleted(try makeImage()))
+        #expect(!manager.isFullScreenSuppressed)
+        #expect(manager.shouldPresentPanel)
+    }
+
     private func makeManager() throws -> ScreenshotShelfManager {
         let suiteName = "ScreenshotShelfManagerTests-\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -187,12 +213,16 @@ struct ScreenshotShelfManagerTests {
         }
         defaults.set(true, forKey: "screenshotShelf_enabled")
         defaults.set(3, forKey: "screenshotShelf_count")
-        return ScreenshotShelfManager(
+        let manager = ScreenshotShelfManager(
             defaults: defaults,
             sessionStore: nil,
             observesSystemEvents: false,
             createsPanel: false
         )
+        // Real window enumeration depends on whichever app is frontmost in the
+        // test process; pin it so suppression assertions are repeatable.
+        manager.frontmostAppCoversDisplay = { _ in false }
+        return manager
     }
 
     private func makeImage() throws -> CGImage {

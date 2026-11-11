@@ -68,6 +68,16 @@ public actor HistoryActor: HistoryProtocol {
     /// 全局条目数量硬限制
     var maxEntries: Int
 
+    /// 上次全量磁盘配额扫描的时间点；`nil` 表示尚无有效扫描。
+    ///
+    /// 磁盘配额扫描要枚举三个目录并对每个文件取一次 `fileSizeKey`，
+    /// 随历史规模线性增长。配额只在 `save` 尾部检查，因此允许最多一个
+    /// 扫描间隔的过冲，换取每次截图不再付全盘扫描的代价。
+    var lastDiskQuotaScan: ContinuousClock.Instant?
+
+    /// 两次全量磁盘配额扫描之间的最短间隔。
+    static let diskQuotaScanInterval: Duration = .seconds(30)
+
     // MARK: - Initialization
 
     /// 初始化历史存储 Actor

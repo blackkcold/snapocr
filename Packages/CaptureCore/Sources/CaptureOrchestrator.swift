@@ -297,6 +297,14 @@ public final class CaptureOrchestrator: Sendable {
         await permissionService.checkScreenCapturePermission()
     }
 
+    /// 用调用方已枚举的显示器数量检查权限，避免第二次 `SCShareableContent` 枚举。
+    ///
+    /// - Parameter displayCount: 调用方已取得的 `SCShareableContent.displays.count`
+    /// - Returns: 权限是否已授予。
+    public func checkPermissionStatus(displayCount: Int) async -> Bool {
+        await permissionService.verifyCaptureAccess(displayCount: displayCount)
+    }
+
     /// 获取当前权限状态的完整枚举值。
     ///
     /// 用于驱动 UI 层权限引导卡片的展示逻辑。

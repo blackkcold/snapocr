@@ -70,6 +70,10 @@ final class ScreenshotShelfManager {
     var isFullScreenSuppressed = false
     var isEditingSuppressed = false
 
+    /// 全屏抑制判定缝。生产代码走 `ScreenshotShelfScreenResolver`；
+    /// 测试进程里真实枚举取决于「谁恰好在最前」，因此允许注入可重复的判定。
+    var frontmostAppCoversDisplay: ((CGDirectDisplayID?) -> Bool)?
+
     var onEdit: ((UUID) -> Void)?
     var onInspectMockup: ((UUID) -> Void)?
     var onCopy: ((UUID) -> Void)?
@@ -184,6 +188,10 @@ final class ScreenshotShelfManager {
         presentationState.captureCompleted()
         preferredDisplayID = sourceDisplayID
         synchronizeCards()
+        // Re-align suppression before the panel can appear: an empty or disabled
+        // shelf does not track full-screen changes, so the first visible card must
+        // not inherit a stale suppression value.
+        refreshFullScreenSuppression()
         refreshPresentation()
         let presented = presentedImage ?? image
         enqueuePreview(presented, captureID: captureID)

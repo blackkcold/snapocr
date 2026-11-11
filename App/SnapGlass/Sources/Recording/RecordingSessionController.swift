@@ -386,19 +386,32 @@ final class RecordingSessionController {
         guard availableBytes >= RecordingStorage.minimumContinueFreeSpace else {
             return AppLocalization.string("Free space fell below 512 MB; the recording is being finalized.")
         }
-        guard await captureOrchestrator.checkPermissionStatus() else {
-            onOpenPermissionGuide?()
-            return AppLocalization.string("Screen recording permission was lost; the recording is being finalized.")
-        }
-
+        let content: SCShareableContent
         do {
-            let content = try await SCShareableContent.current
-            return Self.sourceChangeReason(for: activeSession.selection, in: content)
+            content = try await SCShareableContent.current
         } catch {
+            // Rare failure path: this poll ends the recording anyway, so fall
+            // back to the existing check to keep both messages (permission lost
+            // vs. source unavailable) and the permission guide exactly as today.
+            guard await captureOrchestrator.checkPermissionStatus() else {
+                onOpenPermissionGuide?()
+                return AppLocalization.string(
+                    "Screen recording permission was lost; the recording is being finalized."
+                )
+            }
             return AppLocalization.string(
                 "Recording sources are no longer available; the recording is being finalized."
             )
         }
+
+        // Steady state: one enumeration answers both permission and source changes.
+        guard await captureOrchestrator.checkPermissionStatus(displayCount: content.displays.count) else {
+            onOpenPermissionGuide?()
+            return AppLocalization.string(
+                "Screen recording permission was lost; the recording is being finalized."
+            )
+        }
+        return Self.sourceChangeReason(for: activeSession.selection, in: content)
     }
 
     private static func sourceChangeReason(

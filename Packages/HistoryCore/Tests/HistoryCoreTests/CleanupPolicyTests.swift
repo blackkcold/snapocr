@@ -122,4 +122,65 @@ struct CleanupPolicyTests {
         // Just verify it doesn't crash — actual value depends on system memory
         _ = limit
     }
+
+    // MARK: - rank-based cache eviction
+
+    @Test func shouldEvictFromCacheRank_mediumEvictsFromTheLimitIncludingFavourites() {
+        #expect(
+            !policy.shouldEvictFromCache(
+                rank: 49, isFavourite: false, pressure: .medium, cacheLimit: 50
+            )
+        )
+        #expect(
+            policy.shouldEvictFromCache(
+                rank: 50, isFavourite: false, pressure: .medium, cacheLimit: 50
+            )
+        )
+        #expect(
+            policy.shouldEvictFromCache(
+                rank: 50, isFavourite: true, pressure: .medium, cacheLimit: 50
+            )
+        )
+    }
+
+    @Test func shouldEvictFromCacheRank_highKeepsFavourites() {
+        #expect(
+            !policy.shouldEvictFromCache(
+                rank: 19, isFavourite: false, pressure: .high, cacheLimit: 20
+            )
+        )
+        #expect(
+            policy.shouldEvictFromCache(
+                rank: 20, isFavourite: false, pressure: .high, cacheLimit: 20
+            )
+        )
+        #expect(
+            !policy.shouldEvictFromCache(
+                rank: 20, isFavourite: true, pressure: .high, cacheLimit: 20
+            )
+        )
+    }
+
+    @Test func shouldEvictFromCacheRank_criticalIgnoresRankAndMembership() {
+        #expect(
+            policy.shouldEvictFromCache(
+                rank: 0, isFavourite: false, pressure: .critical, cacheLimit: 0
+            )
+        )
+        #expect(
+            !policy.shouldEvictFromCache(
+                rank: 999, isFavourite: true, pressure: .critical, cacheLimit: 0
+            )
+        )
+    }
+
+    @Test func shouldEvictFromCacheRank_normalNeverEvicts() {
+        for rank in [0, 10, 10_000] {
+            #expect(
+                !policy.shouldEvictFromCache(
+                    rank: rank, isFavourite: false, pressure: .normal, cacheLimit: 0
+                )
+            )
+        }
+    }
 }

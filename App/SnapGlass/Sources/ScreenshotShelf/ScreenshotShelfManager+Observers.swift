@@ -110,9 +110,15 @@ extension ScreenshotShelfManager {
     }
 
     func refreshPreferences() {
+        let wasEnabled = isEnabled
         let enabled = ScreenshotShelfPreferences.isEnabled(in: defaults)
         if isEnabled && !enabled { presentationState.hide() }
         isEnabled = enabled
+        if !wasEnabled, enabled {
+            // While disabled the shelf did not track full-screen changes; align
+            // suppression before this method does any presentation work.
+            refreshFullScreenSuppression()
+        }
         cardHeight = CGFloat(ScreenshotShelfPreferences.cardHeight(in: defaults))
         imageOpacity = ScreenshotShelfPreferences.imageOpacity(in: defaults)
         let newAnchor = ScreenshotShelfPreferences.anchor(in: defaults)
@@ -152,11 +158,17 @@ extension ScreenshotShelfManager {
     }
 
     func refreshFullScreenSuppression() {
+        // The panel can only exist while the shelf is enabled and non-empty
+        // (`shouldPresentPanel`). Outside that window there is nothing to hide,
+        // so skip the WindowServer window-list enumeration. Both ways back into
+        // the window re-align first: `refreshPreferences` (disabled → enabled)
+        // and `captureCompleted` (0 → 1 card).
+        guard isEnabled, hasItems else { return }
+
         let targetDisplayID = (displayScreen ?? NSScreen.main)
             .flatMap(ScreenshotShelfScreenResolver.displayID(for:))
-        let isCovered = ScreenshotShelfScreenResolver.frontmostAppCoversDisplay(
-            targetDisplayID: targetDisplayID
-        )
+        let isCovered = (frontmostAppCoversDisplay
+            ?? ScreenshotShelfScreenResolver.frontmostAppCoversDisplay)(targetDisplayID)
         guard isCovered != isFullScreenSuppressed else { return }
         isFullScreenSuppressed = isCovered
         if isCovered {

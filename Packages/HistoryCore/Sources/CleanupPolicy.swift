@@ -218,11 +218,12 @@ public struct CleanupPolicy: Sendable {
         }
     }
 
-    /// 获取当前内存压力下的内存缓存条目上限
+    /// 获取指定内存压力下的内存缓存条目上限
     ///
+    /// - Parameter pressure: 本次操作统一测得的压力级别
     /// - Returns: 缓存条目数上限，`nil` 表示无限制
-    public func cacheLimit() -> Int? {
-        switch currentMemoryPressure() {
+    public func cacheLimit(for pressure: MemoryPressureLevel) -> Int? {
+        switch pressure {
         case .normal:
             return nil
         case .medium:
@@ -231,6 +232,42 @@ public struct CleanupPolicy: Sendable {
             return highCacheLimit
         case .critical:
             return 0
+        }
+    }
+
+    /// 获取当前内存压力下的内存缓存条目上限
+    ///
+    /// - Returns: 缓存条目数上限，`nil` 表示无限制
+    public func cacheLimit() -> Int? {
+        cacheLimit(for: currentMemoryPressure())
+    }
+
+    /// 按降序排名判定条目是否应从缓存中清除。
+    ///
+    /// 压力与上限由调用方一次算好，整批驱逐只读一次 `task_info`，
+    /// 且不再为每条目重排序。
+    ///
+    /// - Parameters:
+    ///   - rank: 条目在按 `timestamp` 降序排列后的下标
+    ///   - isFavourite: 条目是否收藏
+    ///   - pressure: 本次操作统一测得的压力级别
+    ///   - cacheLimit: `cacheLimit(for: pressure) ?? 0`
+    /// - Returns: 如果应从缓存移除返回 `true`
+    public func shouldEvictFromCache(
+        rank: Int,
+        isFavourite: Bool,
+        pressure: MemoryPressureLevel,
+        cacheLimit: Int
+    ) -> Bool {
+        switch pressure {
+        case .normal:
+            return false
+        case .critical:
+            return !isFavourite
+        case .high:
+            return rank >= cacheLimit ? !isFavourite : false
+        case .medium:
+            return rank >= cacheLimit
         }
     }
 
@@ -248,26 +285,20 @@ public struct CleanupPolicy: Sendable {
     ) -> Bool {
         let pressure = currentMemoryPressure()
 
-        switch pressure {
-        case .normal:
-            return false
-        case .critical:
+        // `.critical` 不看排名也不看成员关系：`load()` 传入的条目此时还不在
+        // `entries` 里，旧实现同样返回 !isFavourite。
+        if pressure == .critical {
             return !entry.isFavourite
-        case .high:
-            guard let limit = cacheLimit() else { return false }
-            let sorted = entries.sorted { $0.timestamp > $1.timestamp }
-            if let index = sorted.firstIndex(where: { $0.id == entry.id }), index >= limit {
-                return !entry.isFavourite
-            }
-            return false
-        case .medium:
-            guard let limit = cacheLimit() else { return false }
-            let sorted = entries.sorted { $0.timestamp > $1.timestamp }
-            if let index = sorted.firstIndex(where: { $0.id == entry.id }), index >= limit {
-                return true
-            }
-            return false
         }
+        guard let limit = cacheLimit(for: pressure) else { return false }
+        let sorted = entries.sorted { $0.timestamp > $1.timestamp }
+        guard let rank = sorted.firstIndex(where: { $0.id == entry.id }) else { return false }
+        return shouldEvictFromCache(
+            rank: rank,
+            isFavourite: entry.isFavourite,
+            pressure: pressure,
+            cacheLimit: limit
+        )
     }
 
     // MARK: - 工具方法

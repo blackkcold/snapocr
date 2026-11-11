@@ -84,6 +84,22 @@ public struct PermissionService: Sendable {
         return false
     }
 
+    /// 用调用方已经付过一次枚举代价的显示器数量完成权限判定。
+    ///
+    /// `checkScreenCapturePermission()` 把「displays 非空」视为已授权。
+    /// 调用方若已经枚举过 `SCShareableContent`，可复用同一判据而不必再枚举。
+    ///
+    /// - Parameter displayCount: 调用方拿到的 `SCShareableContent.displays.count`
+    /// - Returns: 权限是否已授予
+    public func verifyCaptureAccess(displayCount: Int) async -> Bool {
+        guard displayCount > 0 else {
+            await PermissionCheckCache.shared.clear()
+            return false
+        }
+        await PermissionCheckCache.shared.storeGranted()
+        return true
+    }
+
     /// 请求屏幕录制权限
     ///
     /// macOS 15+ 会触发系统权限弹窗，用户选择后返回结果。
