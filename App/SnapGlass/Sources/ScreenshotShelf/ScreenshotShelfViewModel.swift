@@ -130,6 +130,7 @@ final class ScreenshotShelfViewModel: ObservableObject {
 
     weak var delegate: ScreenshotShelfViewModelDelegate?
     var onPointerInsideChanged: ((Bool) -> Void)?
+    var onPointerMoved: ((CGPoint) -> Void)?
     var onDragPreviewChanged: ((ScreenshotShelfDragPreview?) -> Void)?
 
     init(layout: ScreenshotShelfLayout = .empty) {
@@ -194,5 +195,10 @@ final class ScreenshotShelfViewModel: ObservableObject {
 
     func setPointerLocation(_ location: CGPoint?) {
         pointerLocation = location
+    }
+
+    /// Forwards pointer travel so a dwell expansion can be cancelled when the pointer moves on.
+    func pointerMoved(to location: CGPoint) {
+        onPointerMoved?(location)
     }
 }

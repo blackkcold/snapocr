@@ -83,14 +83,75 @@ extension ScreenshotShelfManager {
     func handlePointerInside(_ inside: Bool) {
         if inside {
             cancelCollapseTask()
-            modeState.pointerEntered()
+            modeState.pointerEntered(
+                at: viewModel.pointerLocation,
+                now: Date(),
+                dwell: Self.dwellDelay
+            )
+            scheduleDwellIfNeeded()
             if phase == .visible, viewModel.layout.mode != modeState.mode {
                 refreshPresentation()
             }
-        } else if collapseToRail, phase == .visible {
-            modeState.pointerExited(now: Date(), delay: Self.collapseDelay)
-            scheduleCollapseIfNeeded()
+        } else {
+            cancelDwellTask()
+            if collapseToRail, phase == .visible {
+                modeState.pointerExited(now: Date(), delay: Self.pointerExitCollapseDelay)
+                scheduleCollapseIfNeeded()
+            }
         }
+    }
+
+    /// Restarts the dwell from the new pointer position when it travels across the handle.
+    ///
+    /// A pointer that arrives and settles still opens the shelf; one that sweeps across leaves
+    /// the window before the dwell can elapse.
+    func handlePointerMoved(_ location: CGPoint) {
+        guard modeState.dwellDeadline != nil else { return }
+        if modeState.pointerMoved(to: location, now: Date(), dwell: Self.dwellDelay) {
+            scheduleDwellIfNeeded()
+        }
+    }
+
+    /// Expands the shelf only after the pointer has rested on the collapsed handle.
+    ///
+    /// The handle is small and sits over other apps' title bars, so expanding on mere entry
+    /// would make it easy to interrupt a click on a browser tab. The dwell makes expansion
+    /// deliberate while still allowing a quick click on the handle to open it immediately.
+    func scheduleDwellIfNeeded() {
+        guard collapseToRail,
+              phase == .visible,
+              modeState.mode == .collapsed,
+              viewModel.isPointerInside,
+              !isMenuTracking,
+              !modeState.isSuppressed,
+              !modeState.isInteractionHeld,
+              let deadline = modeState.dwellDeadline else { return }
+
+        let delay = max(0.01, deadline.timeIntervalSinceNow)
+        dwellTask?.cancel()
+        dwellTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.expandIfPointerDwelled()
+        }
+    }
+
+    func expandIfPointerDwelled() {
+        guard collapseToRail,
+              phase == .visible,
+              modeState.mode == .collapsed,
+              viewModel.isPointerInside,
+              !isMenuTracking,
+              !modeState.isSuppressed,
+              !modeState.isInteractionHeld else { return }
+        guard modeState.expandIfDwellElapsed(now: Date()) else { return }
+        refreshPresentation()
+    }
+
+    func cancelDwellTask() {
+        dwellTask?.cancel()
+        dwellTask = nil
+        modeState.cancelDwell()
     }
 
     func scheduleCollapseIfNeeded() {
@@ -104,8 +165,8 @@ extension ScreenshotShelfManager {
         if let deadline = modeState.idleDeadline {
             delay = max(0.05, deadline.timeIntervalSinceNow)
         } else {
-            modeState.pointerExited(now: Date(), delay: Self.collapseDelay)
-            delay = Self.collapseDelay
+            modeState.pointerExited(now: Date(), delay: Self.pointerExitCollapseDelay)
+            delay = Self.pointerExitCollapseDelay
         }
         collapseTask?.cancel()
         collapseTask = Task { @MainActor [weak self] in
@@ -133,12 +194,17 @@ extension ScreenshotShelfManager {
             try? await Task.sleep(nanoseconds: UInt64(Self.armExpansionDelay * 1_000_000_000))
             guard let self, !Task.isCancelled else { return }
             self.modeState.armExpansion()
-            if self.viewModel.isPointerInside,
-               self.modeState.mode == .collapsed,
-               self.phase == .visible {
-                self.modeState.expand()
-                self.refreshPresentation()
-            }
+            // A pointer that returned during the cooldown must rest for a fresh dwell before the
+            // shelf opens; the cooldown never expands it by itself.
+            guard self.viewModel.isPointerInside,
+                  self.modeState.mode == .collapsed,
+                  self.phase == .visible else { return }
+            self.modeState.pointerEntered(
+                at: self.viewModel.pointerLocation,
+                now: Date(),
+                dwell: Self.dwellDelay
+            )
+            self.scheduleDwellIfNeeded()
         }
     }
 
@@ -149,6 +215,7 @@ extension ScreenshotShelfManager {
 
     func cancelCollapseTasks() {
         cancelCollapseTask()
+        cancelDwellTask()
         armExpansionTask?.cancel()
         armExpansionTask = nil
     }
@@ -162,6 +229,7 @@ extension ScreenshotShelfManager {
             modeState.collapse()
         }
         cancelCollapseTask()
+        cancelDwellTask()
         if mode == .collapsed {
             scheduleArmExpansion()
         }
@@ -170,9 +238,10 @@ extension ScreenshotShelfManager {
 
     func updateModeSuppression() {
         let suppressed = captureSuppressionCount > 0 || isRecordingActive || isFullScreenSuppressed
-        modeState.setSuppressed(suppressed, now: Date(), delay: Self.collapseDelay)
+        modeState.setSuppressed(suppressed, now: Date(), delay: Self.interactionResumeDelay)
         if suppressed {
             cancelCollapseTask()
+            cancelDwellTask()
         }
     }
 
@@ -326,6 +395,9 @@ extension ScreenshotShelfManager {
                     }
                 }
                 self.scheduleCollapseIfNeeded()
+                if self.modeState.mode == .collapsed {
+                    self.scheduleDwellIfNeeded()
+                }
                 self.publishState()
             }
         }
@@ -416,8 +488,7 @@ extension ScreenshotShelfManager {
 
     func offscreenFrame(for frame: CGRect) -> CGRect {
         let offset = frame.height + 12
-        let offsetY = anchor.isTop ? offset : -offset
-        return frame.offsetBy(dx: 0, dy: offsetY)
+        return frame.offsetBy(dx: 0, dy: offset)
     }
 
     func installClickDismissMonitorIfNeeded() {

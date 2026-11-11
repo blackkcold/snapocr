@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-11
+
+### Changed
+- 截图架位置只保留顶部左/中/右三档：移除底部三档，旧的下方设置会回落到顶部居中。
+
+### Fixed
+- 顶部截图架空闲时缩成 56×14 的细把手，指针停留 250ms（位移小于 5pt）才展开、离开面板 0.7s 后收回，减少对浏览器标签栏等窗口顶部的误触与遮挡。
+
 ## [1.4.0] - 2026-11-11
 
 ### Added

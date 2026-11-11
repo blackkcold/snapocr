@@ -31,7 +31,7 @@ struct ScreenshotShelfGeometryTests {
         #expect(cardTopY == railY - (metrics.railZone + metrics.railGap))
     }
 
-    @Test func allSixAnchorsKeepThePanelInsideTheUsableFrame() {
+    @Test func allAnchorsKeepThePanelInsideTheUsableFrame() {
         let visibleFrame = CGRect(x: 100, y: 50, width: 1_000, height: 700)
         for anchor in ScreenshotShelfAnchor.allCases {
             let frame = ScreenshotShelfGeometry.panelFrame(
@@ -69,24 +69,16 @@ struct ScreenshotShelfGeometryTests {
         #expect(trailing.maxX == visibleFrame.maxX)
     }
 
-    @Test func bottomAnchorLeavesRoomForAnAutoHiddenDock() {
-        let visibleFrame = CGRect(x: 0, y: 0, width: 1_000, height: 1_000)
+    @Test func effectiveVisibleFrameReservesOnlyTheAutoHiddenMenuBar() {
+        let screen = CGRect(x: 0, y: 0, width: 1_000, height: 1_000)
         let effective = ScreenshotShelfGeometry.effectiveVisibleFrame(
-            visibleFrame: visibleFrame,
-            screenFrame: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)
-        )
-        let frame = ScreenshotShelfGeometry.panelFrame(
-            visibleFrame: effective,
-            cardWidths: [160],
-            cardHeight: 96,
-            anchor: .bottom,
-            metrics: metrics
+            visibleFrame: screen,
+            screenFrame: screen
         )
 
-        #expect(effective.minY == 70)
+        // The top anchor no longer needs Dock reveal room, only the 28 pt menu-bar reveal.
+        #expect(effective.minY == 0)
         #expect(effective.maxY == 972)
-        #expect(frame.minY == 70)
-        #expect(frame.minY + metrics.shadowInset == 86)
     }
 
     @Test func effectiveVisibleFrameLeavesVisibleBarsAlone() {
@@ -227,7 +219,7 @@ struct ScreenshotShelfGeometryTests {
         )
     }
 
-    @Test func collapsedFrameKeepsTheTopEdgeAndCenterForAllAnchors() {
+    @Test func collapsedHandleStaysInsideTheExpandedFrameForAllAnchors() {
         let visibleFrame = CGRect(x: 100, y: 50, width: 1_000, height: 700)
         for anchor in ScreenshotShelfAnchor.allCases {
             let expanded = ScreenshotShelfGeometry.panelFrame(
@@ -241,8 +233,10 @@ struct ScreenshotShelfGeometryTests {
 
             #expect(collapsed.maxY == expanded.maxY, "\(anchor)")
             #expect(collapsed.midX == expanded.midX, "\(anchor)")
-            #expect(collapsed.width == 80, "\(anchor)")
-            #expect(collapsed.height == 20, "\(anchor)")
+            #expect(collapsed.width == ScreenshotShelfMetrics.collapsedHandleWidth, "\(anchor)")
+            #expect(collapsed.height == ScreenshotShelfMetrics.collapsedHandleHeight, "\(anchor)")
+            #expect(collapsed.minX >= expanded.minX - 0.5, "\(anchor)")
+            #expect(collapsed.maxX <= expanded.maxX + 0.5, "\(anchor)")
             #expect(collapsed.minY >= expanded.minY - 0.5, "\(anchor)")
         }
     }

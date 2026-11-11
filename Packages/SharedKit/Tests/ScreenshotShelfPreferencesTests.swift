@@ -31,10 +31,29 @@ struct ScreenshotShelfPreferencesTests {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        defaults.set(ScreenshotShelfAnchor.bottomTrailing.rawValue, forKey: PreferenceKeys.screenshotShelfAnchor)
-        #expect(ScreenshotShelfPreferences.anchor(in: defaults) == .bottomTrailing)
+        defaults.set(ScreenshotShelfAnchor.topTrailing.rawValue, forKey: PreferenceKeys.screenshotShelfAnchor)
+        #expect(ScreenshotShelfPreferences.anchor(in: defaults) == .topTrailing)
 
         defaults.set("left-ish", forKey: PreferenceKeys.screenshotShelfAnchor)
+        #expect(ScreenshotShelfPreferences.anchor(in: defaults) == .top)
+        #expect(defaults.string(forKey: PreferenceKeys.screenshotShelfAnchor) == ScreenshotShelfAnchor.top.rawValue)
+    }
+
+    @Test func topOnlyAnchorsRemainAvailable() {
+        #expect(ScreenshotShelfAnchor.allCases.count == 3)
+        #expect(
+            Set(ScreenshotShelfAnchor.allCases.map(\.rawValue))
+                == ["topLeading", "top", "topTrailing"]
+        )
+    }
+
+    @Test(arguments: ["bottomLeading", "bottom", "bottomTrailing"])
+    func removedBottomAnchorsMigrateToTop(_ legacyValue: String) throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(legacyValue, forKey: PreferenceKeys.screenshotShelfAnchor)
+
         #expect(ScreenshotShelfPreferences.anchor(in: defaults) == .top)
         #expect(defaults.string(forKey: PreferenceKeys.screenshotShelfAnchor) == ScreenshotShelfAnchor.top.rawValue)
     }

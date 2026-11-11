@@ -78,8 +78,11 @@ final class ScreenshotShelfPanel: NSPanel {
 
 /// Hosting view that owns native pointer tracking and limits mouse handling to the shelf band.
 ///
-/// AppKit cannot forward a click through a transparent window region, but returning `nil` from
-/// `hitTest` at least keeps the transparent shadow margins from swallowing shelf interactions.
+/// The window server routes pointer events to the whole window frame before AppKit sees them, so
+/// transparent pixels still swallow clicks from the app underneath. `hitTest` only decides which
+/// view inside this window handles the event; it cannot pass the click through. Keeping the frame
+/// tight to the drawn content is therefore the only reliable way to reduce pointer interference.
+///
 /// A native `.activeAlways` tracking area is the source of truth for hover because SwiftUI
 /// `onHover` is unreliable on a non-key accessory panel.
 final class ShelfHostingView: NSHostingView<ScreenshotShelfView> {
@@ -111,8 +114,9 @@ final class ShelfHostingView: NSHostingView<ScreenshotShelfView> {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        rootView.model.setPointerInside(true)
+        // Record the location first: the manager uses it as the origin for the dwell tolerance.
         updatePointer(with: event)
+        rootView.model.setPointerInside(true)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -122,7 +126,8 @@ final class ShelfHostingView: NSHostingView<ScreenshotShelfView> {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        updatePointer(with: event)
+        let point = updatePointer(with: event)
+        rootView.model.pointerMoved(to: point)
     }
 
     override func cursorUpdate(with event: NSEvent) {
@@ -140,7 +145,8 @@ final class ShelfHostingView: NSHostingView<ScreenshotShelfView> {
         return super.hitTest(point)
     }
 
-    private func updatePointer(with event: NSEvent) {
+    @discardableResult
+    private func updatePointer(with event: NSEvent) -> CGPoint {
         let point = swiftUIPoint(fromWindow: event.locationInWindow)
         rootView.model.setPointerLocation(point)
 
@@ -152,6 +158,7 @@ final class ShelfHostingView: NSHostingView<ScreenshotShelfView> {
         } else {
             NSCursor.arrow.set()
         }
+        return point
     }
 
     private func swiftUIPoint(from point: NSPoint) -> CGPoint {

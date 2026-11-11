@@ -174,13 +174,10 @@
 "Top Left" = "左上";
 "Top Center" = "上部中央";
 "Top Right" = "右上";
-"Bottom Left" = "左下";
-"Bottom Center" = "下部中央";
-"Bottom Right" = "右下";
 "Screenshot shelf position" = "シェルフの位置";
 "Collapse to rail when idle" = "アイドル時にレールへ折りたたむ";
-"The rail tab stays visible; move the pointer to it to expand again." = "レールタブは表示されたままです。ポインタを近づけると再び展開します。";
-"The shelf hangs below the menu bar by default. Drag thumbnails to reorder." = "シェルフは既定でメニューバーの下に表示されます。サムネイルをドラッグして並べ替えられます。";
+"The rail stays visible; rest the pointer on it for a moment to expand the shelf." = "レールは表示されたままです。ポインタをレール上で少し止めると再び展開します。";
+"The shelf hangs below the menu bar. Drag thumbnails to reorder." = "シェルフはメニューバーの下に表示されます。サムネイルをドラッグして並べ替えられます。";
 "Screenshot Shelf Actions" = "シェルフの操作";
 "Move Left" = "左へ移動";
 "Move Right" = "右へ移動";

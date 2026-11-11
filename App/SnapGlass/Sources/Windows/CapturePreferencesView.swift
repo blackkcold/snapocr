@@ -112,10 +112,10 @@ struct CapturePreferencesView: View {
                 .disabled(!screenshotShelfEnabled)
 
             PreferencesCardCaption(
-                text: "The rail tab stays visible; move the pointer to it to expand again."
+                text: "The rail stays visible; rest the pointer on it for a moment to expand the shelf."
             )
             PreferencesCardCaption(
-                text: "The shelf hangs below the menu bar by default. Drag thumbnails to reorder."
+                text: "The shelf hangs below the menu bar. Drag thumbnails to reorder."
             )
             PreferencesCardCaption(
                 text: "Shelf items are kept only for the current session unless saved to History."

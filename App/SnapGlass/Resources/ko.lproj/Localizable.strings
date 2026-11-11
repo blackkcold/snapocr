@@ -174,13 +174,10 @@
 "Top Left" = "왼쪽 위";
 "Top Center" = "위쪽 가운데";
 "Top Right" = "오른쪽 위";
-"Bottom Left" = "왼쪽 아래";
-"Bottom Center" = "아래쪽 가운데";
-"Bottom Right" = "오른쪽 아래";
 "Screenshot shelf position" = "보관함 위치";
 "Collapse to rail when idle" = "유휴 시 레일로 접기";
-"The rail tab stays visible; move the pointer to it to expand again." = "레일 탭은 계속 표시됩니다. 포인터를 가져가면 다시 펼쳐집니다.";
-"The shelf hangs below the menu bar by default. Drag thumbnails to reorder." = "보관함은 기본적으로 메뉴 막대 아래에 표시됩니다. 썸네일을 드래그하여 순서를 바꿀 수 있습니다.";
+"The rail stays visible; rest the pointer on it for a moment to expand the shelf." = "레일은 계속 표시됩니다. 포인터를 레일에 잠시 두면 다시 펼쳐집니다.";
+"The shelf hangs below the menu bar. Drag thumbnails to reorder." = "보관함은 메뉴 막대 아래에 표시됩니다. 썸네일을 드래그하여 순서를 바꿀 수 있습니다.";
 "Screenshot Shelf Actions" = "보관함 동작";
 "Move Left" = "왼쪽으로 이동";
 "Move Right" = "오른쪽으로 이동";
