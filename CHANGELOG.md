@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- 截图架拖动改为原位低透明虚影占位：拖动全程不移动兄弟卡片、不计算插入目标、不排序；松手、取消或拖出后移回时恢复原顺序。拖到外部应用仍复制真实文件并保留架内卡片。
+
 ## [1.4.2] - 2026-11-11
 
 ### Added
