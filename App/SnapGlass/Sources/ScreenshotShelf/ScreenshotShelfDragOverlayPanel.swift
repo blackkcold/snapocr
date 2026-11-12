@@ -134,7 +134,7 @@ final class ScreenshotShelfDragOverlayController {
 
     func cancel() {
         if viewModel.dragPreview != nil {
-            viewModel.endDrag()
+            viewModel.cancelLocalDrag()
             NSCursor.arrow.set()
         }
         hide()
@@ -149,7 +149,7 @@ final class ScreenshotShelfDragOverlayController {
               let shelfPanel = panelProvider(),
               let card = viewModel.layout.cards.first(where: { $0.captureID == preview.cardID }) else {
             hide()
-            viewModel.endDrag()
+            viewModel.cancelLocalDrag()
             return
         }
 
