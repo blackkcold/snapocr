@@ -126,7 +126,18 @@ final class ScreenshotShelfViewModel: ObservableObject {
     @Published private(set) var isPointerInside = false
     @Published private(set) var pointerLocation: CGPoint?
     @Published private(set) var dragPreview: ScreenshotShelfDragPreview?
+    /// Card identity that owns the source ghost while the system drag is in flight.
+    @Published private(set) var nativeDragCardID: UUID?
     @Published private(set) var focusedCaptureID: UUID?
+
+    /// The source card that must stay hidden behind the ghost for either drag phase.
+    var ghostCardID: UUID? {
+        dragPreview?.cardID ?? nativeDragCardID
+    }
+
+    /// A local drag cancelled by the overlay must not restart from the still-live
+    /// SwiftUI gesture. The latch is cleared by the gesture's own end or a fresh mouse-down.
+    private(set) var isLocalDragCancelled = false
 
     weak var delegate: ScreenshotShelfViewModelDelegate?
     var onPointerInsideChanged: ((Bool) -> Void)?
@@ -159,6 +170,7 @@ final class ScreenshotShelfViewModel: ObservableObject {
 #endif
 
     func beginDrag(cardID: UUID, startIndex: Int, startX: CGFloat, width: CGFloat) {
+        guard dragPreview == nil, nativeDragCardID == nil, !isLocalDragCancelled else { return }
         delegate?.screenshotShelfViewModel(self, perform: .beginInteraction)
         let preview = ScreenshotShelfDragPreview(
             cardID: cardID,
@@ -178,7 +190,42 @@ final class ScreenshotShelfViewModel: ObservableObject {
         onDragPreviewChanged?(preview)
     }
 
+    /// Hands the active local drag to a system dragging session without dropping the
+    /// source ghost. The interaction lock started by `beginDrag` stays held.
+    @discardableResult
+    func handOffDragToNative(cardID: UUID) -> Bool {
+        guard dragPreview?.cardID == cardID, nativeDragCardID == nil else { return false }
+        nativeDragCardID = cardID
+        dragPreview = nil
+        onDragPreviewChanged?(nil)
+        return true
+    }
+
+    /// Ends the native phase exactly once. The real card becomes visible again in
+    /// its current layout slot; the order is never changed by a drag.
+    func endNativeDrag() {
+        guard nativeDragCardID != nil else { return }
+        nativeDragCardID = nil
+        delegate?.screenshotShelfViewModel(self, perform: .endInteraction)
+    }
+
+    /// Cancels a local drag from outside the gesture (app resign, space change,
+    /// missing card) and prevents the same gesture from starting it again.
+    func cancelLocalDrag() {
+        isLocalDragCancelled = true
+        guard dragPreview != nil else { return }
+        dragPreview = nil
+        onDragPreviewChanged?(nil)
+        delegate?.screenshotShelfViewModel(self, perform: .endInteraction)
+    }
+
+    /// Called on a fresh mouse-down so a cancelled gesture cannot block the next drag.
+    func resetLocalDragCancellation() {
+        isLocalDragCancelled = false
+    }
+
     func endDrag() {
+        isLocalDragCancelled = false
         guard dragPreview != nil else { return }
         dragPreview = nil
         onDragPreviewChanged?(nil)
