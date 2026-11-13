@@ -4,7 +4,7 @@ import ImageIO
 
 /// The outcome of inspecting one pointer event while a shelf card is being dragged.
 enum ScreenshotShelfDragOutDecision: Equatable {
-    /// Keep the event flowing to the SwiftUI reorder gesture.
+    /// Keep the event flowing to the SwiftUI drag gesture.
     case passThrough
     /// The pointer left the shelf but the plaintext file is not ready yet.
     case prepareFile
@@ -21,12 +21,25 @@ enum ScreenshotShelfDragOutDecision: Equatable {
     }
 }
 
+/// Pure geometry shared by the native hand-off and its tests.
+enum ScreenshotShelfNativeDragGeometry {
+    /// Resolves the card size from the current layout, not the drag-start preview.
+    static func cardSize(at index: Int, layout: ScreenshotShelfLayout) -> CGSize? {
+        guard layout.cards.indices.contains(index),
+              layout.cardWidths.indices.contains(index) else { return nil }
+        let width = layout.cardWidths[index]
+        let height = layout.cardHeight
+        guard width.isFinite, width > 0, height.isFinite, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+}
+
 /// Carries the drag to the system and reports when it ends.
 @MainActor
 final class ScreenshotShelfDraggingSource: NSObject, NSDraggingSource {
-    private let onEnd: () -> Void
+    private let onEnd: (NSDraggingSession, NSDragOperation) -> Void
 
-    init(onEnd: @escaping () -> Void) {
+    init(onEnd: @escaping (NSDraggingSession, NSDragOperation) -> Void) {
         self.onEnd = onEnd
         super.init()
     }
@@ -43,18 +56,19 @@ final class ScreenshotShelfDraggingSource: NSObject, NSDraggingSource {
         endedAt screenPoint: NSPoint,
         operation: NSDragOperation
     ) {
-        onEnd()
+        onEnd(session, operation)
     }
 }
 
-/// Turns the shelf's in-panel reorder gesture into a system file drag once the
-/// pointer leaves the panel.
+/// Turns the shelf's local drag gesture into a system file drag once the pointer
+/// leaves the panel.
 ///
 /// The controller is driven by `ScreenshotShelfPanel.sendEvent(_:)`: a window
 /// keeps receiving `leftMouseDragged` after mouse-down even when the pointer
 /// leaves its bounds, so the real `NSEvent` used to start the native session is
-/// the same event the reorder gesture would have consumed. The SwiftUI gesture
-/// stays untouched while the pointer is inside the shelf.
+/// the same event the local gesture would have consumed. Once the system session
+/// starts, the card keeps a source-slot ghost until the standard source callback
+/// says the drag has ended.
 @MainActor
 final class ScreenshotShelfDragOutController {
     private weak var panel: ScreenshotShelfPanel?
@@ -67,6 +81,7 @@ final class ScreenshotShelfDragOutController {
     private var preparingCaptureID: UUID?
     private var preparationStartedAt: Date?
     private var sessionSource: ScreenshotShelfDraggingSource?
+    private var sessionGeneration: UInt64 = 0
     private var lastPointerLocal: CGPoint?
 
     /// True while a native file-drag session started from the shelf is in flight.
@@ -92,22 +107,19 @@ final class ScreenshotShelfDragOutController {
         self.panel = panel
     }
 
+    /// A fresh mouse-down is the only reset point for the local-cancel latch; no
+    /// global event monitor or timer is involved.
+    func prepareForNewPointerDown() {
+        model.resetLocalDragCancellation()
+    }
+
     // MARK: - Event handling
 
     /// Handles one window event. Returns `true` when the event was consumed.
     func handle(_ event: NSEvent) -> Bool {
         guard let panel, event.window === panel else { return false }
-
-        switch event.type {
-        case .leftMouseDragged:
-            return handleDrag(event, panel: panel)
-        case .leftMouseUp:
-            guard handoffActive else { return false }
-            handoffActive = false
-            return true
-        default:
-            return false
-        }
+        guard event.type == .leftMouseDragged else { return false }
+        return handleDrag(event, panel: panel)
     }
 
     private func handleDrag(_ event: NSEvent, panel: ScreenshotShelfPanel) -> Bool {
@@ -194,16 +206,23 @@ final class ScreenshotShelfDragOutController {
         panel: ScreenshotShelfPanel,
         pointerLocal: CGPoint
     ) {
-        guard let view = panel.contentView else { return }
+        guard let view = panel.contentView,
+              let index = model.layout.cards.firstIndex(where: { $0.captureID == preview.cardID }),
+              model.layout.cardWidths.indices.contains(index) else {
+            rollbackLocalHandoff()
+            return
+        }
 
-        handoffActive = true
-        preparingCaptureID = nil
-        preparationStartedAt = nil
-
-        let cardSize = CGSize(width: preview.width, height: model.layout.cardHeight)
-        let thumbnail = model.layout.cards
-            .first(where: { $0.captureID == preview.cardID })?
-            .decodedThumbnail
+        guard let cardSize = ScreenshotShelfNativeDragGeometry.cardSize(
+            at: index,
+            layout: model.layout
+        ) else {
+            rollbackLocalHandoff()
+            return
+        }
+        let cardWidth = cardSize.width
+        let cardHeight = cardSize.height
+        let thumbnail = model.layout.cards[index].decodedThumbnail
         let dragImage = ScreenshotShelfDragImageRenderer.image(
             thumbnail: thumbnail,
             cardSize: cardSize
@@ -211,52 +230,111 @@ final class ScreenshotShelfDragOutController {
 
         let item = NSDraggingItem(pasteboardWriter: artifact.url as NSURL)
         item.setDraggingFrame(
-            draggingFrame(preview: preview, pointerLocal: pointerLocal, in: view),
+            draggingFrame(
+                preview: preview,
+                cardWidth: cardWidth,
+                cardHeight: cardHeight,
+                pointerLocal: pointerLocal,
+                in: view
+            ),
             contents: dragImage
         )
 
-        let source = ScreenshotShelfDraggingSource { [weak self] in
-            self?.finishSession()
+        // A failed hand-off must not leave a native session running against a
+        // local preview. When another native session already owns the state,
+        // leave it alone; otherwise end the local drag cleanly.
+        guard model.handOffDragToNative(cardID: preview.cardID) else {
+            rollbackLocalHandoff()
+            return
+        }
+
+        handoffActive = true
+        preparingCaptureID = nil
+        preparationStartedAt = nil
+
+        // Capture the identity before starting the session. A synchronous
+        // ended callback is still accepted; a late callback from an older
+        // session is ignored because its generation no longer matches.
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
+        let source = ScreenshotShelfDraggingSource { [weak self] session, operation in
+            self?.finishSession(
+                session: session,
+                operation: operation,
+                generation: generation
+            )
         }
         sessionSource = source
 
-        // Hide the SwiftUI drag preview first so the native drag image appears in
-        // the same place instead of both being visible for a frame.
-        model.endDrag()
-        model.perform(.beginInteraction)
         NSCursor.arrow.set()
         _ = view.beginDraggingSession(with: [item], event: event, source: source)
     }
 
-    private func finishSession() {
+    private func rollbackLocalHandoff() {
+        if model.nativeDragCardID == nil {
+            // Cancel, not end: the mouse may still be down and the same
+            // SwiftUI gesture must not start a second local drag.
+            model.cancelLocalDrag()
+        }
+        NSCursor.arrow.set()
+    }
+
+    private func finishSession(
+        session: NSDraggingSession,
+        operation: NSDragOperation,
+        generation: UInt64
+    ) {
+        guard handoffActive, generation == sessionGeneration else { return }
         handoffActive = false
+
+        // The system defaults to sliding the drag image back to the hand-off
+        // point on a cancelled or failed drag. Disable that slide-back; the
+        // source card reappears in its unchanged slot when the ghost clears.
+        if operation.isEmpty {
+            session.animatesToStartingPositionsOnCancelOrFail = false
+        }
+
         sessionSource = nil
         lastPointerLocal = nil
-        model.perform(.endInteraction)
+        model.endNativeDrag()
+        model.endDrag()
         NSCursor.arrow.set()
     }
 
     private func draggingFrame(
         preview: ScreenshotShelfDragPreview,
+        cardWidth: CGFloat,
+        cardHeight: CGFloat,
         pointerLocal: CGPoint,
         in view: NSView
     ) -> CGRect {
         let padding = ScreenshotShelfDragImageRenderer.padding
+        // The image must replace the local overlay under the pointer. That
+        // origin is the frozen drag start plus the pointer delta; current
+        // layout only supplies the card's current size. Using the current
+        // slot's startX here would make the image jump when a new screenshot
+        // changes the layout mid-drag.
         let cardOrigin = CGPoint(
             x: preview.startX + preview.translation.width,
             y: model.layout.cardTopOffset + preview.translation.height
         )
         // `lastPointerLocal` and this card origin come from the same previous
-        // event, so their difference is the exact grab point inside the card.
-        let grabOffset: CGPoint
+        // event, so their difference is the grab point inside the card.
+        let rawGrabOffset: CGPoint
         if let lastPointerLocal {
-            grabOffset = CGPoint(
+            rawGrabOffset = CGPoint(
                 x: lastPointerLocal.x - cardOrigin.x,
                 y: lastPointerLocal.y - cardOrigin.y
             )
         } else {
-            grabOffset = CGPoint(x: preview.width / 2, y: model.layout.cardHeight / 2)
+            rawGrabOffset = CGPoint(x: cardWidth / 2, y: cardHeight / 2)
         }
+        // A width change can shrink the card under the original grab point.
+        // Clamp so the image stays under the pointer without jumping.
+        let grabOffset = CGPoint(
+            x: min(max(rawGrabOffset.x, 0), cardWidth),
+            y: min(max(rawGrabOffset.y, 0), cardHeight)
+        )
 
         let origin = CGPoint(
             x: pointerLocal.x - grabOffset.x,
@@ -265,8 +343,8 @@ final class ScreenshotShelfDragOutController {
         let imageRect = CGRect(
             x: origin.x - padding,
             y: origin.y - padding,
-            width: preview.width + padding * 2,
-            height: model.layout.cardHeight + padding * 2
+            width: cardWidth + padding * 2,
+            height: cardHeight + padding * 2
         )
         return viewRect(fromTopLeft: imageRect, in: view)
     }

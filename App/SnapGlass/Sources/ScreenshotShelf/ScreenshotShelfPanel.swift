@@ -37,11 +37,14 @@ final class ScreenshotShelfPanel: NSPanel {
     /// Routes pointer events through the drag-out controller before SwiftUI sees them.
     ///
     /// A window keeps receiving `leftMouseDragged` after mouse-down even when the
-    /// pointer leaves its bounds, which is what lets an in-shelf reorder become a
+    /// pointer leaves its bounds, which is what lets a local shelf drag become a
     /// system file drag mid-gesture.
     override func sendEvent(_ event: NSEvent) {
         if isKeyboardMode, event.type == .keyDown, keyHandler?(event) == true {
             return
+        }
+        if event.type == .leftMouseDown {
+            dragOutController?.prepareForNewPointerDown()
         }
         if dragOutController?.handle(event) == true {
             return

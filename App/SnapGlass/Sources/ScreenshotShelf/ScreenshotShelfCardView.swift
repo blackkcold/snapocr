@@ -20,10 +20,41 @@ struct ScreenshotShelfCardView: View {
     let onMoveRight: () -> Void
     var showsHanger: Bool = true
     var railEmphasis: Bool = false
+    /// Source-ghost cards keep the outer drag gesture but must not expose tap,
+    /// context menu, or accessibility actions.
+    var isInteractive: Bool = true
 
     private var isLifted: Bool { isHovered && !isDragging }
 
+    @ViewBuilder
     var body: some View {
+        if isInteractive {
+            interactiveCard
+        } else {
+            cardSurface
+        }
+    }
+
+    private var interactiveCard: some View {
+        cardSurface
+            .onTapGesture { onOpen() }
+            .contextMenu { contextMenu }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("Screenshot"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: Text("Open Screenshot")) { onOpen() }
+            .accessibilityAction(named: Text("Copy Screenshot")) { onCopy() }
+            .accessibilityAction(named: Text("Pin Screenshot")) { onPin() }
+            .accessibilityAction(named: Text("Move Left")) {
+                if canMoveLeft { onMoveLeft() }
+            }
+            .accessibilityAction(named: Text("Move Right")) {
+                if canMoveRight { onMoveRight() }
+            }
+            .accessibilityAction(named: Text("Remove from Shelf")) { onRemove() }
+    }
+
+    private var cardSurface: some View {
         ZStack(alignment: .top) {
             cardContent
                 .rotationEffect(
@@ -52,21 +83,6 @@ struct ScreenshotShelfCardView: View {
             y: isDragging ? 8 : (isLifted ? ScreenshotShelfMetrics.hoverShadowYOffset : 2)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .onTapGesture { onOpen() }
-        .contextMenu { contextMenu }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Screenshot"))
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: Text("Open Screenshot")) { onOpen() }
-        .accessibilityAction(named: Text("Copy Screenshot")) { onCopy() }
-        .accessibilityAction(named: Text("Pin Screenshot")) { onPin() }
-        .accessibilityAction(named: Text("Move Left")) {
-            if canMoveLeft { onMoveLeft() }
-        }
-        .accessibilityAction(named: Text("Move Right")) {
-            if canMoveRight { onMoveRight() }
-        }
-        .accessibilityAction(named: Text("Remove from Shelf")) { onRemove() }
     }
 
     private var cardContent: some View {

@@ -12,7 +12,7 @@ struct ScreenshotShelfDragOutDecisionTests {
         )
     }
 
-    @Test func insideTheShelfTheEventStillReorders() {
+    @Test func insideTheShelfTheEventStaysLocal() {
         #expect(
             ScreenshotShelfDragOutDecision.decide(
                 previewExists: true,

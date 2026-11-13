@@ -7,8 +7,6 @@ import SwiftUI
 struct ScreenshotShelfView: View {
     @ObservedObject var model: ScreenshotShelfViewModel
 
-    @State private var dropTargetIndex: Int?
-
     private static let coordinateSpaceName = "screenshot-shelf"
 
     private var layout: ScreenshotShelfLayout { model.layout }
@@ -28,45 +26,35 @@ struct ScreenshotShelfView: View {
         .environment(\.locale, layout.locale)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Recent Screenshots"))
-        .onChange(of: model.dragPreview) { preview in
-            if preview == nil {
-                dropTargetIndex = nil
-            }
-        }
     }
 
     private var expandedView: some View {
         ZStack(alignment: .topLeading) {
             rail
             cardsRow
-            if model.dragPreview != nil {
-                reorderZoneOverlay
-            }
+            sourceGhost
             endMenu
         }
-        .animation(.easeOut(duration: 0.15), value: model.dragPreview != nil)
     }
 
-    /// Dashed outline that marks the shelf interior as reorder-only while a card
-    /// is being dragged. It fades out the moment the drag becomes a file drag.
-    private var reorderZoneOverlay: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(
-                Color.secondary.opacity(0.55),
-                style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+    private var ghostCardID: UUID? {
+        model.ghostCardID
+    }
+
+    @ViewBuilder
+    private var sourceGhost: some View {
+        if let ghostCardID,
+           let index = layout.cards.firstIndex(where: { $0.captureID == ghostCardID }),
+           index < layout.cardWidths.count {
+            ScreenshotShelfSourceGhostView(
+                card: layout.cards[index],
+                cardWidth: layout.cardWidths[index],
+                cardHeight: layout.cardHeight
             )
-            .frame(width: reorderZoneWidth, height: layout.cardHeight + 12)
-            .offset(x: metrics.shadowInset - 6, y: layout.cardTopOffset - 6)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-            .transition(.opacity)
-    }
-
-    private var reorderZoneWidth: CGFloat {
-        guard !layout.cardWidths.isEmpty else { return 0 }
-        // Wrap the whole shelf content, including the end menu, so the outline
-        // reads as "this surface is reorder-only" rather than cutting through it.
-        return layout.visualWidth + 12
+            .frame(width: layout.cardWidths[index], height: layout.cardHeight)
+            .offset(x: startX(for: index), y: layout.cardTopOffset)
+            .zIndex(100)
+        }
     }
 
     /// The collapsed state is a compact handle that stays visible and expands once the pointer
@@ -161,12 +149,11 @@ struct ScreenshotShelfView: View {
                     cardView(
                         card,
                         index: index,
-                        isHovered: hoveredCardID == card.captureID
+                        isHovered: ghostCardID == nil && hoveredCardID == card.captureID
                     )
                     .frame(width: layout.cardWidths[index], height: layout.cardHeight)
-                    .offset(x: siblingOffset(for: index))
-                    .opacity(model.dragPreview?.cardID == card.captureID ? 0 : 1)
-                    .accessibilityHidden(model.dragPreview?.cardID == card.captureID)
+                    .opacity(ghostCardID == card.captureID ? 0 : 1)
+                    .accessibilityHidden(ghostCardID == card.captureID)
                     .zIndex(Double(index))
                     .transition(
                         .asymmetric(
@@ -205,7 +192,7 @@ struct ScreenshotShelfView: View {
             cardHeight: layout.cardHeight,
             imageOpacity: layout.imageOpacity,
             isHovered: isHovered,
-            isDragging: model.dragPreview?.cardID == card.captureID,
+            isDragging: ghostCardID == card.captureID,
             canMoveLeft: index > 0,
             canMoveRight: index < layout.cards.count - 1,
             onOpen: { model.perform(.edit(card.captureID)) },
@@ -216,7 +203,8 @@ struct ScreenshotShelfView: View {
             onMoveRight: {
                 model.perform(.move(card.captureID, min(layout.cards.count - 1, index + 1)))
             },
-            railEmphasis: model.isPointerInside
+            railEmphasis: model.isPointerInside,
+            isInteractive: ghostCardID != card.captureID
         )
         .overlay {
             if model.focusedCaptureID == card.captureID {
@@ -279,6 +267,10 @@ struct ScreenshotShelfView: View {
     private func dragGesture(for card: ScreenshotShelfCard, index: Int) -> some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.coordinateSpaceName))
             .onChanged { value in
+                // A native hand-off clears dragPreview but keeps the interaction
+                // locked; a cancelled local drag must also stay cancelled until
+                // the gesture ends or a fresh mouse-down resets the latch.
+                guard model.nativeDragCardID == nil, !model.isLocalDragCancelled else { return }
                 if model.dragPreview == nil {
                     NSCursor.closedHand.set()
                     model.beginDrag(
@@ -287,50 +279,20 @@ struct ScreenshotShelfView: View {
                         startX: startX(for: index),
                         width: layout.cardWidths[index]
                     )
-                    dropTargetIndex = index
                 }
                 guard var drag = model.dragPreview else { return }
                 drag.translation = value.translation
                 let predicted = value.predictedEndTranslation.width - value.translation.width
                 drag.rotation = min(max(predicted * 0.015, -4), 4)
                 model.updateDrag(drag)
-
-                let centerX = drag.startX + value.translation.width + drag.width / 2
-                let target = targetIndex(for: centerX, startIndex: drag.startIndex)
-                if target != dropTargetIndex {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                        dropTargetIndex = target
-                    }
-                }
             }
-            .onEnded { value in
-                guard let drag = model.dragPreview else { return }
-                let target = dropTargetIndex ?? drag.startIndex
-                let inside = CGRect(origin: .zero, size: layout.panelSize).contains(value.location)
-                if inside {
-                    model.perform(.move(card.captureID, target))
-                }
+            .onEnded { _ in
+                // The native source callback owns cleanup once a system drag
+                // session started. A local release always keeps the order.
+                guard model.nativeDragCardID == nil else { return }
                 NSCursor.arrow.set()
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-                    model.endDrag()
-                    dropTargetIndex = nil
-                }
+                model.endDrag()
             }
-    }
-
-    private func siblingOffset(for index: Int) -> CGFloat {
-        guard let drag = model.dragPreview, let target = dropTargetIndex else { return 0 }
-        let shift = drag.width + metrics.cardSpacing
-        if target > drag.startIndex {
-            if index > drag.startIndex, index <= target {
-                return -shift
-            }
-        } else if target < drag.startIndex {
-            if index >= target, index < drag.startIndex {
-                return shift
-            }
-        }
-        return 0
     }
 
     private func startX(for index: Int) -> CGFloat {
@@ -340,26 +302,43 @@ struct ScreenshotShelfView: View {
             + precedingWidth
             + metrics.cardSpacing * CGFloat(index)
     }
+}
 
-    private func midpoint(for index: Int) -> CGFloat {
-        guard index >= 0, index < layout.cardWidths.count else { return 0 }
-        return startX(for: index) + layout.cardWidths[index] / 2
-    }
+/// Low-opacity source-slot placeholder shown for the whole drag session.
+///
+/// It deliberately has no gesture, menu, or hit testing: the dragged card is the
+/// system/local drag image, and this view only marks where it came from.
+private struct ScreenshotShelfSourceGhostView: View {
+    let card: ScreenshotShelfCard
+    let cardWidth: CGFloat
+    let cardHeight: CGFloat
 
-    private func targetIndex(for centerX: CGFloat, startIndex: Int) -> Int {
-        guard !layout.cardWidths.isEmpty else { return 0 }
-        var target = min(max(startIndex, 0), layout.cardWidths.count - 1)
-        let originMidpoint = midpoint(for: target)
-        if centerX > originMidpoint {
-            while target + 1 < layout.cardWidths.count,
-                  centerX > midpoint(for: target + 1) {
-                target += 1
-            }
-        } else if centerX < originMidpoint {
-            while target > 0, centerX < midpoint(for: target - 1) {
-                target -= 1
+    private let cornerRadius: CGFloat = 8
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(.quaternary)
+
+            if let image = card.decodedThumbnail {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: cardWidth, height: cardHeight)
+                    .clipped()
             }
         }
-        return target
+        .frame(width: cardWidth, height: cardHeight)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .opacity(0.30)
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    Color.secondary.opacity(0.55),
+                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                )
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
