@@ -857,3 +857,6 @@
 "Trim end" = "Trim end";
 "Missing" = "Missing";
 "Locate" = "Locate";
+"A selected source is unavailable. The original recording was kept; use Locate or choose another segment." = "A selected source is unavailable. The original recording was kept; use Locate or choose another segment.";
+"The destination is unavailable. The original recording was kept; choose an existing folder." = "The destination is unavailable. The original recording was kept; choose an existing folder.";
+"Video passthrough is unavailable for this trim. The original recording was kept; adjust the trim or choose audio-only." = "Video passthrough is unavailable for this trim. The original recording was kept; adjust the trim or choose audio-only.";

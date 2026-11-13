@@ -857,3 +857,6 @@
 "Trim end" = "裁剪终点";
 "Missing" = "缺失";
 "Locate" = "定位";
+"A selected source is unavailable. The original recording was kept; use Locate or choose another segment." = "所选源不可用。原始录音已保留；请使用“定位”，或选择其他片段。";
+"The destination is unavailable. The original recording was kept; choose an existing folder." = "目标位置不可用。原始录音已保留；请选择已有文件夹。";
+"Video passthrough is unavailable for this trim. The original recording was kept; adjust the trim or choose audio-only." = "此裁剪无法使用视频直通。原始录音已保留；请调整裁剪范围或选择仅音频。";

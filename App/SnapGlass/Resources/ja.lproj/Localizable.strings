@@ -857,3 +857,6 @@
 "Trim end" = "終了位置";
 "Missing" = "欠落";
 "Locate" = "表示";
+"A selected source is unavailable. The original recording was kept; use Locate or choose another segment." = "選択したソースを利用できません。元の録音は保持されています。「表示」を使うか、別のセグメントを選択してください。";
+"The destination is unavailable. The original recording was kept; choose an existing folder." = "保存先を利用できません。元の録音は保持されています。既存のフォルダを選択してください。";
+"Video passthrough is unavailable for this trim. The original recording was kept; adjust the trim or choose audio-only." = "このトリミングでは動画パススルーを利用できません。元の録音は保持されています。範囲を調整するか音声のみを選択してください。";

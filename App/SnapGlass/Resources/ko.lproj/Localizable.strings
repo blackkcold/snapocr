@@ -857,3 +857,6 @@
 "Trim end" = "끝점 자르기";
 "Missing" = "누락됨";
 "Locate" = "찾기";
+"A selected source is unavailable. The original recording was kept; use Locate or choose another segment." = "선택한 소스를 사용할 수 없습니다. 원본 녹화는 보존되었습니다. 찾기를 사용하거나 다른 구간을 선택하세요.";
+"The destination is unavailable. The original recording was kept; choose an existing folder." = "대상 위치를 사용할 수 없습니다. 원본 녹화는 보존되었습니다. 기존 폴더를 선택하세요.";
+"Video passthrough is unavailable for this trim. The original recording was kept; adjust the trim or choose audio-only." = "이 트림에는 비디오 패스스루를 사용할 수 없습니다. 원본 녹화는 보존되었습니다. 트림을 조정하거나 오디오만 선택하세요.";
