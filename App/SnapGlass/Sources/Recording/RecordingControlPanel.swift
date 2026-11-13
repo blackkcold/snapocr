@@ -9,6 +9,9 @@ enum RecordingControlPanelState: Equatable {
     case starting
     case recording(startedAt: Date)
     case saving(fileName: String?)
+    case audioRecording(RecordingHUDPresentation, expanded: Bool, silenceWarning: Bool)
+    case audioFinalizing(savedSegments: Int, previewReady: Bool, previewPlaying: Bool)
+    case audioFinished(savedSegments: Int, outputURL: URL?, previewReady: Bool, previewPlaying: Bool)
     case failure(RecordingControlPanelFailure)
     case notice(String)
 }
@@ -29,6 +32,12 @@ struct RecordingControlPanelActions {
     var onDismiss: () -> Void
     var onHideWhileSaving: () -> Void
     var onCornerChange: (RecordingHUDCorner) -> Void
+    var onToggleAudioDetails: () -> Void
+    var onPreview: () -> Void
+    var onStopPreview: () -> Void
+    var onOpenLatest: (URL?) -> Void
+    var onOpenRecordings: () -> Void
+    var onJoinExport: () -> Void
 }
 
 /// Observable state shared with the hosted SwiftUI view.
@@ -53,6 +62,7 @@ private struct RecordingControlPanelView: View {
     let actions: RecordingControlPanelActions
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var hovered = false
     @State private var pulsing = false
 
@@ -63,6 +73,15 @@ private struct RecordingControlPanelView: View {
         case .saving: RecordingHUDMetrics.savingSize
         case .failure: RecordingHUDMetrics.failureSize
         case .notice: RecordingHUDMetrics.noticeSize
+        case .audioRecording, .audioFinalizing, .audioFinished:
+            CGSize(width: 1, height: RecordingHUDMetrics.audioRecordingHeight)
+        }
+    }
+
+    private var isAudioState: Bool {
+        switch model.state {
+        case .audioRecording, .audioFinalizing, .audioFinished: true
+        case .countdown, .starting, .recording, .saving, .failure, .notice: false
         }
     }
 
@@ -76,7 +95,8 @@ private struct RecordingControlPanelView: View {
             content
         }
         .padding(.horizontal, 12)
-        .frame(width: size.width, height: size.height)
+        .frame(width: isAudioState ? nil : size.width, height: size.height)
+        .fixedSize(horizontal: isAudioState, vertical: false)
         .glassSurface(
             Capsule(style: .continuous),
             elevation: .floating,
@@ -87,6 +107,7 @@ private struct RecordingControlPanelView: View {
         .onHover { hovered = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: DS.Motion.fast), value: hovered)
         .accessibilityElement(children: .contain)
+        .environment(\.locale, AppLocalization.locale())
     }
 
     @ViewBuilder
@@ -103,6 +124,17 @@ private struct RecordingControlPanelView: View {
             recording(startedAt: startedAt)
         case let .saving(fileName):
             saving(fileName: fileName)
+        case let .audioRecording(presentation, expanded, silenceWarning):
+            audioRecording(presentation, expanded: expanded, silenceWarning: silenceWarning)
+        case let .audioFinalizing(savedSegments, previewReady, previewPlaying):
+            audioFinalizing(savedSegments: savedSegments, previewReady: previewReady, previewPlaying: previewPlaying)
+        case let .audioFinished(savedSegments, outputURL, previewReady, previewPlaying):
+            audioFinished(
+                savedSegments: savedSegments,
+                outputURL: outputURL,
+                previewReady: previewReady,
+                previewPlaying: previewPlaying
+            )
         case let .failure(failure):
             failureView(failure)
         case let .notice(text):
@@ -204,6 +236,197 @@ private struct RecordingControlPanelView: View {
         .accessibilityLabel(Text("Close"))
     }
 
+    private func audioRecording(
+        _ source: RecordingHUDPresentation,
+        expanded: Bool,
+        silenceWarning: Bool
+    ) -> some View {
+        let presentation = source.resolvingAccessibility(
+            reduceMotion: reduceMotion,
+            reduceTransparency: reduceTransparency
+        )
+        let segmentNumber = presentation.segmentIndex + 1
+        let elapsed = RecordingHUDTimeFormatter.string(elapsed: floor(presentation.duration))
+
+        return HStack(spacing: 7) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+
+            Text(elapsed)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .frame(minWidth: 38, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 3) {
+                audioMeter(level: presentation.systemLevel, color: .accentColor)
+                audioMeter(level: presentation.micLevel, color: .green)
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Button(action: actions.onToggleAudioDetails) {
+                    Text(
+                        expanded
+                            ? AppLocalization.string("%d saved · current segment %d", presentation.savedCount, segmentNumber)
+                            : AppLocalization.string("Segment %d", segmentNumber)
+                    )
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .help(AppLocalization.string("Show saved segment count and current segment"))
+                .accessibilityLabel(Text(AppLocalization.string("Recording segment %d", segmentNumber)))
+                .accessibilityValue(Text(AppLocalization.string("%d segments saved", presentation.savedCount)))
+
+                if expanded {
+                    Text(audioModeLabel(presentation.mode))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            if silenceWarning {
+                Label("No sound detected", systemImage: "speaker.slash.fill")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.orange)
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
+            }
+
+            stopButton
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Recording audio"))
+        .accessibilityValue(Text(AppLocalization.string(
+            "Audio recording status: %@ · %d saved · Segment %d",
+            elapsed,
+            presentation.savedCount,
+            segmentNumber
+        )))
+    }
+
+    private func audioMeter(level: Float, color: Color) -> some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(color.opacity(level == 0 ? 0.3 : 0.18))
+                Capsule()
+                    .fill(color.opacity(level == 0 ? 0.3 : 1))
+                    .frame(width: geometry.size.width * CGFloat(level))
+            }
+        }
+        .frame(width: 30, height: 3)
+        .accessibilityHidden(true)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: level)
+    }
+
+    private func audioModeLabel(_ mode: AudioSourceMode) -> String {
+        switch mode {
+        case .system: AppLocalization.string("System Audio")
+        case .microphone: AppLocalization.string("Microphone")
+        case .systemAndMicrophone: AppLocalization.string("System Audio + Microphone")
+        case .none: AppLocalization.string("No Audio")
+        }
+    }
+
+    private func audioFinalizing(
+        savedSegments: Int,
+        previewReady: Bool,
+        previewPlaying: Bool
+    ) -> some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Organizing recording…")
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                Text(AppLocalization.string("%d segments saved", savedSegments))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            if previewReady {
+                previewButton(isPlaying: previewPlaying)
+            } else {
+                Text("Preparing preview…")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            closeWhileSavingButton
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func audioFinished(
+        savedSegments: Int,
+        outputURL: URL?,
+        previewReady: Bool,
+        previewPlaying: Bool
+    ) -> some View {
+        HStack(spacing: 7) {
+            if savedSegments > 1 {
+                Button("Open Recordings", action: actions.onOpenRecordings)
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .frame(minHeight: 28)
+            } else {
+                Button("Open") { actions.onOpenLatest(outputURL) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .frame(minHeight: 28)
+                    .disabled(outputURL == nil)
+            }
+
+            Button("Show in Finder") { actions.onReveal(outputURL) }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .frame(minHeight: 28)
+                .disabled(outputURL == nil)
+
+            Button("Combine & Export", action: actions.onJoinExport)
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .frame(minHeight: 28)
+                .disabled(savedSegments < 2)
+
+            if previewReady {
+                previewButton(isPlaying: previewPlaying)
+            }
+            closeWhileSavingButton
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func previewButton(isPlaying: Bool) -> some View {
+        Button(action: isPlaying ? actions.onStopPreview : actions.onPreview) {
+            Label(
+                isPlaying ? "Stop preview" : "Preview",
+                systemImage: isPlaying ? "stop.fill" : "play.fill"
+            )
+            .labelStyle(.titleAndIcon)
+            .font(.system(size: 10, weight: .medium))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .frame(minHeight: 28)
+        .accessibilityLabel(Text(isPlaying ? "Stop audio preview" : "Preview recording"))
+    }
+
+    private var closeWhileSavingButton: some View {
+        Button(action: actions.onHideWhileSaving) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(.primary.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .help("Close")
+        .accessibilityLabel(Text("Close"))
+    }
+
     @ViewBuilder
     private func failureView(_ failure: RecordingControlPanelFailure) -> some View {
         Image(systemName: "exclamationmark.triangle.fill")
@@ -250,7 +473,7 @@ private struct RecordingControlPanelView: View {
         Button(action: actions.onStop) {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(Color.red)
-                .frame(width: 22, height: 22)
+                .frame(width: 28, height: 28)
                 .overlay {
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(.white)
@@ -339,6 +562,7 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         super.orderFrontRegardless()
         // `sharingType` is per-window and can be reset by ordering.
         sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
+        RecordingWindowExclusionRegistry.shared.register(self)
     }
 
     /// Borderless panels must keep their exact frame near screen edges.
@@ -366,6 +590,9 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         snapTask?.cancel()
         snapTask = nil
         orderOut(nil)
+        if windowNumber > 0 {
+            RecordingWindowExclusionRegistry.shared.unregister(CGWindowID(windowNumber))
+        }
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -396,7 +623,13 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
     }
 
     private func resize(for state: RecordingControlPanelState) {
-        let size = Self.size(for: state)
+        let size: CGSize
+        if Self.isAudioState(state) {
+            hostingView.layoutSubtreeIfNeeded()
+            size = CGSize(width: hostingView.fittingSize.width, height: RecordingHUDMetrics.audioRecordingHeight)
+        } else {
+            size = Self.size(for: state)
+        }
         guard frame.size != size else { return }
         let origin = RecordingHUDPlacement.origin(for: corner, size: size, in: screenFrame)
         isProgrammaticMove = true
@@ -411,6 +644,15 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         case .saving: RecordingHUDMetrics.savingSize
         case .failure: RecordingHUDMetrics.failureSize
         case .notice: RecordingHUDMetrics.noticeSize
+        case .audioRecording, .audioFinalizing, .audioFinished:
+            CGSize(width: 1, height: RecordingHUDMetrics.audioRecordingHeight)
+        }
+    }
+
+    private static func isAudioState(_ state: RecordingControlPanelState) -> Bool {
+        switch state {
+        case .audioRecording, .audioFinalizing, .audioFinished: true
+        case .countdown, .starting, .recording, .saving, .failure, .notice: false
         }
     }
 }

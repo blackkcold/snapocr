@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import CoreGraphics
 import CoreMedia
 import Foundation
@@ -32,48 +33,6 @@ enum RecordingStreamSettings {
             streamConfiguration.channelCount = 2
         }
         return streamConfiguration
-    }
-}
-
-enum RecordingWriterFinalizationDecision: Equatable {
-    case discardPartial(reason: String)
-    case retainPartial(reason: String)
-    case finishWriting
-    case publish
-
-    static func beforeFinishing(
-        hasAcceptedVideoSample: Bool,
-        writerIsWriting: Bool,
-        failureMessage: String?,
-        writerError: String?
-    ) -> Self {
-        guard hasAcceptedVideoSample else {
-            return .discardPartial(reason: failureMessage ?? "No video frame was captured.")
-        }
-        guard writerIsWriting else {
-            return .retainPartial(
-                reason: writerError ?? failureMessage ?? "The media writer did not finish successfully."
-            )
-        }
-        return .finishWriting
-    }
-
-    static func afterFinishing(
-        hasAcceptedVideoSample: Bool,
-        writerCompleted: Bool,
-        failureMessage: String?,
-        writerError: String?
-    ) -> Self {
-        guard hasAcceptedVideoSample else {
-            return .discardPartial(reason: failureMessage ?? "No video frame was captured.")
-        }
-        guard writerCompleted else {
-            return .retainPartial(
-                reason: writerError ?? failureMessage ?? "The media writer did not finish successfully."
-            )
-        }
-        guard let failureMessage else { return .publish }
-        return .retainPartial(reason: failureMessage)
     }
 }
 
@@ -137,11 +96,213 @@ public actor ScreenRecordingEngine {
     private var sessionState = RecordingSessionState()
     private var stream: SCStream?
     private var output: RecordingSampleOutput?
+    private var segmentedOutput: SegmentedRecordingSampleOutput?
+    private var segmentedAudioOutputReuse: ScreenAudioOutputReuse?
+    private var segmentedRetryHandler: (@Sendable () async throws -> URL)?
+    private var segmentedFailureMessage: String?
+    private var segmentedDroppedFrameCount: Int64 = 0
+    private var segmentedHasAcceptedVideoSample = false
     private var pipeline: RecordingWriterPipeline?
     private var transaction: RecordingOutputTransaction?
+    private var activeSource: RecordingSource?
+    private var excludedWindowIDs: Set<CGWindowID> = []
+    private var exclusionRevision: UInt64 = 0
+    private var appliedExclusionRevision: UInt64 = 0
+    private var hasReceivedExclusionUpdate = false
+    private var isStreamCapturing = false
+    private var isContentFilterUpdateInFlight = false
 
     /// Creates an unused recording engine.
     public init() {}
+
+    /// Installs the segmented screen pipeline's retry operation for the legacy HUD entry point.
+    public func installSegmentedRetryHandler(
+        _ handler: (@Sendable () async throws -> URL)?
+    ) {
+        segmentedRetryHandler = handler
+    }
+
+    /// The first failure reported by the active segmented screen pipeline, if any.
+    public func segmentedFailureDescription() -> String? {
+        segmentedFailureMessage ?? segmentedOutput?.failureMessage
+    }
+
+    /// Starts one segmented session on this engine's single ScreenCaptureKit stream.
+    ///
+    /// Screen samples are forwarded to the supplied bounded consumer. When an audio reuse
+    /// output is supplied, it is attached to this same stream; this method never creates a
+    /// second stream or a legacy single-file writer.
+    public func startSegmented(
+        _ configuration: ScreenRecordingStartConfiguration,
+        audioOutputReuse: ScreenAudioOutputReuse?,
+        onVideoFrame: @escaping @Sendable (CMSampleBuffer, UInt64) -> Bool,
+        onFailure: @escaping @Sendable (String) -> Void
+    ) async throws {
+        try sessionState.beginStart()
+        activeSource = configuration.source
+        if !hasReceivedExclusionUpdate {
+            excludedWindowIDs = configuration.excludedWindowIDs
+            exclusionRevision &+= 1
+        }
+        isStreamCapturing = false
+        segmentedFailureMessage = nil
+        segmentedDroppedFrameCount = 0
+        segmentedHasAcceptedVideoSample = false
+
+        do {
+            try configuration.video.validate()
+            let shareableContent = try await SCShareableContent.current
+            let initialExcludedWindowIDs = excludedWindowIDs
+            let initialExclusionRevision = exclusionRevision
+            let resolvedSource = try resolve(
+                configuration.source,
+                in: shareableContent,
+                excludedWindowIDs: initialExcludedWindowIDs
+            )
+            guard resolvedSource.dimensions.width.isFinite,
+                  resolvedSource.dimensions.height.isFinite,
+                  resolvedSource.dimensions.width > 0,
+                  resolvedSource.dimensions.height > 0 else {
+                throw ScreenRecordingEngineError.invalidSourceDimensions
+            }
+
+            let streamConfiguration = try RecordingStreamSettings.make(
+                configuration: configuration.video,
+                sourceDimensions: resolvedSource.dimensions,
+                sourceRect: resolvedSource.sourceRect
+            )
+            streamConfiguration.capturesAudio = audioOutputReuse != nil
+            if audioOutputReuse != nil {
+                streamConfiguration.sampleRate = 48_000
+                streamConfiguration.channelCount = 2
+            }
+
+            let segmentedOutput = SegmentedRecordingSampleOutput(
+                sampleQueue: sampleQueue,
+                onVideoFrame: onVideoFrame,
+                onFailure: { [weak self] message in
+                    Task { await self?.recordSegmentedFailure(message) }
+                    onFailure(message)
+                }
+            )
+            self.segmentedOutput = segmentedOutput
+            segmentedAudioOutputReuse = audioOutputReuse
+
+            let stream = SCStream(
+                filter: resolvedSource.filter,
+                configuration: streamConfiguration,
+                delegate: segmentedOutput
+            )
+            self.stream = stream
+            try stream.addStreamOutput(
+                segmentedOutput,
+                type: .screen,
+                sampleHandlerQueue: sampleQueue
+            )
+            try audioOutputReuse?.attach(to: stream)
+            try await stream.startCapture()
+            isStreamCapturing = true
+            appliedExclusionRevision = initialExclusionRevision
+            try sessionState.recordingDidStart()
+            await applyLatestExcludedWindowFilter()
+        } catch {
+            await cleanupAfterSegmentedStartFailure()
+            throw error
+        }
+    }
+
+    /// Stops the shared capture stream and returns its bounded callback-drop count.
+    public func stopSegmentedCapture() async -> Int64 {
+        guard let stream, let segmentedOutput else { return segmentedDroppedFrameCount }
+        isStreamCapturing = false
+        if sessionState.phase == .recording { try? sessionState.beginStop() }
+
+        do {
+            try await stream.stopCapture()
+        } catch {
+            recordSegmentedFailure("The capture stream could not stop cleanly: \(error.localizedDescription)")
+        }
+
+        let stats = sampleQueue.sync {
+            segmentedOutput.stopAcceptingSamples()
+            return segmentedOutput.snapshot
+        }
+        segmentedAudioOutputReuse?.detach(from: stream)
+        segmentedFailureMessage = segmentedFailureMessage ?? stats.failureMessage
+        segmentedDroppedFrameCount = stats.droppedFrameCount
+        segmentedHasAcceptedVideoSample = stats.hasAcceptedVideoFrame
+        self.stream = nil
+        output = nil
+        self.segmentedOutput = nil
+        segmentedAudioOutputReuse = nil
+        activeSource = nil
+        if sessionState.phase == .stopping { try? sessionState.beginSaving() }
+        return segmentedDroppedFrameCount
+    }
+
+    /// Completes the segmented lifecycle after sealing and publication have succeeded.
+    public func finishSegmentedSession() throws {
+        if sessionState.phase == .saving { try sessionState.finish() }
+        segmentedRetryHandler = nil
+        segmentedOutput = nil
+        segmentedAudioOutputReuse = nil
+        stream = nil
+        output = nil
+        activeSource = nil
+    }
+
+    /// Marks segmented finalization as recoverable while retaining its retry handler.
+    public func failSegmentedSession() async {
+        isStreamCapturing = false
+        if let stream {
+            try? await stream.stopCapture()
+            segmentedAudioOutputReuse?.detach(from: stream)
+        }
+        if let segmentedOutput {
+            let stats = sampleQueue.sync {
+                segmentedOutput.stopAcceptingSamples()
+                return segmentedOutput.snapshot
+            }
+            segmentedFailureMessage = segmentedFailureMessage ?? stats.failureMessage
+            segmentedDroppedFrameCount = max(segmentedDroppedFrameCount, stats.droppedFrameCount)
+            segmentedHasAcceptedVideoSample = segmentedHasAcceptedVideoSample || stats.hasAcceptedVideoFrame
+        }
+        sessionState.fail()
+        stream = nil
+        output = nil
+        segmentedOutput = nil
+        segmentedAudioOutputReuse = nil
+        activeSource = nil
+    }
+
+    private func cleanupAfterSegmentedStartFailure() async {
+        isStreamCapturing = false
+        if let stream {
+            try? await stream.stopCapture()
+            segmentedAudioOutputReuse?.detach(from: stream)
+        }
+        if let segmentedOutput {
+            _ = sampleQueue.sync {
+                segmentedOutput.stopAcceptingSamples()
+                return segmentedOutput.snapshot
+            }
+        } else {
+            sampleQueue.sync {}
+        }
+        sessionState.fail()
+        stream = nil
+        output = nil
+        segmentedOutput = nil
+        segmentedAudioOutputReuse = nil
+        pipeline = nil
+        transaction = nil
+        activeSource = nil
+    }
+
+    private func recordSegmentedFailure(_ message: String) {
+        guard segmentedFailureMessage == nil else { return }
+        segmentedFailureMessage = message
+    }
 
     /// Current lifecycle phase for this single recording session.
     public var phase: RecordingSessionState.Phase {
@@ -162,12 +323,14 @@ public actor ScreenRecordingEngine {
     /// Used by the control panel watchdog to distinguish "recording" from "recording but the
     /// source delivers no frames", which otherwise looks identical to the user.
     public var hasAcceptedVideoFrame: Bool {
-        pipeline?.hasAcceptedVideoSample ?? false
+        pipeline?.hasAcceptedVideoSample
+            ?? segmentedOutput?.snapshot.hasAcceptedVideoFrame
+            ?? segmentedHasAcceptedVideoSample
     }
 
     /// Whether the retained partial of a failed session can be published again.
     public var canRetryPublish: Bool {
-        transaction?.isPublishable ?? false
+        transaction?.isPublishable ?? (segmentedRetryHandler != nil && hasAcceptedVideoFrame)
     }
 
     /// Starts capture for one display, one window, or a display-local region.
@@ -190,14 +353,22 @@ public actor ScreenRecordingEngine {
         onFailure: @escaping @Sendable (String) -> Void = { _ in }
     ) async throws {
         try sessionState.beginStart()
+        activeSource = source
+        if !hasReceivedExclusionUpdate {
+            self.excludedWindowIDs = excludedWindowIDs
+            exclusionRevision &+= 1
+        }
+        isStreamCapturing = false
 
         do {
             try configuration.validate()
             let shareableContent = try await SCShareableContent.current
+            let initialExcludedWindowIDs = self.excludedWindowIDs
+            let initialExclusionRevision = exclusionRevision
             let resolvedSource = try resolve(
                 source,
                 in: shareableContent,
-                excludedWindowIDs: excludedWindowIDs
+                excludedWindowIDs: initialExcludedWindowIDs
             )
             guard resolvedSource.dimensions.width.isFinite,
                   resolvedSource.dimensions.height.isFinite,
@@ -235,7 +406,10 @@ public actor ScreenRecordingEngine {
                 try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: sampleQueue)
             }
             try await stream.startCapture()
+            isStreamCapturing = true
+            appliedExclusionRevision = initialExclusionRevision
             try sessionState.recordingDidStart()
+            await applyLatestExcludedWindowFilter()
         } catch let startError {
             if let cleanupError = await cleanupAfterStartFailure(startError) {
                 throw cleanupError
@@ -245,6 +419,7 @@ public actor ScreenRecordingEngine {
     }
 
     private func cleanupAfterStartFailure(_ startError: any Error) async -> ScreenRecordingEngineError? {
+        isStreamCapturing = false
         if let stream {
             try? await stream.stopCapture()
         }
@@ -270,6 +445,7 @@ public actor ScreenRecordingEngine {
         output = nil
         pipeline = nil
         transaction = nil
+        activeSource = nil
         guard let retainedPartialURL else { return nil }
         return .recordingFailed(startError.localizedDescription, partialURL: retainedPartialURL)
     }
@@ -289,6 +465,7 @@ public actor ScreenRecordingEngine {
             )
         }
 
+        isStreamCapturing = false
         var stopError: String?
         do {
             try await stream.stopCapture()
@@ -307,9 +484,11 @@ public actor ScreenRecordingEngine {
             output = nil
             self.pipeline = nil
             transaction = nil
+            activeSource = nil
             return finalURL
         } catch {
             sessionState.fail()
+            activeSource = nil
             if stopError == nil {
                 self.stream = nil
                 output = nil
@@ -324,6 +503,7 @@ public actor ScreenRecordingEngine {
     /// - Throws: `ScreenRecordingEngineError.finalizationFailed` when nothing is publishable or the
     ///   destination still refuses the file.
     public func retryPublish() async throws -> URL {
+        if let segmentedRetryHandler { return try await segmentedRetryHandler() }
         guard let transaction, transaction.isPublishable else {
             throw ScreenRecordingEngineError.finalizationFailed(
                 "The retained recording cannot be published.",
@@ -340,6 +520,55 @@ public actor ScreenRecordingEngine {
                 error.localizedDescription,
                 partialURL: transaction.partialURL
             )
+        }
+    }
+
+    /// Updates display/region window exclusions without stopping the capture stream or writer.
+    /// Window-source recordings already include only the selected window, so their filter is
+    /// independent of the app's floating control windows.
+    public func updateExcludedWindowIDs(_ windowIDs: Set<CGWindowID>) async {
+        hasReceivedExclusionUpdate = true
+        if excludedWindowIDs != windowIDs {
+            excludedWindowIDs = windowIDs
+            exclusionRevision &+= 1
+        } else if appliedExclusionRevision == exclusionRevision {
+            return
+        }
+
+        guard isStreamCapturing else { return }
+        await applyLatestExcludedWindowFilter()
+    }
+
+    private func applyLatestExcludedWindowFilter() async {
+        guard !isContentFilterUpdateInFlight else { return }
+        isContentFilterUpdateInFlight = true
+        defer { isContentFilterUpdateInFlight = false }
+
+        while appliedExclusionRevision != exclusionRevision {
+            guard isStreamCapturing,
+                  let stream,
+                  let activeSource else { return }
+            let revision = exclusionRevision
+
+            if case .window = activeSource {
+                appliedExclusionRevision = revision
+                continue
+            }
+
+            do {
+                let shareableContent = try await SCShareableContent.current
+                guard revision == exclusionRevision else { continue }
+                let resolvedSource = try resolve(
+                    activeSource,
+                    in: shareableContent,
+                    excludedWindowIDs: excludedWindowIDs
+                )
+                try await stream.updateContentFilter(resolvedSource.filter)
+                appliedExclusionRevision = revision
+            } catch {
+                logger.warning("recording: excluded-window filter update failed: \(error.localizedDescription)")
+                return
+            }
         }
     }
 
@@ -435,298 +664,82 @@ private final class RecordingSampleOutput: NSObject, SCStreamOutput, SCStreamDel
     }
 }
 
-/// Writes one recording session's samples into the transaction's partial file.
-///
-/// Internal rather than file-private so `RecordingWriterPipelineTests` can drive the real
-/// `AVAssetWriter` with synthetic frames; nothing outside `CaptureCore` can see it.
-final class RecordingWriterPipeline: @unchecked Sendable {
-    private let transaction: RecordingOutputTransaction
-    private let writer: AVAssetWriter
-    private let videoInput: AVAssetWriterInput
-    private let audioInput: AVAssetWriterInput?
+private final class SegmentedRecordingSampleOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
+    struct Snapshot {
+        let droppedFrameCount: Int64
+        let hasAcceptedVideoFrame: Bool
+        let failureMessage: String?
+    }
+
     private let sampleQueue: DispatchQueue
-    private let logger = Logger(category: "recording")
-    private var sessionStartTime: CMTime?
-    private var hasStartedWriting = false
-    private(set) var hasAcceptedVideoSample = false
+    private let onVideoFrame: @Sendable (CMSampleBuffer, UInt64) -> Bool
+    private let onFailure: @Sendable (String) -> Void
+    private let lock = NSLock()
     private var acceptsSamples = true
-    private var failureRelay: RecordingFailureRelay
-
-    private var failureMessage: String? {
-        failureRelay.message
-    }
-
-    var partialURL: URL {
-        transaction.partialURL
-    }
+    private var droppedFrameCount: Int64 = 0
+    private var hasAcceptedVideoFrame = false
+    private var recordedFailureMessage: String?
 
     init(
-        transaction: RecordingOutputTransaction,
-        configuration: RecordingConfiguration,
-        dimensions: CGSize,
         sampleQueue: DispatchQueue,
+        onVideoFrame: @escaping @Sendable (CMSampleBuffer, UInt64) -> Bool,
         onFailure: @escaping @Sendable (String) -> Void
-    ) throws {
-        self.transaction = transaction
+    ) {
         self.sampleQueue = sampleQueue
-        failureRelay = RecordingFailureRelay(onFailure: onFailure)
-        try transaction.prepareForWriting()
-
-        let writer = try AVAssetWriter(outputURL: transaction.partialURL, fileType: .mp4)
-        let supportedCodecs = RecordingWriterSettings.supportedVideoCodecs(
-            configuration: configuration,
-            dimensions: dimensions
-        ) { outputSettings in
-            writer.canApply(outputSettings: outputSettings, forMediaType: .video)
-        }
-        try configuration.validate(supportedCodecs: supportedCodecs)
-
-        let videoSettings = RecordingWriterSettings.videoOutputSettings(
-            configuration: configuration,
-            dimensions: dimensions
-        )
-        let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-        videoInput.expectsMediaDataInRealTime = true
-        guard writer.canAdd(videoInput) else {
-            throw ScreenRecordingEngineError.writerInputUnavailable("video")
-        }
-        writer.add(videoInput)
-
-        var audioInput: AVAssetWriterInput?
-        if configuration.capturesSystemAudio {
-            let input = AVAssetWriterInput(
-                mediaType: .audio,
-                outputSettings: RecordingWriterSettings.audioOutputSettings()
-            )
-            input.expectsMediaDataInRealTime = true
-            guard writer.canAdd(input) else {
-                throw ScreenRecordingEngineError.writerInputUnavailable("AAC audio")
-            }
-            writer.add(input)
-            audioInput = input
-        }
-
-        self.writer = writer
-        self.videoInput = videoInput
-        self.audioInput = audioInput
-    }
-
-    func append(_ sampleBuffer: CMSampleBuffer, type: SCStreamOutputType) {
-        dispatchPrecondition(condition: .onQueue(sampleQueue))
-        guard acceptsSamples,
-              CMSampleBufferIsValid(sampleBuffer),
-              CMSampleBufferDataIsReady(sampleBuffer) else {
-            return
-        }
-
-        switch type {
-        case .screen:
-            appendVideo(sampleBuffer)
-        case .audio:
-            appendAudio(sampleBuffer)
-        case .microphone:
-            break
-        @unknown default:
-            break
-        }
-    }
-
-    func recordStreamFailure(_ message: String) {
-        sampleQueue.async {
-            self.setFailure(message)
-        }
-    }
-
-    func stopAcceptingSamples() {
-        sampleQueue.sync {
-            acceptsSamples = false
-        }
-    }
-
-    func finishAndPublish(stopError: String?) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            sampleQueue.async {
-                self.acceptsSamples = false
-                if let stopError {
-                    self.setFailure("The capture stream could not stop cleanly: \(stopError)")
-                }
-                let decision = RecordingWriterFinalizationDecision.beforeFinishing(
-                    hasAcceptedVideoSample: self.hasAcceptedVideoSample,
-                    writerIsWriting: self.writer.status == .writing,
-                    failureMessage: self.failureMessage,
-                    writerError: self.writer.error?.localizedDescription
-                )
-                switch decision {
-                case .discardPartial(let reason):
-                    self.logger.error("recording: discarding partial — \(reason)")
-                    do {
-                        try self.discardUnpublishedOutput()
-                        continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
-                            reason,
-                            partialURL: nil
-                        ))
-                    } catch {
-                        continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
-                            reason,
-                            partialURL: self.existingPartialURL
-                        ))
-                    }
-                case .retainPartial(let reason):
-                    self.logger.error("recording: retaining partial — \(reason)")
-                    // Release the open file handle; a retained partial must not stay locked by a
-                    // writer that was never finalized. `cancelWriting` keeps the file on disk.
-                    if self.writer.status == .writing {
-                        self.writer.cancelWriting()
-                    }
-                    continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
-                        reason,
-                        partialURL: self.existingPartialURL
-                    ))
-                case .finishWriting:
-                    self.logger.info("recording: finishing writer")
-                    self.videoInput.markAsFinished()
-                    self.audioInput?.markAsFinished()
-                    self.writer.finishWriting {
-                        self.sampleQueue.async {
-                            self.completeWriting(continuation: continuation)
-                        }
-                    }
-                case .publish:
-                    continuation.resume(throwing: self.writerFailure())
-                }
-            }
-        }
-    }
-
-    func discardUnpublishedOutput() throws {
-        dispatchPrecondition(condition: .onQueue(sampleQueue))
-        acceptsSamples = false
-        if writer.status == .writing {
-            writer.cancelWriting()
-        }
-        try transaction.discardPartial()
-    }
-
-    private var existingPartialURL: URL? {
-        FileManager.default.fileExists(atPath: partialURL.path) ? partialURL : nil
-    }
-
-    private func appendVideo(_ sampleBuffer: CMSampleBuffer) {
-        guard sampleBuffer.imageBuffer != nil else { return }
-        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        guard presentationTime.isValid, presentationTime.isNumeric else { return }
-
-        if !hasStartedWriting {
-            guard writer.startWriting() else {
-                setFailure(writer.error?.localizedDescription ?? "The media writer could not start.")
-                return
-            }
-            writer.startSession(atSourceTime: presentationTime)
-            sessionStartTime = presentationTime
-            hasStartedWriting = true
-            logger.info("recording: writer started at first video frame, pts=\(presentationTime.seconds)")
-        }
-
-        // Readiness is only meaningful after `startWriting()`; before that it is always false.
-        // Treat a not-ready input as backpressure and drop the frame rather than failing the session.
-        guard videoInput.isReadyForMoreMediaData else { return }
-
-        guard videoInput.append(sampleBuffer) else {
-            setFailure(writer.error?.localizedDescription ?? "The media writer rejected a video sample.")
-            return
-        }
-        if !hasAcceptedVideoSample {
-            logger.info(
-                "recording: first video frame accepted at pts=\(presentationTime.seconds)"
-            )
-        }
-        hasAcceptedVideoSample = true
-    }
-
-    private func appendAudio(_ sampleBuffer: CMSampleBuffer) {
-        guard hasStartedWriting,
-              let audioInput,
-              audioInput.isReadyForMoreMediaData else {
-            return
-        }
-        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        guard presentationTime.isValid,
-              presentationTime.isNumeric,
-              let sessionStartTime,
-              CMTimeCompare(presentationTime, sessionStartTime) >= 0 else {
-            return
-        }
-        guard audioInput.append(sampleBuffer) else {
-            setFailure(writer.error?.localizedDescription ?? "The media writer rejected an audio sample.")
-            return
-        }
-    }
-
-    private func completeWriting(continuation: CheckedContinuation<URL, any Error>) {
-        let decision = RecordingWriterFinalizationDecision.afterFinishing(
-            hasAcceptedVideoSample: hasAcceptedVideoSample,
-            writerCompleted: writer.status == .completed,
-            failureMessage: failureMessage,
-            writerError: writer.error?.localizedDescription
-        )
-        switch decision {
-        case .discardPartial(let reason):
-            do {
-                try discardUnpublishedOutput()
-                continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(reason, partialURL: nil))
-            } catch {
-                continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
-                    reason,
-                    partialURL: existingPartialURL
-                ))
-            }
-        case .retainPartial(let reason):
-            let error: ScreenRecordingEngineError
-            if writer.status == .completed, failureMessage != nil {
-                error = .recordingFailed(reason, partialURL: existingPartialURL)
-            } else {
-                error = .finalizationFailed(reason, partialURL: existingPartialURL)
-            }
-            continuation.resume(throwing: error)
-        case .finishWriting:
-            continuation.resume(throwing: writerFailure())
-        case .publish:
-            do {
-                try transaction.markWriterFinished()
-                let finalURL = try transaction.publish()
-                continuation.resume(returning: finalURL)
-            } catch {
-                continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
-                    error.localizedDescription,
-                    partialURL: existingPartialURL
-                ))
-            }
-        }
-    }
-
-    private func writerFailure() -> ScreenRecordingEngineError {
-        .finalizationFailed(
-            writer.error?.localizedDescription ?? "The media writer did not finish successfully.",
-            partialURL: existingPartialURL
-        )
-    }
-
-    private func setFailure(_ message: String) {
-        failureRelay.record(message)
-    }
-}
-
-struct RecordingFailureRelay {
-    private(set) var message: String?
-    private let onFailure: @Sendable (String) -> Void
-
-    init(onFailure: @escaping @Sendable (String) -> Void) {
+        self.onVideoFrame = onVideoFrame
         self.onFailure = onFailure
     }
 
-    mutating func record(_ message: String) {
-        guard self.message == nil else { return }
-        self.message = message
-        onFailure(message)
+    func stream(
+        _ stream: SCStream,
+        didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
+        of outputType: SCStreamOutputType
+    ) {
+        dispatchPrecondition(condition: .onQueue(sampleQueue))
+        guard outputType == .screen else { return }
+        lock.lock()
+        let shouldAccept = acceptsSamples
+        lock.unlock()
+        guard shouldAccept else { return }
+
+        let delivered = onVideoFrame(sampleBuffer, AudioGetCurrentHostTime())
+        lock.lock()
+        if delivered {
+            hasAcceptedVideoFrame = true
+        } else {
+            droppedFrameCount += 1
+        }
+        lock.unlock()
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: any Error) {
+        recordFailure(error.localizedDescription)
+    }
+
+    func stopAcceptingSamples() {
+        dispatchPrecondition(condition: .onQueue(sampleQueue))
+        lock.lock()
+        acceptsSamples = false
+        lock.unlock()
+    }
+
+    var snapshot: Snapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        return Snapshot(
+            droppedFrameCount: droppedFrameCount,
+            hasAcceptedVideoFrame: hasAcceptedVideoFrame,
+            failureMessage: failureMessage
+        )
+    }
+
+    var failureMessage: String? { snapshot.failureMessage }
+
+    private func recordFailure(_ message: String) {
+        lock.lock()
+        let shouldNotify = recordedFailureMessage == nil
+        if shouldNotify { recordedFailureMessage = message }
+        lock.unlock()
+        if shouldNotify { onFailure(message) }
     }
 }

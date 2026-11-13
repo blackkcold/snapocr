@@ -5,6 +5,11 @@ import SharedKit
 
 @preconcurrency import ScreenCaptureKit
 
+typealias AudioPipelineFactory = @MainActor (
+    AudioRecordingConfiguration,
+    RecordingPipelineRoots
+) throws -> RecordingSessionPipeline
+
 private struct RecordingPreferenceSnapshot: Sendable {
     let codec: RecordingVideoCodec
     let resolutionProfile: String
@@ -113,18 +118,23 @@ final class RecordingSessionController {
     private let captureOrchestrator: CaptureOrchestrator
     let defaults: UserDefaults
     private let fileManager: FileManager
+    private let pipelineRoots: RecordingPipelineRoots
+    private let audioPipelineFactory: AudioPipelineFactory
     private(set) var status: RecordingSessionStatus = .idle
     private var outcomeState = RecordingSessionOutcomeState()
+    var audioStateMachine = RecordingAudioSessionStateMachine()
 
     var onStatusChange: ((RecordingSessionStatus) -> Void)?
     var onScreenshotShelfRecordingChange: ((Bool) -> Void)?
     var onMessage: ((String, ToastType) -> Void)?
     var onOpenPermissionGuide: (() -> Void)?
+    var onOpenRecordings: (() -> Void)?
     var onFailureChange: ((RecordingControlPanelFailure?) -> Void)?
 
     private var activeSession: RecordingSessionSnapshot?
     var sessionScreen: NSScreen?
     var engine: ScreenRecordingEngine?
+    private var screenPipelineAdapter: ScreenRecordingPipelineAdapter?
     var controlPanel: RecordingControlPanel?
     var captureFramePanel: RecordingCaptureFramePanel?
     var recordingStartedAt: Date?
@@ -139,20 +149,59 @@ final class RecordingSessionController {
     private var stopWaiters: [CheckedContinuation<Bool, Never>] = []
     private var outcomeWaiters: [CheckedContinuation<RecordingSessionTerminalOutcome, Never>] = []
     private var currentStartAttemptIdentifier: UUID?
+    var audioPipeline: RecordingSessionPipeline?
+    var audioConfiguration: AudioRecordingConfiguration?
+    var audioCurrentMode: AudioSourceMode?
+    var audioSessionID: UUID?
+    private var audioStartTask: Task<Void, any Error>?
+    private var audioStopTask: Task<AudioRecordingResult, Never>?
+    private var audioStopRequested = false
+    private var audioPipelineStarted = false
+    private var audioRecoveryPending = false
+    var lastAudioResult: AudioRecordingResult?
+    var audioProgressTask: Task<Void, Never>?
+    var previewReadinessTask: Task<Void, Never>?
+    var previewLoadTask: Task<Void, Never>?
+    var previewService: RecordingPreviewService?
+    var previewLease: PreviewLease?
+    var previewTarget: PreviewTarget?
+    var previewPlayer: RecordingAudioPreviewPlayer?
+    var previewReleaseTask: Task<Void, Never>?
+    var previewReleaseGeneration = 0
+    var previewLifecycleGeneration = 0
+    var audioProgress: RecordingProgress?
+    var latestAudioOutputURL: URL?
+    var audioHUDExpanded = false
+    var audioSilenceStartedAt: ContinuousClock.Instant?
+    var audioSilenceWarningShown = false
+    var audioSilenceWarningVisible = false
 
     var isBusy: Bool { status.isBusy }
     var needsQuitConfirmation: Bool { status.needsQuitConfirmation }
-    var isSaving: Bool { status == .saving }
+    var isSaving: Bool { status == .saving || hasPendingBackgroundFinalization }
     var terminalOutcome: RecordingSessionTerminalOutcome? { outcomeState.terminalOutcome }
+    var isAudioSessionActive: Bool {
+        switch audioStateMachine.state {
+        case .starting, .recording, .stopping, .finalizing: true
+        case .idle, .finished, .failedRecoverable: false
+        }
+    }
+    var hasPendingBackgroundFinalization: Bool {
+        audioStopRequested || audioStopTask != nil || audioStateMachine.state == .finalizing || audioRecoveryPending
+    }
 
     init(
         captureOrchestrator: CaptureOrchestrator,
         defaults: UserDefaults = .standard,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        pipelineRoots: RecordingPipelineRoots,
+        audioPipelineFactory: @escaping AudioPipelineFactory
     ) {
         self.captureOrchestrator = captureOrchestrator
         self.defaults = defaults
         self.fileManager = fileManager
+        self.pipelineRoots = pipelineRoots
+        self.audioPipelineFactory = audioPipelineFactory
         installLifecycleObservers()
     }
 
@@ -172,6 +221,11 @@ final class RecordingSessionController {
 
     @discardableResult
     func stopAndSave(reason: String? = nil) async -> Bool {
+        if isAudioSessionActive || hasPendingBackgroundFinalization {
+            let result = await stopAudio()
+            return Self.audioResultWasSaved(result)
+        }
+
         switch status {
         case .idle:
             return false
@@ -190,22 +244,250 @@ final class RecordingSessionController {
     }
 
     func stopAndResolveForQuit(reason: String) async -> RecordingSessionTerminalOutcome {
-        switch status {
-        case .idle:
-            return outcomeState.terminalOutcome ?? .noActiveSession
-        case .selectingSource, .countdown:
-            cancelPendingStart()
-            return outcomeState.terminalOutcome ?? .noActiveSession
-        case .starting:
-            stopWhenStarted = true
-            pendingStopReason = reason
-            return await waitForTerminalOutcome()
-        case .recording:
-            _ = await finalizeRecording(reason: reason)
-            return outcomeState.terminalOutcome ?? .failed
-        case .saving:
-            return await waitForTerminalOutcome()
+        let outcome: RecordingSessionTerminalOutcome
+        if isAudioSessionActive || hasPendingBackgroundFinalization {
+            _ = await stopAudio()
+            outcome = await waitForBackgroundFinalization()
+        } else {
+            switch status {
+            case .idle:
+                outcome = outcomeState.terminalOutcome ?? .noActiveSession
+            case .selectingSource, .countdown:
+                cancelPendingStart()
+                outcome = outcomeState.terminalOutcome ?? .noActiveSession
+            case .starting:
+                stopWhenStarted = true
+                pendingStopReason = reason
+                outcome = await waitForTerminalOutcome()
+            case .recording:
+                _ = await finalizeRecording(reason: reason)
+                outcome = outcomeState.terminalOutcome ?? .failed
+            case .saving:
+                outcome = await waitForTerminalOutcome()
+            }
         }
+        if outcome.allowsApplicationQuit { await closeAudioPreview() }
+        return outcome
+    }
+
+    /// Starts the audio pipeline after the app has resolved the required system permission.
+    /// This method never requests microphone permission itself.
+    func startAudio(_ configuration: AudioRecordingConfiguration) async throws {
+        guard status == .idle, !isAudioSessionActive, !hasPendingBackgroundFinalization else {
+            throw RecordingPipelineError.alreadyStarted
+        }
+
+        await closeAudioPreview()
+        audioProgressTask?.cancel()
+        audioProgressTask = nil
+        previewReadinessTask?.cancel()
+        previewReadinessTask = nil
+        audioProgress = nil
+        audioCurrentMode = configuration.mode
+        latestAudioOutputURL = nil
+        audioHUDExpanded = false
+        audioSilenceStartedAt = nil
+        audioSilenceWarningShown = false
+        audioSilenceWarningVisible = false
+        panelHiddenByUser = false
+
+        outcomeState.beginSession()
+        audioStateMachine = RecordingAudioSessionStateMachine()
+        audioStateMachine.apply(.begin)
+        audioConfiguration = configuration
+        audioSessionID = UUID()
+        audioPipelineStarted = false
+        audioRecoveryPending = false
+        audioStopRequested = false
+        lastAudioResult = nil
+        updateStatus(audioStateMachine.legacyStatus)
+
+        let pipeline: RecordingSessionPipeline
+        do {
+            pipeline = try audioPipelineFactory(configuration, pipelineRootsForCurrentDestination())
+        } catch {
+            completeAudioSession(with: failedAudioResult(error))
+            throw error
+        }
+
+        audioPipeline = pipeline
+        audioSessionID = pipeline.ledger.sessionID
+        let task = Task { try await pipeline.start(configuration) }
+        audioStartTask = task
+        do {
+            try await task.value
+            audioStartTask = nil
+            markAudioPipelineStarted()
+            if audioStopRequested {
+                _ = await stopAudio()
+            }
+        } catch {
+            audioStartTask = nil
+            completeAudioSession(with: failedAudioResult(error))
+            throw error
+        }
+    }
+
+    /// Stops capture idempotently and returns only after T9 has drained tail and seal work.
+    func stopAudio() async -> AudioRecordingResult {
+        if let audioStopTask { return await audioStopTask.value }
+        if audioRecoveryPending, let lastAudioResult { return lastAudioResult }
+        if !isAudioSessionActive && !hasPendingBackgroundFinalization {
+            return lastAudioResult ?? makeAudioResult(failure: "recording pipeline is not active")
+        }
+
+        if let audioStartTask {
+            audioStopRequested = true
+            audioStateMachine.apply(.stopRequested)
+            updateStatus(audioStateMachine.legacyStatus)
+            do {
+                try await audioStartTask.value
+                markAudioPipelineStarted()
+            } catch {
+                if let lastAudioResult { return lastAudioResult }
+                let result = failedAudioResult(error)
+                completeAudioSession(with: result)
+                return result
+            }
+        }
+
+        if let audioStopTask { return await audioStopTask.value }
+        guard let pipeline = audioPipeline else {
+            let result = lastAudioResult ?? makeAudioResult(failure: "recording pipeline is unavailable")
+            completeAudioSession(with: result)
+            return result
+        }
+
+        audioStopRequested = true
+        audioStateMachine.apply(.stopRequested)
+        audioStateMachine.beginFinalization()
+        updateStatus(audioStateMachine.legacyStatus)
+
+        await beginPreviewReadinessMonitoring(for: pipeline)
+
+        let task = Task { @MainActor [weak self] in
+            let result = await pipeline.stop()
+            let outputURL = await pipeline.latestPublishedFileURL()
+            await self?.previewReadinessTask?.value
+            self?.completeAudioSession(with: result, outputURL: outputURL)
+            return result
+        }
+        audioStopTask = task
+        return await task.value
+    }
+
+    func applyRoute(_ event: RouteEvent) async -> RouteCommitResult {
+        guard let audioPipeline else {
+            return .unchanged(reason: "recording pipeline is not active")
+        }
+        let result = await audioPipeline.applyRoute(event)
+        if case .committed = result { audioCurrentMode = event.mode }
+        return result
+    }
+
+    func makeAudioProgressStream() -> AsyncStream<RecordingProgress> {
+        guard let audioPipeline else {
+            return AsyncStream { continuation in continuation.finish() }
+        }
+        return audioPipeline.makeProgressStream()
+    }
+
+    func waitForBackgroundFinalization() async -> RecordingSessionTerminalOutcome {
+        if let audioStopTask {
+            _ = await audioStopTask.value
+            return outcomeState.terminalOutcome ?? .failed
+        }
+        if audioStopRequested {
+            _ = await stopAudio()
+            return outcomeState.terminalOutcome ?? .failed
+        }
+        if isAudioSessionActive { return .failed }
+        return outcomeState.terminalOutcome ?? .noActiveSession
+    }
+
+    private func pipelineRootsForCurrentDestination() -> RecordingPipelineRoots {
+        guard let destination = RecordingDestinationPreferences.directory(in: defaults) else {
+            return pipelineRoots
+        }
+        let outputDirectory = destination.standardizedFileURL
+        let sessionsDirectory = outputDirectory.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
+        return RecordingPipelineRoots(
+            sessionRoot: outputDirectory,
+            indexURL: sessionsDirectory.appendingPathComponent("recording-index.json"),
+            outputDirectory: outputDirectory
+        )
+    }
+
+    private func pipelineRoots(for directory: URL) -> RecordingPipelineRoots {
+        let outputDirectory = directory.standardizedFileURL
+        let sessionsDirectory = outputDirectory.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
+        return RecordingPipelineRoots(
+            sessionRoot: outputDirectory,
+            indexURL: sessionsDirectory.appendingPathComponent("recording-index.json"),
+            outputDirectory: outputDirectory
+        )
+    }
+
+    private func markAudioPipelineStarted() {
+        guard !audioPipelineStarted else { return }
+        audioPipelineStarted = true
+        outcomeState.markRecordingStarted()
+        guard !audioStopRequested else { return }
+        audioStateMachine.apply(.started)
+        recordingStartedAt = Date()
+        if let audioPipeline { startAudioProgressMonitoring(for: audioPipeline) }
+        updateStatus(audioStateMachine.legacyStatus)
+        presentAudioRecordingHUD()
+    }
+
+    private func failedAudioResult(_ error: Error) -> AudioRecordingResult {
+        makeAudioResult(failure: String(describing: error))
+    }
+
+    private func makeAudioResult(failure: String?) -> AudioRecordingResult {
+        AudioRecordingResult(
+            sessionID: audioSessionID ?? UUID(),
+            kind: .audio,
+            layout: audioConfiguration?.layout ?? .mixed,
+            segmentCount: 0,
+            droppedRanges: [],
+            checkpointAge: 0,
+            failure: failure
+        )
+    }
+
+    private func completeAudioSession(with result: AudioRecordingResult, outputURL: URL? = nil) {
+        guard lastAudioResult == nil else { return }
+        lastAudioResult = result
+        latestAudioOutputURL = outputURL
+        audioProgressTask?.cancel()
+        audioProgressTask = nil
+        audioStartTask = nil
+        audioStopTask = nil
+        audioStopRequested = false
+        let saved = Self.audioResultWasSaved(result)
+        audioRecoveryPending = !saved && audioPipelineStarted
+        if saved {
+            audioStateMachine.apply(.stopCompleted(saved: true))
+        } else {
+            audioStateMachine.apply(.stopCompleted(saved: false))
+            audioStateMachine.apply(.failedRecoverable)
+        }
+        outcomeState.finishSession(wasSaved: saved)
+        updateStatus(audioStateMachine.legacyStatus)
+        if result.segmentCount > 0, !panelHiddenByUser, !RecordingHUDPreferences.isHidden(in: defaults) {
+            if controlPanel == nil { controlPanel = makeControlPanel(on: NSScreen.main) }
+            controlPanel?.present(state: .audioFinished(
+                savedSegments: result.segmentCount,
+                outputURL: outputURL,
+                previewReady: previewLease != nil,
+                previewPlaying: previewPlayer?.isPlaying ?? false
+            ))
+        }
+    }
+
+    private static func audioResultWasSaved(_ result: AudioRecordingResult) -> Bool {
+        result.failure == nil && result.segmentCount > 0
     }
 
     private func sourcePickerCompleted(
@@ -303,12 +585,35 @@ final class RecordingSessionController {
 
         let engine = ScreenRecordingEngine()
         self.engine = engine
+        screenPipelineAdapter = nil
+        RecordingWindowExclusionRegistry.shared.onChange = { [weak engine] windowIDs in
+            guard let engine else { return }
+            Task { await engine.updateExcludedWindowIDs(windowIDs) }
+        }
         do {
-            try await engine.start(
+            let coordinator = try ScreenRecordingSessionCoordinator.makeProduction(
+                engine: engine,
+                roots: pipelineRoots(for: activeSession.destinationDirectory)
+            )
+            let adapter = ScreenRecordingPipelineAdapter(coordinator: coordinator)
+            let screenMode = RecordingAudioPreferenceStore.mode(for: .screen, in: defaults)
+            let storedBitRate = defaults.object(forKey: RecordingAudioPreferenceStore.audioBitRateKey) as? Int
+                ?? 128_000
+            let audioBitRate = [96_000, 128_000, 192_000, 256_000].contains(storedBitRate)
+                ? storedBitRate
+                : 128_000
+            let startConfiguration = ScreenRecordingPipelineAdapter.makeStartConfiguration(
                 source: activeSession.selection.source,
-                configuration: activeSession.configuration,
+                video: activeSession.configuration,
+                audioMode: screenMode,
+                audioBitRate: audioBitRate,
                 destinationDirectory: activeSession.destinationDirectory,
                 excludedWindowIDs: excludedWindowIDs,
+                sourceDimensions: screenSourceDimensions(for: activeSession.selection)
+            )
+            screenPipelineAdapter = adapter
+            try await adapter.start(
+                startConfiguration,
                 onFailure: { [weak self] _ in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
@@ -324,6 +629,7 @@ final class RecordingSessionController {
                 startMonitoring()
             }
         } catch {
+            screenPipelineAdapter = nil
             let message = AppLocalization.string(
                 "Unable to start recording: %@",
                 AppLocalization.recordingErrorDescription(error)
@@ -340,7 +646,20 @@ final class RecordingSessionController {
         updateStatus(.saving)
 
         do {
-            let finalURL = try await engine.stopAndSave()
+            let finalURL: URL
+            if let screenPipelineAdapter {
+                let outcome = try await screenPipelineAdapter.stopAndSave()
+                guard outcome.isSaved, let latestURL = outcome.latestPublishedURL else {
+                    throw ScreenRecordingEngineError.finalizationFailed(
+                        outcome.failure ?? "The screen recording did not publish a video segment.",
+                        partialURL: await engine.partialOutputURL
+                    )
+                }
+                finalURL = latestURL
+                self.screenPipelineAdapter = nil
+            } else {
+                finalURL = try await engine.stopAndSave()
+            }
             let message: String
             if let reason {
                 message = AppLocalization.string(
@@ -361,6 +680,19 @@ final class RecordingSessionController {
             await handleRecordingFailure(error, engine: engine)
             return false
         }
+    }
+
+    private func screenSourceDimensions(for selection: RecordingSourceSelection) -> CGSize {
+        if case .display = selection.source { return selection.displayPixelSize }
+        guard selection.displayFrame.width > 0, selection.displayFrame.height > 0 else {
+            return selection.displayPixelSize
+        }
+        let scaleX = selection.displayPixelSize.width / selection.displayFrame.width
+        let scaleY = selection.displayPixelSize.height / selection.displayFrame.height
+        return CGSize(
+            width: selection.sourceFrame.width * scaleX,
+            height: selection.sourceFrame.height * scaleY
+        )
     }
 
     private func startMonitoring() {
@@ -474,6 +806,23 @@ final class RecordingSessionController {
             }
         })
 
+        notificationObservers.append(workspaceCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.hasPendingBackgroundFinalization {
+                    _ = await self.waitForBackgroundFinalization()
+                } else if self.isAudioSessionActive {
+                    // If sleep suspended the notification task before it requested a stop, resume
+                    // through the same pipeline/ledger finalizer instead of claiming the session saved.
+                    _ = await self.stopAudio()
+                }
+            }
+        })
+
         notificationObservers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -492,7 +841,12 @@ final class RecordingSessionController {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.handleInterruption(AppLocalization.string("The screen was locked."))
+                // Audio capture is allowed to continue through a lock; sleep still requests a
+                // durable stop above. Preserve the existing screen-recording interruption path.
+                guard let self, !self.isAudioSessionActive, !self.hasPendingBackgroundFinalization else {
+                    return
+                }
+                await self.handleInterruption(AppLocalization.string("The screen was locked."))
             }
         })
     }
@@ -531,12 +885,25 @@ final class RecordingSessionController {
         case .countdown(let seconds):
             controlPanel?.update(state: .countdown(seconds))
         case .starting:
+            if audioStateMachine.state == .starting {
+                if controlPanel == nil { controlPanel = makeControlPanel(on: NSScreen.main) }
+                controlPanel?.present(state: .starting)
+                return
+            }
             controlPanel?.update(state: .starting)
         case .recording:
+            if audioStateMachine.state == .recording {
+                presentAudioRecordingHUD()
+                return
+            }
             let startedAt = recordingStartedAt ?? Date()
             recordingStartedAt = startedAt
             controlPanel?.update(state: .recording(startedAt: startedAt))
         case .saving:
+            if audioStateMachine.state == .stopping || audioStateMachine.state == .finalizing {
+                updateAudioHUD()
+                return
+            }
             controlPanel?.update(state: .saving(fileName: nil))
         case .idle, .selectingSource:
             break
@@ -544,6 +911,7 @@ final class RecordingSessionController {
     }
 
     func finishSession(success: Bool) {
+        Task { @MainActor [weak self] in await self?.closeAudioPreview() }
         outcomeState.finishSession(wasSaved: success)
         countdownTask?.cancel()
         countdownTask = nil
@@ -558,6 +926,7 @@ final class RecordingSessionController {
         watchdogReported = false
         engine = nil
         activeSession = nil
+        RecordingWindowExclusionRegistry.shared.onChange = { _ in }
         stopWhenStarted = false
         pendingStopReason = nil
         onScreenshotShelfRecordingChange?(false)

@@ -109,7 +109,42 @@ public final class CaptureViewModel: ObservableObject {
         self.ocrPipeline = ocrPipeline
         self.barcodeEngine = barcodeEngine
         self.scrollEngine = scrollEngine
-        recordingSessionController = RecordingSessionController(captureOrchestrator: captureOrchestrator)
+
+        let fileManager = FileManager.default
+        let supportRoot = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
+        let outputDirectory = RecordingDestinationPreferences.directory(in: .standard, fileManager: fileManager)
+            ?? fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent("Movies", isDirectory: true)
+                .appendingPathComponent("SnapGlass", isDirectory: true)
+                .appendingPathComponent("Recordings", isDirectory: true)
+        let sessionsDirectory = outputDirectory.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
+        let pipelineRoots = RecordingPipelineRoots(
+            sessionRoot: outputDirectory,
+            indexURL: sessionsDirectory.appendingPathComponent("recording-index.json"),
+            outputDirectory: outputDirectory
+        )
+        let recoveryRoot = supportRoot
+            .appendingPathComponent("SnapGlass", isDirectory: true)
+            .appendingPathComponent("RecordingRecovery", isDirectory: true)
+        let backlog = RecordingBacklogPolicy(
+            highWatermarkBytes: 512 * 1_024 * 1_024,
+            lowWatermarkBytes: 128 * 1_024 * 1_024
+        )
+        recordingSessionController = RecordingSessionController(
+            captureOrchestrator: captureOrchestrator,
+            pipelineRoots: pipelineRoots,
+            audioPipelineFactory: { configuration, roots in
+                try RecordingAudioPipelineFactory.makeSpaceGated(
+                    configuration: configuration,
+                    roots: roots,
+                    recoveryRoot: recoveryRoot,
+                    backlog: backlog
+                )
+            }
+        )
 
         configureScreenshotShelf()
         configureRecording()

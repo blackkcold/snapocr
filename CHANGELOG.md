@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-13
+
+> 录制功能全量交付。以下为发版说明，不代表已完成运行期验收。
+
+### Added
+- 纯音频录制：系统声音、麦克风及两者组合；默认来源与本次来源分离，运行中切源不重开会话；单轨混音与来源分轨。
+- 分段与恢复基础：CAF 检查点、会话 journal／索引、预览租约、双卷空间预算和低空间安全停止接线；正常可见段上限 59 分钟。
+- 录音菜单、无默认绑定的录音快捷键、双路电平 HUD、录音会话窗口与四语言文案。
+- 选段、裁剪、试听与拼接导出界面及真实导出核心；主动导出上限 1 小时 59 分 30 秒，视频使用压缩样本直通路径，试听增益与导出增益分离。
+- 录屏多来源内嵌音轨、独立恢复 chunk／可见 segment 协调器，以及同一 ScreenCaptureKit stream 的音频复用接线。
+
+### Changed
+- 录制期间允许普通与滚动截图；截图架默认保持可见，只按显式偏好隐藏。录制窗口排除改为运行时更新 filter，不重启时间轴。
+- 退出收尾等待实际保存结果；录音码率配置传递到编码器，恢复和导出失败保留自有暂存材料。
+- 修正隔离 SourcePackages 构建时 Embed Sparkle 的框架路径选择，保留默认回退；支持显式路径配置，不改变签名、更新功能或依赖版本。
+
+### Verification status
+- 本版按用户要求只做必要编译／类型检查，未运行单测、专项评测、GUI／TCC、真实采集或独立复核；发版 PR 的 CI 会首次执行自动化测试。
+- Core、纯 App 模型 target 和包含 SwiftUI 窗口的完整无签名 SnapGlass Debug 构建均有 exit 0 记录；编译通过不代表媒体、权限或 GUI 行为通过。
+- 实际媒体时间守恒、多音轨、恢复、长跑、四语言截断与辅助功能行为未验收。
+
+## [1.5.1] - 2026-11-12
+
+### Changed
+- 截图架拖动改为原位低透明虚影占位：拖动全程不移动兄弟卡片、不计算插入目标、不排序；松手、取消或拖出后移回时恢复原顺序。拖到外部应用仍复制真实文件并保留架内卡片。
+
 ## [1.5.0] - 2026-11-11
 
 ### Changed
@@ -512,7 +538,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/blackkcold/snapocr/compare/v1.5.1...v1.6.0
+[1.5.1]: https://github.com/blackkcold/snapocr/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/blackkcold/snapocr/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/blackkcold/snapocr/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/blackkcold/snapocr/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/blackkcold/snapocr/compare/v1.3.1...v1.4.0

@@ -36,6 +36,90 @@ public enum RecordingOutputTransactionError: Error, Equatable, LocalizedError, S
     }
 }
 
+/// A validated description of one recording output segment.
+///
+/// The request owns naming and shape only. Creating a request does not inspect
+/// the destination or touch the filesystem.
+public struct RecordingOutputRequest: Equatable, Sendable {
+    /// The kind of output produced by one recording segment.
+    public enum Shape: Equatable, Sendable {
+        /// A single file using the normalized lowercase extension, without a leading dot.
+        case singleFile(fileExtension: String)
+        /// A directory whose tracks and manifest are written and sealed by the recording layer.
+        case directory
+    }
+
+    /// Existing directory that receives the segment output.
+    public let destinationDirectory: URL
+    /// Complete base name including any date prefix, without a segment suffix or extension.
+    public let stem: String
+    /// Non-negative zero-based segment index used in the output name.
+    public let segmentIndex: Int
+    /// Whether the segment publishes as a single file or as a directory.
+    public let shape: Shape
+
+    /// Creates a validated output request.
+    ///
+    /// - Parameters:
+    ///   - destinationDirectory: Existing directory that receives the output.
+    ///   - stem: Complete base name without a segment suffix or extension.
+    ///   - segmentIndex: Zero-based segment index; must be non-negative.
+    ///   - shape: Single-file output with an extension, or directory output.
+    /// - Throws: `RecordingOutputRequestError` when the stem, index, or extension is invalid.
+    public init(
+        destinationDirectory: URL,
+        stem: String,
+        segmentIndex: Int,
+        shape: Shape
+    ) throws {
+        guard !stem.isEmpty else { throw RecordingOutputRequestError.emptyStem }
+        guard stem != ".", stem != "..", !stem.hasPrefix("."),
+              !stem.contains("/"), !stem.contains("\\"), !stem.contains("\0")
+        else {
+            throw RecordingOutputRequestError.invalidStem
+        }
+        guard segmentIndex >= 0 else { throw RecordingOutputRequestError.negativeSegmentIndex }
+
+        switch shape {
+        case .singleFile(let fileExtension):
+            guard Self.isValidFileExtension(fileExtension) else {
+                throw RecordingOutputRequestError.invalidFileExtension
+            }
+            self.shape = .singleFile(fileExtension: fileExtension.lowercased())
+        case .directory:
+            self.shape = .directory
+        }
+
+        self.destinationDirectory = destinationDirectory
+        self.stem = stem
+        self.segmentIndex = segmentIndex
+    }
+
+    private static func isValidFileExtension(_ fileExtension: String) -> Bool {
+        guard !fileExtension.isEmpty else { return false }
+        return fileExtension.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 48...57, 65...90, 97...122:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+}
+
+/// Validation failures raised while creating a `RecordingOutputRequest`.
+public enum RecordingOutputRequestError: Error, Equatable, Sendable {
+    /// The stem was empty.
+    case emptyStem
+    /// The stem would escape or hide the destination path.
+    case invalidStem
+    /// The segment index was negative.
+    case negativeSegmentIndex
+    /// The file extension was empty or contained characters outside `[A-Za-z0-9]`.
+    case invalidFileExtension
+}
+
 enum AtomicFileOperationResult: Equatable {
     case succeeded
     case destinationExists
@@ -105,7 +189,7 @@ struct AtomicRecordingOutputPublisher {
         return classify(status: status, errorCode: errorCode)
     }
 
-    private static func supportsExclusiveRename(_ directoryURL: URL) -> Bool {
+    static func supportsExclusiveRename(_ directoryURL: URL) -> Bool {
         var requestedAttributes = attrlist()
         requestedAttributes.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         requestedAttributes.volattr = attrgroup_t(ATTR_VOL_CAPABILITIES)
@@ -131,7 +215,7 @@ struct AtomicRecordingOutputPublisher {
             && volumeAttributes.attributes.capabilities.1 & exclusiveRenameCapability != 0
     }
 
-    private static func renameExclusively(from sourceURL: URL, to destinationURL: URL) -> AtomicFileOperationResult {
+    static func renameExclusively(from sourceURL: URL, to destinationURL: URL) -> AtomicFileOperationResult {
         let (status, errorCode) = withFileSystemPaths(sourceURL, destinationURL) { source, destination in
             let result = renameatx_np(AT_FDCWD, source, AT_FDCWD, destination, UInt32(RENAME_EXCL))
             return (result, result == 0 ? 0 : errno)
@@ -169,7 +253,44 @@ private struct VolumeCapabilitiesBuffer {
     var attributes = vol_capabilities_attr_t()
 }
 
-/// Reserves a unique hidden MP4 partial and publishes it without overwriting files.
+/// Publishes a staged directory only through a same-volume exclusive rename.
+///
+/// A directory can never be published by a hard link, so this publisher has no
+/// hard-link operation. Failures leave the staging directory in place.
+struct AtomicDirectoryOutputPublisher {
+    private let exclusiveRenameSupported: (URL) -> Bool
+    private let exclusiveRenameOperation: (URL, URL) -> AtomicFileOperationResult
+
+    init(
+        exclusiveRenameSupported: @escaping (URL) -> Bool =
+            AtomicRecordingOutputPublisher.supportsExclusiveRename,
+        exclusiveRenameOperation: @escaping (URL, URL) -> AtomicFileOperationResult =
+            AtomicRecordingOutputPublisher.renameExclusively
+    ) {
+        self.exclusiveRenameSupported = exclusiveRenameSupported
+        self.exclusiveRenameOperation = exclusiveRenameOperation
+    }
+
+    func publish(stagingURL: URL, finalURL: URL) throws {
+        let destinationDirectory = finalURL.deletingLastPathComponent()
+        guard exclusiveRenameSupported(destinationDirectory) else {
+            throw RecordingOutputTransactionError.unsupportedDestination
+        }
+
+        switch exclusiveRenameOperation(stagingURL, finalURL) {
+        case .succeeded:
+            return
+        case .destinationExists:
+            throw RecordingOutputTransactionError.destinationAlreadyExists
+        case .unsupported:
+            throw RecordingOutputTransactionError.unsupportedDestination
+        case .failed:
+            throw RecordingOutputTransactionError.publicationFailed
+        }
+    }
+}
+
+/// Reserves a hidden partial output and publishes it without overwriting an existing destination.
 public final class RecordingOutputTransaction {
     private enum State {
         case reserved
@@ -181,19 +302,30 @@ public final class RecordingOutputTransaction {
 
     /// Hidden same-directory URL supplied to the media writer.
     public let partialURL: URL
-    /// Unique user-visible MP4 destination.
+    /// Unique user-visible destination: a file, or a directory for directory output.
     public let finalURL: URL
 
     private let fileManager: FileManager
-    private let publisher: AtomicRecordingOutputPublisher
+    private let filePublisher: AtomicRecordingOutputPublisher
+    private let directoryPublisher: AtomicDirectoryOutputPublisher
+    private let directoryOutput: Bool
     private var state = State.reserved
 
-    /// Whether the writer finished and the partial file is still on disk, so publication can be retried.
-    public var isPublishable: Bool {
-        state == .finished && fileManager.fileExists(atPath: partialURL.path)
+    /// Whether this transaction publishes a directory instead of a single file.
+    public var isDirectoryOutput: Bool {
+        directoryOutput
     }
 
-    /// Reserves a hidden partial file and a unique final filename.
+    /// Whether the writer finished and the partial output is still on disk, so publication can be retried.
+    public var isPublishable: Bool {
+        guard state == .finished else { return false }
+        if directoryOutput {
+            return Self.isDirectory(partialURL)
+        }
+        return fileManager.fileExists(atPath: partialURL.path)
+    }
+
+    /// Reserves a hidden partial file and a unique final MP4 filename.
     ///
     /// The destination directory must already exist. The first final name is
     /// `SnapGlass_yyyy-MM-dd_HH-mm-ss.mp4`; collisions receive a numeric suffix.
@@ -220,7 +352,34 @@ public final class RecordingOutputTransaction {
         )
     }
 
-    init(
+    /// Reserves a hidden partial file or staging directory for a validated request.
+    ///
+    /// Single-file requests keep the existing file publication behavior. Directory
+    /// requests reserve a hidden same-parent staging directory and publish only by
+    /// an exclusive rename of that directory.
+    ///
+    /// - Parameters:
+    ///   - request: Validated naming request for this segment.
+    ///   - now: Accepted for call-site symmetry with the legacy initializer; request names do not use it.
+    ///   - timeZone: Accepted for call-site symmetry with the legacy initializer; request names do not use it.
+    ///   - fileManager: File manager used for filesystem operations.
+    /// - Throws: `RecordingOutputTransactionError` if the destination is missing or a partial cannot be reserved.
+    public convenience init(
+        request: RecordingOutputRequest,
+        now: Date = Date(),
+        timeZone: TimeZone = .current,
+        fileManager: FileManager = .default
+    ) throws {
+        try self.init(
+            request: request,
+            fileManager: fileManager,
+            identifierProvider: UUID.init,
+            filePublisher: AtomicRecordingOutputPublisher(),
+            directoryPublisher: AtomicDirectoryOutputPublisher()
+        )
+    }
+
+    convenience init(
         destinationDirectory: URL,
         now: Date = Date(),
         timeZone: TimeZone = .current,
@@ -228,37 +387,102 @@ public final class RecordingOutputTransaction {
         identifierProvider: @escaping () -> UUID,
         publisher: AtomicRecordingOutputPublisher
     ) throws {
-        self.fileManager = fileManager
-        self.publisher = publisher
-        let urls = try Self.reserveURLs(
+        let urls = try Self.reserveLegacyURLs(
             in: destinationDirectory,
             now: now,
             timeZone: timeZone,
             fileManager: fileManager,
             identifierProvider: identifierProvider
         )
-        partialURL = urls.partial
-        finalURL = urls.final
+        self.init(
+            partialURL: urls.partial,
+            finalURL: urls.final,
+            isDirectoryOutput: false,
+            fileManager: fileManager,
+            filePublisher: publisher,
+            directoryPublisher: AtomicDirectoryOutputPublisher()
+        )
     }
 
-    /// Removes the zero-byte reservation immediately before creating the writer.
+    convenience init(
+        request: RecordingOutputRequest,
+        fileManager: FileManager = .default,
+        identifierProvider: @escaping () -> UUID,
+        filePublisher: AtomicRecordingOutputPublisher,
+        directoryPublisher: AtomicDirectoryOutputPublisher
+    ) throws {
+        let urls = try Self.reserveURLs(
+            for: request,
+            fileManager: fileManager,
+            identifierProvider: identifierProvider
+        )
+        self.init(
+            partialURL: urls.partial,
+            finalURL: urls.final,
+            isDirectoryOutput: request.isDirectoryOutput,
+            fileManager: fileManager,
+            filePublisher: filePublisher,
+            directoryPublisher: directoryPublisher
+        )
+    }
+
+    private init(
+        partialURL: URL,
+        finalURL: URL,
+        isDirectoryOutput: Bool,
+        fileManager: FileManager,
+        filePublisher: AtomicRecordingOutputPublisher,
+        directoryPublisher: AtomicDirectoryOutputPublisher
+    ) {
+        self.partialURL = partialURL
+        self.finalURL = finalURL
+        self.directoryOutput = isDirectoryOutput
+        self.fileManager = fileManager
+        self.filePublisher = filePublisher
+        self.directoryPublisher = directoryPublisher
+    }
+
+    /// Prepares the reserved output for the writer.
     ///
-    /// AVAssetWriter creates its output file at this URL. The transaction keeps
-    /// ownership of the reserved name while the writer is active.
+    /// Single-file outputs remove the zero-byte reservation immediately before
+    /// creating the writer. Directory outputs keep their staging directory and
+    /// require it to still be a real directory; a symlink replacement is rejected.
+    ///
+    /// - Throws: `RecordingOutputTransactionError` when the transaction is not
+    ///   reserved or the partial output is missing.
     public func prepareForWriting() throws {
         guard state == .reserved else { throw RecordingOutputTransactionError.invalidState }
-        guard fileManager.fileExists(atPath: partialURL.path) else {
-            throw RecordingOutputTransactionError.partialFileMissing
+        if directoryOutput {
+            guard Self.isDirectory(partialURL) else {
+                throw RecordingOutputTransactionError.partialFileMissing
+            }
+        } else {
+            guard fileManager.fileExists(atPath: partialURL.path) else {
+                throw RecordingOutputTransactionError.partialFileMissing
+            }
+            try fileManager.removeItem(at: partialURL)
         }
-        try fileManager.removeItem(at: partialURL)
         state = .writing
     }
 
     /// Records successful writer finalization before the output can be published.
+    ///
+    /// Both shapes require the partial file or staging directory to exist.
+    /// Directory staging must still be a real directory; a symlink replacement
+    /// is rejected. Directory content completeness is validated by the sealing layer.
+    ///
+    /// - Throws: `RecordingOutputTransactionError` when the transaction is not
+    ///   writing or the partial output is missing.
     public func markWriterFinished() throws {
         guard state == .writing else { throw RecordingOutputTransactionError.invalidState }
-        guard fileManager.fileExists(atPath: partialURL.path) else {
-            throw RecordingOutputTransactionError.partialFileMissing
+        if directoryOutput {
+            guard Self.isDirectory(partialURL) else {
+                throw RecordingOutputTransactionError.partialFileMissing
+            }
+        } else {
+            guard fileManager.fileExists(atPath: partialURL.path) else {
+                throw RecordingOutputTransactionError.partialFileMissing
+            }
         }
         state = .finished
     }
@@ -274,26 +498,39 @@ public final class RecordingOutputTransaction {
             throw RecordingOutputTransactionError.invalidState
         }
 
-        if fileManager.fileExists(atPath: partialURL.path) {
+        if Self.lstatStatus(at: partialURL) != nil {
             try fileManager.removeItem(at: partialURL)
         }
         state = .discarded
     }
 
-    /// Publishes the finished MP4 through a hard link or exclusive rename.
+    /// Publishes the finished output without overwriting an existing destination.
     ///
-    /// If publication fails, the `partialURL` remains available.
+    /// Single-file outputs use the existing hard-link or exclusive-rename
+    /// publisher. Directory outputs only use an exclusive rename of the owned
+    /// staging directory and never create hard links. If publication fails,
+    /// the partial or staging output remains available for recovery.
     ///
-    /// - Returns: The final recording URL.
+    /// - Returns: The final output URL.
     /// - Throws: `RecordingOutputTransactionError` if the writer is unfinished,
-    ///   the partial is missing, or the destination cannot be published atomically without replacement.
+    ///   the partial is missing, or the destination cannot be published atomically
+    ///   without replacement.
     public func publish() throws -> URL {
         guard state == .finished else { throw RecordingOutputTransactionError.writerNotFinished }
         guard fileManager.fileExists(atPath: partialURL.path) else {
             throw RecordingOutputTransactionError.partialFileMissing
         }
 
-        let method = try publisher.publish(partialURL: partialURL, finalURL: finalURL)
+        if directoryOutput {
+            guard Self.isDirectory(partialURL) else {
+                throw RecordingOutputTransactionError.partialFileMissing
+            }
+            try directoryPublisher.publish(stagingURL: partialURL, finalURL: finalURL)
+            state = .published
+            return finalURL
+        }
+
+        let method = try filePublisher.publish(partialURL: partialURL, finalURL: finalURL)
 
         state = .published
         if method == .hardLink {
@@ -302,7 +539,7 @@ public final class RecordingOutputTransaction {
         return finalURL
     }
 
-    private static func reserveURLs(
+    private static func reserveLegacyURLs(
         in directory: URL,
         now: Date,
         timeZone: TimeZone,
@@ -359,6 +596,110 @@ public final class RecordingOutputTransaction {
             }
             return .created
         }
+    }
+
+    private static func reserveURLs(
+        for request: RecordingOutputRequest,
+        fileManager: FileManager,
+        identifierProvider: () -> UUID
+    ) throws -> (partial: URL, final: URL) {
+        var destinationIsDirectory: ObjCBool = false
+        guard
+            fileManager.fileExists(
+                atPath: request.destinationDirectory.path,
+                isDirectory: &destinationIsDirectory
+            ), destinationIsDirectory.boolValue
+        else {
+            throw RecordingOutputTransactionError.invalidDestinationDirectory
+        }
+
+        let baseName = "\(request.stem)-\(segmentText(for: request.segmentIndex))"
+        let fileExtension: String?
+        if case .singleFile(let normalizedExtension) = request.shape {
+            fileExtension = normalizedExtension
+        } else {
+            fileExtension = nil
+        }
+
+        var suffix: Int?
+        while true {
+            let suffixText = suffix.map { "_\($0)" } ?? ""
+            let name = "\(baseName)\(suffixText)"
+            let final: URL
+            if let fileExtension {
+                final = request.destinationDirectory
+                    .appendingPathComponent("\(name).\(fileExtension)")
+            } else {
+                final = request.destinationDirectory
+                    .appendingPathComponent(name, isDirectory: true)
+            }
+            guard !fileManager.fileExists(atPath: final.path) else {
+                suffix = (suffix ?? 1) + 1
+                continue
+            }
+
+            let partial: URL
+            let creationResult: ExclusivePartialCreationResult
+            if let fileExtension {
+                partial = request.destinationDirectory.appendingPathComponent(
+                    ".SnapGlass-\(identifierProvider().uuidString).\(fileExtension).partial"
+                )
+                creationResult = createExclusivePartial(at: partial)
+            } else {
+                partial = request.destinationDirectory.appendingPathComponent(
+                    ".SnapGlass-\(identifierProvider().uuidString).staging",
+                    isDirectory: true
+                )
+                creationResult = createExclusiveDirectory(at: partial)
+            }
+
+            switch creationResult {
+            case .created:
+                return (partial, final)
+            case .alreadyExists:
+                continue
+            case .failed:
+                throw RecordingOutputTransactionError.unableToReservePartialFile
+            }
+        }
+    }
+
+    private static func segmentText(for index: Int) -> String {
+        let digits = String(index)
+        return String(repeating: "0", count: max(0, 2 - digits.count)) + digits
+    }
+
+    private static func createExclusiveDirectory(at url: URL) -> ExclusivePartialCreationResult {
+        url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { return .failed }
+            guard Darwin.mkdir(path, mode_t(0o700)) == 0 else {
+                return errno == EEXIST ? .alreadyExists : .failed
+            }
+            return .created
+        }
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        guard let status = lstatStatus(at: url) else { return false }
+        return status.st_mode & S_IFMT == S_IFDIR
+    }
+
+    private static func lstatStatus(at url: URL) -> stat? {
+        var status = stat()
+        let result = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return Darwin.lstat(path, &status)
+        }
+        return result == 0 ? status : nil
+    }
+}
+
+private extension RecordingOutputRequest {
+    var isDirectoryOutput: Bool {
+        if case .directory = shape {
+            return true
+        }
+        return false
     }
 }
 

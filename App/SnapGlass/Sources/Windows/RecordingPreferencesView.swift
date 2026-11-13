@@ -1,8 +1,28 @@
 import AppKit
+import CaptureCore
+import KeyboardShortcuts
 import SharedKit
 import SwiftUI
 
 struct RecordingPreferencesView: View {
+    @EnvironmentObject private var viewModel: CaptureViewModel
+    @AppStorage(PreferenceKeys.recordingAudioMode)
+    private var audioMode = PreferenceDefaults.recordingAudioMode
+    @AppStorage(PreferenceKeys.recordingScreenAudioMode)
+    private var screenAudioMode = PreferenceDefaults.recordingScreenAudioMode
+    @AppStorage(PreferenceKeys.recordingOutputLayout)
+    private var outputLayout = PreferenceDefaults.recordingOutputLayout
+    @AppStorage(RecordingAudioPreferenceStore.audioBitRateKey)
+    private var audioBitRate = 128_000
+    @AppStorage(PreferenceKeys.recordingHideShelfWhileRecording)
+    private var hideShelfWhileRecording = PreferenceDefaults.recordingHideShelfWhileRecording
+    @AppStorage(PreferenceKeys.recordingMenuBarDuration)
+    private var menuBarDuration = PreferenceDefaults.recordingMenuBarDuration
+    @AppStorage(PreferenceKeys.recordingAudioShortcut)
+    private var audioShortcut = PreferenceDefaults.recordingAudioShortcut
+    @AppStorage(PreferenceKeys.recordingShortcutHintShown)
+    private var recordingShortcutHintShown = PreferenceDefaults.recordingShortcutHintShown
+
     @AppStorage(PreferenceKeys.recordingVideoCodec)
     private var videoCodec = PreferenceDefaults.recordingVideoCodec
     @AppStorage(PreferenceKeys.recordingResolution)
@@ -25,22 +45,111 @@ struct RecordingPreferencesView: View {
     private var revealOnFinish = PreferenceDefaults.recordingRevealOnFinish
     @AppStorage(PreferenceKeys.recordingCustomOutputDirectory)
     private var customOutputDirectoryPath = ""
+    @State private var resolvedScreenAudioMode = PreferenceDefaults.recordingScreenAudioMode
+    @State private var isShowingAudioShortcutHint = false
     @State private var availableSpace: Int64?
 
     var body: some View {
         ScrollView {
             PreferencesCardGrid {
-                videoCard
-                controlPanelCard
+                audioCard
+                safetyCard
                 destinationCard
             }
         }
-        .onAppear(perform: refreshAvailableSpace)
+        .onAppear(perform: preparePreferences)
+        .alert("Audio Recording Shortcut", isPresented: $isShowingAudioShortcutHint) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("No audio-recording shortcut is assigned by default. Record one here if you want a global shortcut.")
+        }
     }
 
-    private var videoCard: some View {
+    private var audioCard: some View {
         PreferencesCard {
-            PreferencesCardHeader(systemImage: "record.circle", title: "Video")
+            PreferencesCardHeader(systemImage: "waveform", title: "Audio")
+
+            Picker("Audio-only recording", selection: $audioMode) {
+                Text("System Audio").tag("system")
+                Text("Microphone").tag("microphone")
+                Text("System Audio + Microphone").tag("systemAndMicrophone")
+            }
+            .pickerStyle(.menu)
+
+            Picker("Screen recording audio", selection: screenAudioModeBinding) {
+                Text("System Audio").tag("system")
+                Text("Microphone").tag("microphone")
+                Text("System Audio + Microphone").tag("systemAndMicrophone")
+                Text("No Audio").tag("none")
+            }
+            .pickerStyle(.menu)
+
+            Picker("Audio track layout", selection: $outputLayout) {
+                Text("Mixed Track").tag("mixed")
+                Text("Separate Tracks").tag("separateTracks")
+            }
+            .pickerStyle(.menu)
+
+            Picker("Audio quality", selection: $audioBitRate) {
+                Text("Economy · 96 kbps").tag(96_000)
+                Text("Standard · 128 kbps").tag(128_000)
+                Text("High · 192 kbps").tag(192_000)
+                Text("Maximum · 256 kbps").tag(256_000)
+            }
+            .pickerStyle(.menu)
+
+            PreferencesCardCaption(
+                text: "Selected AAC bitrate is applied to each encoded track."
+            )
+
+            PreferencesCardCaption(
+                text: "Screen recordings still use the existing system-audio route; microphone routing will be applied with screen-audio integration."
+            )
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Audio Recording Shortcut")
+                        if audioShortcut.isEmpty {
+                            Text("No shortcut assigned")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: "keyboard")
+                        .foregroundStyle(Color.accentColor)
+                }
+
+                Spacer(minLength: 0)
+
+                KeyboardShortcuts.Recorder(for: .audioRecording) { shortcut in
+                    audioShortcut = shortcut?.description ?? ""
+                }
+                .fixedSize()
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var safetyCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "checkmark.shield", title: "Segmentation & Safety")
+
+            LabeledContent("Maximum segment length", value: "59 minutes")
+            LabeledContent("Crash recovery", value: "Always On")
+
+            Toggle("Hide Screenshot Shelf while recording", isOn: $hideShelfWhileRecording)
+                .onChange(of: hideShelfWhileRecording) { _ in
+                    viewModel.refreshRecordingShelfVisibility()
+                }
+            Toggle("Show recording duration in the menu bar", isOn: $menuBarDuration)
+
+            Divider()
+
+            PreferencesCardHeader(systemImage: "record.circle", title: "Screen Recording")
 
             Picker("Codec", selection: videoCodecBinding) {
                 Text("H.264").tag("h264")
@@ -74,17 +183,12 @@ struct RecordingPreferencesView: View {
             }
             .pickerStyle(.menu)
 
-            Toggle("Include system audio", isOn: $systemAudio)
-
             PreferencesCardCaption(
                 text: "HEVC typically uses half the H.264 bitrate for a similar quality target."
             )
-            PreferencesCardCaption(text: "Estimated size per minute: \(estimatedSize)")
-        }
-    }
 
-    private var controlPanelCard: some View {
-        PreferencesCard {
+            Divider()
+
             PreferencesCardHeader(systemImage: "rectangle.inset.filled", title: "Control panel")
 
             HStack(spacing: 10) {
@@ -109,6 +213,18 @@ struct RecordingPreferencesView: View {
         }
     }
 
+    private var screenAudioModeBinding: Binding<String> {
+        Binding(
+            get: { resolvedScreenAudioMode },
+            set: { newValue in
+                resolvedScreenAudioMode = newValue
+                screenAudioMode = newValue
+                let mode = RecordingAudioPreferenceMigration.mode(fromPreferenceValue: newValue) ?? .system
+                systemAudio = mode == .system || mode == .systemAndMicrophone
+            }
+        )
+    }
+
     private var hudOpacityBinding: Binding<Double> {
         Binding(
             get: { hudOpacity },
@@ -120,7 +236,7 @@ struct RecordingPreferencesView: View {
 
     private var destinationCard: some View {
         PreferencesCard {
-            PreferencesCardHeader(systemImage: "folder", title: "Destination")
+            PreferencesCardHeader(systemImage: "folder", title: "Storage")
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(destinationDescription)
@@ -153,6 +269,9 @@ struct RecordingPreferencesView: View {
             PreferencesCardCaption(
                 text: "Changing the destination does not move existing recordings or create this folder."
             )
+
+            PreferencesCardCaption(text: "Estimated screen recording size per minute: \(estimatedScreenSize)")
+            PreferencesCardCaption(text: "Estimated audio recording size per minute: \(estimatedAudioSize)")
         }
         .onChange(of: customOutputDirectoryPath) { _ in
             refreshAvailableSpace()
@@ -199,10 +318,40 @@ struct RecordingPreferencesView: View {
         return "Movies/SnapGlass/Recordings"
     }
 
-    private var estimatedSize: String {
+    private var estimatedScreenSize: String {
         let audioBitrate = systemAudio ? 128_000 : 0
         let estimatedBytes = Int64(averageVideoBitrate + audioBitrate) * 60 / 8
         return RecordingStorage.formattedBytes(estimatedBytes)
+    }
+
+    private var estimatedAudioSize: String {
+        let mode = RecordingAudioPreferenceMigration.mode(fromPreferenceValue: audioMode) ?? .systemAndMicrophone
+        let encodedBitsPerSecond: Int
+        switch (mode, outputLayout == "separateTracks") {
+        case (.system, _):
+            encodedBitsPerSecond = 160_000
+        case (.microphone, _):
+            encodedBitsPerSecond = 96_000
+        case (.systemAndMicrophone, true):
+            encodedBitsPerSecond = 256_000
+        case (.systemAndMicrophone, false):
+            encodedBitsPerSecond = 160_000
+        case (.none, _):
+            encodedBitsPerSecond = 0
+        }
+        let bytesPerMinute = Int64(encodedBitsPerSecond) * 60 / 8
+        return RecordingStorage.formattedBytes(bytesPerMinute)
+    }
+
+    private func preparePreferences() {
+        refreshAvailableSpace()
+        resolvedScreenAudioMode = RecordingAudioPreferenceMigration.preferenceValue(
+            for: RecordingAudioPreferenceStore.mode(for: .screen)
+        )
+        audioShortcut = KeyboardShortcuts.getShortcut(for: .audioRecording)?.description ?? ""
+        guard audioShortcut.isEmpty, !recordingShortcutHintShown else { return }
+        recordingShortcutHintShown = true
+        isShowingAudioShortcutHint = true
     }
 
     private func chooseDirectory() {

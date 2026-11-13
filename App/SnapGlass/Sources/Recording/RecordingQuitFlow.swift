@@ -1,3 +1,5 @@
+import CaptureCore
+
 enum RecordingSessionTerminalOutcome: Equatable, Sendable {
     case saved
     case noActiveSession
@@ -9,6 +11,69 @@ enum RecordingSessionTerminalOutcome: Equatable, Sendable {
             true
         case .failed:
             false
+        }
+    }
+}
+
+enum RecordingAudioSessionState: Equatable, Sendable {
+    case idle
+    case starting
+    case recording
+    case stopping
+    case finalizing
+    case finished
+    case failedRecoverable
+}
+
+enum RecordingAudioSessionTransition: Equatable, Sendable {
+    case begin
+    case started
+    case stopRequested
+    case stopCompleted(saved: Bool)
+    case failedRecoverable
+}
+
+struct RecordingAudioSessionStateMachine {
+    private(set) var state: RecordingAudioSessionState
+
+    init(state: RecordingAudioSessionState = .idle) {
+        self.state = state
+    }
+
+    mutating func apply(_ transition: RecordingAudioSessionTransition) {
+        switch transition {
+        case .begin:
+            guard state == .idle || state == .finished || state == .failedRecoverable else { return }
+            state = .starting
+        case .started:
+            guard state == .starting else { return }
+            state = .recording
+        case .stopRequested:
+            guard state == .starting || state == .recording else { return }
+            state = .stopping
+        case .stopCompleted(saved: true):
+            guard state == .finalizing else { return }
+            state = .finished
+        case .stopCompleted(saved: false):
+            guard state == .stopping || state == .finalizing else { return }
+            state = .failedRecoverable
+        case .failedRecoverable:
+            guard state != .idle && state != .finished else { return }
+            state = .failedRecoverable
+        }
+    }
+
+    mutating func beginFinalization() {
+        guard state == .stopping else { return }
+        state = .finalizing
+    }
+
+    var legacyStatus: RecordingSessionStatus {
+        switch state {
+        case .starting: .starting
+        case .recording: .recording
+        case .stopping, .finalizing: .saving
+        case .idle, .finished, .failedRecoverable: .idle
         }
     }
 }

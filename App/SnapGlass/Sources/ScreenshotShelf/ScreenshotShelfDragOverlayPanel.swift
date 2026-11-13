@@ -251,6 +251,7 @@ final class ScreenshotShelfDragOverlayPanel: NSPanel {
     override func orderFrontRegardless() {
         super.orderFrontRegardless()
         assertSharingType()
+        RecordingWindowExclusionRegistry.shared.register(self)
     }
 
     func assertSharingType() {

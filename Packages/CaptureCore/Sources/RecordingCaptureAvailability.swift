@@ -1,4 +1,4 @@
-/// Pure guards that prevent screenshot and screen-recording sessions from overlapping.
+/// Pure guards for starting screen recording while capture operations are active.
 public enum RecordingCaptureAvailability {
     /// Returns whether a recording may start while the app's capture state is idle.
     ///
@@ -10,11 +10,4 @@ public enum RecordingCaptureAvailability {
         !isCapturing && !isScrollCaptureActive
     }
 
-    /// Returns whether a screenshot or scrolling capture may start.
-    ///
-    /// - Parameter isRecordingBusy: Whether recording is selecting, starting, recording, or saving.
-    /// - Returns: `true` when no recording session is busy.
-    public static func canBeginCapture(isRecordingBusy: Bool) -> Bool {
-        !isRecordingBusy
-    }
 }

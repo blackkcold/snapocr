@@ -52,5 +52,7 @@
 	<true/>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SnapGlass uses the microphone only when you choose a recording source that includes it.</string>
 </dict>
 </plist>

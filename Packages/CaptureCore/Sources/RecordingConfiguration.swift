@@ -31,6 +31,8 @@ public struct RecordingConfiguration: Equatable, Sendable {
     public let frameRateLimit: Int
     /// Target average video bitrate, in bits per second.
     public let averageVideoBitrate: Int
+    /// Maximum duration between key frames, in seconds.
+    public let maximumKeyFrameIntervalSeconds: TimeInterval
     /// Whether system audio is included in the recording.
     public let capturesSystemAudio: Bool
 
@@ -41,18 +43,21 @@ public struct RecordingConfiguration: Equatable, Sendable {
     ///   - resolutionLimit: Maximum encoded pixel dimensions; defaults to 1920×1080.
     ///   - frameRateLimit: Maximum frames per second; defaults to 30.
     ///   - averageVideoBitrate: Target video bitrate; defaults to 8 Mbps.
+    ///   - maximumKeyFrameIntervalSeconds: Maximum key-frame interval; defaults to one second.
     ///   - capturesSystemAudio: Whether to capture AAC system audio; defaults to `false`.
     public init(
         codec: RecordingVideoCodec = .h264,
         resolutionLimit: CGSize = CGSize(width: 1_920, height: 1_080),
         frameRateLimit: Int = 30,
         averageVideoBitrate: Int = 8_000_000,
+        maximumKeyFrameIntervalSeconds: TimeInterval = 1,
         capturesSystemAudio: Bool = false
     ) {
         self.codec = codec
         self.resolutionLimit = resolutionLimit
         self.frameRateLimit = frameRateLimit
         self.averageVideoBitrate = averageVideoBitrate
+        self.maximumKeyFrameIntervalSeconds = maximumKeyFrameIntervalSeconds
         self.capturesSystemAudio = capturesSystemAudio
     }
 
@@ -131,6 +136,9 @@ public struct RecordingConfiguration: Equatable, Sendable {
               resolutionLimit.width > 0,
               resolutionLimit.height > 0,
               frameRateLimit > 0,
+              frameRateLimit <= Int(Int32.max),
+              maximumKeyFrameIntervalSeconds.isFinite,
+              maximumKeyFrameIntervalSeconds > 0,
               averageVideoBitrate > 0 else {
             throw RecordingConfigurationError.invalidConfiguration
         }
@@ -243,6 +251,9 @@ enum RecordingWriterSettings {
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey: NSNumber(value: configuration.averageVideoBitrate),
                 AVVideoExpectedSourceFrameRateKey: NSNumber(value: configuration.frameRateLimit),
+                AVVideoMaxKeyFrameIntervalDurationKey: NSNumber(
+                    value: configuration.maximumKeyFrameIntervalSeconds
+                ),
             ],
         ]
     }

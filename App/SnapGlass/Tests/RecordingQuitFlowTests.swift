@@ -72,6 +72,15 @@ struct RecordingQuitFlowTests {
         #expect(shouldQuit)
     }
 
+    @Test("A failed background finalization keeps the application open")
+    func failedBackgroundFinalizationKeepsApplicationOpen() {
+        var flow = RecordingQuitFlow()
+
+        #expect(flow.request(needsConfirmation: true, isSaving: true) == .waitForRecording)
+        let shouldQuit = flow.complete(with: .failed)
+        #expect(!shouldQuit)
+    }
+
     @Test("A duplicate quit request is cancelled while confirmation is open")
     func duplicateQuitIsCancelled() {
         var flow = RecordingQuitFlow()

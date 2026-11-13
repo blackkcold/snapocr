@@ -59,6 +59,20 @@ public enum PreferenceKeys {
     public static let recordingAverageVideoBitrate = "recording_averageVideoBitrate"
     /// Whether new screen recordings include system audio.
     public static let recordingSystemAudio = "recording_systemAudio"
+    /// Audio sources used by audio-only recordings.
+    public static let recordingAudioMode = "recording_audioMode"
+    /// Audio sources used by screen recordings.
+    public static let recordingScreenAudioMode = "recording_screenAudioMode"
+    /// File layout used for a recording's audio output.
+    public static let recordingOutputLayout = "recording_outputLayout"
+    /// Whether the screenshot shelf hides while a recording is active.
+    public static let recordingHideShelfWhileRecording = "recording_hideShelfWhileRecording"
+    /// Whether the menu bar recording indicator shows elapsed duration.
+    public static let recordingMenuBarDuration = "recording_menuBarDuration"
+    /// Optional keyboard shortcut for audio-only recordings; empty means none.
+    public static let recordingAudioShortcut = "recording_audioShortcut"
+    /// Whether the audio-only recording shortcut hint has been shown.
+    public static let recordingShortcutHintShown = "recording_shortcutHintShown"
     /// Optional user-selected screen-recording destination directory.
     public static let recordingCustomOutputDirectory = "recording_customOutputDirectory"
     /// Opacity applied to the floating recording control panel surface.
@@ -140,6 +154,20 @@ public enum PreferenceDefaults {
     public static let recordingAverageVideoBitrate = 8_000_000
     /// Exclude system audio from new recordings by default.
     public static let recordingSystemAudio = false
+    /// Capture system audio and microphone audio by default for audio-only recordings.
+    public static let recordingAudioMode = "systemAndMicrophone"
+    /// Capture system audio by default for screen recordings.
+    public static let recordingScreenAudioMode = "system"
+    /// Mix active audio sources into one output track by default.
+    public static let recordingOutputLayout = "mixed"
+    /// Keep the screenshot shelf visible during recordings by default.
+    public static let recordingHideShelfWhileRecording = false
+    /// Show the elapsed recording duration in the menu bar by default.
+    public static let recordingMenuBarDuration = true
+    /// Define no audio-only recording shortcut by default.
+    public static let recordingAudioShortcut = ""
+    /// Treat the audio-only shortcut hint as not yet shown by default.
+    public static let recordingShortcutHintShown = false
     /// Render the recording control panel surface at 85% opacity by default.
     public static let recordingHUDOpacity = 0.85
     /// Restore full panel opacity while the pointer is inside it.

@@ -55,6 +55,7 @@ final class ScreenshotShelfPanel: NSPanel {
     override func orderFrontRegardless() {
         super.orderFrontRegardless()
         assertSharingType()
+        RecordingWindowExclusionRegistry.shared.register(self)
     }
 
     /// Borderless shelf windows must be able to start and end a slide just outside the screen.

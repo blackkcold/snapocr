@@ -111,6 +111,19 @@ struct SnapGlassApp: App {
                 .preferredColorScheme(preferredColorScheme)
                 .background(AppWindowRegistrationView(id: "history", appearanceMode: appearanceMode))
         }
+
+        Window("Recordings", id: AppWindowPresenter.recordingsWindowID) {
+            RecordingsWindow()
+                .navigationTitle(Text("Recordings"))
+                .environment(\.locale, locale)
+                .preferredColorScheme(preferredColorScheme)
+                .background(AppWindowRegistrationView(
+                    id: AppWindowPresenter.recordingsWindowID,
+                    appearanceMode: appearanceMode
+                ))
+        }
+        .defaultSize(width: PreferencesSpacing.idealWindowWidth, height: PreferencesSpacing.idealWindowHeight)
+        .windowResizability(.contentMinSize)
         
         Window("Annotation Editor", id: "editor") {
             EditorWorkspaceView(workspace: viewModel.editorWorkspace)

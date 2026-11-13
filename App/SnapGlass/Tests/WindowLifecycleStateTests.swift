@@ -20,6 +20,19 @@ struct WindowLifecycleStateTests {
         #expect(!state.shouldUseAccessoryPolicy)
     }
 
+    @Test("The recordings window route can be registered")
+    func recordingsWindowCanBeRegistered() {
+        var state = WindowLifecycleState()
+
+        let presentation = state.beginPresentation(id: "recordings")
+        state.registerWindow(id: "recordings")
+        state.completePresentation(id: "recordings", generation: presentation.generation)
+
+        #expect(presentation.isNew)
+        #expect(state.registeredWindowIDs.contains("recordings"))
+        #expect(!state.isPresentationPending(id: "recordings"))
+    }
+
     @Test("Repeated presentation calls are idempotent while pending")
     func repeatedPresentationIsIdempotent() {
         var state = WindowLifecycleState()

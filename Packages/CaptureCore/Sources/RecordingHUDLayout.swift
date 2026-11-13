@@ -22,6 +22,8 @@ public enum RecordingHUDCorner: String, CaseIterable, Sendable {
 /// The panel is a capsule: `height / 2` is its radius. Widths are the measured content widths
 /// from the HUD spec, so the window and the card share one set of numbers.
 public enum RecordingHUDMetrics {
+    /// Fixed audio HUD height; its width is measured from localized content.
+    public static let audioRecordingHeight: CGFloat = 44
     public static let countdownSize = CGSize(width: 236, height: 40)
     public static let recordingSize = CGSize(width: 176, height: 40)
     public static let pausedSize = CGSize(width: 176, height: 40)

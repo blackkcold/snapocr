@@ -15,8 +15,8 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "1.5.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.6.0"
+    CURRENT_PROJECT_VERSION: "3"
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
@@ -117,9 +117,11 @@ targets:
           set -euo pipefail
           source_framework=""
           for candidate in \
+            "${SPARKLE_FRAMEWORK_PATH:-}" \
             "${BUILT_PRODUCTS_DIR}/PackageFrameworks/Sparkle.framework" \
+            "${CLONED_SOURCE_PACKAGES_DIR_PATH:+${CLONED_SOURCE_PACKAGES_DIR_PATH}/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework}" \
             "${BUILD_DIR}/../../SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"; do
-            if [ -d "$candidate" ]; then
+            if [ -n "$candidate" ] && [ -d "$candidate" ]; then
               source_framework="$candidate"
               break
             fi
@@ -180,8 +182,16 @@ targets:
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift
       - path: App/SnapGlass/Sources/Recording/RecordingQuitFlow.swift
       - path: App/SnapGlass/Sources/Recording/RecordingPermissionDecision.swift
+      - path: App/SnapGlass/Sources/Recording/ScreenRecordingPipelineAdapter.swift
+      - path: App/SnapGlass/Sources/Recording/ScreenRecordingPipelineDecision.swift
+      - path: App/SnapGlass/Sources/Recording/MicrophonePermission.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingHUDPresentation.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingWindowExclusionRegistry.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingExportSummary.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel.swift
     dependencies:
       - package: SharedKit
+      - package: CaptureCore
     settings:
       base:
         PRODUCT_NAME: WindowLifecycleStateTests

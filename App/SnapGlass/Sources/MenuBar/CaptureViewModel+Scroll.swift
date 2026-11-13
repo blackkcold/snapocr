@@ -53,7 +53,6 @@ extension CaptureViewModel {
         scrollCaptureTask?.cancel()
         let task = Task {
             guard !isCapturing,
-                  !isRecordingBusy,
                   let session = scrollSession,
                   scrollCapturedFrameCount >= 1 else { return }
             isCapturing = true
@@ -121,7 +120,6 @@ extension CaptureViewModel {
     public func finishScrollCapture() {
         Task {
             guard !isCapturing,
-                  !isRecordingBusy,
                   scrollCapturedFrameCount >= 2,
                   let session = scrollSession else { return }
             isCapturing = true
