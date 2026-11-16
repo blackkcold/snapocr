@@ -5,14 +5,14 @@ import Testing
 
 struct ScreenSegmentCoordinatorTests {
     @Test func audioAheadOfVideoIsBoundedToTwoSeconds() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ScreenSegmentCoordinatorTests-\(UUID().uuidString)", isDirectory: true)
+        let root = TestTemporaryDirectory.root("ScreenSegmentCoordinatorTests")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
         let sessionID = UUID()
         let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
         let ledger = try RecordingSessionLedger(
             sessionRoot: sessionRoot,
             indexURL: root.appendingPathComponent("recording-index.json"),
@@ -33,8 +33,7 @@ struct ScreenSegmentCoordinatorTests {
     }
 
     @Test func audioBlocksWithInvalidSampleGridAreRejected() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ScreenSegmentCoordinatorInvalidAudio-\(UUID().uuidString)", isDirectory: true)
+        let root = TestTemporaryDirectory.root("ScreenSegmentCoordinatorInvalidAudio")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 

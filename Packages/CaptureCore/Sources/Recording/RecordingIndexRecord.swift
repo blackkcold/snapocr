@@ -86,8 +86,9 @@ enum RecordingLedgerFileSystem {
     static func validateNoSymlink(_ url: URL, allowingMissing: Bool = false) throws {
         let path = try canonicalFileURL(url).path
         var missing = false
+        var candidate = URL(fileURLWithPath: "/")
         for component in URL(fileURLWithPath: path).pathComponents where component != "/" {
-            let candidate = URL(fileURLWithPath: "/").appendingPathComponent(component)
+            candidate.appendPathComponent(component)
             if missing { continue }
             guard let mode = mode(at: candidate) else {
                 if allowingMissing { missing = true; continue }

@@ -6,14 +6,14 @@ import Testing
 
 struct ScreenCheckpointLedgerTests {
     @Test func screenCheckpointCodableReadbackSurvivesLedgerRecoveryWithoutAudio() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ScreenCheckpointLedgerTests-\(UUID().uuidString)", isDirectory: true)
+        let root = TestTemporaryDirectory.root("ScreenCheckpointLedgerTests")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
         let sessionID = UUID()
         let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
         let indexURL = root.appendingPathComponent("recording-index.json")
         let ledger = try RecordingSessionLedger(
             sessionRoot: sessionRoot,

@@ -547,7 +547,11 @@ public final class AudioAACStreamSink: @unchecked Sendable {
     public func finish() throws {
         guard !isFinished else { throw AudioAACStreamSinkError.finished }
         isFinished = true
-        input.markAsFinished()
+        // `markAsFinished` raises when the writer never started (status .unknown)
+        // or already finished; cleanup paths must stay crash-free.
+        if writer.status == .writing {
+            input.markAsFinished()
+        }
     }
 }
 

@@ -5,8 +5,7 @@ import Testing
 
 struct RecordingPipelineSpaceGateTests {
     @Test func lowSpacePreflightDeniesT9PipelineBeforeMediaCreation() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Task10-SpaceGate-\(UUID().uuidString)", isDirectory: true)
+        let root = TestTemporaryDirectory.root("Task10-SpaceGate")
         let roots = RecordingPipelineRoots(
             sessionRoot: root.appendingPathComponent("recordings", isDirectory: true),
             indexURL: root.appendingPathComponent("recording-index.json"),

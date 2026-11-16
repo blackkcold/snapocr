@@ -6,8 +6,7 @@ import Testing
 
 struct RecordingPipelineIntegrationTests {
     @Test func realEngineCheckpointCAFSealAndLedgerComposeEndToEnd() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Task09-Pipeline-\(UUID().uuidString)", isDirectory: true)
+        let root = TestTemporaryDirectory.root("Task09-Pipeline")
         defer { try? FileManager.default.removeItem(at: root) }
         let sessionID = UUID()
         let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
@@ -138,7 +137,9 @@ private final class IntegrationPCMSource: AudioFrameSource, AudioSourceReconfigu
         .unchangedOnFailure(reason: "fixed synthetic test source")
     }
 
-    func commitReconfiguration(_ generation: AudioSourceGeneration) async -> Bool { false }
+    func commitReconfiguration(_ generation: AudioSourceGeneration) async -> Bool {
+        lock.withLock { self.generation.id == generation.id && running }
+    }
 
     func cancelReconfiguration(_ generationID: UUID) async {}
 }

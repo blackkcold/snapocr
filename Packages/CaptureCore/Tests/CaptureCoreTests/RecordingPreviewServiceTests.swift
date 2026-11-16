@@ -110,8 +110,7 @@ struct RecordingPreviewServiceTests {
     }
 
     private func makePaths() throws -> (root: URL, sessionRoot: URL, indexURL: URL, sessionID: UUID) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Task09-Preview-\(UUID().uuidString)", isDirectory: true)
+        let root = TestTemporaryDirectory.root("Task09-Preview")
         let sessionID = UUID()
         let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)

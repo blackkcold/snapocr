@@ -70,8 +70,7 @@ struct RecordingSessionLedgerTests {
     }
 
     private func makePaths() throws -> (root: URL, sessionRoot: URL, indexURL: URL, sessionID: UUID) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Task09-Ledger-\(UUID().uuidString)", isDirectory: true)
+        let root = TestTemporaryDirectory.root("Task09-Ledger")
         let sessionID = UUID()
         let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
