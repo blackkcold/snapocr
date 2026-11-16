@@ -128,6 +128,7 @@ jobs:
               "Removed": "### 🔄 移除",
               "Security": "### 🔐 安全",
               "Performance": "### ⚡ 性能优化",
+              "Verification status": "### ✅ 验证状态",
           }
 
           lines = open("CHANGELOG.md", encoding="utf-8").read().splitlines()
@@ -142,7 +143,7 @@ jobs:
                   break
               if not in_section:
                   continue
-              sec_m = re.match(r"^###\s+(\w+)", ln)
+              sec_m = re.match(r"^###\s+(.+?)\s*$", ln)
               if sec_m:
                   heading = section_map.get(sec_m.group(1))
                   if heading:

@@ -24,9 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 修正隔离 SourcePackages 构建时 Embed Sparkle 的框架路径选择，保留默认回退；支持显式路径配置，不改变签名、更新功能或依赖版本。
 
 ### Verification status
-- 本版按用户要求只做必要编译／类型检查，未运行单测、专项评测、GUI／TCC、真实采集或独立复核；发版 PR 的 CI 会首次执行自动化测试。
-- Core、纯 App 模型 target 和包含 SwiftUI 窗口的完整无签名 SnapGlass Debug 构建均有 exit 0 记录；编译通过不代表媒体、权限或 GUI 行为通过。
-- 实际媒体时间守恒、多音轨、恢复、长跑、四语言截断与辅助功能行为未验收。
+- 发版前运行 CaptureCore 全量单测 644 条，全部通过；`release.yml` 只跑 SharedKit 测试与签名构建，不跑 CaptureCore 单测与 lint。
+- Core、纯 App 模型 target 和包含 SwiftUI 窗口的完整无签名 SnapGlass Debug 构建均有 exit 0 记录；编译与单测通过不代表媒体、权限或 GUI 行为通过。
+- 未做专项评测、GUI／TCC、真实采集与独立复核；实际媒体时间守恒、多音轨、恢复、长跑、四语言截断与辅助功能行为未验收。
 
 ## [1.5.1] - 2026-11-12
 
