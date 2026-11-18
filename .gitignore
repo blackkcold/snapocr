@@ -51,6 +51,7 @@ release/
 *.tmp
 *.bak
 *.log
+.context/
 
 # Build output (临时构建产物，统一使用 release/vX.Y.Z/)
 output/
