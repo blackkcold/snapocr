@@ -259,6 +259,15 @@ public struct RecordingProgress: Sendable, Hashable {
     public let systemLevel: Float
     /// RMS level from the microphone input, clamped to `0...1`.
     public let micLevel: Float
+    /// Real captured source samples observed so far.
+    ///
+    /// This counts PCM frames actually read from a capture source. Synthetic
+    /// silence and clock-advanced ticks do not increment it, so a non-zero value
+    /// means at least one real sample (including an all-zero captured sample) was
+    /// received. It is not derived from `systemLevel` or `micLevel`, and the
+    /// pipeline forwards only the engine's counter: checkpoint coverage,
+    /// including writer-synthesized silence, never raises it.
+    public let capturedSamples: Int64
 
     /// Creates a recording progress snapshot.
     ///
@@ -270,6 +279,7 @@ public struct RecordingProgress: Sendable, Hashable {
     ///   - droppedSamples: Number of samples known to be missing from the recording.
     ///   - systemLevel: System-audio input RMS, clamped to `0...1`.
     ///   - micLevel: Microphone input RMS, clamped to `0...1`.
+    ///   - capturedSamples: Real captured source samples observed so far.
     public init(
         sessionID: UUID,
         elapsedSeconds: Double,
@@ -277,7 +287,8 @@ public struct RecordingProgress: Sendable, Hashable {
         checkpointAgeSeconds: Double,
         droppedSamples: Int64,
         systemLevel: Float = 0,
-        micLevel: Float = 0
+        micLevel: Float = 0,
+        capturedSamples: Int64 = 0
     ) {
         self.sessionID = sessionID
         self.elapsedSeconds = elapsedSeconds
@@ -286,6 +297,7 @@ public struct RecordingProgress: Sendable, Hashable {
         self.droppedSamples = droppedSamples
         self.systemLevel = Self.clampedLevel(systemLevel)
         self.micLevel = Self.clampedLevel(micLevel)
+        self.capturedSamples = max(0, capturedSamples)
     }
 
     private static func clampedLevel(_ value: Float) -> Float {

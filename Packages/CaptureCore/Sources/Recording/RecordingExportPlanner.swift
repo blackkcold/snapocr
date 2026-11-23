@@ -17,10 +17,16 @@ public enum ExportAudioOperation: Sendable, Equatable {
 public enum ExportAudioSource: Sendable {
     case checkpointPCM([URL])
     case publishedMedia([URL])
+    /// Media adopted in place from an interrupted session.
+    ///
+    /// These files are the recorder's originals, so they carry no sealed-product
+    /// portable metadata. Preview and export read them directly instead of
+    /// requiring a published product, and never copy or re-encode them.
+    case recoveredMedia([URL])
 
     public var urls: [URL] {
         switch self {
-        case .checkpointPCM(let urls), .publishedMedia(let urls): urls
+        case .checkpointPCM(let urls), .publishedMedia(let urls), .recoveredMedia(let urls): urls
         }
     }
 }
@@ -696,6 +702,7 @@ public enum RecordingExportPlanner {
         switch source {
         case .checkpointPCM: mediaKind = .checkpoint
         case .publishedMedia: mediaKind = .published
+        case .recoveredMedia: mediaKind = .published
         }
         var result: [PlannerAudioDescriptor] = []
         for url in uniqueURLs(source.urls) {
@@ -734,6 +741,21 @@ public enum RecordingExportPlanner {
                         sampleRate: audioInfo.sampleRate, channelCount: audioInfo.channelCount, mediaKind: mediaKind
                     ))
                 }
+            case .recoveredMedia:
+                // Recovered media is the recorder's original file, not a sealed
+                // product: read the format from the file itself and report an
+                // honest missing source when it cannot be decoded as audio.
+                let roles = roles(for: url, segment: segment, layout: sessionLayout)
+                guard !roles.isEmpty, let audioInfo = readableAudioFormat(url: url) else {
+                    throw ExportError.missingSource
+                }
+                for role in roles {
+                    result.append(PlannerAudioDescriptor(
+                        role: role, url: url, urls: [url],
+                        range: SampleRange(startSample: segment.startSample, sampleCount: segment.sampleCount),
+                        sampleRate: audioInfo.sampleRate, channelCount: audioInfo.channelCount, mediaKind: mediaKind
+                    ))
+                }
             }
         }
         guard !result.isEmpty else { throw ExportError.missingSource }
@@ -763,6 +785,20 @@ public enum RecordingExportPlanner {
             let rate = Int(file.processingFormat.sampleRate.rounded())
             let channels = Int(file.processingFormat.channelCount)
             return (rate > 0 ? rate : Int(sessionSampleRate), (1...2).contains(channels) ? channels : 2)
+        }
+    }
+
+    /// Real format of a file that must be readable, or `nil` when it is not.
+    ///
+    /// Recovered media has no portable record to fall back on, so an unreadable
+    /// file must be reported as a missing source instead of a guessed format.
+    private static func readableAudioFormat(url: URL) -> (sampleRate: Int, channelCount: Int)? {
+        DispatchQueue.global(qos: .utility).sync {
+            guard let file = try? AVAudioFile(forReading: url), file.length > 0 else { return nil }
+            let rate = Int(file.processingFormat.sampleRate.rounded())
+            let channels = Int(file.processingFormat.channelCount)
+            guard rate > 0, (1...2).contains(channels) else { return nil }
+            return (rate, channels)
         }
     }
 

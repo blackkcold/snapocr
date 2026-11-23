@@ -34,7 +34,7 @@
 | 维度 | 正式发版 | 本地实验打包 |
 |------|----------|--------------|
 | 触发方式 | `./scripts/build.sh`（默认） | `./scripts/build.sh --experimental`（别名 `--exp`） |
-| 输出目录 | `release/vX.Y.Z/`（固定） | `release/exp-vX.Y.Z-<时间戳>-<随机码>/`（每次唯一） |
+| 输出目录 | `release/vX.Y.Z/`（固定） | `release/exp-vX.Y.Z-<UTC时间戳>-<随机码>/`（每次唯一） |
 | 是否覆盖 | 目录已存在则**拒绝**并报错 | **永不覆盖**，每次生成新目录 |
 | 用途 | 正式发布、`release.sh`、CI、GitHub Release | 多轮构建对比测试、A/B 验证 |
 | 是否入库 | 是（`.dmg`/`.sha256`/`BUILD_INFO.json`） | 否（`.gitignore` 忽略 `release/exp-*/`） |
@@ -104,7 +104,7 @@ release/.DS_Store
 # 指定输出目录（默认 release/vX.Y.Z/）
 ./scripts/build.sh --release-dir /tmp/snapglass-build
 
-# 本地实验打包：每次生成唯一目录 release/exp-vX.Y.Z-<时间戳>-<随机码>/，永不覆盖
+# 本地实验打包：每次生成唯一目录 release/exp-vX.Y.Z-<UTC时间戳>-<随机码>/，永不覆盖
 ./scripts/build.sh --experimental
 ./scripts/build.sh --exp --version 0.5.3
 
@@ -123,17 +123,44 @@ DMGBUILD_PYTHON=.build/dmg-tools/bin/python ./scripts/build.sh --dmg --sign
 
 1. 读取版本号（`--version` 或 `version.txt`）
 2. 校验版本号格式 `^[0-9]+\.[0-9]+\.[0-9]+$`
-3. 确定输出目录：
+3. 取**一个** UTC 打包时刻（同一秒派生 `YYYY-MM-DDTHH:MM:SSZ` 与 `YYYYMMDDTHHMMSSZ`）
+4. 确定输出目录：
    - 默认（正式发版）→ `release/vX.Y.Z/`，若已存在则拒绝覆盖
-   - `--experimental` → `release/exp-vX.Y.Z-<时间戳>-<随机码>/`，每次唯一，永不覆盖
+   - `--experimental` → `release/exp-vX.Y.Z-<UTC时间戳>-<随机码>/`，每次唯一，永不覆盖
    - `--release-dir PATH` → 指定目录（与 `--experimental` 互斥）
-4. `xcodegen generate` → 分别构建 arm64 与 x86_64 Release
-5. 使用 `lipo` 合并主程序并验证 Universal 架构
-6. `ditto` 拷贝 `.app` 到产物目录
-7. 用固定证书按「内层先、容器后」签名，并断言身份、DR 与 `CFBundleVersion`（`--no-sign` 时为 ad-hoc）
-8. 使用 `--dmg` 时，通过 `dmgbuild` 生成品牌背景、Applications 拖放入口与 SHA-256
-9. 更新 `release/latest/SnapGlass.app` 软链，指向最近一次打包的 app
-10. 输出 `✅ App packaged: <产物目录>/SnapGlass.app`
+5. `xcodegen generate` → 分别构建 arm64 与 x86_64 Release
+6. 使用 `lipo` 合并主程序并验证 Universal 架构
+7. `ditto` 拷贝 `.app` 到产物目录
+8. 向组装完成的 `SnapGlass.app/Contents/Info.plist` 写入 `SGBuildTimestamp`（`YYYY-MM-DDTHH:MM:SSZ`，即步骤 3 的同一时刻）；写入失败或回读不一致直接中止。此步必须在签名之前，值才会被封进签名
+9. 用固定证书按「内层先、容器后」签名，并断言身份、DR 与 `CFBundleVersion`（`--no-sign` 时为 ad-hoc）
+10. 使用 `--dmg` 时，通过 `dmgbuild` 生成品牌背景、Applications 拖放入口与 SHA-256；实验打包的 DMG 文件名含同一 UTC 时间戳
+11. 更新 `release/latest/SnapGlass.app` 软链，指向最近一次打包的 app
+12. 输出 `✅ App packaged: <产物目录>/SnapGlass.app`
+
+### 打包时间戳（`SGBuildTimestamp`）
+
+一次打包只取一个 UTC 时刻，下列四处必须一致：
+
+| 位置 | 形态 | 示例 |
+|------|------|------|
+| 已签名 App 的 `Contents/Info.plist` → `SGBuildTimestamp` | ISO 8601 UTC | `2026-11-18T09:41:07Z` |
+| `BUILD_INFO.json` → `buildDate` | 同上 | `2026-11-18T09:41:07Z` |
+| 实验目录名 | 紧凑 UTC | `release/exp-v1.4.3-20261118T094107Z-a1b2c3/` |
+| 实验 DMG 文件名 | 紧凑 UTC | `SnapGlass-v1.4.3-20261118T094107Z.dmg` |
+
+正式发版的 DMG 名保持规范形式 `SnapGlass-vX.Y.Z.dmg`（1.4.x 客户端按此名降级下载），不带时间戳；App 与 `BUILD_INFO.json` 仍然带时间戳。
+
+从已构建的 App 读回时间戳（不启动 App、不需要证书）：
+
+```bash
+# 推荐：单行输出，可直接进脚本或对比
+plutil -extract SGBuildTimestamp raw release/exp-v1.4.3-*/SnapGlass.app/Contents/Info.plist
+
+# 等价写法
+/usr/libexec/PlistBuddy -c "Print :SGBuildTimestamp" release/vX.Y.Z/SnapGlass.app/Contents/Info.plist
+```
+
+用 `date -u` 核对：App 内的 ISO 形式与目录/DMG 名里的紧凑形式应当是同一秒（macOS 可直接换算 `date -j -u -f %Y-%m-%dT%H:%M:%SZ "2026-11-18T09:41:07Z" +%Y%m%dT%H%M%SZ`）。时间戳一律 UTC，不随构建机时区变化。
 
 ---
 
@@ -205,4 +232,4 @@ App 检查更新的流程（不调用受匿名 IP 配额限制的 GitHub REST AP
 
 ---
 
-*最后更新: 2026-08-04*
+*最后更新: 2026-11-18*

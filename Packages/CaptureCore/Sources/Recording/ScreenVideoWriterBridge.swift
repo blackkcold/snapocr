@@ -2,6 +2,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
+import SharedKit
 
 /// Timing and sync metadata for one accepted source video frame.
 public struct VideoFrameSample: Sendable, Hashable {
@@ -61,6 +62,108 @@ public struct VideoChunkResult: Sendable, Hashable {
     }
 }
 
+/// How one chunk writer's `startWriting()` attempt ended.
+public enum ScreenWriterStartResult: String, Codable, Sendable, Hashable {
+    /// No frame reached the writer, so writing was never attempted.
+    case notAttempted
+    /// `AVAssetWriter.startWriting()` returned true.
+    case started
+    /// `AVAssetWriter.startWriting()` returned false.
+    case failed
+}
+
+/// Privacy-safe counters describing how a chunk writer behaved.
+///
+/// Every field is a count or a short error string. No frame content, window
+/// title, or application name is ever recorded here.
+public struct ScreenWriterDiagnostics: Codable, Sendable, Hashable {
+    /// Whether `startWriting()` was attempted and what it returned.
+    public var startWritingResult: ScreenWriterStartResult
+    /// Sync frames the writer could not accept. A healthy run keeps this at zero.
+    public var syncDropCount: Int64
+    /// Non-sync frames dropped because the writer applied backpressure.
+    public var nonSyncDropCount: Int64
+    /// `AVAssetWriterInput.append` rejections and the writer errors behind them.
+    public var appendFailureCount: Int64
+    /// The last writer error description, when one was reported.
+    public var lastErrorDescription: String?
+    /// Why the session's audio track could not start, when it could not.
+    ///
+    /// This is a session-level fact carried here so every diagnostics consumer sees
+    /// it next to the writer counters. The video keeps recording when this is set.
+    public var audioFailureReason: String?
+
+    /// A writer that has not run yet.
+    public static let idle = ScreenWriterDiagnostics(
+        startWritingResult: .notAttempted,
+        syncDropCount: 0,
+        nonSyncDropCount: 0,
+        appendFailureCount: 0,
+        lastErrorDescription: nil
+    )
+
+    /// Creates a diagnostics snapshot.
+    public init(
+        startWritingResult: ScreenWriterStartResult,
+        syncDropCount: Int64,
+        nonSyncDropCount: Int64,
+        appendFailureCount: Int64,
+        lastErrorDescription: String?,
+        audioFailureReason: String? = nil
+    ) {
+        self.startWritingResult = startWritingResult
+        self.syncDropCount = syncDropCount
+        self.nonSyncDropCount = nonSyncDropCount
+        self.appendFailureCount = appendFailureCount
+        self.lastErrorDescription = lastErrorDescription
+        self.audioFailureReason = audioFailureReason
+    }
+
+    /// Whether the writer started writing successfully.
+    public var writerStart: Bool { startWritingResult == .started }
+
+    /// Adds another writer's counters to this snapshot.
+    ///
+    /// - Parameter other: The later writer's counters.
+    /// - Returns: Summed counts with the newest error and the furthest start result.
+    public func combined(with other: ScreenWriterDiagnostics) -> ScreenWriterDiagnostics {
+        ScreenWriterDiagnostics(
+            startWritingResult: Self.stronger(startWritingResult, other.startWritingResult),
+            syncDropCount: syncDropCount + other.syncDropCount,
+            nonSyncDropCount: nonSyncDropCount + other.nonSyncDropCount,
+            appendFailureCount: appendFailureCount + other.appendFailureCount,
+            lastErrorDescription: other.lastErrorDescription ?? lastErrorDescription,
+            audioFailureReason: other.audioFailureReason ?? audioFailureReason
+        )
+    }
+
+    private static func stronger(
+        _ lhs: ScreenWriterStartResult,
+        _ rhs: ScreenWriterStartResult
+    ) -> ScreenWriterStartResult {
+        if lhs == .failed || rhs == .failed { return .failed }
+        if lhs == .started || rhs == .started { return .started }
+        return .notAttempted
+    }
+}
+
+/// Test-only fault injection for the writer's failure branches.
+///
+/// Production never sets these; the unit tests use them to reach branches an
+/// encoder will not produce on demand (a refusing `startWriting`, an always-busy
+/// input, a rejected append).
+struct ScreenWriterFaultInjection: Sendable {
+    /// Replaces `AVAssetWriter.startWriting()`.
+    var startWriting: (@Sendable () -> Bool)?
+    /// Replaces `AVAssetWriterInput.isReadyForMoreMediaData`.
+    var inputReady: (@Sendable () -> Bool)?
+    /// Replaces `AVAssetWriterInput.append(_:)`.
+    var append: (@Sendable (CMSampleBuffer) -> Bool)?
+
+    /// No injection.
+    static let none = ScreenWriterFaultInjection()
+}
+
 /// Failures raised while writing one screen-video chunk.
 public enum ScreenVideoWriterBridgeError: LocalizedError, Equatable, Sendable {
     /// The requested destination already exists or is not a file URL.
@@ -75,6 +178,8 @@ public enum ScreenVideoWriterBridgeError: LocalizedError, Equatable, Sendable {
     case unsupportedVideoFormat
     /// The writer input cannot be added.
     case writerInputUnavailable
+    /// The writer input stayed busy past the bounded sync-frame wait.
+    case writerNotReady
     /// The writer failed to start, append, or finish.
     case writerFailed(String)
     /// The chunk has no accepted video frame.
@@ -97,6 +202,8 @@ public enum ScreenVideoWriterBridgeError: LocalizedError, Equatable, Sendable {
             "The selected encoder cannot write the requested video format."
         case .writerInputUnavailable:
             "The media writer cannot add a video input."
+        case .writerNotReady:
+            "The media writer was not ready to accept a video sample."
         case let .writerFailed(reason):
             reason
         case .noVideoFrames:
@@ -123,6 +230,10 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
     private var nextFrameIndex: Int64 = 0
     private var acceptedFrames: [VideoFrameSample] = []
     private var droppedFrames: Int64 = 0
+    private var diagnosticsState = ScreenWriterDiagnostics.idle
+    private let logger = Logger(subsystem: "com.snapglass", category: "screen.writer")
+    /// Test-only fault injection; production never sets it.
+    var faultInjection = ScreenWriterFaultInjection.none
 
     /// Creates a video-only MP4 chunk writer.
     ///
@@ -195,55 +306,148 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
         return droppedFrames
     }
 
-    /// Appends a video sample synchronously on the caller's capture queue.
-    ///
-    /// Invalid/non-video samples throw. When the writer input is not ready, the
-    /// sample is dropped immediately and the bounded drop counter is incremented.
-    ///
-    /// - Parameter sampleBuffer: A ready sample buffer containing a pixel buffer.
-    /// - Throws: `ScreenVideoWriterBridgeError` for invalid input or writer failure.
-    public func append(video sampleBuffer: CMSampleBuffer) throws {
+    /// Privacy-safe counters for this writer.
+    public var diagnostics: ScreenWriterDiagnostics {
         lock.lock()
         defer { lock.unlock() }
-        guard !isFinishing else { throw ScreenVideoWriterBridgeError.alreadyFinished }
+        return diagnosticsState
+    }
+
+    /// Bounded wait for a sync frame when the writer input is busy.
+    static let syncReadinessBudget: Duration = .milliseconds(250)
+    /// Slice length used while polling the writer input.
+    private static let readinessPollSlice: TimeInterval = 0.005
+
+    /// Appends a video sample synchronously on the caller's capture queue.
+    ///
+    /// A sync frame is never dropped silently: while the writer input is busy the
+    /// call waits in bounded slices, and if it is still busy after
+    /// ``syncReadinessBudget`` the chunk fails with
+    /// ``ScreenVideoWriterBridgeError/writerNotReady`` after cancelling the writer
+    /// and removing the unusable chunk. Non-sync frames may be dropped under
+    /// backpressure and are counted.
+    ///
+    /// - Parameter sampleBuffer: A ready sample buffer containing a pixel buffer.
+    /// - Returns: `true` only when `AVAssetWriterInput.append` accepted the sample.
+    /// - Throws: `ScreenVideoWriterBridgeError` for invalid input or writer failure.
+    @discardableResult
+    public func append(video sampleBuffer: CMSampleBuffer) throws -> Bool {
         guard CMSampleBufferIsValid(sampleBuffer),
               CMSampleBufferDataIsReady(sampleBuffer),
               CMSampleBufferGetImageBuffer(sampleBuffer) != nil else {
             throw ScreenVideoWriterBridgeError.invalidVideoSample
         }
-
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         guard presentationTime.isValid, presentationTime.isNumeric else {
             throw ScreenVideoWriterBridgeError.invalidVideoSample
         }
         let isSync = Self.isSyncSample(sampleBuffer)
+        let frameIndex = try beginAppend(presentationTime: presentationTime, isSync: isSync)
+        guard try awaitInputReady(isSync: isSync) else {
+            recordNonSyncDrop()
+            return false
+        }
+        return try commit(
+            sampleBuffer,
+            frameIndex: frameIndex,
+            presentationTime: presentationTime,
+            isSync: isSync
+        )
+    }
+
+    /// Validates state and starts the writer/session for one frame.
+    ///
+    /// - Parameters:
+    ///   - presentationTime: The frame's presentation timestamp.
+    ///   - isSync: Whether the frame is a sync frame.
+    /// - Returns: The source-frame ordinal this attempt owns.
+    /// - Throws: A ``ScreenVideoWriterBridgeError`` when the writer cannot start.
+    private func beginAppend(presentationTime: CMTime, isSync: Bool) throws -> Int64 {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isFinishing else { throw ScreenVideoWriterBridgeError.alreadyFinished }
         if !hasStartedSession, !isSync {
             throw ScreenVideoWriterBridgeError.firstFrameNotSync
         }
-
         if !hasStartedWriting {
-            guard writer.startWriting() else {
-                throw ScreenVideoWriterBridgeError.writerFailed(
-                    writer.error?.localizedDescription ?? "The media writer could not start."
-                )
+            let started = faultInjection.startWriting?() ?? writer.startWriting()
+            guard started else {
+                let reason = writer.error?.localizedDescription
+                    ?? "The media writer could not start."
+                diagnosticsState.startWritingResult = .failed
+                diagnosticsState.lastErrorDescription = reason
+                writer.cancelWriting()
+                discardDestinationIfEmpty()
+                logger.error("screen.writer start failed")
+                throw ScreenVideoWriterBridgeError.writerFailed(reason)
             }
             hasStartedWriting = true
+            diagnosticsState.startWritingResult = .started
         }
         if !hasStartedSession {
             writer.startSession(atSourceTime: presentationTime)
             hasStartedSession = true
         }
-
         let frameIndex = nextFrameIndex
         try advanceFrameIndex()
-        guard videoInput.isReadyForMoreMediaData else {
-            droppedFrames += 1
-            return
+        return frameIndex
+    }
+
+    /// Waits for writer-input readiness without holding the state lock.
+    ///
+    /// - Parameter isSync: Whether a drop is allowed when the wait expires.
+    /// - Returns: `true` when the input is ready; `false` only for a dropped non-sync frame.
+    /// - Throws: ``ScreenVideoWriterBridgeError/writerNotReady`` for a sync frame.
+    private func awaitInputReady(isSync: Bool) throws -> Bool {
+        if isInputReady() { return true }
+        guard isSync else { return false }
+        let deadline = ContinuousClock.now.advanced(by: Self.syncReadinessBudget)
+        while true {
+            if isInputReady() { return true }
+            if ContinuousClock.now >= deadline {
+                let reason = "The media writer was not ready to accept a video sample."
+                lock.lock()
+                diagnosticsState.syncDropCount += 1
+                diagnosticsState.lastErrorDescription = reason
+                droppedFrames += 1
+                writer.cancelWriting()
+                discardDestinationIfEmpty()
+                lock.unlock()
+                logger.error("screen.writer sync frame was still not ready after the bounded wait")
+                throw ScreenVideoWriterBridgeError.writerNotReady
+            }
+            Thread.sleep(forTimeInterval: Self.readinessPollSlice)
         }
-        guard videoInput.append(sampleBuffer) else {
-            throw ScreenVideoWriterBridgeError.writerFailed(
-                writer.error?.localizedDescription ?? "The media writer rejected a video sample."
-            )
+    }
+
+    /// Appends the frame and records any rejection.
+    ///
+    /// - Parameters:
+    ///   - sampleBuffer: The frame to append.
+    ///   - frameIndex: The source-frame ordinal owned by this attempt.
+    ///   - presentationTime: The frame's presentation timestamp.
+    ///   - isSync: Whether the frame is a sync frame.
+    /// - Returns: Always `true`; a rejection throws.
+    /// - Throws: ``ScreenVideoWriterBridgeError/writerFailed(_:)`` after cleanup.
+    private func commit(
+        _ sampleBuffer: CMSampleBuffer,
+        frameIndex: Int64,
+        presentationTime: CMTime,
+        isSync: Bool
+    ) throws -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isFinishing else { throw ScreenVideoWriterBridgeError.alreadyFinished }
+        let accepted = faultInjection.append?(sampleBuffer) ?? videoInput.append(sampleBuffer)
+        guard accepted else {
+            let reason = writer.error?.localizedDescription
+                ?? "The media writer rejected a video sample."
+            diagnosticsState.appendFailureCount += 1
+            diagnosticsState.lastErrorDescription = reason
+            writer.cancelWriting()
+            discardDestinationIfEmpty(force: true)
+            logger.error("screen.writer append rejected a sample; the chunk was discarded")
+            throw ScreenVideoWriterBridgeError.writerFailed(reason)
         }
 
         let sourceDuration = CMSampleBufferGetDuration(sampleBuffer)
@@ -260,6 +464,37 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
             duration: duration,
             isSync: isSync
         ))
+        return true
+    }
+
+    /// Whether the writer input can accept another sample right now.
+    private func isInputReady() -> Bool {
+        lock.lock()
+        let override = faultInjection.inputReady
+        lock.unlock()
+        if let override { return override() }
+        return videoInput.isReadyForMoreMediaData
+    }
+
+    /// Counts one non-sync frame dropped under backpressure.
+    private func recordNonSyncDrop() {
+        lock.lock()
+        droppedFrames += 1
+        diagnosticsState.nonSyncDropCount += 1
+        lock.unlock()
+    }
+
+    /// Removes the chunk file when it holds no bytes and so cannot be recovered.
+    ///
+    /// - Parameter force: Remove the file whatever its size (an appended chunk is
+    ///   unusable after `cancelWriting`).
+    private func discardDestinationIfEmpty(force: Bool = false) {
+        let path = destinationURL.path
+        let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?
+            .int64Value
+        guard let size else { return }
+        guard force || size == 0 else { return }
+        try? FileManager.default.removeItem(at: destinationURL)
     }
 
     /// Finishes and returns the finalized video-only MP4 chunk.
@@ -278,15 +513,25 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
             isFinishing = true
             guard !acceptedFrames.isEmpty, hasStartedWriting, hasStartedSession else {
                 writer.cancelWriting()
+                discardDestinationIfEmpty()
+                diagnosticsState.lastErrorDescription =
+                    "The video chunk contains no accepted video frames."
                 lock.unlock()
+                logger.error("screen.writer finish had no accepted frames")
                 continuation.resume(throwing: ScreenVideoWriterBridgeError.noVideoFrames)
                 return
             }
             videoInput.markAsFinished()
+            let frameCount = acceptedFrames.count
             lock.unlock()
+            logger.info("screen.writer finish requested frames=\(frameCount)")
             writer.finishWriting { [weak self] in
                 guard let self else {
-                    continuation.resume(throwing: ScreenVideoWriterBridgeError.writerFailed("The video writer was released while finishing."))
+                    continuation.resume(
+                        throwing: ScreenVideoWriterBridgeError.writerFailed(
+                            "The video writer was released while finishing."
+                        )
+                    )
                     return
                 }
                 self.lock.lock()
@@ -298,10 +543,15 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
                 let writerStatus = self.writer.status
                 let writerError = self.writer.error?.localizedDescription
                 self.lock.unlock()
+                self.logger.info(
+                    "screen.writer finish completed status=\(writerStatus.rawValue)"
+                )
 
                 guard writerStatus == .completed,
                       let attributes = try? FileManager.default.attributesOfItem(atPath: self.destinationURL.path),
                       ((attributes[.size] as? NSNumber)?.int64Value ?? 0) > 0 else {
+                    self.logger.error("screen.writer finish produced no usable file")
+                    self.discardDestinationIfEmpty()
                     continuation.resume(throwing: ScreenVideoWriterBridgeError.writerFailed(
                         writerError ?? "The video chunk could not be finalized."
                     ))

@@ -73,8 +73,24 @@ public enum PreferenceKeys {
     public static let recordingAudioShortcut = "recording_audioShortcut"
     /// Whether the audio-only recording shortcut hint has been shown.
     public static let recordingShortcutHintShown = "recording_shortcutHintShown"
-    /// Optional user-selected screen-recording destination directory.
+    /// Legacy shared destination directory. Kept for upgrade discovery only.
     public static let recordingCustomOutputDirectory = "recording_customOutputDirectory"
+    /// AAC bitrate used by audio-only recordings. Also the legacy shared bitrate key.
+    public static let recordingAudioBitRate = "recording_audioBitRate"
+    /// AAC bitrate used by screen recordings.
+    public static let recordingScreenAudioBitRate = "recording_screenAudioBitRate"
+    /// Optional user-selected destination for audio-only recordings.
+    public static let recordingAudioCustomOutputDirectory = "recording_audioCustomOutputDirectory"
+    /// Optional user-selected destination for screen recordings.
+    public static let recordingScreenCustomOutputDirectory = "recording_screenCustomOutputDirectory"
+    /// Persistent volume UUID captured when the audio destination was chosen.
+    public static let recordingAudioCustomOutputVolumeUUID = "recording_audioCustomOutputVolumeUUID"
+    /// Persistent volume UUID captured when the screen destination was chosen.
+    public static let recordingScreenCustomOutputVolumeUUID = "recording_screenCustomOutputVolumeUUID"
+    /// One-time marker proving the legacy shared values were seeded per kind.
+    public static let recordingPerKindPreferencesSeeded = "recording_perKindPreferencesSeeded"
+    /// Previously used recording folders, retained for export-window discovery.
+    public static let recordingKnownOutputRoots = "recording_knownOutputRoots"
     /// Opacity applied to the floating recording control panel surface.
     public static let recordingHUDOpacity = "recording_hudOpacity"
     /// Whether the recording control panel restores full opacity while the pointer is inside it.
@@ -168,6 +184,10 @@ public enum PreferenceDefaults {
     public static let recordingAudioShortcut = ""
     /// Treat the audio-only shortcut hint as not yet shown by default.
     public static let recordingShortcutHintShown = false
+    /// Encode audio-only tracks at 128 kbps by default.
+    public static let recordingAudioBitRate = 128_000
+    /// Encode screen-recording audio tracks at 128 kbps by default.
+    public static let recordingScreenAudioBitRate = 128_000
     /// Render the recording control panel surface at 85% opacity by default.
     public static let recordingHUDOpacity = 0.85
     /// Restore full panel opacity while the pointer is inside it.
@@ -352,23 +372,48 @@ public enum RecordingHUDPreferences {
     }
 }
 
-/// Reads and updates the optional destination for screen recordings.
+/// Recording kinds that own independent destination and AAC preferences.
+///
+/// This type is deliberately kind-agnostic: `SharedKit` must not depend on
+/// `CaptureCore.RecordingKind`. The app maps its recording kind to this enum.
+public enum RecordingOutputKind: String, CaseIterable, Sendable {
+    /// Audio-only recordings.
+    case audio
+    /// Screen recordings, including their embedded audio tracks.
+    case screen
+}
+
+/// Reads and updates per-kind recording destinations and seeds legacy values once.
+///
+/// Priority, before the one-time seed exists:
+/// 1. the per-kind key;
+/// 2. the legacy shared `recording_customOutputDirectory`;
+/// 3. the `Movies/SnapGlass/Recordings` default.
+///
+/// After the seed marker exists, only the per-kind key is read. Resetting one
+/// kind removes that key and returns it to the default without re-coupling the
+/// other kind or the legacy key.
 public enum RecordingDestinationPreferences {
-    /// Returns the selected destination, defaulting to `Movies/SnapGlass/Recordings`.
+    /// Maximum number of previously used folders retained for discovery.
+    public static let maximumKnownDirectories = 12
+
+    /// Returns the selected destination for `kind`, defaulting to `Movies/SnapGlass/Recordings`.
     ///
     /// This lookup never creates the directory.
     ///
     /// - Parameters:
+    ///   - kind: The recording kind whose destination should be read.
     ///   - defaults: Defaults store containing the optional custom directory.
     ///   - moviesDirectory: Optional Movies-directory override, primarily for tests.
     ///   - fileManager: File manager used to locate the user's Movies directory.
     /// - Returns: The custom or default directory, or `nil` if Movies cannot be resolved.
     public static func directory(
+        for kind: RecordingOutputKind = .screen,
         in defaults: UserDefaults = .standard,
         moviesDirectory: URL? = nil,
         fileManager: FileManager = .default
     ) -> URL? {
-        if let customDirectory = customDirectory(in: defaults) {
+        if let customDirectory = customDirectory(for: kind, in: defaults) {
             return customDirectory
         }
         guard let moviesDirectory = moviesDirectory
@@ -380,27 +425,185 @@ public enum RecordingDestinationPreferences {
             .appendingPathComponent("Recordings", isDirectory: true)
     }
 
-    /// Returns the remembered custom directory, if one was selected.
-    public static func customDirectory(in defaults: UserDefaults = .standard) -> URL? {
+    /// Returns the remembered custom directory for `kind`, if one was selected.
+    ///
+    /// Before the one-time seed has run, the legacy shared key is still read so an
+    /// upgraded user's existing folder is found. Once the marker exists, a missing
+    /// per-kind key means the user reset it (or never chose one) and the legacy key
+    /// is never consulted again.
+    public static func customDirectory(
+        for kind: RecordingOutputKind = .screen,
+        in defaults: UserDefaults = .standard
+    ) -> URL? {
+        if let path = defaults.string(forKey: customDirectoryKey(for: kind)), !path.isEmpty {
+            return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        }
+        guard defaults.object(forKey: PreferenceKeys.recordingPerKindPreferencesSeeded) == nil else {
+            return nil
+        }
+        return legacyCustomDirectory(in: defaults)
+    }
+
+    /// Remembers a user-selected directory without creating it or moving files.
+    ///
+    /// Also records the folder for export-window discovery, including after it is
+    /// later changed or reset.
+    public static func setCustomDirectory(
+        _ directory: URL,
+        for kind: RecordingOutputKind = .screen,
+        in defaults: UserDefaults = .standard
+    ) {
+        guard directory.isFileURL else { return }
+        seedLegacySharedValuesIfNeeded(in: defaults)
+        let standardized = directory.standardizedFileURL
+        defaults.set(standardized.path, forKey: customDirectoryKey(for: kind))
+        let volumeKey = customDirectoryVolumeUUIDKey(for: kind)
+        if let volumeUUID = RecordingVolumeIdentityPolicy.volumeUUIDString(for: standardized),
+           !RecordingVolumeIdentityPolicy.isStaleVolumesMountPoint(standardized) {
+            defaults.set(volumeUUID, forKey: volumeKey)
+        } else {
+            // A reserved /Volumes directory that looks like a stale mount point
+            // must not capture the current (system) UUID and bypass the guard.
+            defaults.removeObject(forKey: volumeKey)
+        }
+        rememberDirectory(standardized, in: defaults)
+    }
+
+    /// Returns the persistent volume UUID captured when the custom folder was chosen.
+    ///
+    /// `nil` means the setting predates UUID capture, the volume does not report a
+    /// persistent UUID, or the custom folder is not currently set. Callers must not
+    /// treat a missing value as a mismatch.
+    public static func customDirectoryVolumeUUID(
+        for kind: RecordingOutputKind = .screen,
+        in defaults: UserDefaults = .standard
+    ) -> String? {
+        let pathKey = customDirectoryKey(for: kind)
+        guard let path = defaults.string(forKey: pathKey), !path.isEmpty else {
+            return nil
+        }
+        guard let value = defaults.string(forKey: customDirectoryVolumeUUIDKey(for: kind)),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    /// Clears the custom directory for `kind` and restores the Movies default.
+    ///
+    /// The folder stays in the discovery list so existing recordings remain
+    /// visible; the legacy keys are never removed.
+    public static func reset(
+        for kind: RecordingOutputKind = .screen,
+        in defaults: UserDefaults = .standard
+    ) {
+        seedLegacySharedValuesIfNeeded(in: defaults)
+        defaults.removeObject(forKey: customDirectoryKey(for: kind))
+        defaults.removeObject(forKey: customDirectoryVolumeUUIDKey(for: kind))
+    }
+
+    /// Copies legacy shared values into per-kind keys exactly once.
+    ///
+    /// New values already present are never overwritten. The marker is written
+    /// last, after every value has been computed and applied. Legacy keys are
+    /// retained for upgrade discovery.
+    public static func seedLegacySharedValuesIfNeeded(in defaults: UserDefaults = .standard) {
+        guard defaults.object(forKey: PreferenceKeys.recordingPerKindPreferencesSeeded) == nil else {
+            return
+        }
+
+        var pending: [String: Any] = [:]
+        let legacyPath = legacyCustomDirectoryPath(in: defaults)
+        if let legacyPath {
+            for kind in RecordingOutputKind.allCases {
+                let key = customDirectoryKey(for: kind)
+                if defaults.object(forKey: key) == nil {
+                    pending[key] = legacyPath
+                }
+            }
+        }
+        // Audio keeps the legacy bitrate key as its own key; screen gets a copy.
+        if defaults.object(forKey: PreferenceKeys.recordingScreenAudioBitRate) == nil,
+           let legacyBitRate = defaults.object(forKey: PreferenceKeys.recordingAudioBitRate) as? NSNumber {
+            pending[PreferenceKeys.recordingScreenAudioBitRate] = legacyBitRate.intValue
+        }
+
+        for (key, value) in pending {
+            defaults.set(value, forKey: key)
+        }
+        if let legacyPath {
+            rememberDirectory(
+                URL(fileURLWithPath: legacyPath, isDirectory: true).standardizedFileURL,
+                in: defaults
+            )
+        }
+        defaults.set(true, forKey: PreferenceKeys.recordingPerKindPreferencesSeeded)
+    }
+
+    /// Returns every folder worth scanning for completed recordings.
+    ///
+    /// Includes previously used folders and the legacy shared custom folder, even
+    /// after the user changes or resets the current destination. This list is for
+    /// discovery only; it never changes where new recordings are written.
+    public static func knownDirectories(in defaults: UserDefaults = .standard) -> [URL] {
+        var standardizedPaths: [String] = []
+
+        func append(_ path: String?) {
+            guard let path, !path.isEmpty else { return }
+            let standardized = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path
+            guard !standardizedPaths.contains(standardized) else { return }
+            standardizedPaths.append(standardized)
+        }
+
+        for path in defaults.stringArray(forKey: PreferenceKeys.recordingKnownOutputRoots) ?? [] {
+            append(path)
+        }
+        append(legacyCustomDirectoryPath(in: defaults))
+        return standardizedPaths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    /// Records a folder for export-window discovery without creating it.
+    public static func rememberDirectory(_ directory: URL, in defaults: UserDefaults = .standard) {
+        guard directory.isFileURL else { return }
+        let path = directory.standardizedFileURL.path
+        var paths = (defaults.stringArray(forKey: PreferenceKeys.recordingKnownOutputRoots) ?? [])
+            .filter { !$0.isEmpty && $0 != path }
+        paths.insert(path, at: 0)
+        if paths.count > maximumKnownDirectories {
+            paths.removeLast(paths.count - maximumKnownDirectories)
+        }
+        let storedPaths = defaults.stringArray(forKey: PreferenceKeys.recordingKnownOutputRoots) ?? []
+        if paths != storedPaths {
+            defaults.set(paths, forKey: PreferenceKeys.recordingKnownOutputRoots)
+        }
+    }
+
+    /// Returns the legacy shared custom directory, if one was selected.
+    private static func legacyCustomDirectory(in defaults: UserDefaults) -> URL? {
+        guard let path = legacyCustomDirectoryPath(in: defaults) else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+    }
+
+    private static func legacyCustomDirectoryPath(in defaults: UserDefaults) -> String? {
         guard let path = defaults.string(forKey: PreferenceKeys.recordingCustomOutputDirectory),
               !path.isEmpty else {
             return nil
         }
-        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        return path
     }
 
-    /// Remembers a user-selected directory without creating it or moving files.
-    public static func setCustomDirectory(_ directory: URL, in defaults: UserDefaults = .standard) {
-        guard directory.isFileURL else { return }
-        defaults.set(
-            directory.standardizedFileURL.path,
-            forKey: PreferenceKeys.recordingCustomOutputDirectory
-        )
+    private static func customDirectoryKey(for kind: RecordingOutputKind) -> String {
+        switch kind {
+        case .audio: PreferenceKeys.recordingAudioCustomOutputDirectory
+        case .screen: PreferenceKeys.recordingScreenCustomOutputDirectory
+        }
     }
 
-    /// Clears the custom directory and restores the Movies default.
-    public static func reset(in defaults: UserDefaults = .standard) {
-        defaults.removeObject(forKey: PreferenceKeys.recordingCustomOutputDirectory)
+    private static func customDirectoryVolumeUUIDKey(for kind: RecordingOutputKind) -> String {
+        switch kind {
+        case .audio: PreferenceKeys.recordingAudioCustomOutputVolumeUUID
+        case .screen: PreferenceKeys.recordingScreenCustomOutputVolumeUUID
+        }
     }
 }
 

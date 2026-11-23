@@ -209,6 +209,7 @@ public final class AudioMixPump: @unchecked Sendable {
   private var silenceTickCount: Int64 = 0
   private var gapFramesByRole: [RecordingTrackRole: Int64] = [:]
   private var droppedFramesByRole: [RecordingTrackRole: Int64] = [:]
+  private var capturedSourceFrames: Int64 = 0
 
   /// Creates a pump for one recording layout.
   ///
@@ -253,6 +254,7 @@ public final class AudioMixPump: @unchecked Sendable {
     silenceTickCount = 0
     gapFramesByRole = [:]
     droppedFramesByRole = [:]
+    capturedSourceFrames = 0
     policy = initialPolicy
   }
 
@@ -404,6 +406,17 @@ public final class AudioMixPump: @unchecked Sendable {
     defer { lock.unlock() }
     return nextSample
   }
+
+  /// Frames actually read from captured source buffers so far.
+  ///
+  /// Frames synthesized to fill a tick when a source has no data are excluded,
+  /// as are clock-advanced ticks with no source frames. An all-zero captured
+  /// sample still counts because it came from the source buffer.
+  internal var capturedSourceFrameCount: Int64 {
+    lock.lock()
+    defer { lock.unlock() }
+    return capturedSourceFrames
+  }
 }
 
 extension AudioMixPump {
@@ -525,6 +538,7 @@ extension AudioMixPump {
       let maximum = max(64, min(16_384, Int(scaled.rounded(.up)) + 8))
       let read = pipeline.ring.read(maxFrames: maximum)
       if let block = read.block {
+        capturedSourceFrames += Int64(block.frameCount)
         if let trimmed = trimmedForActivation(block, pipeline: pipeline) {
           let batch = try pipeline.resampler.process(trimmed)
           appendBatchLocked(batch.blocks, gap: batch.sessionGapFrames, to: &pipeline)
@@ -817,6 +831,7 @@ extension AudioMixPump {
     while !pipeline.ring.isClosedAndEmpty {
       let read = pipeline.ring.read(maxFrames: 4_096)
       if let block = read.block {
+        capturedSourceFrames += Int64(block.frameCount)
         if let trimmed = trimmedForActivation(block, pipeline: pipeline) {
           let batch = try pipeline.resampler.process(trimmed)
           appendBatchLocked(batch.blocks, gap: batch.sessionGapFrames, to: &pipeline)

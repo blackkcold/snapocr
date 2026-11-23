@@ -8,19 +8,8 @@ struct RecordingsWindow: View {
     @StateObject private var viewModel: RecordingExportViewModel
 
     init() {
-        let fileManager = FileManager.default
-        let recordingRoot = RecordingDestinationPreferences.directory(in: .standard, fileManager: fileManager)
-            ?? fileManager.homeDirectoryForCurrentUser
-                .appendingPathComponent("Movies", isDirectory: true)
-                .appendingPathComponent("SnapGlass", isDirectory: true)
-                .appendingPathComponent("Recordings", isDirectory: true)
-        let indexURL = recordingRoot
-            .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
-            .appendingPathComponent("recording-index.json")
-        _viewModel = StateObject(wrappedValue: RecordingExportViewModel(
-            recordingRoot: recordingRoot,
-            indexURL: indexURL
-        ))
+        let roots = RecordingExportRoots.current(in: .standard, fileManager: .default)
+        _viewModel = StateObject(wrappedValue: RecordingExportViewModel(roots: roots))
     }
 
     var body: some View {

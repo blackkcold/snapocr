@@ -1,0 +1,27 @@
+{
+  "name": "screen-10s-audio-degraded",
+  "mode": "screen",
+  "audioSeconds": 1,
+  "screenSeconds": 10,
+  "firstSampleDeadlineSeconds": 10,
+  "simulateMainStallMs": 0,
+  "simulateStallAfterStart": false,
+  "audioMode": "system",
+  "hudWarmup": false,
+  "simulateScreenAudioFailure": true,
+  "expect": {
+    "artifactPlayable": true,
+    "becameRecording": true
+  },
+  "screenExpect": {
+    "writerStart": true,
+    "published": true,
+    "becameWaitingForFrame": true,
+    "minChunkBytes": 1,
+    "noZeroByteChunks": true,
+    "durationToleranceSeconds": 2.5,
+    "audioTrackPresent": false,
+    "audioStartFailed": true,
+    "failureMentionsMissingAudio": true
+  }
+}

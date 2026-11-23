@@ -11,7 +11,6 @@ struct RecordingPipelineSpaceGateTests {
             indexURL: root.appendingPathComponent("recording-index.json"),
             outputDirectory: root.appendingPathComponent("output", isDirectory: true)
         )
-        let recoveryRoot = root.appendingPathComponent("recovery", isDirectory: true)
         let provider = MutableGateCapacityProvider(defaultCapacity: 10_000_000_000)
         let configuration = AudioRecordingConfiguration(
             kind: .audio,
@@ -24,7 +23,6 @@ struct RecordingPipelineSpaceGateTests {
         let pipeline = try RecordingAudioPipelineFactory.makeSpaceGated(
             configuration: configuration,
             roots: roots,
-            recoveryRoot: recoveryRoot,
             backlog: RecordingBacklogPolicy(highWatermarkBytes: 8_000_000, lowWatermarkBytes: 2_000_000),
             capacityProvider: provider
         )
@@ -33,8 +31,10 @@ struct RecordingPipelineSpaceGateTests {
         do {
             try await pipeline.start(configuration)
             Issue.record("Expected T9 start to reject the low-space preflight")
-        } catch RecordingPipelineError.spacePreflightDenied(_) {
+        } catch let RecordingPipelineError.spacePreflightDenied(decision) {
             // The T9 pipeline rejects before ledger registration or engine creation.
+            #expect(!decision.allowed)
+            #expect(decision.volumes.count == 1)
         }
 
         #expect(!FileManager.default.fileExists(atPath: roots.indexURL.path))
@@ -121,8 +121,7 @@ struct RecordingPipelineSpaceGateTests {
                 bitRate: 128_000
             ),
             capacityProvider: provider,
-            recordingRoot: URL(fileURLWithPath: "/recording"),
-            recoveryRoot: URL(fileURLWithPath: "/recovery")
+            recordingRoot: URL(fileURLWithPath: "/recording")
         )
         return RecordingPipelineSpaceGate(
             budget: budget,

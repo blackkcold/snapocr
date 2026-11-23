@@ -36,6 +36,37 @@ enum RecordingStreamSettings {
     }
 }
 
+/// The result of asking the shared ScreenCaptureKit stream to stop.
+///
+/// Files may only be finalized after `confirmed` is `true`: an unconfirmed stop
+/// leaves the stream reference in place and keeps the session from starting a
+/// second stream on top of the old one.
+public struct ScreenCaptureStopResult: Sendable, Equatable {
+    /// Capture-callback frames dropped before the stream stopped.
+    public let droppedFrames: Int64
+    /// `true` only when `SCStream.stopCapture()` returned without throwing.
+    public let confirmed: Bool
+
+    /// Creates a stop result.
+    public init(droppedFrames: Int64, confirmed: Bool) {
+        self.droppedFrames = droppedFrames
+        self.confirmed = confirmed
+    }
+}
+
+/// How one delivered video frame was handled by the screen capture pipeline.
+public enum ScreenVideoFrameDisposition: Sendable, Equatable {
+    /// The frame was enqueued for the segment writer.
+    case accepted
+    /// The bounded frame stream evicted queued work to make room (backpressure).
+    ///
+    /// The capture callback owns this drop count; the consumer must not count the
+    /// same eviction again.
+    case streamDrop
+    /// The frame was ignored because the stream already finished; not a backpressure drop.
+    case ignored
+}
+
 /// Errors raised while starting, stopping, or finalizing one recording session.
 public enum ScreenRecordingEngineError: LocalizedError, Equatable, Sendable {
     /// The selected display or window is no longer available.
@@ -52,6 +83,8 @@ public enum ScreenRecordingEngineError: LocalizedError, Equatable, Sendable {
     case recordingFailed(String, partialURL: URL?)
     /// The writer could not finish or publish the completed media file.
     case finalizationFailed(String, partialURL: URL?)
+    /// A previous stream was not confirmed stopped; a second stream is refused.
+    case previousStreamNotStopped
 
     /// English fallback description for presentation layers without app-language localization.
     public var errorDescription: String? {
@@ -70,6 +103,8 @@ public enum ScreenRecordingEngineError: LocalizedError, Equatable, Sendable {
             Self.message(reason: reason, partialURL: partialURL)
         case let .finalizationFailed(reason, partialURL):
             Self.message(reason: reason, partialURL: partialURL)
+        case .previousStreamNotStopped:
+            "The previous capture stream has not stopped yet; no new recording was started."
         }
     }
 
@@ -111,6 +146,17 @@ public actor ScreenRecordingEngine {
     private var hasReceivedExclusionUpdate = false
     private var isStreamCapturing = false
     private var isContentFilterUpdateInFlight = false
+    private var cachedShareableContent: SCShareableContent?
+    /// Set when `stopCapture()` failed. The stream reference is kept so a later
+    /// confirmation attempt can still stop it; a new start is refused meanwhile.
+    private var hasUnconfirmedSegmentedStream = false
+
+    /// Whether an earlier stream could not be confirmed stopped.
+    ///
+    /// While true, this engine refuses to start another stream and retains the
+    /// old `SCStream` reference. Only a successful ``stopSegmentedCapture()`` or
+    /// ``confirmSegmentedCaptureStopped()`` clears it.
+    public var hasUnconfirmedStream: Bool { hasUnconfirmedSegmentedStream }
 
     /// Creates an unused recording engine.
     public init() {}
@@ -135,9 +181,15 @@ public actor ScreenRecordingEngine {
     public func startSegmented(
         _ configuration: ScreenRecordingStartConfiguration,
         audioOutputReuse: ScreenAudioOutputReuse?,
-        onVideoFrame: @escaping @Sendable (CMSampleBuffer, UInt64) -> Bool,
+        onVideoFrame: @escaping @Sendable (CMSampleBuffer, UInt64) -> ScreenVideoFrameDisposition,
         onFailure: @escaping @Sendable (String) -> Void
     ) async throws {
+        // Every session owns exactly one stream. A stream that could not be
+        // confirmed stopped keeps this engine unavailable, so two capture
+        // sessions can never overlap on the same engine.
+        guard stream == nil, !hasUnconfirmedSegmentedStream else {
+            throw ScreenRecordingEngineError.previousStreamNotStopped
+        }
         try sessionState.beginStart()
         activeSource = configuration.source
         if !hasReceivedExclusionUpdate {
@@ -152,6 +204,7 @@ public actor ScreenRecordingEngine {
         do {
             try configuration.video.validate()
             let shareableContent = try await SCShareableContent.current
+            cachedShareableContent = shareableContent
             let initialExcludedWindowIDs = excludedWindowIDs
             let initialExclusionRevision = exclusionRevision
             let resolvedSource = try resolve(
@@ -211,9 +264,19 @@ public actor ScreenRecordingEngine {
         }
     }
 
-    /// Stops the shared capture stream and returns its bounded callback-drop count.
-    public func stopSegmentedCapture() async -> Int64 {
-        guard let stream, let segmentedOutput else { return segmentedDroppedFrameCount }
+    /// Stops the shared capture stream and returns its stop confirmation.
+    ///
+    /// Files must not be finalized unless `confirmed` is `true`. When
+    /// `stopCapture()` throws, the stream and its sample output are deliberately
+    /// retained, `hasUnconfirmedStream` is set, and the drop count is left at its
+    /// last known value.
+    public func stopSegmentedCapture() async -> ScreenCaptureStopResult {
+        guard let stream else {
+            return ScreenCaptureStopResult(
+                droppedFrames: segmentedDroppedFrameCount,
+                confirmed: !hasUnconfirmedSegmentedStream
+            )
+        }
         isStreamCapturing = false
         if sessionState.phase == .recording { try? sessionState.beginStop() }
 
@@ -221,23 +284,58 @@ public actor ScreenRecordingEngine {
             try await stream.stopCapture()
         } catch {
             recordSegmentedFailure("The capture stream could not stop cleanly: \(error.localizedDescription)")
+            hasUnconfirmedSegmentedStream = true
+            return ScreenCaptureStopResult(
+                droppedFrames: segmentedDroppedFrameCount,
+                confirmed: false
+            )
         }
 
+        hasUnconfirmedSegmentedStream = false
+        let videoOutput = segmentedOutput
         let stats = sampleQueue.sync {
-            segmentedOutput.stopAcceptingSamples()
-            return segmentedOutput.snapshot
+            videoOutput?.stopAcceptingSamples()
+            return videoOutput?.snapshot
         }
         segmentedAudioOutputReuse?.detach(from: stream)
-        segmentedFailureMessage = segmentedFailureMessage ?? stats.failureMessage
-        segmentedDroppedFrameCount = stats.droppedFrameCount
-        segmentedHasAcceptedVideoSample = stats.hasAcceptedVideoFrame
+        if let stats {
+            segmentedFailureMessage = segmentedFailureMessage ?? stats.failureMessage
+            segmentedDroppedFrameCount = stats.droppedFrameCount
+            segmentedHasAcceptedVideoSample = stats.hasAcceptedVideoFrame
+        }
         self.stream = nil
         output = nil
-        self.segmentedOutput = nil
+        segmentedOutput = nil
         segmentedAudioOutputReuse = nil
         activeSource = nil
+        cachedShareableContent = nil
         if sessionState.phase == .stopping { try? sessionState.beginSaving() }
-        return segmentedDroppedFrameCount
+        return ScreenCaptureStopResult(
+            droppedFrames: segmentedDroppedFrameCount,
+            confirmed: true
+        )
+    }
+
+    /// Retries one stop after an unconfirmed stop left the stream retained.
+    ///
+    /// This is the explicit recovery path for ``ScreenCaptureStopResult/confirmed``
+    /// being `false`; it never starts a second stream.
+    public func confirmSegmentedCaptureStopped() async -> ScreenCaptureStopResult {
+        guard hasUnconfirmedSegmentedStream || stream != nil else {
+            return ScreenCaptureStopResult(droppedFrames: segmentedDroppedFrameCount, confirmed: true)
+        }
+        let result = await stopSegmentedCapture()
+        if result.confirmed, sessionState.phase != .failed {
+            sessionState.fail()
+        }
+        return result
+    }
+
+    /// The last segmented session's capture-callback drop count.
+    ///
+    /// Read after a stop or failure to complete the three-layer accounting.
+    public func captureCallbackDroppedCount() -> Int64 {
+        segmentedOutput?.snapshot.droppedFrameCount ?? segmentedDroppedFrameCount
     }
 
     /// Completes the segmented lifecycle after sealing and publication have succeeded.
@@ -249,13 +347,24 @@ public actor ScreenRecordingEngine {
         stream = nil
         output = nil
         activeSource = nil
+        cachedShareableContent = nil
     }
 
     /// Marks segmented finalization as recoverable while retaining its retry handler.
+    ///
+    /// An unconfirmed stream is never dropped here: the references stay so a later
+    /// confirmation can still stop it, and a new stream stays refused.
     public func failSegmentedSession() async {
         isStreamCapturing = false
         if let stream {
-            try? await stream.stopCapture()
+            do {
+                try await stream.stopCapture()
+                hasUnconfirmedSegmentedStream = false
+            } catch {
+                recordSegmentedFailure("The capture stream could not stop cleanly: \(error.localizedDescription)")
+                hasUnconfirmedSegmentedStream = true
+                return
+            }
             segmentedAudioOutputReuse?.detach(from: stream)
         }
         if let segmentedOutput {
@@ -273,12 +382,20 @@ public actor ScreenRecordingEngine {
         segmentedOutput = nil
         segmentedAudioOutputReuse = nil
         activeSource = nil
+        cachedShareableContent = nil
     }
 
     private func cleanupAfterSegmentedStartFailure() async {
         isStreamCapturing = false
         if let stream {
-            try? await stream.stopCapture()
+            do {
+                try await stream.stopCapture()
+                hasUnconfirmedSegmentedStream = false
+            } catch {
+                recordSegmentedFailure("The capture stream could not stop cleanly: \(error.localizedDescription)")
+                hasUnconfirmedSegmentedStream = true
+                return
+            }
             segmentedAudioOutputReuse?.detach(from: stream)
         }
         if let segmentedOutput {
@@ -297,6 +414,7 @@ public actor ScreenRecordingEngine {
         pipeline = nil
         transaction = nil
         activeSource = nil
+        cachedShareableContent = nil
     }
 
     private func recordSegmentedFailure(_ message: String) {
@@ -363,6 +481,7 @@ public actor ScreenRecordingEngine {
         do {
             try configuration.validate()
             let shareableContent = try await SCShareableContent.current
+            cachedShareableContent = shareableContent
             let initialExcludedWindowIDs = self.excludedWindowIDs
             let initialExclusionRevision = exclusionRevision
             let resolvedSource = try resolve(
@@ -446,6 +565,7 @@ public actor ScreenRecordingEngine {
         pipeline = nil
         transaction = nil
         activeSource = nil
+        cachedShareableContent = nil
         guard let retainedPartialURL else { return nil }
         return .recordingFailed(startError.localizedDescription, partialURL: retainedPartialURL)
     }
@@ -485,10 +605,12 @@ public actor ScreenRecordingEngine {
             self.pipeline = nil
             transaction = nil
             activeSource = nil
+            cachedShareableContent = nil
             return finalURL
         } catch {
             sessionState.fail()
             activeSource = nil
+            cachedShareableContent = nil
             if stopError == nil {
                 self.stream = nil
                 output = nil
@@ -549,6 +671,7 @@ public actor ScreenRecordingEngine {
                   let stream,
                   let activeSource else { return }
             let revision = exclusionRevision
+            let excludedIDs = excludedWindowIDs
 
             if case .window = activeSource {
                 appliedExclusionRevision = revision
@@ -556,12 +679,23 @@ public actor ScreenRecordingEngine {
             }
 
             do {
-                let shareableContent = try await SCShareableContent.current
+                let content: SCShareableContent
+                if let cached = cachedShareableContent,
+                   Self.canResolve(activeSource, excludedWindowIDs: excludedIDs, in: cached) {
+                    content = cached
+                } else {
+                    // Missing cached windows usually means a newly created own
+                    // window is not excluded yet; refresh instead of reusing.
+                    content = try await SCShareableContent.current
+                    cachedShareableContent = content
+                }
+                // Fold rapid revision updates: a newer exclusion set wins, and the
+                // result of this pass is discarded without applying a stale filter.
                 guard revision == exclusionRevision else { continue }
                 let resolvedSource = try resolve(
                     activeSource,
-                    in: shareableContent,
-                    excludedWindowIDs: excludedWindowIDs
+                    in: content,
+                    excludedWindowIDs: excludedIDs
                 )
                 try await stream.updateContentFilter(resolvedSource.filter)
                 appliedExclusionRevision = revision
@@ -570,6 +704,29 @@ public actor ScreenRecordingEngine {
                 return
             }
         }
+    }
+
+    /// Whether cached shareable content can resolve this source and every exclusion.
+    ///
+    /// Reuse is unsafe when the display/window disappeared or when an excluded
+    /// window ID is absent from the cache; the caller must refresh in that case.
+    private static func canResolve(
+        _ source: RecordingSource,
+        excludedWindowIDs: Set<CGWindowID>,
+        in content: SCShareableContent
+    ) -> Bool {
+        let sourcePresent: Bool
+        switch source {
+        case let .display(displayID):
+            sourcePresent = content.displays.contains { $0.displayID == displayID }
+        case let .region(displayID, _):
+            sourcePresent = content.displays.contains { $0.displayID == displayID }
+        case let .window(windowID):
+            sourcePresent = content.windows.contains { $0.windowID == windowID }
+        }
+        guard sourcePresent else { return false }
+        let cachedWindowIDs = Set(content.windows.map(\.windowID))
+        return excludedWindowIDs.isSubset(of: cachedWindowIDs)
     }
 
     private func resolve(
@@ -672,7 +829,7 @@ private final class SegmentedRecordingSampleOutput: NSObject, SCStreamOutput, SC
     }
 
     private let sampleQueue: DispatchQueue
-    private let onVideoFrame: @Sendable (CMSampleBuffer, UInt64) -> Bool
+    private let onVideoFrame: @Sendable (CMSampleBuffer, UInt64) -> ScreenVideoFrameDisposition
     private let onFailure: @Sendable (String) -> Void
     private let lock = NSLock()
     private var acceptsSamples = true
@@ -682,7 +839,7 @@ private final class SegmentedRecordingSampleOutput: NSObject, SCStreamOutput, SC
 
     init(
         sampleQueue: DispatchQueue,
-        onVideoFrame: @escaping @Sendable (CMSampleBuffer, UInt64) -> Bool,
+        onVideoFrame: @escaping @Sendable (CMSampleBuffer, UInt64) -> ScreenVideoFrameDisposition,
         onFailure: @escaping @Sendable (String) -> Void
     ) {
         self.sampleQueue = sampleQueue
@@ -702,12 +859,15 @@ private final class SegmentedRecordingSampleOutput: NSObject, SCStreamOutput, SC
         lock.unlock()
         guard shouldAccept else { return }
 
-        let delivered = onVideoFrame(sampleBuffer, AudioGetCurrentHostTime())
+        let disposition = onVideoFrame(sampleBuffer, AudioGetCurrentHostTime())
         lock.lock()
-        if delivered {
+        switch disposition {
+        case .accepted:
             hasAcceptedVideoFrame = true
-        } else {
+        case .streamDrop:
             droppedFrameCount += 1
+        case .ignored:
+            break
         }
         lock.unlock()
     }
@@ -729,7 +889,10 @@ private final class SegmentedRecordingSampleOutput: NSObject, SCStreamOutput, SC
         return Snapshot(
             droppedFrameCount: droppedFrameCount,
             hasAcceptedVideoFrame: hasAcceptedVideoFrame,
-            failureMessage: failureMessage
+            // Read the stored value directly: going through `failureMessage`
+            // would take this same non-recursive lock again on this thread and
+            // deadlock the stop path before any chunk can be finalized.
+            failureMessage: recordedFailureMessage
         )
     }
 

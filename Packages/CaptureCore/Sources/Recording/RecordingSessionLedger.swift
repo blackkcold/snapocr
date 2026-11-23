@@ -46,29 +46,59 @@ private struct LedgerJournalPayload: Codable, Sendable, Hashable {
     let intent: RecordingPublishIntent?
     let published: PublishedSegment?
     let closed: LedgerClosedSegment?
+    /// A segment adopted in place from an interrupted session.
+    ///
+    /// Added after the first shipping schema; optional so every line written
+    /// before adoption still decodes with `adopted == nil`.
+    let adopted: PublishedSegment?
 
     static func registered(_ record: RecordingSessionRecord) -> Self {
-        Self(kind: "register", record: record, checkpoint: nil, screenCheckpoint: nil, intent: nil, published: nil, closed: nil)
+        Self(
+            kind: "register", record: record, checkpoint: nil, screenCheckpoint: nil,
+            intent: nil, published: nil, closed: nil, adopted: nil
+        )
     }
 
     static func committed(_ checkpoint: LedgerCheckpoint) -> Self {
-        Self(kind: "checkpoint", record: nil, checkpoint: checkpoint, screenCheckpoint: nil, intent: nil, published: nil, closed: nil)
+        Self(
+            kind: "checkpoint", record: nil, checkpoint: checkpoint, screenCheckpoint: nil,
+            intent: nil, published: nil, closed: nil, adopted: nil
+        )
     }
 
     static func committedScreen(_ checkpoint: ScreenCheckpointRecord) -> Self {
-        Self(kind: "screenCheckpoint", record: nil, checkpoint: nil, screenCheckpoint: checkpoint, intent: nil, published: nil, closed: nil)
+        Self(
+            kind: "screenCheckpoint", record: nil, checkpoint: nil, screenCheckpoint: checkpoint,
+            intent: nil, published: nil, closed: nil, adopted: nil
+        )
     }
 
     static func publishIntent(_ intent: RecordingPublishIntent) -> Self {
-        Self(kind: "publishIntent", record: nil, checkpoint: nil, screenCheckpoint: nil, intent: intent, published: nil, closed: nil)
+        Self(
+            kind: "publishIntent", record: nil, checkpoint: nil, screenCheckpoint: nil,
+            intent: intent, published: nil, closed: nil, adopted: nil
+        )
     }
 
     static func published(_ segment: PublishedSegment) -> Self {
-        Self(kind: "published", record: nil, checkpoint: nil, screenCheckpoint: nil, intent: nil, published: segment, closed: nil)
+        Self(
+            kind: "published", record: nil, checkpoint: nil, screenCheckpoint: nil,
+            intent: nil, published: segment, closed: nil, adopted: nil
+        )
     }
 
     static func closed(_ segment: LedgerClosedSegment) -> Self {
-        Self(kind: "segmentClosed", record: nil, checkpoint: nil, screenCheckpoint: nil, intent: nil, published: nil, closed: segment)
+        Self(
+            kind: "segmentClosed", record: nil, checkpoint: nil, screenCheckpoint: nil,
+            intent: nil, published: nil, closed: segment, adopted: nil
+        )
+    }
+
+    static func adopted(_ segment: PublishedSegment) -> Self {
+        Self(
+            kind: "adopted", record: nil, checkpoint: nil, screenCheckpoint: nil,
+            intent: nil, published: nil, closed: nil, adopted: segment
+        )
     }
 }
 
@@ -92,6 +122,8 @@ private struct LedgerState {
     var intents: [UUID: RecordingPublishIntent] = [:]
     var closed: [Int: LedgerClosedSegment] = [:]
     var published: [UUID: PublishedSegment] = [:]
+    /// Segments recovered in place from an interrupted session, keyed by segment ID.
+    var adopted: [UUID: PublishedSegment] = [:]
     var sequence: UInt64 = 0
     var lastHash = String(repeating: "0", count: 64)
     var requiresNewerVersion = false
@@ -374,6 +406,70 @@ public actor RecordingSessionLedger {
         try persistIndex()
     }
 
+    /// Journals an interrupted segment that references existing media in place.
+    ///
+    /// Recovery never copies or re-encodes captured media: the segment records the
+    /// media that is already inside the session root, so preview and export read the
+    /// original bytes. The result is an ordinary index entry, which means
+    /// `publishedSessions(in:indexURL:)`, `isCompleted`, preview and export all use
+    /// their existing paths.
+    ///
+    /// A session that already journaled checkpoints keeps its segment identity: the
+    /// adopted segment reuses the checkpoint's segment ID, so replay stays valid and
+    /// the checkpoint files remain untouched on disk.
+    ///
+    /// Idempotent: adopting the same segment index twice returns the segment that
+    /// is already journaled and appends nothing.
+    ///
+    /// - Parameter segment: Segment whose media already exists in the session root.
+    /// - Returns: The journaled segment (the existing one on a repeat adoption).
+    @discardableResult
+    public func adoptPublishedSegment(_ segment: PublishedSegment) async throws -> PublishedSegment {
+        try ensureWritable()
+        guard state.record != nil else { throw RecordingSessionLedgerError.missingSession }
+        try Self.validateAdoptedSegment(segment, sessionRoot: sessionRoot)
+
+        let effective = Self.reidentifying(
+            segment,
+            as: state.segmentIDs[segment.index] ?? segment.id
+        )
+        if let existing = state.adopted[effective.id] {
+            guard existing == effective else { throw RecordingSessionLedgerError.idempotencyConflict }
+            try persistIndex()
+            return existing
+        }
+        if let other = state.adopted.values.first(where: { $0.index == effective.index }) {
+            try persistIndex()
+            return other
+        }
+        if state.intents.values.contains(where: { $0.segmentIndex == effective.index })
+            || state.published.values.contains(where: { $0.index == effective.index })
+        {
+            throw RecordingSessionLedgerError.idempotencyConflict
+        }
+        try append(.adopted(effective))
+        try persistIndex()
+        return effective
+    }
+
+    /// Copies an adopted segment onto the segment ID the index already uses.
+    private static func reidentifying(_ segment: PublishedSegment, as id: UUID) -> PublishedSegment {
+        guard segment.id != id else { return segment }
+        return PublishedSegment(
+            id: id,
+            index: segment.index,
+            files: segment.files,
+            startSample: segment.startSample,
+            sampleCount: segment.sampleCount,
+            trackMap: segment.trackMap,
+            missingRanges: segment.missingRanges,
+            state: segment.state,
+            videoURL: segment.videoURL,
+            videoTrackIndex: segment.videoTrackIndex,
+            materialURL: segment.materialURL
+        )
+    }
+
     public func rebuildIndex() async throws {
         try ensureWritable()
         let entries = try await Self.allEntries(
@@ -545,6 +641,11 @@ public actor RecordingSessionLedger {
             }
             return (checkpoint.segmentID, urls)
         case .segment(let segmentID):
+            if let adopted = state.adopted[segmentID] {
+                let urls = try Self.adoptedMaterialURLs(adopted, sessionRoot: sessionRoot)
+                guard !urls.isEmpty else { throw RecordingPreviewError.notPreviewable }
+                return (segmentID, urls)
+            }
             guard let segment = state.published[segmentID],
                   let intent = state.intents[segmentID]
             else { throw RecordingPreviewError.notPreviewable }
@@ -857,6 +958,25 @@ public actor RecordingSessionLedger {
             }
             state.segmentIDs[index] = closed.segmentID
             state.closed[index] = closed
+        case "adopted":
+            guard let segment = payload.adopted, payload.record == nil, payload.checkpoint == nil,
+                  payload.screenCheckpoint == nil, payload.intent == nil, payload.published == nil,
+                  payload.closed == nil
+            else { throw RecordingSessionLedgerError.journalCorrupt }
+            try validateAdoptedSegment(segment, sessionRoot: root)
+            if let prior = state.adopted[segment.id] {
+                guard prior == segment else { throw RecordingSessionLedgerError.journalCorrupt }
+                return
+            }
+            if let other = state.adopted.values.first(where: { $0.index == segment.index }) {
+                guard other.id == segment.id else { throw RecordingSessionLedgerError.journalCorrupt }
+                return
+            }
+            if let prior = state.segmentIDs[segment.index], prior != segment.id {
+                throw RecordingSessionLedgerError.journalCorrupt
+            }
+            state.adopted[segment.id] = segment
+            state.segmentIDs[segment.index] = segment.id
         default:
             throw RecordingSessionLedgerError.journalCorrupt
         }
@@ -894,9 +1014,14 @@ public actor RecordingSessionLedger {
             .union(state.intents.values.map(\.segmentIndex))
             .union(state.closed.keys)
             .union(state.published.values.map(\.index))
+            .union(state.adopted.values.map(\.index))
         var segments: [PublishedSegment] = []
         for index in indices.sorted() {
             guard let id = state.segmentIDs[index] ?? state.closed[index]?.segmentID else { continue }
+            if let adopted = state.adopted[id] {
+                segments.append(adopted)
+                continue
+            }
             let checkpoints = state.checkpoints.values.filter { $0.segmentIndex == index }
             let start = state.closed[index]?.coverage.segmentStartSample
                 ?? checkpoints.map(\.range.startSample).min() ?? 0
@@ -1187,6 +1312,56 @@ public actor RecordingSessionLedger {
         verifyFiles: Bool = true
     ) throws {
         try Self.validatePublishedSegment(segment, against: intent, verifyFiles: verifyFiles)
+    }
+
+    /// Validates an adopted segment: media must live inside the session root.
+    private static func validateAdoptedSegment(_ segment: PublishedSegment, sessionRoot: URL) throws {
+        guard segment.state == .published, segment.index >= 0,
+              segment.startSample >= 0, segment.sampleCount > 0,
+              (segment.videoURL == nil) == (segment.videoTrackIndex == nil),
+              segment.materialURL != nil || segment.videoURL != nil,
+              !segment.files.isEmpty || segment.videoURL != nil,
+              Set(segment.files.keys).isSubset(of: ["mixed", "system", "microphone"]),
+              Set(segment.trackMap.keys) == Set(segment.files.keys)
+        else { throw RecordingSessionLedgerError.invalidPublication }
+        do {
+            for relative in segment.files.values {
+                try RecordingLedgerFileSystem.validateRelativePath(relative)
+                let url = try RecordingLedgerFileSystem.resolve(relative, under: sessionRoot)
+                guard RecordingLedgerFileSystem.isRegularFile(url) else {
+                    throw RecordingSessionLedgerError.invalidPublication
+                }
+            }
+            if let materialURL = segment.materialURL {
+                let relative = try RecordingLedgerFileSystem.validateChild(materialURL, under: sessionRoot)
+                guard segment.files.values.contains(relative) else {
+                    throw RecordingSessionLedgerError.invalidPublication
+                }
+            }
+            if let videoURL = segment.videoURL {
+                _ = try RecordingLedgerFileSystem.validateChild(videoURL, under: sessionRoot)
+                guard RecordingLedgerFileSystem.isRegularFile(videoURL) else {
+                    throw RecordingSessionLedgerError.invalidPublication
+                }
+            }
+        } catch let error as RecordingSessionLedgerError {
+            throw error
+        } catch {
+            throw Self.mapPathError(error)
+        }
+    }
+
+    /// Resolves the media of an adopted segment, newest file first per track role.
+    private static func adoptedMaterialURLs(_ segment: PublishedSegment, sessionRoot: URL) throws -> [URL] {
+        let ordered = RecordingCheckpointWriter.roleOrder.compactMap { role -> URL? in
+            let name = roleName(role)
+            guard let relative = segment.files[name] else { return nil }
+            return try? RecordingLedgerFileSystem.resolve(relative, under: sessionRoot)
+        }
+        if ordered.isEmpty, let materialURL = segment.materialURL {
+            return (try? RecordingLedgerFileSystem.validateChild(materialURL, under: sessionRoot)).map { _ in [materialURL] } ?? []
+        }
+        return ordered
     }
 
     private static func validatePublishedSegment(

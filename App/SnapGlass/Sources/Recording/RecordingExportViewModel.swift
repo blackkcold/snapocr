@@ -22,6 +22,17 @@ enum RecordingExportViewMessage: Sendable, Equatable {
     case previewUnavailable
     case previewFailed
     case export(ExportError)
+    case recoveryScanFailed
+    case recoveryFailed
+    case discardFailed
+}
+
+/// One-time feedback for a recovery action.
+enum RecordingRecoveryNotice: Sendable, Equatable {
+    /// The session was adopted and now appears in the normal list.
+    case recovered
+    /// The session folder was moved to the Trash.
+    case discarded
 }
 
 @MainActor
@@ -45,13 +56,30 @@ final class RecordingExportViewModel: ObservableObject {
     @Published private(set) var previewSegmentID: UUID?
     @Published private(set) var message: RecordingExportViewMessage?
     @Published private(set) var succeededOutputURL: URL?
+    /// Interrupted sessions that still have media but no published entry.
+    @Published private(set) var recoverableRecordings: [RecoverableRecording] = []
+    /// Whether a recovery scan is running.
+    @Published private(set) var isScanningRecoverable = false
+    /// Session currently being adopted, so its row can show progress.
+    @Published private(set) var recoveringRecordingID: UUID?
+    /// Session currently being moved to the Trash.
+    @Published private(set) var discardingRecordingID: UUID?
+    /// One-time feedback for the last recovery action.
+    @Published private(set) var recoveryNotice: RecordingRecoveryNotice?
 
-    let recordingRoot: URL
-    let indexURL: URL
+    let roots: [RecordingExportRoot]
+    private let primaryRoot: URL
+
+    /// Root of the selected session, or the first configured folder.
+    var recordingRoot: URL {
+        selectedExportRoot?.root ?? primaryRoot
+    }
 
     private let exporter = RecordingCompositionExporter()
     private var ledger: RecordingSessionLedger?
     private var previewService: RecordingPreviewService?
+    private var exportRootBySessionID: [UUID: RecordingExportRoot] = [:]
+    private var hasUserChosenOutputDirectory = false
     private var rangesBySegment: [UUID: SampleRange] = [:]
     private var assessmentGeneration = 0
     private var sessionGeneration = 0
@@ -70,11 +98,29 @@ final class RecordingExportViewModel: ObservableObject {
     private var activeExportID: UUID?
     private var exportGeneration = 0
 
-    init(recordingRoot: URL, indexURL: URL, defaultStem: String = "Recording") {
-        self.recordingRoot = recordingRoot.standardizedFileURL
-        self.indexURL = indexURL.standardizedFileURL
-        outputDirectory = recordingRoot.standardizedFileURL
+    init(roots: [RecordingExportRoot], defaultStem: String = "Recording") {
+        self.roots = roots
+        let fallback = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Movies", isDirectory: true)
+            .appendingPathComponent("SnapGlass", isDirectory: true)
+            .appendingPathComponent("Recordings", isDirectory: true)
+        let primary = roots.first
+        primaryRoot = primary?.root ?? fallback
+        outputDirectory = primaryRoot
         outputStem = defaultStem
+    }
+
+    /// Single-folder convenience entry point retained for tests and older callers.
+    convenience init(recordingRoot: URL, indexURL: URL, defaultStem: String = "Recording") {
+        self.init(
+            roots: [RecordingExportRoot(kind: .screen, root: recordingRoot, indexURL: indexURL)],
+            defaultStem: defaultStem
+        )
+    }
+
+    private var selectedExportRoot: RecordingExportRoot? {
+        guard let selectedSessionID else { return nil }
+        return exportRootBySessionID[selectedSessionID]
     }
 
     var availableOutputModes: [RecordingExportOutputMode] {
@@ -104,35 +150,136 @@ final class RecordingExportViewModel: ObservableObject {
         isLoading = true
         message = nil
 
-        let root = recordingRoot
-        let index = indexURL
+        let roots = self.roots
         let task = Task.detached(priority: .utility) {
-            var isDirectory = ObjCBool(false)
-            guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else { return [RecordingSessionRecord]() }
-            let records = try await RecordingSessionLedger.publishedSessions(in: root, indexURL: index)
-            return Self.completedSessions(records)
+            var records: [RecordingSessionRecord] = []
+            var indexByID: [UUID: Int] = [:]
+            var rootByID: [UUID: RecordingExportRoot] = [:]
+            var failedRoot = false
+
+            for exportRoot in roots {
+                var isDirectory = ObjCBool(false)
+                guard FileManager.default.fileExists(
+                    atPath: exportRoot.root.path,
+                    isDirectory: &isDirectory
+                ), isDirectory.boolValue else {
+                    continue
+                }
+                do {
+                    let found = try await RecordingSessionLedger.publishedSessions(
+                        in: exportRoot.root,
+                        indexURL: exportRoot.indexURL
+                    )
+                    for record in found where Self.isCompleted(record) {
+                        if let index = indexByID[record.id] {
+                            // The same session can exist in two scanned folders; keep the newest copy.
+                            if record.startedAt > records[index].startedAt {
+                                records[index] = record
+                                rootByID[record.id] = exportRoot
+                            }
+                        } else {
+                            indexByID[record.id] = records.count
+                            records.append(record)
+                            rootByID[record.id] = exportRoot
+                        }
+                    }
+                } catch {
+                    // One unreadable folder must not hide sessions from the others.
+                    failedRoot = true
+                }
+            }
+
+            records.sort { $0.startedAt > $1.startedAt }
+            return (records, rootByID, failedRoot)
         }
 
-        do {
-            let records = try await task.value
-            guard generation == listGeneration else { return }
-            publishedSessions = records
-            isLoading = false
-            if let selectedSessionID, !records.contains(where: { $0.id == selectedSessionID }) {
-                clearSelectedSession()
-            }
-        } catch {
-            guard generation == listGeneration else { return }
-            publishedSessions = []
-            isLoading = false
+        let (records, rootByID, failedRoot) = await task.value
+        guard generation == listGeneration else { return }
+        publishedSessions = records
+        exportRootBySessionID = rootByID
+        isLoading = false
+        if let selectedSessionID, !records.contains(where: { $0.id == selectedSessionID }) {
+            clearSelectedSession()
+        }
+        // Only surface the listing error when no folder produced a usable list.
+        if failedRoot, records.isEmpty {
             message = .listingFailed
         }
+    }
+
+    // MARK: Recovery
+
+    /// Scans for interrupted sessions that still have media on disk.
+    ///
+    /// Scanning never writes: adoption only happens through ``recoverRecording(_:)``.
+    func scanRecoverableRecordings() async {
+        guard !isScanningRecoverable else { return }
+        isScanningRecoverable = true
+        if message == .recoveryScanFailed { message = nil }
+        let roots = self.roots
+        let found = await RecordingRecoveryService.shared.scan(roots: roots)
+        recoverableRecordings = found
+        isScanningRecoverable = false
+    }
+
+    /// Adopts one interrupted session so the normal list, preview, and export use it.
+    ///
+    /// - Parameter sessionID: Session chosen in the recoverable group.
+    func recoverRecording(_ sessionID: UUID) async {
+        guard recoveringRecordingID == nil,
+              let recording = recoverableRecordings.first(where: { $0.id == sessionID })
+        else { return }
+        recoveringRecordingID = sessionID
+        recoveryNotice = nil
+        message = nil
+        do {
+            _ = try await RecordingRecoveryService.shared.recover(recording)
+            recoverableRecordings.removeAll { $0.id == sessionID }
+            recoveringRecordingID = nil
+            recoveryNotice = .recovered
+            // The adopted session is an ordinary entry now: reload so selection,
+            // preview, and export all use the existing list path.
+            await loadPublishedSessions()
+            await selectSession(sessionID)
+        } catch {
+            recoveringRecordingID = nil
+            message = .recoveryFailed
+        }
+    }
+
+    /// Moves one interrupted session folder to the Trash.
+    ///
+    /// - Parameter sessionID: Session chosen in the recoverable group.
+    func discardRecording(_ sessionID: UUID) async {
+        guard discardingRecordingID == nil,
+              let recording = recoverableRecordings.first(where: { $0.id == sessionID })
+        else { return }
+        discardingRecordingID = sessionID
+        recoveryNotice = nil
+        message = nil
+        do {
+            try await RecordingRecoveryService.shared.discard(recording)
+            recoverableRecordings.removeAll { $0.id == sessionID }
+            discardingRecordingID = nil
+            recoveryNotice = .discarded
+        } catch {
+            discardingRecordingID = nil
+            message = .discardFailed
+        }
+    }
+
+    /// Clears the one-time recovery notice after the view showed it.
+    func clearRecoveryNotice() {
+        recoveryNotice = nil
     }
 
     func selectSession(_ sessionID: UUID) async {
         guard publishedSessions.contains(where: { $0.id == sessionID }) else { return }
         guard selectedSessionID != sessionID || session == nil else { return }
+        guard let exportRoot = exportRootBySessionID[sessionID] else {
+            message = .sessionUnavailable
+            return
+        }
 
         sessionGeneration += 1
         let generation = sessionGeneration
@@ -151,8 +298,8 @@ final class RecordingExportViewModel: ObservableObject {
         isOpeningSession = true
         invalidateAssessment()
 
-        let root = recordingRoot
-        let index = indexURL
+        let root = exportRoot.root
+        let index = exportRoot.indexURL
         let task = Task.detached(priority: .utility) {
             let ledger = try await RecordingSessionLedger.openExisting(
                 sessionID: sessionID,
@@ -177,6 +324,9 @@ final class RecordingExportViewModel: ObservableObject {
             previewService = service
             outputMode = record.kind == .screen ? .mp4Video : .mixedAudio
             outputStem = Self.defaultStem(for: record)
+            if !hasUserChosenOutputDirectory {
+                outputDirectory = exportRoot.root
+            }
             isOpeningSession = false
             refreshAssessment()
         } catch {
@@ -192,6 +342,7 @@ final class RecordingExportViewModel: ObservableObject {
         releaseSelectedSourceLeases()
         session = nil
         selectedSessionID = nil
+        hasUserChosenOutputDirectory = false
         ledger = nil
         previewService = nil
         selectedSegmentIDs = []
@@ -270,6 +421,7 @@ final class RecordingExportViewModel: ObservableObject {
 
     func setOutputDirectory(_ directory: URL) {
         guard directory.isFileURL else { return }
+        hasUserChosenOutputDirectory = true
         outputDirectory = directory.standardizedFileURL
         succeededOutputURL = nil
         refreshAssessment()
@@ -564,12 +716,6 @@ final class RecordingExportViewModel: ObservableObject {
         }
     }
 
-    nonisolated private static func completedSessions(_ records: [RecordingSessionRecord]) -> [RecordingSessionRecord] {
-        records
-            .filter(isCompleted)
-            .sorted { $0.startedAt > $1.startedAt }
-    }
-
     nonisolated private static func isCompleted(_ record: RecordingSessionRecord) -> Bool {
         guard record.segments.contains(where: { $0.state == .published || $0.state == .missing }) else {
             return false
@@ -664,7 +810,13 @@ private enum RecordingExportWork {
             do {
                 let lease = try await service.leasePreview(for: segmentID, duration: 24 * 60 * 60)
                 leases[segmentID] = lease
-                sources[segmentID] = .publishedMedia(lease.mediaURLs)
+                // Adopted segments reference the recorder's original media, which
+                // has no sealed-product metadata: read the file itself instead.
+                let isRecovered = session.segments
+                    .first(where: { $0.id == segmentID })?.materialURL != nil
+                sources[segmentID] = isRecovered
+                    ? .recoveredMedia(lease.mediaURLs)
+                    : .publishedMedia(lease.mediaURLs)
             } catch {
                 // The planner reports the real missing-source disabled reason.
             }

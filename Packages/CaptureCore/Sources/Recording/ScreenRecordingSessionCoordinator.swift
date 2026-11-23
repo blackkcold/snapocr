@@ -3,6 +3,7 @@ import AudioToolbox
 import CoreGraphics
 import CoreMedia
 import Foundation
+import SharedKit
 
 /// Immutable settings selected for one screen-recording session.
 public struct ScreenRecordingStartConfiguration: Sendable, Hashable {
@@ -107,22 +108,47 @@ public struct ScreenRecordingOutcome: Sendable, Hashable {
     public let sessionID: UUID
     /// Published MP4 URLs in segment order.
     public let segmentURLs: [URL]
-    /// Frames dropped by bounded video backpressure.
+    /// Total frames dropped by bounded video backpressure and writer rejection.
     public let droppedFrameCount: Int64
     /// A failure summary when finalization was incomplete.
     public let failure: String?
+    /// Why the audio track could not start, when it could not.
+    ///
+    /// Non-fatal: the video is published normally and the app shows a warning.
+    public let audioFailure: String?
+    /// Per-stage drop counts; `total` always equals ``droppedFrameCount``.
+    public let dropAccounting: ScreenRecordingDropAccounting
 
     /// Creates a screen-recording outcome.
+    ///
+    /// - Parameters:
+    ///   - sessionID: Identity of the screen-recording session.
+    ///   - segmentURLs: Published MP4 URLs in segment order.
+    ///   - droppedFrameCount: Total dropped frames.
+    ///   - failure: A failure summary when finalization was incomplete.
+    ///   - audioFailure: Why the audio track could not start, when it could not.
+    ///   - dropAccounting: Per-stage counts. When omitted, the legacy total is
+    ///     treated as capture-callback drops so old call sites keep their meaning.
     public init(
         sessionID: UUID,
         segmentURLs: [URL],
         droppedFrameCount: Int64,
-        failure: String?
+        failure: String?,
+        audioFailure: String? = nil,
+        dropAccounting: ScreenRecordingDropAccounting? = nil
     ) {
+        let accounting = dropAccounting
+            ?? ScreenRecordingDropAccounting(
+                captureCallbackDrops: droppedFrameCount,
+                frameStreamDrops: 0,
+                writerDrops: 0
+            )
         self.sessionID = sessionID
         self.segmentURLs = segmentURLs
-        self.droppedFrameCount = droppedFrameCount
+        self.droppedFrameCount = accounting.total
         self.failure = failure
+        self.audioFailure = audioFailure
+        self.dropAccounting = accounting
     }
 
     /// The most recently published segment, when one exists.
@@ -144,6 +170,8 @@ public enum ScreenRecordingSessionCoordinatorError: LocalizedError, Equatable, S
     case invalidConfiguration
     /// Audio finalization failed after capture stopped.
     case audioFinalizationFailed(String)
+    /// The capture stream could not be confirmed stopped, so files were left unfinalized.
+    case streamStopUnconfirmed
 
     public var errorDescription: String? {
         switch self {
@@ -157,6 +185,8 @@ public enum ScreenRecordingSessionCoordinatorError: LocalizedError, Equatable, S
             "The screen-recording configuration is invalid."
         case .audioFinalizationFailed(let reason):
             "Screen-recording audio could not be finalized: \(reason)"
+        case .streamStopUnconfirmed:
+            "The capture stream did not confirm it stopped; the recording files were kept as they are."
         }
     }
 }
@@ -185,8 +215,15 @@ public actor ScreenRecordingSessionCoordinator {
     private var tickTask: Task<Void, Never>?
     private var onFailure: (@Sendable (String) -> Void)?
     private var processingFailure: String?
+    /// The first audio failure for this session, when the audio track could not start.
+    ///
+    /// Audio is optional for a screen recording: the video keeps recording and the
+    /// user is told the audio was not captured instead of losing the whole take.
+    private var audioFailureReason: String?
     private var lastOutcome: ScreenRecordingOutcome?
     private var isStopping = false
+    private let frameStreamDropCounter = ScreenRecordingDropCounter()
+    private let logger = Logger(subsystem: "com.snapglass", category: "screen.session")
 
     /// Creates a coordinator around the existing screen stream engine.
     public init(
@@ -206,9 +243,23 @@ public actor ScreenRecordingSessionCoordinator {
     }
 
     /// Creates the production screen composition using the shared capture roots.
+    ///
+    /// - Parameters:
+    ///   - engine: The ScreenCaptureKit engine for this session.
+    ///   - roots: Ledger and destination roots.
+    ///   - audioEngineFactoryOverride: Test/agent-only seam that replaces the real
+    ///     audio engine factory. Production passes `nil`; the agent channel uses it
+    ///     to prove that an audio-start failure never truncates the video.
+    /// - Returns: A coordinator wired for one screen session.
+    /// - Throws: ``RecordingPipelineError`` or a file-system error while creating the roots.
     public static func makeProduction(
         engine: ScreenRecordingEngine,
-        roots: RecordingPipelineRoots
+        roots: RecordingPipelineRoots,
+        audioEngineFactoryOverride: (@Sendable (
+            AudioRecordingConfiguration,
+            any AudioCheckpointSink & Sendable,
+            AudioSampleClock
+        ) throws -> any AudioRecordingControlling & Sendable)? = nil
     ) throws -> ScreenRecordingSessionCoordinator {
         let ticksPerSecond = AudioSourceTimestampMapper.nativeHostTicksPerSecond()
         let systemRing = try AudioSourceRingBuffer(
@@ -241,7 +292,7 @@ public actor ScreenRecordingSessionCoordinator {
         return ScreenRecordingSessionCoordinator(
             engine: engine,
             segmentCompositionFactory: compositionFactory,
-            audioEngineFactory: audioFactory,
+            audioEngineFactory: audioEngineFactoryOverride ?? audioFactory,
             audio: bridge
         )
     }
@@ -306,30 +357,117 @@ public actor ScreenRecordingSessionCoordinator {
                 onVideoFrame: { sampleBuffer, hostTime in
                     switch queue.continuation.yield(ScreenVideoFrameEvent(sampleBuffer: sampleBuffer, hostTime: hostTime)) {
                     case .enqueued:
-                        true
-                    case .dropped, .terminated:
-                        false
+                        .accepted
+                    case .dropped:
+                        // The capture callback owns this eviction count exactly once.
+                        .streamDrop
+                    case .terminated:
+                        // Normal stream shutdown is not backpressure.
+                        .ignored
                     @unknown default:
-                        false
+                        .ignored
                     }
                 },
-                onFailure: onFailure
+                onFailure: { [logger] reason in
+                    logger.error("screen.session capture failure: \(reason)")
+                    onFailure(reason)
+                }
             )
         } catch {
             queue.continuation.finish()
             await frameTask?.value
             frameTask = nil
             frameContinuation = nil
+            await engine.installSegmentedRetryHandler(nil)
+            // A failed start that could not confirm its stream stopped is reported
+            // as such: the caller must keep this adapter and confirm the stop
+            // before any new stream is allowed. The journal and composition are
+            // kept so that confirmation can still finalize what was written.
+            if await engine.hasUnconfirmedStream {
+                throw ScreenRecordingSessionCoordinatorError.streamStopUnconfirmed
+            }
             self.configuration = nil
             self.composition = nil
             self.onFailure = nil
-            await engine.installSegmentedRetryHandler(nil)
             throw error
         }
         startBoundaryTicks()
     }
 
+    /// Whether the active video writer has accepted at least one frame.
+    ///
+    /// Forwards the segment coordinator's writer-level signal. Queue acceptance
+    /// in the capture engine is not enough because frames can still be dropped
+    /// before they reach `AVAssetWriterInput`.
+    public func hasWrittenVideoFrame() async -> Bool {
+        guard let composition else { return false }
+        return await composition.coordinator.hasWrittenVideoFrame
+    }
+
+    /// Whether the capture callback ever accepted a video sample for this session.
+    ///
+    /// This is the queue-level fact used only to classify a failed first-frame
+    /// gate into "no frames arrived" versus "the writer never accepted a frame".
+    public func hasAcceptedCaptureFrame() async -> Bool {
+        await engine.hasAcceptedVideoFrame
+    }
+
+    /// The first capture or writer failure reported for this session, if any.
+    public func failureDescription() async -> String? {
+        if let processingFailure { return processingFailure }
+        return await engine.segmentedFailureDescription()
+    }
+
+    /// The session's material directory, used for an actionable recovery hint.
+    ///
+    /// Read-only: the coordinator never moves or deletes these files.
+    public func materialRoot() -> URL? {
+        composition?.coordinator.materialRoot
+    }
+
+    /// Why the writer could not accept its first frame, when it reported a failure.
+    ///
+    /// Used by the first-frame readiness poll so a real writer failure ends the wait
+    /// immediately with its own reason instead of a generic five-second timeout.
+    public func writerFailureDescription() async -> String? {
+        if let processingFailure { return processingFailure }
+        guard let composition else { return nil }
+        let diagnostics = await composition.coordinator.writerDiagnostics()
+        let failed = diagnostics.startWritingResult == .failed
+            || diagnostics.syncDropCount > 0
+            || diagnostics.appendFailureCount > 0
+        guard failed else { return nil }
+        return diagnostics.lastErrorDescription
+            ?? "The video writer failed before the recording started."
+    }
+
+    /// Privacy-safe writer counters for this session, or `nil` before it starts.
+    public func writerDiagnostics() async -> ScreenWriterDiagnostics? {
+        guard let composition else { return nil }
+        var diagnostics = await composition.coordinator.writerDiagnostics()
+        // Session-level facts travel with the writer counters so every consumer
+        // (failure copy, agent report) sees them together.
+        diagnostics.audioFailureReason = audioFailureReason
+        return diagnostics
+    }
+
+    /// Why the screen audio track could not start, when it could not.
+    public func audioFailureDescription() -> String? { audioFailureReason }
+
+    /// Frames the frame task consumed but could not append to a segment writer.
+    ///
+    /// This is the consumer stage only; evictions observed at `yield` belong to
+    /// the capture callback's count and are never added here again.
+    public nonisolated func frameStreamDroppedCount() -> Int64 {
+        frameStreamDropCounter.value
+    }
+
     /// Stops the shared stream, drains audio, seals the final segment, and returns published URLs.
+    ///
+    /// The order is fixed: the stream stop must be confirmed before any file is
+    /// finalized. An unconfirmed stop throws ``ScreenRecordingSessionCoordinatorError/streamStopUnconfirmed``
+    /// and deliberately leaves the journal, frame stream, and composition in place
+    /// so a later attempt can confirm the stop first.
     public func stopAndSave() async throws -> ScreenRecordingOutcome {
         if let lastOutcome { return lastOutcome }
         guard configuration != nil, let composition else {
@@ -342,7 +480,14 @@ public actor ScreenRecordingSessionCoordinator {
         tickTask?.cancel()
         await tickTask?.value
         tickTask = nil
-        let streamDroppedFrames = await engine.stopSegmentedCapture()
+        let stop = await engine.stopSegmentedCapture()
+        guard stop.confirmed else {
+            recordFailure(
+                ScreenRecordingSessionCoordinatorError.streamStopUnconfirmed.localizedDescription
+            )
+            throw ScreenRecordingSessionCoordinatorError.streamStopUnconfirmed
+        }
+        let streamDroppedFrames = stop.droppedFrames
         frameContinuation?.finish()
         frameContinuation = nil
         await frameTask?.value
@@ -358,13 +503,21 @@ public actor ScreenRecordingSessionCoordinator {
             let failure = processingFailure
                 ?? audioResult?.failure
                 ?? engineFailure
+            let dropAccounting = ScreenRecordingDropAccounting(
+                captureCallbackDrops: streamDroppedFrames,
+                frameStreamDrops: frameStreamDroppedCount(),
+                writerDrops: await composition.coordinator.droppedVideoFrameCount()
+            )
             let outcome = ScreenRecordingOutcome(
                 sessionID: composition.coordinator.sessionID,
                 segmentURLs: urls,
-                droppedFrameCount: streamDroppedFrames + (await composition.coordinator.droppedVideoFrameCount()),
-                failure: failure
+                droppedFrameCount: dropAccounting.total,
+                failure: failure,
+                audioFailure: audioFailureReason,
+                dropAccounting: dropAccounting
             )
             lastOutcome = outcome
+            logger.info("screen.session stop published=\(urls.count) writerDrops=\(dropAccounting.writerDrops)")
             if failure == nil {
                 try await engine.finishSegmentedSession()
                 await engine.installSegmentedRetryHandler(nil)
@@ -373,6 +526,7 @@ public actor ScreenRecordingSessionCoordinator {
             }
             return outcome
         } catch {
+            logger.error("screen.session stop failed: \(error.localizedDescription)")
             await engine.failSegmentedSession()
             throw error
         }
@@ -396,11 +550,18 @@ public actor ScreenRecordingSessionCoordinator {
             throw ScreenRecordingSessionCoordinatorError.noPublishedSegments
         }
         let urls = try await composition.coordinator.publishedVideoURLs()
+        let dropAccounting = ScreenRecordingDropAccounting(
+            captureCallbackDrops: await engine.captureCallbackDroppedCount(),
+            frameStreamDrops: frameStreamDroppedCount(),
+            writerDrops: await composition.coordinator.droppedVideoFrameCount()
+        )
         lastOutcome = ScreenRecordingOutcome(
             sessionID: composition.coordinator.sessionID,
             segmentURLs: urls,
-            droppedFrameCount: await composition.coordinator.droppedVideoFrameCount(),
-            failure: nil
+            droppedFrameCount: dropAccounting.total,
+            failure: nil,
+            audioFailure: audioFailureReason,
+            dropAccounting: dropAccounting
         )
         try await engine.finishSegmentedSession()
         await engine.installSegmentedRetryHandler(nil)
@@ -408,11 +569,23 @@ public actor ScreenRecordingSessionCoordinator {
     }
 
     private func consume(_ event: ScreenVideoFrameEvent) async {
-        guard let configuration, let composition, processingFailure == nil else { return }
+        guard let configuration, let composition, processingFailure == nil else {
+            // The consumer stage: a consumed frame that cannot reach a writer.
+            frameStreamDropCounter.increment()
+            return
+        }
         do {
             try await composition.coordinator.append(video: event.sampleBuffer, at: event.hostTime)
-            guard audioEngine == nil, configuration.audio.mode != .none,
-                  let epoch = await composition.coordinator.recordingEpochHostTime() else { return }
+        } catch {
+            frameStreamDropCounter.increment()
+            logger.error("screen.session frame rejected: \(String(reflecting: error))")
+            recordFailure(error.localizedDescription)
+            return
+        }
+        guard audioEngine == nil, audioFailureReason == nil,
+              configuration.audio.mode != .none,
+              let epoch = await composition.coordinator.recordingEpochHostTime() else { return }
+        do {
             let clock = AudioSampleClock(
                 epochHostTime: epoch,
                 hostTicksPerSecond: AudioSourceTimestampMapper.nativeHostTicksPerSecond(),
@@ -422,7 +595,8 @@ public actor ScreenRecordingSessionCoordinator {
             try await engine.start(configuration.audio)
             audioEngine = engine
         } catch {
-            recordFailure(error.localizedDescription)
+            logger.error("screen.session audio start failed: \(String(reflecting: error))")
+            recordAudioFailure(error.localizedDescription)
         }
     }
 
@@ -454,7 +628,21 @@ public actor ScreenRecordingSessionCoordinator {
     private func recordFailure(_ reason: String) {
         guard processingFailure == nil else { return }
         processingFailure = reason
+        logger.error("screen.session failure: \(reason)")
         onFailure?(reason)
+    }
+
+    /// Records an audio-start failure without stopping the video.
+    ///
+    /// The video writer, the freeze-frame ticks, and the boundary ticks keep
+    /// running; the app tells the user the system audio was not captured when the
+    /// file is saved. Audio is attempted once per session.
+    ///
+    /// - Parameter reason: The audio engine's failure description.
+    private func recordAudioFailure(_ reason: String) {
+        guard audioFailureReason == nil else { return }
+        audioFailureReason = reason
+        logger.error("screen.session audio unavailable; the video keeps recording: \(reason)")
     }
 
     private static func makeComposition(
@@ -647,12 +835,13 @@ private struct ScreenNoAudioSegmentSink: SegmentCheckpointSink {
     }
 }
 
-private final class ScreenRingAudioFrameSource: AudioFrameSource, @unchecked Sendable {
+final class ScreenRingAudioFrameSource: AudioFrameSource, @unchecked Sendable {
     let role: RecordingTrackRole = .system
     private let ring: AudioSourceRingBuffer
     private let generation: AudioSourceGeneration
     private let lock = NSLock()
     private var stopped = false
+    private let logger = Logger(subsystem: "com.snapglass", category: "screen.audio")
 
     init(ring: AudioSourceRingBuffer, hostTicksPerSecond: UInt64) {
         self.ring = ring
@@ -694,8 +883,25 @@ private final class ScreenRingAudioFrameSource: AudioFrameSource, @unchecked Sen
     func isProducerJoined() async -> Bool { true }
 
     func prepareReconfiguration(_ event: AudioDeviceChangeEvent) async -> AudioSourcePreparation {
-        .unchangedOnFailure(reason: "screen audio uses the active SCK stream")
+        // The shared SCK stream owns the format, so there is nothing to prepare.
+        logger.info("screen.audio prepare reconfiguration unchanged: stream-owned format")
+        return .unchangedOnFailure(reason: "screen audio uses the active SCK stream")
     }
 
-    func commitReconfiguration(_ generation: AudioSourceGeneration) async -> Bool { false }
+    /// Commits the ring generation the route controller prepared.
+    ///
+    /// The screen source has exactly one generation, created with its ring buffer
+    /// when the SCK stream was attached. `AudioRouteController` still calls this for
+    /// the initial commit, so returning `false` here failed every screen recording
+    /// with "initial route commit failed" before any audio was written.
+    ///
+    /// - Parameter generation: The generation returned by ``currentGeneration()``.
+    /// - Returns: `true` when it is this source's own generation and the source is
+    ///   still running.
+    func commitReconfiguration(_ generation: AudioSourceGeneration) async -> Bool {
+        let matches = generation.id == self.generation.id
+        let running = !isStopped()
+        logger.info("screen.audio commit generation matches=\(matches) running=\(running)")
+        return matches && running
+    }
 }

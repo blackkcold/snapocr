@@ -845,6 +845,7 @@ extension AudioRecordingEngine {
       return
     }
     let nextSample = snapshot.components?.pump.nextSampleIndex ?? 0
+    let capturedSamples = snapshot.components?.pump.capturedSourceFrameCount ?? 0
     let dropped = snapshot.components?.pump.diagnostics.gapFramesByRole.values.reduce(0, +) ?? 0
     let age = snapshot.lastCommitDate.map { Date().timeIntervalSince($0) } ?? 0
     progress.publish(
@@ -857,7 +858,8 @@ extension AudioRecordingEngine {
         checkpointAgeSeconds: age,
         droppedSamples: dropped,
         systemLevel: snapshot.systemLevel,
-        micLevel: snapshot.micLevel
+        micLevel: snapshot.micLevel,
+        capturedSamples: capturedSamples
       )
     )
   }

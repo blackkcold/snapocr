@@ -1,0 +1,15 @@
+{
+  "name": "recover-orphan",
+  "mode": "recover",
+  "hudWarmup": false,
+  "expect": {
+    "artifactPlayable": true
+  },
+  "recoveryExpect": {
+    "minRecoverable": 1,
+    "expectExportPlayable": true,
+    "expectZeroByteHidden": true,
+    "expectIdempotent": true,
+    "maxDurationDeltaSeconds": 1.5
+  }
+}

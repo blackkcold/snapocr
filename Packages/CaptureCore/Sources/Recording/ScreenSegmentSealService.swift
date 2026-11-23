@@ -2,6 +2,7 @@ import AVFoundation
 import AudioToolbox
 import CoreMedia
 import Foundation
+import SharedKit
 
 /// Failures raised while joining closed screen chunks and sealing audio tracks.
 public enum ScreenSegmentSealError: Error, Equatable, Sendable {
@@ -19,6 +20,7 @@ public actor ScreenSegmentSealService {
     private let fileManager: FileManager
     private let publicationHooks: [any SegmentPublicationHooking]
     private var isSealing = false
+    private let logger = Logger(subsystem: "com.snapglass", category: "screen.seal")
 
     /// Creates a screen-specific sealer; publication hooks are fixed at construction.
     public init(
@@ -75,6 +77,7 @@ public actor ScreenSegmentSealService {
         try transaction.prepareForWriting()
 
         let firstVideo = try await videoTrack(for: ordered[0].videoURL)
+        logger.info("screen.seal chunks=\(ordered.count) videoTrackReady")
         let writer: AVAssetWriter
         do { writer = try AVAssetWriter(outputURL: transaction.partialURL, fileType: .mp4) }
         catch { throw ScreenSegmentSealError.writerFailed }
@@ -106,28 +109,38 @@ public actor ScreenSegmentSealService {
         }
 
         guard writer.startWriting() else { throw ScreenSegmentSealError.writerFailed }
-        var mediaOrigin: CMTime?
-        for checkpoint in ordered {
-            try await appendVideo(
-                from: checkpoint.videoURL,
-                writer: writer,
-                input: videoInput,
-                mediaOrigin: &mediaOrigin
-            )
-        }
-        guard let mediaOrigin else { throw ScreenSegmentSealError.videoTrackUnavailable }
+        logger.info("screen.seal writer started")
+        // A writer with an audio input stalls its video input after a few samples
+        // until the audio input receives media. The session time origin comes from
+        // the first video sample, so both tracks are fed concurrently from there.
+        let mediaOrigin = try await firstVideoMediaOrigin(for: ordered[0].videoURL)
+        writer.startSession(atSourceTime: mediaOrigin)
+        logger.info("screen.seal media origin=\(CMTimeGetSeconds(mediaOrigin))")
 
-        for (role, sink) in audioSinks {
-            guard let urls = roleURLs[role] else { continue }
-            try await appendAudio(
-                urls: urls,
-                role: role,
-                sink: sink,
-                segmentStartSample: startSample,
-                segmentEndSample: endSample,
-                mediaOrigin: mediaOrigin
-            )
-            try sink.finish()
+        let audioTask: Task<Void, any Error>? = audioSinks.isEmpty
+            ? nil
+            : Task { [self] in
+                try await appendAudioTracks(
+                    roleURLs: roleURLs,
+                    audioSinks: audioSinks,
+                    segmentStartSample: startSample,
+                    segmentEndSample: endSample,
+                    mediaOrigin: mediaOrigin
+                )
+            }
+        do {
+            for checkpoint in ordered {
+                try await appendVideo(
+                    from: checkpoint.videoURL,
+                    writer: writer,
+                    input: videoInput
+                )
+            }
+            try await audioTask?.value
+        } catch {
+            audioTask?.cancel()
+            _ = try? await audioTask?.value
+            throw error
         }
         videoInput.markAsFinished()
         await writer.finishWriting()
@@ -177,44 +190,118 @@ public actor ScreenSegmentSealService {
         )
     }
 
-    private func videoTrack(for url: URL) async throws -> (track: AVAssetTrack, format: CMFormatDescription) {
+    private func videoTrack(
+        for url: URL
+    ) async throws -> (asset: AVURLAsset, track: AVAssetTrack, format: CMFormatDescription) {
+        // The track must belong to the same AVURLAsset instance the reader is
+        // created from: a track from another instance makes `canAdd` fail.
         let asset = AVURLAsset(url: url)
         let tracks: [AVAssetTrack]
         do { tracks = try await asset.loadTracks(withMediaType: .video) }
-        catch { throw ScreenSegmentSealError.videoTrackUnavailable }
-        guard let track = tracks.first else { throw ScreenSegmentSealError.videoTrackUnavailable }
+        catch {
+            logger.error("screen.seal loadTracks failed: \(String(describing: error))")
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
+        guard let track = tracks.first else {
+            logger.error("screen.seal chunk has no video track")
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
         let descriptions: [CMFormatDescription]
         do { descriptions = try await track.load(.formatDescriptions) }
+        catch {
+            logger.error("screen.seal format descriptions failed: \(String(describing: error))")
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
+        guard let format = descriptions.first else {
+            logger.error("screen.seal chunk has no video format")
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
+        return (asset, track, format)
+    }
+
+    /// Reads the first video sample's presentation time from a chunk.
+    ///
+    /// The seal writer needs one session origin for both the video and audio
+    /// inputs, so the origin is resolved before either input starts.
+    ///
+    /// - Parameter url: A closed chunk MP4.
+    /// - Returns: The first sample's presentation timestamp.
+    /// - Throws: ``ScreenSegmentSealError/videoTrackUnavailable`` when no sample is readable.
+    private func firstVideoMediaOrigin(for url: URL) async throws -> CMTime {
+        let source = try await videoTrack(for: url)
+        let reader: AVAssetReader
+        do { reader = try AVAssetReader(asset: source.asset) }
         catch { throw ScreenSegmentSealError.videoTrackUnavailable }
-        guard let format = descriptions.first else { throw ScreenSegmentSealError.videoTrackUnavailable }
-        return (track, format)
+        let output = AVAssetReaderTrackOutput(track: source.track, outputSettings: nil)
+        guard reader.canAdd(output) else { throw ScreenSegmentSealError.videoTrackUnavailable }
+        reader.add(output)
+        guard reader.startReading(), let sample = output.copyNextSampleBuffer() else {
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard pts.isValid, pts.isNumeric else {
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
+        return pts
+    }
+
+    /// Feeds every prepared audio track while the video input is being appended.
+    ///
+    /// - Parameters:
+    ///   - roleURLs: Audio checkpoint files keyed by role.
+    ///   - audioSinks: One AAC input per active role, already added to the writer.
+    ///   - segmentStartSample: Session sample of the segment start.
+    ///   - segmentEndSample: Exclusive session sample of the segment end.
+    ///   - mediaOrigin: Output time of the segment's first media sample.
+    private func appendAudioTracks(
+        roleURLs: [RecordingTrackRole: [URL]],
+        audioSinks: [RecordingTrackRole: AudioAACStreamSink],
+        segmentStartSample: Int64,
+        segmentEndSample: Int64,
+        mediaOrigin: CMTime
+    ) async throws {
+        for (role, sink) in audioSinks {
+            guard let urls = roleURLs[role] else { continue }
+            try await appendAudio(
+                urls: urls,
+                role: role,
+                sink: sink,
+                segmentStartSample: segmentStartSample,
+                segmentEndSample: segmentEndSample,
+                mediaOrigin: mediaOrigin
+            )
+            try sink.finish()
+        }
     }
 
     private func appendVideo(
         from url: URL,
         writer: AVAssetWriter,
-        input: AVAssetWriterInput,
-        mediaOrigin: inout CMTime?
+        input: AVAssetWriterInput
     ) async throws {
         let source = try await videoTrack(for: url)
-        let asset = AVURLAsset(url: url)
+        logger.info("screen.seal append chunk track ready")
         let reader: AVAssetReader
-        do { reader = try AVAssetReader(asset: asset) }
-        catch { throw ScreenSegmentSealError.videoTrackUnavailable }
+        do { reader = try AVAssetReader(asset: source.asset) }
+        catch {
+            logger.error("screen.seal reader init failed: \(String(describing: error))")
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
         let output = AVAssetReaderTrackOutput(track: source.track, outputSettings: nil)
-        guard reader.canAdd(output) else { throw ScreenSegmentSealError.videoTrackUnavailable }
+        guard reader.canAdd(output) else {
+            logger.error("screen.seal reader cannot add the video output")
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
         reader.add(output)
-        guard reader.startReading() else { throw ScreenSegmentSealError.videoTrackUnavailable }
+        guard reader.startReading() else {
+            logger.error("screen.seal reader start failed: \(String(describing: reader.error))")
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
 
         var sawSample = false
+        var sampleCount = 0
         while let sample = output.copyNextSampleBuffer() {
             try Task.checkCancellation()
-            if mediaOrigin == nil {
-                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-                guard pts.isValid, pts.isNumeric else { throw ScreenSegmentSealError.videoTrackUnavailable }
-                mediaOrigin = pts
-                writer.startSession(atSourceTime: pts)
-            }
             while !input.isReadyForMoreMediaData {
                 try Task.checkCancellation()
                 guard writer.status == .writing else { throw ScreenSegmentSealError.writerFailed }
@@ -222,7 +309,11 @@ public actor ScreenSegmentSealService {
             }
             guard input.append(sample) else { throw ScreenSegmentSealError.writerFailed }
             sawSample = true
+            sampleCount += 1
         }
+        logger.info(
+            "screen.seal chunk samples=\(sampleCount) readerStatus=\(reader.status.rawValue)"
+        )
         guard reader.status == .completed, sawSample else {
             throw ScreenSegmentSealError.videoTrackUnavailable
         }

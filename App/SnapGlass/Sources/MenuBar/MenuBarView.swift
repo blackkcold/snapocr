@@ -150,7 +150,11 @@ struct MenuBarView: View {
                 screenStopAction
             }
         case .saving:
-            Text("Saving Recording…")
+            if viewModel.currentRecordingKind == .audio {
+                Text("Saving audio recording")
+            } else {
+                Text("Saving screen recording")
+            }
         }
     }
 

@@ -22,6 +22,14 @@ public struct PublishedSegment: Codable, Sendable, Hashable {
     public let state: PublishedSegmentState
     public let videoURL: URL?
     public let videoTrackIndex: Int?
+    /// Media that was adopted in place after an interrupted session.
+    ///
+    /// Normal publications resolve their product from the publish intent, so this
+    /// stays `nil` for them. An adopted segment points at media that already
+    /// existed on disk (for example an interrupted CAF), which lets preview and
+    /// export read the original bytes instead of waiting for a sealed product.
+    /// Optional so index records written before adoption still decode unchanged.
+    public let materialURL: URL?
 
     public init(
         id: UUID,
@@ -33,7 +41,8 @@ public struct PublishedSegment: Codable, Sendable, Hashable {
         missingRanges: [RecordingSampleRange],
         state: PublishedSegmentState,
         videoURL: URL? = nil,
-        videoTrackIndex: Int? = nil
+        videoTrackIndex: Int? = nil,
+        materialURL: URL? = nil
     ) {
         self.id = id
         self.index = index
@@ -45,6 +54,7 @@ public struct PublishedSegment: Codable, Sendable, Hashable {
         self.state = state
         self.videoURL = videoURL
         self.videoTrackIndex = videoTrackIndex
+        self.materialURL = materialURL
     }
 }
 
@@ -195,17 +205,96 @@ public enum RecordingSealAdmission: Sendable, Hashable {
     case stop(reason: String)
 }
 
-public struct SpaceBudgetDecision: Sendable, Hashable {
-    public let allowed: Bool
-    public let requiredBytes: Int64
-    public let availableBytes: Int64
-    public let reason: String?
+/// One role that actually receives recorded bytes.
+///
+/// A directory with no writer is not a write role and must not be added to a
+/// budget or a preflight decision.
+public enum RecordingWriteRole: String, Sendable, Hashable {
+    /// The destination that receives checkpoints, final media, and recovery materials.
+    case recording
+}
 
-    public init(allowed: Bool, requiredBytes: Int64, availableBytes: Int64, reason: String?) {
+/// The measured state of one distinct write volume in a single preflight decision.
+public struct RecordingVolumePlan: Sendable, Hashable {
+    /// The write role that owns this volume.
+    public let role: RecordingWriteRole
+    /// One root on the volume, used for diagnostics.
+    public let path: URL
+    /// The volume identity read with the capacity snapshot.
+    public let identity: RecordingVolumeIdentity?
+    /// Bytes required by all write roots that share this volume.
+    public let requiredBytes: Int64
+    /// Free bytes, or `nil` when the volume could not be read.
+    public let availableBytes: Int64?
+    /// Whether the write location itself was confirmed.
+    public let isLocationAvailable: Bool
+
+    /// Creates one write-volume plan.
+    public init(
+        role: RecordingWriteRole,
+        path: URL,
+        identity: RecordingVolumeIdentity?,
+        requiredBytes: Int64,
+        availableBytes: Int64?,
+        isLocationAvailable: Bool
+    ) {
+        self.role = role
+        self.path = path
+        self.identity = identity
+        self.requiredBytes = requiredBytes
+        self.availableBytes = availableBytes
+        self.isLocationAvailable = isLocationAvailable
+    }
+}
+
+/// Why a write-volume preflight denied the start.
+public enum RecordingSpaceDenial: Sendable, Hashable {
+    /// The write location is missing, not a directory, or not writable.
+    case locationUnavailable(role: RecordingWriteRole, path: String)
+    /// The write location exists but its free space could not be read.
+    case capacityUnreadable(role: RecordingWriteRole)
+    /// The volume has less free space than the recording requires.
+    case insufficient(role: RecordingWriteRole, available: Int64, required: Int64)
+}
+
+/// The result of one start-time space decision.
+public struct SpaceBudgetDecision: Sendable, Hashable {
+    /// Whether every write volume meets its own requirement.
+    public let allowed: Bool
+    /// Requirement of the binding volume (the first failing volume, else the least slack).
+    public let requiredBytes: Int64
+    /// Available bytes of the binding volume.
+    public let availableBytes: Int64
+    /// A short diagnostic reason; the App layer maps `denial` to user text.
+    public let reason: String?
+    /// One entry per distinct write volume; unrelated directories never appear.
+    public let volumes: [RecordingVolumePlan]
+    /// A structured denial when `allowed` is false.
+    public let denial: RecordingSpaceDenial?
+
+    /// Creates a start-time space decision.
+    ///
+    /// - Parameters:
+    ///   - allowed: Whether every write volume meets its requirement.
+    ///   - requiredBytes: Requirement of the binding volume.
+    ///   - availableBytes: Available bytes of the binding volume.
+    ///   - reason: A short diagnostic reason.
+    ///   - volumes: One plan per distinct write volume.
+    ///   - denial: A structured denial when not allowed.
+    public init(
+        allowed: Bool,
+        requiredBytes: Int64,
+        availableBytes: Int64,
+        reason: String?,
+        volumes: [RecordingVolumePlan] = [],
+        denial: RecordingSpaceDenial? = nil
+    ) {
         self.allowed = allowed
         self.requiredBytes = requiredBytes
         self.availableBytes = availableBytes
         self.reason = reason
+        self.volumes = volumes
+        self.denial = denial
     }
 }
 
@@ -232,7 +321,7 @@ public struct RecordingPipelineRoots: Sendable, Hashable {
 public enum RecordingPipelineError: Error, Equatable, Sendable {
     case alreadyStarted
     case invalidConfiguration
-    case spacePreflightDenied(String)
+    case spacePreflightDenied(SpaceBudgetDecision)
     case journalUnavailable
     case engineUnavailable
 }
@@ -842,7 +931,7 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         if let spaceGate {
             let decision = try await spaceGate.preflightStart()
             guard decision.allowed else {
-                throw RecordingPipelineError.spacePreflightDenied(decision.reason ?? "recording space unavailable")
+                throw RecordingPipelineError.spacePreflightDenied(decision)
             }
         }
         try prepareSessionRoot()
@@ -1103,11 +1192,22 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         Task { [weak self] in _ = await self?.stop() }
     }
 
+    /// How often the pipeline journals a durable audio checkpoint.
+    ///
+    /// Ten seconds bounds how much audio an interrupted session can lose, which is
+    /// what makes the recovery list worth showing. It is deliberately independent
+    /// of `RecordingSegmentPolicy.maximumCheckpointAge` (300 s): that value is the
+    /// target coverage a segment must reach before the seal step may close it,
+    /// while this interval only decides how often a recovery point becomes
+    /// durable. Shortening this interval changes no seal, planner, or space-gate
+    /// constant.
+    public static let checkpointIntervalSeconds: Int64 = 10
+
     private func startCheckpointTimer() {
         timerTask = Task(priority: .utility) { [weak self] in
             let clock = ContinuousClock()
             while !Task.isCancelled {
-                do { try await clock.sleep(for: .seconds(290)) } catch { break }
+                do { try await clock.sleep(for: .seconds(Self.checkpointIntervalSeconds)) } catch { break }
                 guard !Task.isCancelled else { break }
                 await self?.checkpointTimerFired()
             }
@@ -1163,7 +1263,8 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
             checkpointAgeSeconds: checkpointAge,
             droppedSamples: engineProgress?.droppedSamples ?? 0,
             systemLevel: engineProgress?.systemLevel ?? 0,
-            micLevel: engineProgress?.micLevel ?? 0
+            micLevel: engineProgress?.micLevel ?? 0,
+            capturedSamples: engineProgress?.capturedSamples ?? 0
         ))
     }
 

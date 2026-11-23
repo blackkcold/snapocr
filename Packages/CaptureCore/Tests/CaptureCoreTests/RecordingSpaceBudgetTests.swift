@@ -27,8 +27,8 @@ struct RecordingSpaceBudgetTests {
         #expect(multiTrack.requiredBytes(seconds: 3_540) == 1_019_520_000)
     }
 
-    @Test func preflightChecksRecordingAndRecoveryVolumesSeparately() throws {
-        let provider = MutableCapacityProvider(defaultCapacity: 3_000_000_000)
+    @Test func preflightReadsOnlyRegisteredWriteRoots() throws {
+        let provider = MutableCapacityProvider(defaultCapacity: 20_000_000_000)
         let storageBudget = budget(
             kind: .audio,
             layout: .mixed,
@@ -36,18 +36,61 @@ struct RecordingSpaceBudgetTests {
             bitRate: 128_000,
             provider: provider
         )
-        let required = try storageBudget.preflight().requiredBytes
 
-        provider.set(required, at: storageBudget.recordingRootForTesting)
-        provider.set(required, at: storageBudget.recoveryRootForTesting)
-        #expect(try storageBudget.preflight().allowed)
+        let decision = try storageBudget.preflight()
 
-        provider.set(required - 1, at: storageBudget.recordingRootForTesting)
-        #expect(!(try storageBudget.preflight().allowed))
+        #expect(decision.allowed)
+        #expect(decision.volumes.count == 1)
+        #expect(provider.requestedPaths == ["/recording"])
+        #expect(!provider.requestedPaths.contains("/recovery"))
+    }
 
-        provider.set(required, at: storageBudget.recordingRootForTesting)
-        provider.set(required - 1, at: storageBudget.recoveryRootForTesting)
-        #expect(!(try storageBudget.preflight().allowed))
+    @Test func sameVolumeWriteRootsMergeRequirements() throws {
+        let provider = MutableCapacityProvider(defaultCapacity: nil)
+        provider.set(capacity: 20_000, identity: 7, at: URL(fileURLWithPath: "/a"))
+        provider.set(capacity: 12_000, identity: 7, at: URL(fileURLWithPath: "/b"))
+        let storageBudget = RecordingSpaceBudget(
+            configuration: audioConfiguration,
+            capacityProvider: provider,
+            writeRoots: [
+                RecordingWriteRoot(url: URL(fileURLWithPath: "/a"), requiredBytes: 4_000),
+                RecordingWriteRoot(url: URL(fileURLWithPath: "/b"), requiredBytes: 3_000),
+            ]
+        )
+
+        let decision = try storageBudget.preflight()
+
+        #expect(decision.allowed)
+        #expect(decision.volumes.count == 1)
+        #expect(decision.volumes[0].requiredBytes == 7_000)
+        #expect(decision.volumes[0].availableBytes == 12_000)
+    }
+
+    @Test func differentVolumesShareTheirOwnRequirement() throws {
+        let provider = MutableCapacityProvider(defaultCapacity: nil)
+        provider.set(capacity: 10_000, identity: 7, at: URL(fileURLWithPath: "/a"))
+        provider.set(capacity: 900, identity: 8, at: URL(fileURLWithPath: "/b"))
+        let storageBudget = RecordingSpaceBudget(
+            configuration: audioConfiguration,
+            capacityProvider: provider,
+            writeRoots: [
+                RecordingWriteRoot(url: URL(fileURLWithPath: "/a"), requiredBytes: 4_000),
+                RecordingWriteRoot(url: URL(fileURLWithPath: "/b"), requiredBytes: 3_000),
+            ]
+        )
+
+        let decision = try storageBudget.preflight()
+
+        #expect(!decision.allowed)
+        #expect(decision.volumes.count == 2)
+        #expect(decision.availableBytes == 900)
+        #expect(decision.requiredBytes == 3_000)
+        guard case let .insufficient(_, available, required)? = decision.denial else {
+            Issue.record("Expected an insufficient-space denial")
+            return
+        }
+        #expect(available == 900)
+        #expect(required == 3_000)
     }
 
     @Test func capacityUnavailableFailsClosed() throws {
@@ -63,6 +106,10 @@ struct RecordingSpaceBudgetTests {
         #expect(!decision.allowed)
         #expect(decision.availableBytes == 0)
         #expect(decision.reason != nil)
+        guard case .capacityUnreadable? = decision.denial else {
+            Issue.record("Expected a capacity-unreadable denial")
+            return
+        }
     }
 
     @Test func invalidConfigurationDoesNotTrap() {
@@ -128,8 +175,7 @@ struct RecordingSpaceBudgetTests {
                 videoBitsPerSecond: 8_000
             ),
             capacityProvider: MutableCapacityProvider(defaultCapacity: 20_000_000_000),
-            recordingRoot: URL(fileURLWithPath: "/recording"),
-            recoveryRoot: URL(fileURLWithPath: "/recovery")
+            recordingRoot: URL(fileURLWithPath: "/recording")
         )
         // 8,000 bits/s is estimated as 1,000 bytes/s; VBR may exceed this nominal estimate.
         #expect(videoBudget.requiredBytes(seconds: 10) == 10_000)
@@ -147,6 +193,15 @@ struct RecordingSpaceBudgetTests {
         ))
     }
 
+    private var audioConfiguration: RecordingStorageConfiguration {
+        RecordingStorageConfiguration(
+            kind: .audio,
+            layout: .mixed,
+            channelCountByRole: [.mixed: 2],
+            bitRate: 128_000
+        )
+    }
+
     private func budget(
         kind: RecordingKind,
         layout: AudioOutputLayout,
@@ -162,8 +217,7 @@ struct RecordingSpaceBudgetTests {
                 bitRate: bitRate
             ),
             capacityProvider: provider,
-            recordingRoot: URL(fileURLWithPath: "/recording"),
-            recoveryRoot: URL(fileURLWithPath: "/recovery")
+            recordingRoot: URL(fileURLWithPath: "/recording")
         )
     }
 }
@@ -172,25 +226,42 @@ private final class MutableCapacityProvider: VolumeCapacityProviding, @unchecked
     private let lock = NSLock()
     private var defaultCapacity: Int64?
     private var capacities: [String: Int64] = [:]
+    private var identities: [String: RecordingVolumeIdentity] = [:]
+    private var paths: [String] = []
 
     init(defaultCapacity: Int64?) {
         self.defaultCapacity = defaultCapacity
     }
 
-    func availableBytes(at url: URL) throws -> Int64? {
+    var requestedPaths: [String] {
         lock.lock()
         defer { lock.unlock() }
-        return capacities[url.standardizedFileURL.path] ?? defaultCapacity
+        return paths
     }
 
-    func set(_ capacity: Int64, at url: URL) {
+    func availableBytes(at url: URL) throws -> Int64? {
+        try volumeSnapshot(at: url)?.availableBytes
+    }
+
+    func volumeSnapshot(at url: URL) throws -> RecordingVolumeSnapshot? {
         lock.lock()
-        capacities[url.standardizedFileURL.path] = capacity
+        defer { lock.unlock() }
+        let path = url.standardizedFileURL.path
+        paths.append(path)
+        guard let capacity = capacities[path] ?? defaultCapacity else { return nil }
+        return RecordingVolumeSnapshot(
+            availableBytes: capacity,
+            identity: identities[path]
+        )
+    }
+
+    func set(capacity: Int64, identity: UInt64? = nil, at url: URL) {
+        lock.lock()
+        let path = url.standardizedFileURL.path
+        capacities[path] = capacity
+        if let identity {
+            identities[path] = RecordingVolumeIdentity(systemNumber: identity)
+        }
         lock.unlock()
     }
-}
-
-private extension RecordingSpaceBudget {
-    var recordingRootForTesting: URL { URL(fileURLWithPath: "/recording") }
-    var recoveryRootForTesting: URL { URL(fileURLWithPath: "/recovery") }
 }

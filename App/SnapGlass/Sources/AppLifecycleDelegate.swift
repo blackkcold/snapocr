@@ -14,12 +14,35 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
     private var isSavingEditorForQuit = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if AgentMode.isActive {
+            AgentRuntime.start()
+            return
+        }
 #if DEBUG
         ShowcaseImageExporter.runIfConfigured()
 #endif
     }
 
+    /// Re-opens the recording controls when the app is launched again from Finder or Spotlight.
+    ///
+    /// This is a menu-bar-only app (`LSUIElement`), so a second launch activates the
+    /// running copy instead of opening a window. Without this, a hidden or dismissed
+    /// recording panel would be unreachable while capture is still running.
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        if AgentMode.isActive { return false }
+        guard let viewModel, viewModel.restoreRecordingControlOnReopen() else {
+            return false
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // The agent channel owns its lifecycle: it flushes its report, then quits.
+        if AgentMode.isActive { return .terminateNow }
         // Sparkle already waited for unsaved edits and recordings to clear
         // before invoking its install handler. Prompting again would stall the
         // relaunch behind a modal the user cannot see.
@@ -118,10 +141,17 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
         case .terminateCancel:
             return .terminateCancel
         case .confirm:
+            let isAudio = viewModel.currentRecordingKind == .audio
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = AppLocalization.string("A screen recording is in progress.")
-            alert.informativeText = AppLocalization.string("Stop and save the recording before quitting?")
+            alert.messageText = AppLocalization.string(
+                isAudio ? "An audio recording is in progress." : "A screen recording is in progress."
+            )
+            alert.informativeText = AppLocalization.string(
+                isAudio
+                    ? "Stop and save the audio recording before quitting?"
+                    : "Stop and save the recording before quitting?"
+            )
             alert.addButton(withTitle: AppLocalization.string("Stop and Save, then Quit"))
             alert.addButton(withTitle: AppLocalization.string("Cancel"))
             // Same Escape mapping as the annotation alert above.
@@ -132,7 +162,10 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
                 return .terminateCancel
             }
         case .waitForRecording:
-            break
+            viewModel.showToast(
+                message: AppLocalization.string("Saving recording before quitting"),
+                type: .info
+            )
         }
 
         Task { @MainActor [weak self] in

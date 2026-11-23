@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-23
+
+> 录制 P0 收尾：HUD、生命周期、恢复与录屏音频。
+
+### Fixed
+- 录制状态按真实媒体推进：屏幕仅在视频写入器接受首帧后进入录制，音频仅在收到真实样本后进入录制；取消、停止与退出在底层调用不返回时给出有界且诚实的结果，不把后台保存说成已保存。
+- 起录请求在权限/选源之前先确定单一 generation 身份，真正拿到选源后再冻结会话快照；迟到的权限、选源、启动、首帧与停止结果按“是否当前身份 + 是否仍持资源”分流，旧请求不写新 UI，持资源者只清理一次或登记恢复材料。
+- 屏幕启动取消明确区分“start 尚未返回”和“start 已返回、仍在等首帧”：后者立即对现存 adapter 发起唯一一次停止，迟到首帧不再把已收敛的会话提升回录制；未确认停流保留占用，确认后同进程可再次起录。
+- 倒计时结束后仍悬挂的目录复查不再保留最后一秒倒计时，改为真实、可取消的“准备录制保存位置”状态；复查的成功/失败只在请求仍为当前身份时交接，A 取消且 B 开始后，A 的迟到结果不会启动、报错或结束 B。
+- 迟到的音频启动会在自己的代际内停止其管线，不再留下继续运行的麦克风/音频流；新增独立于首帧/首样本计时的启动看门狗，正常慢保存不受影响。
+- 屏幕启动失败回调与中断轮询加入代际与所有权判定，过期回调不再停止新会话；退出超时时保留仍在保存的会话引用，只提示稍后重试。
+- `RecordingPipelineError.alreadyStarted` 等启动错误改用可操作的本地化文案，不再退回到原始 error 描述。
+- 录屏准备期（权限检查与来源枚举）现在有可见状态且可取消；已授权时枚举有界，授权提示未决时改为等待授权而不是超时失败；取消后迟到的探针、启动与停止结果不再影响后续会话。
+- 屏幕停止改为显式确认：未确认停流不关闭分段、不封装、不允许开始新会话；停止迟迟不返回时给出有界提示并可用 Finder 定位已写文件，已录内容保留。
+- 首帧失败区分为写入器失败、未收到采集帧、写入器等待超时三类，不再统一报同一错误；Finder 或 Spotlight 重新打开应用会恢复被隐藏的录制面板。
+- 录屏视频写入器：sync 帧有界等待（≤250 ms 分片轮询），`startWriting` 失败与 append 拒绝立即取消并删除当前 chunk；停止路径不再同线程重入自锁；sealer 使用同一 asset 实例的 track，避免 `videoTrackUnavailable`；静态画面以重复末帧保时长，10 秒录制不再塌缩成 2 帧。
+- 录屏 + 系统音频：屏幕环缓冲 source 的 `commitReconfiguration` 由恒定失败改为返回真实 generation，消除每次录屏的 `initial route commit failed`；sealer 改为并发喂视频与音频，修复多输入交错死锁；音频 flush 加单槽闸门，修复 actor 重入导致的范围断裂。
+- 系统音频启动失败改为非致命：视频、freeze-frame 与边界 tick 继续，保存时提示“系统音频未能录制，视频已保存”，不再让 10 秒录屏塌缩为 0.07 秒。
+- 启动时扫描磁盘上未登记的录制材料，经用户确认后收编并导出；0 字节媒体不进入列表；失败或取消留下的材料登记为可恢复，不自动删除。
+
+### Changed
+- 录制目标目录校验与容量探测、音频管线构造移出主线程；屏幕内容枚举在启动快照后按需刷新；HUD 电平更新不再触发布局或改变窗口尺寸。
+- 录制设置拆分为音频与屏幕页：输出目录与 AAC 码率按 kind 独立持久化，旧共享值一次性迁移；屏幕与音频来源键、历史与导出发现保持不变。
+- 失败或取消后的恢复材料与活动保存分离，只登记 ledger 会话材料，不自动删除、不阻塞退出。
+- 起录空间检查只读实际写入卷，移除对无写入的 Application Support 恢复目录的容量读取，外置盘录制不再被内盘剩余空间误挡；录制中的 512 MiB 保护、checkpoint/seal/tail 预留与 59 分钟分段不变。
+- 自定义录制目录记录并核对卷 UUID，兼容旧设置里的 `/Volumes/<Name>` 挂载点；默认目录尚未创建时按已确认存在的上级目录读取同一卷容量，自定义外置路径不回退到内盘。
+- 空间检查结果拆分为位置不可用、容量读不到、确实不足三种；不足时显示实际可用与需求，设置页与起录使用同一探针和同一需求口径。
+- 来源选择复用探针已枚举的结果，音频起录的容量读取由两次降为一次（按调用点的静态计数，不是实测性能结论）。
+- 录制检查点间隔缩短到 10 秒（此前为分钟级），崩溃后最多丢失约 10 秒；`maximumCheckpointAge` 300 秒上限与 59 分钟分段不变。
+- 新增隔离的 agent 测试通道：独立根目录、独立偏好与索引，与用户库隔离；用于真实录音/录屏/卡死/恢复场景的端到端验收。
+
+### Verification status
+- 最终构建（v1.6.1，build 4）通过：CaptureCore 673/673、App WindowLifecycle 141/141（跳过既有的 RecordingWindowExclusionRegistry 2 例崩溃）、SharedKit 45/45；`check-localization.sh` 通过；Release 通用二进制签名构建（arm64 + x86_64，含 Sparkle 内嵌签名）exit 0。
+- 隔离 agent 实例、最终构建的真实场景 10/10 通过：audio-smoke 3.41 s（HUD 首现 55 ms）、audio-10s 10.49 s、audio-smoke-default-source 3.63 s、stall-main 6.46 s（主线程卡死 6007 ms 期间完成结算）、deadline-during-stall（settlementDuringStall=true、stopCalls=1）、recover-orphan 22.02 s（adopted=1、幂等、0 字节隐藏）、screen-10s 10.108 s / 3.41 MB、screen-10s-audio 9.650 s / 2.54 MB（1 video + 1 audio 48 kHz）、screen-10s-audio-degraded 9.258 s（音频失败但视频完整）、screen-permission-denied（立即失败，无残留）。
+- 用户库与正在运行的 App 未受影响：`~/Movies/SnapGlass` 11 文件 / 4 会话 / 索引 4 条 / defaults 哈希不变；pid 52603 全程存活；所有运行使用隔离 agent root，未 `tccutil reset`。
+- 未验证：HUD/失败面板/权限引导的真实点击；系统音频的主观听感；录屏中途 SCK 无效帧仍按既有语义判致命（4 次 10 秒录制中 1 次提前结束）。CI 的 SwiftLint 全仓检查当前有 203 处历史/本轮违规，tag 发版路径未运行该检查。
+
 ## [1.6.0] - 2026-11-13
 
 > 录制功能全量交付。以下为发版说明，不代表已完成运行期验收。
@@ -539,6 +576,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
 [Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.6.0...HEAD
+[1.6.1]: https://github.com/blackkcold/snapocr/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/blackkcold/snapocr/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/blackkcold/snapocr/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/blackkcold/snapocr/compare/v1.4.2...v1.5.0

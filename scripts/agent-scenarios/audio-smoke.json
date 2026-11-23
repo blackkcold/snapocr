@@ -1,0 +1,16 @@
+{
+  "name": "audio-smoke",
+  "audioSeconds": 3,
+  "screenSeconds": 0,
+  "firstSampleDeadlineSeconds": 6,
+  "simulateMainStallMs": 0,
+  "simulateStallAfterStart": false,
+  "audioMode": "microphone",
+  "hudWarmup": false,
+  "expect": {
+    "artifactPlayable": true,
+    "hudFirstVisibleUnderMs": 300,
+    "sizeThatFitsBeforeFirstVisible": 0,
+    "becameRecording": true
+  }
+}

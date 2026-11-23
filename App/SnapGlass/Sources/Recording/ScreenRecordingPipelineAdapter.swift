@@ -15,6 +15,11 @@ struct ScreenRecordingPipelineAdapter {
     private let startOperation: StartOperation
     private let stopOperation: StopOperation
     private let retryOperation: RetryOperation
+    private let writtenVideoFrameQuery: @Sendable () async -> Bool
+    private let captureFrameQuery: @Sendable () async -> Bool
+    private let failureDescriptionQuery: @Sendable () async -> String?
+    private let materialRootQuery: @Sendable () async -> URL?
+    private let writerDiagnosticsQuery: @Sendable () async -> ScreenWriterDiagnostics?
 
     /// Creates an adapter backed by the production screen-session coordinator.
     init(coordinator: ScreenRecordingSessionCoordinator) {
@@ -23,17 +28,32 @@ struct ScreenRecordingPipelineAdapter {
         }
         stopOperation = { try await coordinator.stopAndSave() }
         retryOperation = { try await coordinator.retryPublish() }
+        writtenVideoFrameQuery = { await coordinator.hasWrittenVideoFrame() }
+        captureFrameQuery = { await coordinator.hasAcceptedCaptureFrame() }
+        failureDescriptionQuery = { await coordinator.failureDescription() }
+        materialRootQuery = { await coordinator.materialRoot() }
+        writerDiagnosticsQuery = { await coordinator.writerDiagnostics() }
     }
 
     /// Creates an adapter around app-owned operations, including pure test fakes.
     init(
         start: @escaping StartOperation,
         stopAndSave: @escaping StopOperation,
-        retryPublish: @escaping RetryOperation
+        retryPublish: @escaping RetryOperation,
+        hasWrittenVideoFrame: @escaping @Sendable () async -> Bool = { false },
+        hasAcceptedCaptureFrame: @escaping @Sendable () async -> Bool = { false },
+        failureDescription: @escaping @Sendable () async -> String? = { nil },
+        materialRoot: @escaping @Sendable () async -> URL? = { nil },
+        writerDiagnostics: @escaping @Sendable () async -> ScreenWriterDiagnostics? = { nil }
     ) {
         startOperation = start
         stopOperation = stopAndSave
         retryOperation = retryPublish
+        writtenVideoFrameQuery = hasWrittenVideoFrame
+        captureFrameQuery = hasAcceptedCaptureFrame
+        failureDescriptionQuery = failureDescription
+        materialRootQuery = materialRoot
+        writerDiagnosticsQuery = writerDiagnostics
     }
 
     /// Builds the immutable core configuration from the selected screen audio mode.
@@ -100,5 +120,36 @@ struct ScreenRecordingPipelineAdapter {
     /// Retries publication through the screen pipeline, without starting capture again.
     func retryPublish() async throws -> URL {
         try await retryOperation()
+    }
+
+    /// Whether the video writer has accepted at least one frame for this session.
+    ///
+    /// This is true only after `AVAssetWriterInput.append` accepts a sample; it is
+    /// not queue acceptance in the capture engine.
+    func hasWrittenVideoFrame() async -> Bool {
+        await writtenVideoFrameQuery()
+    }
+
+    /// Whether the capture callback accepted a video sample at the queue level.
+    ///
+    /// Used only to tell "no frames arrived" apart from "the writer never accepted
+    /// one" after the first-frame gate expires.
+    func hasAcceptedCaptureFrame() async -> Bool {
+        await captureFrameQuery()
+    }
+
+    /// The capture or writer failure summary reported for this session, if any.
+    func failureDescription() async -> String? {
+        await failureDescriptionQuery()
+    }
+
+    /// The session's material directory for an actionable recovery hint.
+    func materialRoot() async -> URL? {
+        await materialRootQuery()
+    }
+
+    /// Privacy-safe writer counters for this session, when the pipeline produced any.
+    func writerDiagnostics() async -> ScreenWriterDiagnostics? {
+        await writerDiagnosticsQuery()
     }
 }

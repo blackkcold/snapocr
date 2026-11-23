@@ -5,6 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_PATH=""
 VERSION=""
 OUTPUT_DIR=""
+TIMESTAMP=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -20,8 +21,15 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
+        --timestamp)
+            TIMESTAMP="$2"
+            shift 2
+            ;;
         -h|--help)
-            echo "Usage: $0 --app PATH --version X.Y.Z --output-dir PATH"
+            echo "Usage: $0 --app PATH --version X.Y.Z --output-dir PATH [--timestamp YYYYMMDDTHHMMSSZ]"
+            echo ""
+            echo "  --timestamp  可选。UTC 打包时刻，写进 DMG 文件名做区分（实验打包用）。"
+            echo "               缺省时文件名保持正式发布的规范名 SnapGlass-vX.Y.Z.dmg。"
             exit 0
             ;;
         *)
@@ -41,6 +49,11 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
+if [[ -n "$TIMESTAMP" && ! "$TIMESTAMP" =~ ^[0-9]{8}T[0-9]{6}Z$ ]]; then
+    echo "Invalid --timestamp (expected UTC YYYYMMDDTHHMMSSZ): $TIMESTAMP" >&2
+    exit 1
+fi
+
 if [[ -z "$OUTPUT_DIR" ]]; then
     echo "Missing --output-dir" >&2
     exit 1
@@ -56,7 +69,11 @@ fi
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
-DMG_PATH="$OUTPUT_DIR/SnapGlass-v${VERSION}.dmg"
+DMG_NAME="SnapGlass-v${VERSION}.dmg"
+if [[ -n "$TIMESTAMP" ]]; then
+    DMG_NAME="SnapGlass-v${VERSION}-${TIMESTAMP}.dmg"
+fi
+DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
 CHECKSUM_PATH="$DMG_PATH.sha256"
 
 if [[ -e "$DMG_PATH" || -e "$CHECKSUM_PATH" ]]; then

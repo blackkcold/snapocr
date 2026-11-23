@@ -115,13 +115,24 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
     private var currentSegmentIndex: Int?
     private var currentSegmentID: UUID?
     private var epochHostTime: UInt64?
+    private var epochPresentationTime: CMTime?
     private var nextFrameIndex: Int64 = 0
     private var lastFrame: VideoFrameSample?
+    /// The most recent source frame, retained to hold the picture during static periods.
+    ///
+    /// ScreenCaptureKit is change-driven: a still screen stops producing frames. One
+    /// retained buffer lets the coordinator repeat it with advancing timestamps, so a
+    /// static recording still has a timeline of the real length.
+    private var lastSampleBuffer: CMSampleBuffer?
     private var pendingAudio: [AudioPCMBlock] = []
     private var pendingAudioFrames = 0
+    /// Serializes audio flushes; `sink.append` suspends this actor.
+    private var audioFlushInFlight = false
+    private var audioFlushWaiters: [CheckedContinuation<Void, Never>] = []
     private var screenRecords: [Int: [ScreenCheckpointRecord]] = [:]
     private var lastSealedSegment: SealedSegment?
     private var completedVideoDropCount: Int64 = 0
+    private var completedWriterDiagnostics = ScreenWriterDiagnostics.idle
 
     /// Creates a screen coordinator. The returned coordinator itself is the stable audio sink.
     public init(
@@ -153,11 +164,32 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
     /// The host-time origin established by the first accepted sync video frame.
     public func recordingEpochHostTime() -> UInt64? { epochHostTime }
 
+    /// This session's material directory, read-only.
+    ///
+    /// Used to give a failed finalization an actionable "show in Finder" target.
+    /// Nothing in this type moves or deletes these files.
+    public nonisolated var materialRoot: URL { ledger.sessionRoot }
+
     /// Number of frames dropped by completed and currently active video writers.
     public func droppedVideoFrameCount() -> Int64 {
         let active = currentVideoWriter?.droppedFrameCount ?? 0
         let (total, overflow) = completedVideoDropCount.addingReportingOverflow(active)
         return overflow ? Int64.max : total
+    }
+
+    /// Whether the active video writer has accepted at least one frame.
+    ///
+    /// This is set only after `AVAssetWriterInput.append` accepts a sample. Queue
+    /// acceptance in `ScreenRecordingEngine` is not enough: frames can still be
+    /// rejected or dropped before they reach the writer.
+    public private(set) var hasWrittenVideoFrame = false
+
+    /// Privacy-safe writer counters for the whole session.
+    ///
+    /// Combines every finished chunk with the live one, so a failure that closed a
+    /// chunk is still visible while the next chunk writes.
+    public func writerDiagnostics() -> ScreenWriterDiagnostics {
+        completedWriterDiagnostics.combined(with: currentVideoWriter?.diagnostics ?? .idle)
     }
 
     /// Published screen MP4 URLs in segment order, read from the durable ledger.
@@ -211,6 +243,7 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
         case .keepCurrent:
             if epochHostTime == nil, frame.isSync {
                 epochHostTime = hostTime
+                epochPresentationTime = frame.presentationTime
             }
             if currentVideoWriter == nil, frame.isSync {
                 try openSegmentIfNeeded(startingAt: frame)
@@ -218,15 +251,17 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
                 try await flushPreEpochAudio()
             }
             if let writer = currentVideoWriter {
-                try writer.append(video: sampleBuffer)
+                if try writer.append(video: sampleBuffer) { hasWrittenVideoFrame = true }
                 lastFrame = frame
+                lastSampleBuffer = sampleBuffer
                 try await flushAudio(through: sampleIndex(for: frame.presentationTime))
             }
         case .closeChunk(let boundary), .cachedChunkBoundary(let boundary):
             try await closeCurrentChunk(at: boundary)
             try openVideoChunk(startingAt: frame)
-            try currentVideoWriter?.append(video: sampleBuffer)
+            if try currentVideoWriter?.append(video: sampleBuffer) == true { hasWrittenVideoFrame = true }
             lastFrame = frame
+            lastSampleBuffer = sampleBuffer
             try await flushAudio(through: sampleIndex(for: frame.presentationTime))
         case .closeSegment(let boundary):
             try await closeCurrentChunk(at: boundary)
@@ -236,8 +271,9 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
             currentAudioSink = nil
             try openSegmentIfNeeded(startingAt: frame)
             try openVideoChunk(startingAt: frame)
-            try currentVideoWriter?.append(video: sampleBuffer)
+            if try currentVideoWriter?.append(video: sampleBuffer) == true { hasWrittenVideoFrame = true }
             lastFrame = frame
+            lastSampleBuffer = sampleBuffer
             try await flushAudio(through: sampleIndex(for: frame.presentationTime))
         }
     }
@@ -248,6 +284,7 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
         if let end = decision?.boundaryEndTime {
             try await flushAudio(through: sampleIndex(for: end))
         }
+        try await appendFreezeFrameIfNeeded(hostTime: hostTime)
     }
 
     /// Closes and journals the current video chunk.
@@ -293,6 +330,52 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
     public func commitScreenCheckpoint(_ record: ScreenCheckpointRecord) async throws {
         try await ledger.commitScreenCheckpoint(record)
     }
+
+    /// Repeats the last captured frame when the source has gone quiet.
+    ///
+    /// ScreenCaptureKit is change-driven, so a still screen stops producing frames
+    /// while the recording clock keeps running. Writing the retained frame again
+    /// with the elapsed gap as its duration keeps the video timeline equal to the
+    /// real recording length instead of collapsing to the last burst of frames.
+    ///
+    /// - Parameter hostTime: The current monotonic host time.
+    private func appendFreezeFrameIfNeeded(hostTime: UInt64) async throws {
+        guard currentVideoWriter != nil,
+              let sample = lastSampleBuffer,
+              let epochHostTime,
+              let epochPresentationTime,
+              hostTime > epochHostTime,
+              let lastFrame
+        else { return }
+        let elapsed = Double(hostTime - epochHostTime) / Double(hostTicksPerSecond)
+        let target = CMTimeAdd(
+            epochPresentationTime,
+            CMTime(seconds: elapsed, preferredTimescale: 1_000_000)
+        )
+        let lastEnd = CMTimeAdd(lastFrame.presentationTime, lastFrame.duration)
+        let gap = CMTimeSubtract(target, lastEnd)
+        let minimumGap = CMTime(seconds: Self.freezeFrameInterval, preferredTimescale: 1_000_000)
+        guard gap.isValid, gap.isNumeric, CMTimeCompare(gap, minimumGap) >= 0 else { return }
+
+        var timing = CMSampleTimingInfo(
+            duration: gap,
+            presentationTimeStamp: lastEnd,
+            decodeTimeStamp: .invalid
+        )
+        var copied: CMSampleBuffer?
+        let status = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sample,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &copied
+        )
+        guard status == noErr, let copied else { return }
+        try await append(video: copied, at: hostTime)
+    }
+
+    /// Minimum elapsed time before the retained frame is written again.
+    private static let freezeFrameInterval: TimeInterval = 0.5
 
     private func processTick(hostTime: UInt64) async throws -> ScreenBoundaryDecision? {
         let decision = planner.tick(hostTime: hostTime)
@@ -362,7 +445,14 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
         let sessionRoot = ledger.sessionRoot
 
         try await flushAudio(through: sampleIndex(for: boundary.endTime))
-        let result = try await writer.finish()
+        let result: VideoChunkResult
+        do {
+            result = try await writer.finish()
+        } catch {
+            completedWriterDiagnostics = completedWriterDiagnostics.combined(with: writer.diagnostics)
+            throw error
+        }
+        completedWriterDiagnostics = completedWriterDiagnostics.combined(with: writer.diagnostics)
         let (nextDropCount, dropOverflow) = completedVideoDropCount.addingReportingOverflow(result.droppedFrameCount)
         completedVideoDropCount = dropOverflow ? Int64.max : nextDropCount
         do {
@@ -399,6 +489,7 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
         screenRecords[segmentIndex, default: []].append(record)
         currentVideoWriter = nil
         currentChunkStart = nil
+        lastSampleBuffer = nil
         return ScreenCheckpointCommit(
             segmentIndex: segmentIndex,
             chunkIndex: start.chunkIndex,
@@ -480,11 +571,39 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
         if let lastFrame { try await flushAudio(through: sampleIndex(for: lastFrame.presentationTime)) }
     }
 
+    /// Writes every pending block that ends at or before `sample` to the audio sink.
+    ///
+    /// Flushes are serialized: `sink.append` suspends this actor, and two concurrent
+    /// flushes used to write the same pending block twice while skipping another,
+    /// which the sink rejects as a non-contiguous range.
+    ///
+    /// - Parameter sample: Exclusive session sample the caller needs written.
     private func flushAudio(through sample: Int64) async throws {
-        guard let currentAudioSink, !pendingAudio.isEmpty else { return }
+        await acquireAudioFlush()
+        do {
+            try await writePendingAudio(through: sample)
+        } catch {
+            releaseAudioFlush()
+            throw error
+        }
+        releaseAudioFlush()
+    }
+
+    /// The body of one serialized audio flush.
+    ///
+    /// Blocks enqueued while the sink append suspends stay pending: only the prefix
+    /// observed at entry is consumed, so nothing is overwritten by the final assign.
+    ///
+    /// - Parameter sample: Exclusive session sample the caller needs written.
+    private func writePendingAudio(through sample: Int64) async throws {
+        guard let sink = currentAudioSink else { return }
+        let observedCount = pendingAudio.count
+        guard observedCount > 0 else { return }
         var remaining: [AudioPCMBlock] = []
         var remainingFrames = 0
-        for block in pendingAudio {
+        var consumedFrames = 0
+        for block in pendingAudio.prefix(observedCount) {
+            consumedFrames += block.frameCount
             let start = block.range.startSample
             let end = start + Int64(block.frameCount)
             if end <= 0 { continue }
@@ -499,7 +618,14 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
             }
             let appendCount = min(clippedCount, Int(sample - clippedStart))
             if appendCount > 0 {
-                try await currentAudioSink.append(slice(block, offset: Int(trimStart), count: appendCount, startSample: clippedStart))
+                try await sink.append(
+                    slice(
+                        block,
+                        offset: Int(trimStart),
+                        count: appendCount,
+                        startSample: clippedStart
+                    )
+                )
             }
             let suffixCount = clippedCount - appendCount
             if suffixCount > 0 {
@@ -513,8 +639,29 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
                 remainingFrames += suffixCount
             }
         }
-        pendingAudio = remaining
-        pendingAudioFrames = remainingFrames
+        pendingAudio = remaining + pendingAudio.dropFirst(observedCount)
+        pendingAudioFrames = remainingFrames + (pendingAudioFrames - consumedFrames)
+    }
+
+    /// Waits until this actor owns the single audio-flush slot.
+    private func acquireAudioFlush() async {
+        if !audioFlushInFlight {
+            audioFlushInFlight = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            audioFlushWaiters.append(continuation)
+        }
+    }
+
+    /// Hands the audio-flush slot to the next waiter, or frees it.
+    private func releaseAudioFlush() {
+        if audioFlushWaiters.isEmpty {
+            audioFlushInFlight = false
+        } else {
+            let next = audioFlushWaiters.removeFirst()
+            next.resume()
+        }
     }
 
     private func mapToScreenEpoch(_ block: AudioPCMBlock, epochHostTime: UInt64) -> AudioPCMBlock? {

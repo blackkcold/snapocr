@@ -1,0 +1,19 @@
+{
+  "name": "deadline-during-stall",
+  "audioSeconds": 1,
+  "screenSeconds": 0,
+  "firstSampleDeadlineSeconds": 2,
+  "simulateMainStallMs": 6000,
+  "simulateStallAfterStart": false,
+  "audioMode": "microphone",
+  "hudWarmup": false,
+  "suppressFirstSample": true,
+  "expect": {
+    "artifactPlayable": true,
+    "becameRecording": false,
+    "mainThreadMaxStallAtLeastMs": 4800,
+    "settlementDuringStall": true,
+    "supervisorStopCalls": 1,
+    "noZeroByteArtifacts": true
+  }
+}

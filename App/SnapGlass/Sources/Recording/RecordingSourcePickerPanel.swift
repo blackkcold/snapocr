@@ -133,41 +133,39 @@ final class RecordingSourcePickerPanel: NSPanel {
     private let onFailure: (String) -> Void
     private var didFinish = false
 
+    /// Shows the picker for an already-enumerated content snapshot.
+    ///
+    /// The caller owns enumeration so one source selection costs exactly one
+    /// `SCShareableContent` call, and so the caller's bounded/authorization rules
+    /// apply before any picker appears.
+    ///
+    /// - Parameters:
+    ///   - content: The snapshot the permission probe just produced.
+    ///   - onComplete: Called once with the selection, or `nil` on cancel.
+    ///   - onFailure: Called once with a user-facing message when no display exists.
     static func show(
+        content: SCShareableContent,
         onComplete: @escaping (RecordingSourceSelection?) -> Void,
         onFailure: @escaping (String) -> Void
     ) {
+        cancelActivePanel()
         let requestID = UUID()
         activeRequestID = requestID
-        Task { @MainActor in
-            do {
-                let content = try await SCShareableContent.excludingDesktopWindows(
-                    true,
-                    onScreenWindowsOnly: true
-                )
-                guard activeRequestID == requestID else { return }
-                guard !content.displays.isEmpty else {
-                    activeRequestID = nil
-                    onFailure(AppLocalization.string("No displays are available to record."))
-                    onComplete(nil)
-                    return
-                }
-                let panel = RecordingSourcePickerPanel(
-                    content: content,
-                    requestID: requestID,
-                    onComplete: onComplete,
-                    onFailure: onFailure
-                )
-                retainedPanels.append(panel)
-                panel.orderFrontRegardless()
-                panel.makeKey()
-            } catch {
-                guard activeRequestID == requestID else { return }
-                activeRequestID = nil
-                onFailure(AppLocalization.string("Could not load recording sources: %@", error.localizedDescription))
-                onComplete(nil)
-            }
+        guard !content.displays.isEmpty else {
+            activeRequestID = nil
+            onFailure(AppLocalization.string("No displays are available to record."))
+            onComplete(nil)
+            return
         }
+        let panel = RecordingSourcePickerPanel(
+            content: content,
+            requestID: requestID,
+            onComplete: onComplete,
+            onFailure: onFailure
+        )
+        retainedPanels.append(panel)
+        panel.orderFrontRegardless()
+        panel.makeKey()
     }
 
     @MainActor

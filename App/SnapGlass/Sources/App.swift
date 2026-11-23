@@ -1,13 +1,48 @@
-import SwiftUI
-import SharedKit
 import AppKit
+import SharedKit
+import SwiftUI
 
-/// The main application entry point for SnapGlass.
+/// Process entry point.
+///
+/// The agent channel needs `NSApplication` without any SwiftUI scene, because
+/// `SceneBuilder` cannot branch between scene types. Normal launches delegate to
+/// the SwiftUI app exactly as before.
 @main
+@MainActor
+enum SnapGlassLauncher {
+    private static var agentDelegate: SnapGlassApplicationDelegate?
+
+    static func main() {
+        if AgentMode.isActive {
+            let application = NSApplication.shared
+            let delegate = SnapGlassApplicationDelegate()
+            agentDelegate = delegate
+            application.delegate = delegate
+            application.setActivationPolicy(.accessory)
+            application.run()
+            return
+        }
+        SnapGlassApp.main()
+    }
+}
+
+/// The SwiftUI application: menu bar item, windows, and commands.
 struct SnapGlassApp: App {
     @NSApplicationDelegateAdaptor(SnapGlassApplicationDelegate.self)
     private var applicationDelegate
 
+    var body: some Scene {
+        SnapGlassMainScene(applicationDelegate: applicationDelegate)
+    }
+}
+
+/// The normal menu bar application: menu item, windows, and commands.
+///
+/// Extracted from `SnapGlassApp` so an agent launch never initializes the view
+/// model, updater, or menu bar infrastructure.
+private struct SnapGlassMainScene: Scene {
+    /// The application delegate shared with the menu bar lifecycle bridge.
+    let applicationDelegate: SnapGlassApplicationDelegate
     /// The view model managing capture state and coordination.
     @StateObject private var viewModel = CaptureViewModel()
     /// Coordinates the selected Settings section and window opening.
@@ -32,7 +67,7 @@ struct SnapGlassApp: App {
         case .dark: .dark
         }
     }
-    
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarView()
@@ -45,18 +80,19 @@ struct SnapGlassApp: App {
             MenuBarStatusLabel(
                 status: viewModel.recordingStatus,
                 isCapturing: viewModel.isCapturing,
+                recordingKind: viewModel.currentRecordingKind,
                 hasFailure: viewModel.recordingFailure != nil,
                 hasUpdate: updater.hasAvailableUpdate
             )
             .environment(\.locale, locale)
             .background {
-                    AppLifecycleBridge(
-                        viewModel: viewModel,
-                        router: router,
-                        updater: updater,
-                        applicationDelegate: applicationDelegate
-                    )
-                }
+                AppLifecycleBridge(
+                    viewModel: viewModel,
+                    router: router,
+                    updater: updater,
+                    applicationDelegate: applicationDelegate
+                )
+            }
         }
 
         Window("Preferences", id: "preferences") {
@@ -124,7 +160,7 @@ struct SnapGlassApp: App {
         }
         .defaultSize(width: PreferencesSpacing.idealWindowWidth, height: PreferencesSpacing.idealWindowHeight)
         .windowResizability(.contentMinSize)
-        
+
         Window("Annotation Editor", id: "editor") {
             EditorWorkspaceView(workspace: viewModel.editorWorkspace)
                 // Capture-level toasts sit at the bottom so they cannot
@@ -135,7 +171,7 @@ struct SnapGlassApp: App {
                 .navigationTitle(Text("Annotation Editor"))
                 .background(AppWindowRegistrationView(id: "editor", appearanceMode: appearanceMode))
         }
-        
+
         Window("Permission Required", id: "permission") {
             PermissionGuideView()
                 .navigationTitle(Text("Permission Required"))
@@ -155,6 +191,7 @@ private struct AppLifecycleBridge: View {
     @ObservedObject var viewModel: CaptureViewModel
     @ObservedObject var router: PreferencesRouter
     @ObservedObject var updater: UpdaterManager
+    /// The application delegate that owns quit and reopen routing.
     let applicationDelegate: SnapGlassApplicationDelegate
     @State private var didInitialize = false
 
@@ -181,6 +218,9 @@ private struct AppLifecycleBridge: View {
                 didInitialize = true
                 updater.start()
                 viewModel.checkPermissionsOnLaunch()
+                // Interrupted recordings are discovered once, off the main actor,
+                // right after launch. Failure only logs; it never blocks startup.
+                Task { await viewModel.scanRecoverableRecordingsAtLaunch() }
             }
     }
 }

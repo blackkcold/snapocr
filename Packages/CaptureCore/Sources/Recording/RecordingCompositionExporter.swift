@@ -336,6 +336,9 @@ private enum RecordingExportWorker {
             switch source {
             case .checkpointPCM:
                 metadata = try checkpointMetadata(url: url, segmentIndex: segmentIndex)
+            case .recoveredMedia:
+                guard let item = recoveredMetadata(url: url) else { throw ExportError.missingSource }
+                metadata = [item]
             case .publishedMedia:
                 let record: SegmentPortableRecord
                 do { record = try await SegmentPortableMetadata.read(from: url) }
@@ -362,8 +365,38 @@ private enum RecordingExportWorker {
         return cursors
     }
 
-    private static func checkpointMetadata(url: URL, segmentIndex: Int) throws -> [ExportAudioTrackMetadata] {
-        let siblings = try FileManager.default.contentsOfDirectory(
+    /// Metadata for a recovered file: read from the original media itself.
+    ///
+    /// Recovered files have no sealed-product portable record, so the range comes
+    /// from the file's own frame count. Pipeline media is always 48 kHz, which is
+    /// what the export cursor requires.
+    private static func recoveredMetadata(url: URL) -> ExportAudioTrackMetadata? {
+        guard let file = try? AVAudioFile(forReading: url), file.length > 0 else { return nil }
+        let sampleRate = Int(file.processingFormat.sampleRate.rounded())
+        let channelCount = Int(file.processingFormat.channelCount)
+        guard sampleRate == 48_000, (1...2).contains(channelCount) else { return nil }
+        let role = recoveredRole(url: url)
+        return ExportAudioTrackMetadata(
+            role: role,
+            range: SampleRange(startSample: 0, sampleCount: Int64(file.length)),
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            primingFrames: 0,
+            remainderFrames: 0
+        )
+    }
+
+    private static func recoveredRole(url: URL) -> RecordingTrackRole {
+        let token = url.lastPathComponent.split(separator: "-", maxSplits: 1).first
+            .map(String.init)?.lowercased()
+        switch token {
+        case "system": return .system
+        case "mic", "microphone": return .microphone
+        default: return .mixed
+        }
+    }
+
+    private static func checkpointMetadata(url: URL, segmentIndex: Int) throws -> [ExportAudioTrackMetadata] {        let siblings = try FileManager.default.contentsOfDirectory(
             at: url.deletingLastPathComponent(), includingPropertiesForKeys: nil
         ).filter { $0.lastPathComponent.hasPrefix("checkpoint-") && $0.pathExtension == "json" }
         for sidecar in siblings {

@@ -8,12 +8,13 @@ import SharedKit
 /// Kept in its own file so `RecordingSessionController` stays within the project's file-length
 /// budget; every method is driven by panel actions or by finalization.
 extension RecordingSessionController {
-    func startAudioProgressMonitoring(for pipeline: RecordingSessionPipeline) {
+    func startAudioProgressMonitoring(for pipeline: RecordingSessionPipeline, generation: UUID) {
         guard audioProgressTask == nil else { return }
         let stream = pipeline.makeProgressStream()
         audioProgressTask = Task { @MainActor [weak self] in
             for await progress in stream {
                 guard !Task.isCancelled, let self,
+                      generation == self.sessionGeneration,
                       self.audioSessionID == progress.sessionID else { break }
                 self.audioProgress = progress
                 self.updateAudioSilenceWarning(progress)
@@ -22,12 +23,35 @@ extension RecordingSessionController {
         }
     }
 
-    func presentAudioRecordingHUD() {
-        updateAudioHUD()
+    /// Promotes a starting audio session to recording.
+    ///
+    /// Driven only by the settlement supervisor's `.mediaStarted` event, which it
+    /// emits after seeing a real captured sample. The UI never decides readiness
+    /// from a progress value of its own.
+    func handleAudioReadiness(generation: UUID) {
+        guard generation == sessionGeneration,
+              audioStateMachine.state == .starting,
+              !audioStopRequested
+        else { return }
+        audioStateMachine.apply(.started)
+        outcomeState.markRecordingStarted()
+        recordingStartedAt = Date()
+        // `updateStatus` is the only entry point that presents: its `.recording` branch
+        // shows the audio capsule, so presenting again here would enqueue a second
+        // identical state in the same turn.
+        updateStatus(audioStateMachine.legacyStatus)
+        RecordingSignposts.emit(.recording, kind: .audio)
+        announcePhase(.recording, kind: .audio)
     }
 
-    func updateAudioHUD() {
-        guard !panelHiddenByUser, !RecordingHUDPreferences.isHidden(in: defaults) else { return }
+    func presentAudioRecordingHUD(ignoringHiddenPreference: Bool = false) {
+        updateAudioHUD(ignoringHiddenPreference: ignoringHiddenPreference)
+    }
+
+    func updateAudioHUD(ignoringHiddenPreference: Bool = false) {
+        if !ignoringHiddenPreference {
+            guard !panelHiddenByUser, !RecordingHUDPreferences.isHidden(in: defaults) else { return }
+        }
         if controlPanel == nil { controlPanel = makeControlPanel(on: NSScreen.main) }
 
         let progress = audioProgress
@@ -53,7 +77,9 @@ extension RecordingSessionController {
                 expanded: audioHUDExpanded,
                 silenceWarning: audioSilenceWarningVisible
             )
-        case .starting, .stopping, .finalizing:
+        case .starting:
+            state = .starting(kind: .audio, phase: startPhase)
+        case .stopping, .finalizing:
             state = .audioFinalizing(
                 savedSegments: progress?.savedSegments ?? 0,
                 previewReady: previewReady,
@@ -261,24 +287,194 @@ extension RecordingSessionController {
     }
 
     /// Keeps a failed session visible and actionable instead of dismissing it behind a toast.
-    func handleRecordingFailure(_ error: any Error, engine: ScreenRecordingEngine) async {
+    ///
+    /// - Parameters:
+    ///   - error: The failure to explain in the panel.
+    ///   - engine: The engine that still owns retryable material.
+    ///   - materialRoot: A read-only session directory to reveal when no partial file exists.
+    ///   - errorClass: Optional privacy-safe class for the terminal signpost.
+    func handleRecordingFailure(
+        _ error: any Error,
+        engine: ScreenRecordingEngine,
+        materialRoot: URL? = nil,
+        errorClass: RecordingDiagnosticErrorClass? = nil
+    ) async {
         let reason = AppLocalization.recordingErrorDescription(error)
         let payload = RecordingControlPanelFailure(
             reason: reason,
             canRetry: await engine.canRetryPublish,
-            partialURL: await engine.partialOutputURL
+            partialURL: await engine.partialOutputURL ?? materialRoot
         )
+        let wasHidden = panelHiddenByUser || RecordingHUDPreferences.isHidden(in: defaults)
         retainedFailure = (engine, payload)
         onFailureChange?(payload)
-        finishSession(success: false)
-        presentFailurePanel(payload)
-        if RecordingHUDPreferences.isHidden(in: defaults) {
+        finishSession(success: false, errorClass: errorClass ?? Self.diagnosticClass(for: error))
+        if !wasHidden { presentFailurePanel(payload) }
+        if wasHidden {
             onMessage?(AppLocalization.string("Recording failed: %@", reason), .error)
         }
     }
 
+    /// Builds the capture-release capsule payload for the current phase.
+    ///
+    /// "Stream release not confirmed" and "file not sealed yet" are different
+    /// statements: this payload is only used while the stream's release is the
+    /// open question, never for a `.saving` session.
+    func screenReleasePayload(materialRoot: URL? = nil) -> RecordingControlPanelFailure {
+        let phase = screenReleasePhase ?? .startUnconfirmed
+        let reason: String
+        switch phase {
+        case .startUnconfirmed:
+            reason = AppLocalization.string(
+                "SnapGlass has not confirmed what happened to the capture it tried to start, so recording stays disabled. If this does not clear, quit SnapGlass and open it again. Anything already written stays in your recordings folder."
+            )
+        case .stopUnconfirmed:
+            reason = AppLocalization.string(
+                "SnapGlass has asked the capture stream to stop and has not confirmed it yet. Recording stays disabled until it does. If this does not clear, quit SnapGlass and open it again. Written files are kept."
+            )
+        case .stopRejected:
+            reason = AppLocalization.string(
+                "The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one."
+            )
+        }
+        return RecordingControlPanelFailure(
+            reason: reason,
+            canRetry: phase == .stopRejected && !isScreenStopInFlight,
+            partialURL: unconfirmedScreenStop?.materialRoot ?? materialRoot ?? screenReleaseDestination
+        )
+    }
+
+    /// Presents the capture-release capsule when a stream release is still open.
+    @discardableResult
+    func presentScreenReleaseCapsuleIfNeeded() -> Bool {
+        guard screenReleasePhase != nil else { return false }
+        didAnnounceScreenRelease = false
+        presentScreenReleaseCapsule()
+        return true
+    }
+
+    /// Shows the release capsule with its Finder target and explicit exit.
+    ///
+    /// It is static (never a spinner), never claims the stream stopped, and stays
+    /// findable again after the app is reopened from Finder or Spotlight.
+    func presentScreenReleaseCapsule(
+        materialRoot: URL? = nil,
+        ignoringHiddenPreference: Bool = false
+    ) {
+        guard screenReleasePhase != nil else { return }
+        let payload = screenReleasePayload(materialRoot: materialRoot)
+        onFailureChange?(payload)
+        if ignoringHiddenPreference {
+            panelHiddenByUser = false
+            presentReopenPanel(.failure(payload))
+        } else {
+            presentFailurePanel(payload)
+        }
+        let isVisible = controlPanel?.isVisible ?? false
+        isPresentingScreenRelease = isVisible
+        if !isVisible, !didAnnounceScreenRelease {
+            didAnnounceScreenRelease = true
+            onMessage?(payload.reason, .info)
+        }
+    }
+
+    /// Updates the release wording when the phase advances, without re-announcing.
+    func refreshScreenReleaseCapsule() {
+        guard isPresentingScreenRelease, screenReleasePhase != nil else { return }
+        presentScreenReleaseCapsule()
+    }
+
+    /// Removes the release capsule after the gate is actually released.
+    ///
+    /// Call only in the same synchronous step that releases the screen start
+    /// ownership gate, so a newer session can never be showing when this runs.
+    func clearScreenReleaseCapsule() {
+        didAnnounceScreenRelease = false
+        guard isPresentingScreenRelease else { return }
+        isPresentingScreenRelease = false
+        if let failure = retainedFailure?.payload {
+            onFailureChange?(failure)
+            presentFailurePanel(failure)
+            return
+        }
+        onFailureChange?(nil)
+        controlPanel?.dismiss()
+        controlPanel = nil
+    }
+
+    /// Restores a usable control surface after the app is reopened from Finder or Spotlight.
+    ///
+    /// This deliberately ignores the "hide the recording panel" preference and the
+    /// in-memory hide flag: an explicit reopen is a request for controls, not for a
+    /// silent session with no way to stop it.
+    ///
+    /// - Returns: `true` when a recording surface or a failure was brought back.
+    @discardableResult
+    func restoreControlForReopen() -> Bool {
+        panelHiddenByUser = false
+        // A pending stream release outranks a failure: it is what keeps recording
+        // disabled, and it must stay visible even after the session was cleared.
+        if screenReleasePhase != nil {
+            didAnnounceScreenRelease = false
+            presentScreenReleaseCapsule(ignoringHiddenPreference: true)
+            return controlPanel?.isVisible ?? false
+        }
+        if let failure = retainedFailure?.payload {
+            presentReopenPanel(.failure(failure))
+            return true
+        }
+        if isAudioSessionActive {
+            presentAudioRecordingHUD(ignoringHiddenPreference: true)
+            return controlPanel?.isVisible ?? false
+        }
+        switch status {
+        case .selectingSource:
+            presentReopenPanel(
+                .preparing(kind: currentRecordingKind ?? .screen, phase: preparationPhase)
+            )
+            return controlPanel?.isVisible ?? false
+        case .countdown:
+            guard let seconds = countdownSeconds else { return false }
+            presentReopenPanel(.countdown(seconds))
+            return controlPanel?.isVisible ?? false
+        case .starting:
+            let kind = currentRecordingKind ?? .screen
+            presentReopenPanel(
+                .starting(kind: kind, phase: startPhase)
+            )
+            return controlPanel?.isVisible ?? false
+        case .recording:
+            presentReopenPanel(.recording(startedAt: recordingStartedAt ?? Date()))
+            return controlPanel?.isVisible ?? false
+        case .saving:
+            presentReopenPanel(
+                .saving(
+                    kind: currentRecordingKind ?? .screen,
+                    fileName: nil,
+                    isBeforeQuit: isResolvingQuit
+                )
+            )
+            return controlPanel?.isVisible ?? false
+        case .idle:
+            return false
+        }
+    }
+
+    /// Presents a panel state for an explicit reopen, bypassing hide preferences.
+    private func presentReopenPanel(_ state: RecordingControlPanelState) {
+        if controlPanel == nil {
+            controlPanel = makeControlPanel(on: sessionScreen ?? NSScreen.main)
+        }
+        controlPanel?.present(state: state)
+    }
+
+    private var countdownSeconds: Int? {
+        if case let .countdown(seconds) = status { return seconds }
+        return nil
+    }
+
     func presentFailurePanel(_ payload: RecordingControlPanelFailure) {
-        guard !RecordingHUDPreferences.isHidden(in: defaults) else { return }
+        guard !panelHiddenByUser, !RecordingHUDPreferences.isHidden(in: defaults) else { return }
         if controlPanel == nil {
             controlPanel = makeControlPanel(on: sessionScreen ?? NSScreen.main)
         }
@@ -286,6 +482,10 @@ extension RecordingSessionController {
     }
 
     func retryFailedPublish() async {
+        if unconfirmedScreenStop != nil {
+            await retryUnconfirmedScreenStop()
+            return
+        }
         guard let retainedFailure else { return }
         do {
             let url = try await retainedFailure.engine.retryPublish()
@@ -312,6 +512,8 @@ extension RecordingSessionController {
     func dismissFailurePanel() {
         retainedFailure = nil
         onFailureChange?(nil)
+        isPresentingScreenRelease = false
+        didAnnounceScreenRelease = false
         controlPanel?.dismiss()
         controlPanel = nil
         Task { @MainActor [weak self] in await self?.closeAudioPreview() }

@@ -54,6 +54,137 @@ struct ScreenVideoWriterBridgeTests {
         }
     }
 
+    @Test func syncFrameNotReadyThrowsAfterBoundedWait() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dimensions = CGSize(width: 320, height: 240)
+        let destination = directory.appendingPathComponent("busy.mp4")
+        let bridge = try ScreenVideoWriterBridge(
+            destinationURL: destination,
+            configuration: RecordingConfiguration(resolutionLimit: dimensions),
+            dimensions: dimensions
+        )
+        bridge.faultInjection.inputReady = { false }
+        let clock = ContinuousClock()
+        let start = clock.now
+
+        #expect(throws: ScreenVideoWriterBridgeError.writerNotReady) {
+            try bridge.append(video: self.makeVideoSample(dimensions: dimensions, index: 0))
+        }
+
+        // The sync frame was waited for, not silently dropped.
+        #expect(clock.now - start >= .milliseconds(150))
+        #expect(bridge.diagnostics.syncDropCount == 1)
+        #expect(bridge.diagnostics.nonSyncDropCount == 0)
+        #expect(bridge.diagnostics.lastErrorDescription != nil)
+        // No zero-byte chunk is left behind.
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    @Test func syncFrameAcceptedAfterTheWriterBecomesReady() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dimensions = CGSize(width: 320, height: 240)
+        let destination = directory.appendingPathComponent("late-ready.mp4")
+        let bridge = try ScreenVideoWriterBridge(
+            destinationURL: destination,
+            configuration: RecordingConfiguration(resolutionLimit: dimensions),
+            dimensions: dimensions
+        )
+        let counter = WriterProbeCounter()
+        bridge.faultInjection.inputReady = { counter.next() > 2 }
+
+        let accepted = try bridge.append(video: makeVideoSample(dimensions: dimensions, index: 0))
+
+        #expect(accepted)
+        #expect(bridge.diagnostics.syncDropCount == 0)
+        let result = try await bridge.finish()
+        #expect(result.frames.count == 1)
+    }
+
+    @Test func startWritingFailureReportsAndRemovesTheChunk() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dimensions = CGSize(width: 320, height: 240)
+        let destination = directory.appendingPathComponent("start-failed.mp4")
+        let bridge = try ScreenVideoWriterBridge(
+            destinationURL: destination,
+            configuration: RecordingConfiguration(resolutionLimit: dimensions),
+            dimensions: dimensions
+        )
+        bridge.faultInjection.startWriting = { false }
+
+        #expect(throws: ScreenVideoWriterBridgeError.self) {
+            try bridge.append(video: self.makeVideoSample(dimensions: dimensions, index: 0))
+        }
+
+        #expect(bridge.diagnostics.startWritingResult == .failed)
+        #expect(bridge.diagnostics.lastErrorDescription != nil)
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    @Test func appendRejectionDiscardsTheChunk() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dimensions = CGSize(width: 320, height: 240)
+        let destination = directory.appendingPathComponent("append-failed.mp4")
+        let bridge = try ScreenVideoWriterBridge(
+            destinationURL: destination,
+            configuration: RecordingConfiguration(resolutionLimit: dimensions),
+            dimensions: dimensions
+        )
+        bridge.faultInjection.append = { _ in false }
+
+        #expect(throws: ScreenVideoWriterBridgeError.self) {
+            try bridge.append(video: self.makeVideoSample(dimensions: dimensions, index: 0))
+        }
+
+        #expect(bridge.diagnostics.appendFailureCount == 1)
+        #expect(bridge.diagnostics.lastErrorDescription != nil)
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    @Test func nonSyncFrameIsDroppedAndCounted() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dimensions = CGSize(width: 320, height: 240)
+        let destination = directory.appendingPathComponent("drop.mp4")
+        let bridge = try ScreenVideoWriterBridge(
+            destinationURL: destination,
+            configuration: RecordingConfiguration(resolutionLimit: dimensions),
+            dimensions: dimensions
+        )
+        try bridge.append(video: makeVideoSample(dimensions: dimensions, index: 0))
+        bridge.faultInjection.inputReady = { false }
+
+        let accepted = try bridge.append(
+            video: makeVideoSample(dimensions: dimensions, index: 1, notSync: true)
+        )
+
+        #expect(!accepted)
+        #expect(bridge.diagnostics.nonSyncDropCount == 1)
+        #expect(bridge.diagnostics.syncDropCount == 0)
+        let result = try await bridge.finish()
+        #expect(result.frames.count == 1)
+    }
+
+    @Test func finishWithoutAcceptedFramesLeavesNoFile() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dimensions = CGSize(width: 320, height: 240)
+        let destination = directory.appendingPathComponent("no-frames.mp4")
+        let bridge = try ScreenVideoWriterBridge(
+            destinationURL: destination,
+            configuration: RecordingConfiguration(resolutionLimit: dimensions),
+            dimensions: dimensions
+        )
+
+        await #expect(throws: ScreenVideoWriterBridgeError.noVideoFrames) {
+            try await bridge.finish()
+        }
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
     @Test func screenStreamConfigurationKeepsQueueDepthThree() throws {
         let configuration = try RecordingStreamSettings.make(
             configuration: RecordingConfiguration(),
@@ -70,7 +201,11 @@ struct ScreenVideoWriterBridgeTests {
         return url
     }
 
-    private func makeVideoSample(dimensions: CGSize, index: Int) throws -> CMSampleBuffer {
+    private func makeVideoSample(
+        dimensions: CGSize,
+        index: Int,
+        notSync: Bool = false
+    ) throws -> CMSampleBuffer {
         let pixelBuffer = try makePixelBuffer(
             width: Int(dimensions.width),
             height: Int(dimensions.height),
@@ -101,6 +236,20 @@ struct ScreenVideoWriterBridgeTests {
         )
         guard bufferStatus == noErr, let sampleBuffer else {
             throw ScreenVideoWriterBridgeTestError.sampleBufferFailed(bufferStatus)
+        }
+        if notSync {
+            guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
+                sampleBuffer,
+                createIfNecessary: true
+            ), CFArrayGetCount(attachments) > 0 else {
+                throw ScreenVideoWriterBridgeTestError.sampleBufferFailed(bufferStatus)
+            }
+            let entry = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
+            CFDictionarySetValue(
+                entry,
+                Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque(),
+                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+            )
         }
         return sampleBuffer
     }
@@ -137,4 +286,17 @@ private enum ScreenVideoWriterBridgeTestError: Error {
     case pixelBufferFailed(CVReturn)
     case formatDescriptionFailed(OSStatus)
     case sampleBufferFailed(OSStatus)
+}
+
+/// Thread-safe call counter for the injected writer-readiness probe.
+private final class WriterProbeCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
+    }
 }

@@ -1,0 +1,22 @@
+{
+  "name": "screen-permission-denied",
+  "mode": "screen",
+  "audioSeconds": 1,
+  "screenSeconds": 2,
+  "firstSampleDeadlineSeconds": 6,
+  "simulateMainStallMs": 0,
+  "simulateStallAfterStart": false,
+  "audioMode": "none",
+  "hudWarmup": false,
+  "simulateScreenPermissionDenied": true,
+  "expect": {
+    "artifactPlayable": false,
+    "becameRecording": false
+  },
+  "screenExpect": {
+    "published": false,
+    "becameWaitingForFrame": false,
+    "maxChunkCount": 0,
+    "failureMentionsSystemSettings": true
+  }
+}

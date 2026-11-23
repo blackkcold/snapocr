@@ -27,7 +27,7 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
         self.now = now
     }
 
-    /// Runs the initial two-volume capacity check before the pipeline starts.
+    /// Runs the initial write-volume capacity check before the pipeline starts.
     public func preflightStart() async throws -> SpaceBudgetDecision {
         let decision = try budget.preflight()
         let state: RecordingSpaceState = decision.allowed ? .ok : .blocked
@@ -200,6 +200,10 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
     }
 
     /// Returns a newest-only status stream; slow consumers cannot build an unbounded queue.
+    ///
+    /// The stream uses `.bufferingNewest(1)`, so `yield` may return `.dropped` for a
+    /// slow consumer. It reports the latest state and is not a lossless event log;
+    /// do not use it to claim that no status or sample was lost.
     public nonisolated func makeStatusStream() -> AsyncStream<RecordingSpaceStatus> {
         statusBroadcaster.makeStream()
     }
@@ -325,12 +329,17 @@ private final class RecordingSpaceStatusBroadcaster: @unchecked Sendable {
 
 public extension RecordingAudioPipelineFactory {
     /// Builds the production audio pipeline with the real URL capacity provider by default.
-    /// The synchronous preflight runs before T9's factory creates recording roots; T9 checks
-    /// again at `start` through its existing `spaceGate` injection point.
+    ///
+    /// The factory stays synchronous and no longer runs a preflight itself. The
+    /// app calls it on its recording setup queue so directory creation and ledger
+    /// initialization stay off the main actor; ``RecordingSessionPipeline/start(_:)``
+    /// remains the single preflight gate through `spaceGate.preflightStart()`.
+    /// Only the destination that actually receives bytes is registered; a
+    /// directory with no writer is never part of the budget.
     static func makeSpaceGated(
         configuration: AudioRecordingConfiguration,
         roots: RecordingPipelineRoots,
-        recoveryRoot: URL,
+        expectedVolumeUUID: String? = nil,
         backlog: RecordingBacklogPolicy,
         capacityProvider: any VolumeCapacityProviding = URLVolumeCapacityProvider(),
         now: @escaping @Sendable () -> Date = { Date() }
@@ -340,14 +349,8 @@ public extension RecordingAudioPipelineFactory {
             configuration: storageConfiguration,
             capacityProvider: capacityProvider,
             recordingRoot: roots.sessionRoot,
-            recoveryRoot: recoveryRoot
+            expectedVolumeUUID: expectedVolumeUUID
         )
-        let decision = try budget.preflight()
-        guard decision.allowed else {
-            throw RecordingPipelineError.spacePreflightDenied(
-                decision.reason ?? "recording or recovery volume has insufficient space"
-            )
-        }
         let gate = RecordingPipelineSpaceGate(budget: budget, backlog: backlog, now: now)
         return try RecordingAudioPipelineFactory.make(
             configuration: configuration,

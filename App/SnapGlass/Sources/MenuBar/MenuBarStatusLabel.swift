@@ -10,6 +10,8 @@ import SwiftUI
 struct MenuBarStatusLabel: View {
     let status: RecordingSessionStatus
     let isCapturing: Bool
+    /// The active recording kind, when one is preparing, recording, or saving.
+    var recordingKind: RecordingKind?
     var hasFailure: Bool = false
     /// A verified update is waiting; the dot is only shown when no recording
     /// indicator occupies the slot.
@@ -71,11 +73,15 @@ struct MenuBarStatusLabel: View {
         case .capturing:
             return Text("Capturing")
         case .preparing:
-            return Text("Preparing the recording stream.")
+            return recordingKind == .audio
+                ? Text("Preparing audio recording")
+                : Text("Preparing screen recording")
         case .recording:
-            return Text("Recording")
+            return recordingKind == .audio ? Text("Recording audio") : Text("Recording screen")
         case .saving:
-            return Text("Saving Recording…")
+            return recordingKind == .audio
+                ? Text("Saving audio recording")
+                : Text("Saving screen recording")
         case .failed:
             return Text("Recording failed")
         }

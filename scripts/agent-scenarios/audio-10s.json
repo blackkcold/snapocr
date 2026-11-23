@@ -1,0 +1,15 @@
+{
+  "name": "audio-10s",
+  "audioSeconds": 10,
+  "screenSeconds": 0,
+  "firstSampleDeadlineSeconds": 6,
+  "simulateMainStallMs": 0,
+  "simulateStallAfterStart": false,
+  "audioMode": "microphone",
+  "hudWarmup": false,
+  "expect": {
+    "artifactPlayable": true,
+    "becameRecording": true,
+    "maxRecordingResizeCount": 2
+  }
+}

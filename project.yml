@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "1.6.0"
+    MARKETING_VERSION: "1.6.1"
     CURRENT_PROJECT_VERSION: "3"
   configs:
     Debug:
@@ -182,13 +182,21 @@ targets:
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift
       - path: App/SnapGlass/Sources/Recording/RecordingQuitFlow.swift
       - path: App/SnapGlass/Sources/Recording/RecordingPermissionDecision.swift
+      - path: App/SnapGlass/Sources/Recording/ScreenCapturePermissionGate.swift
       - path: App/SnapGlass/Sources/Recording/ScreenRecordingPipelineAdapter.swift
       - path: App/SnapGlass/Sources/Recording/ScreenRecordingPipelineDecision.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingSettlementSupervisor.swift
       - path: App/SnapGlass/Sources/Recording/MicrophonePermission.swift
       - path: App/SnapGlass/Sources/Recording/RecordingHUDPresentation.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingHUDMeasurement.swift
       - path: App/SnapGlass/Sources/Recording/RecordingWindowExclusionRegistry.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportSummary.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingExportRoot.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingRecoveryService.swift
+      - path: App/SnapGlass/Sources/Agent/AgentMode.swift
+      - path: App/SnapGlass/Sources/Agent/AgentScenario.swift
+      - path: App/SnapGlass/Sources/Agent/AgentReport.swift
     dependencies:
       - package: SharedKit
       - package: CaptureCore

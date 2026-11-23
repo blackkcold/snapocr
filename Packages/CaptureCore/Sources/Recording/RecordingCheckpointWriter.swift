@@ -875,6 +875,16 @@ public actor RecordingCheckpointWriter: SegmentCheckpointSink {
         }
     }
 
+    /// Durability boundary note (P2: evaluated, deferred, not implemented).
+    ///
+    /// Appending chunk frames and the journal encode + `F_FULLFSYNC` barrier are
+    /// still one commit path. Separating them may be possible later, but only with
+    /// runtime evidence that it is safe, and it must preserve the committed
+    /// contract: no result may report "safe" before the files are closed and
+    /// verified and the ledger is durable. The ≤300 s recovery-point target and the
+    /// `nextCheckpointSeconds` / `tailReserveSeconds` values are unchanged. This
+    /// comment records a deferral, not a performance win.
+    ///
     /// Commits the current chunk.
     ///
     /// Repeating the call without new samples returns the previous commit. The

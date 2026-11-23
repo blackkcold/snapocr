@@ -638,4 +638,82 @@ struct AudioMixPumpTests {
     #expect(result.nonSilentTicks == 6_000)
     #expect(result.totalGapFrames == 0)
   }
+
+  /// S4: the readiness counter must move for microphone-only capture.
+  @Test func capturedSourceFramesCountMicrophoneFramesNotClockSilence() throws {
+    let microphone = try makeRing(role: .microphone)
+    write(constant(0.1), to: microphone)
+    let pump = makePump(layout: .mixed)
+    pump.start()
+    try pump.updateInputs(
+      inputs(
+        rings: [.microphone: microphone],
+        formats: [.microphone: AudioSourceFormat(sampleRate: 48_000, channelCount: 1)],
+        active: [.microphone],
+        everEnabled: [.microphone],
+        generations: [.microphone: UUID()]
+      )
+    )
+
+    _ = try #require(try pump.nextTick(for: hostTime(forSample: 480)))
+    #expect(pump.capturedSourceFrameCount == 480)
+
+    // A later tick advances the clock but reads no source frames.
+    _ = try #require(try pump.nextTick(for: hostTime(forSample: 960)))
+    #expect(pump.nextSampleIndex > 480)
+    #expect(pump.capturedSourceFrameCount == 480)
+  }
+
+  /// S4: the readiness counter must move for system-audio-only capture.
+  @Test func capturedSourceFramesCountSystemFramesNotClockSilence() throws {
+    let system = try makeRing(role: .system)
+    write(constant(0.1), to: system)
+    let pump = makePump(layout: .mixed)
+    pump.start()
+    try pump.updateInputs(
+      inputs(
+        rings: [.system: system],
+        formats: [.system: AudioSourceFormat(sampleRate: 48_000, channelCount: 1)],
+        active: [.system],
+        everEnabled: [.system],
+        generations: [.system: UUID()]
+      )
+    )
+
+    _ = try #require(try pump.nextTick(for: hostTime(forSample: 480)))
+    #expect(pump.capturedSourceFrameCount == 480)
+
+    _ = try #require(try pump.nextTick(for: hostTime(forSample: 960)))
+    #expect(pump.nextSampleIndex > 480)
+    #expect(pump.capturedSourceFrameCount == 480)
+  }
+
+  /// S4: `systemAndMicrophone` counts frames from both roles.
+  @Test func capturedSourceFramesCountBothRoles() throws {
+    let system = try makeRing(role: .system)
+    let microphone = try makeRing(role: .microphone)
+    write(constant(0.1), to: system)
+    write(constant(0.2), to: microphone)
+    let pump = makePump(layout: .mixed)
+    pump.start()
+    try pump.updateInputs(
+      inputs(
+        rings: [.system: system, .microphone: microphone],
+        formats: [
+          .system: AudioSourceFormat(sampleRate: 48_000, channelCount: 1),
+          .microphone: AudioSourceFormat(sampleRate: 48_000, channelCount: 1),
+        ],
+        active: [.system, .microphone],
+        everEnabled: [.system, .microphone],
+        generations: [.system: UUID(), .microphone: UUID()]
+      )
+    )
+
+    _ = try #require(try pump.nextTick(for: hostTime(forSample: 480)))
+    #expect(pump.capturedSourceFrameCount == 960)
+
+    _ = try #require(try pump.nextTick(for: hostTime(forSample: 960)))
+    #expect(pump.nextSampleIndex > 480)
+    #expect(pump.capturedSourceFrameCount == 960)
+  }
 }
