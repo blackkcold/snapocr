@@ -24,7 +24,7 @@ struct MockupPolicyTests {
         let decoded = try JSONDecoder().decode(MockupStyle.self, from: data)
 
         #expect(decoded == style)
-        #expect(decoded.version == 1)
+        #expect(decoded.version == 2)
     }
 
     @Test func unknownPresetFallsBackToLight() {

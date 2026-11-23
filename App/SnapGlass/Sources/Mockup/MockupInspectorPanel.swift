@@ -12,6 +12,8 @@ final class MockupInspectorModel: ObservableObject {
     @Published var preview: NSImage?
     @Published var isRendering = false
     @Published var message: String?
+    private(set) var lastPreset: MockupPreset?
+    private let baselineStyle: MockupStyle
 
     var onStyleChanged: ((MockupStyle) -> Void)?
     var onEdit: ((MockupStyle) -> Void)?
@@ -27,6 +29,8 @@ final class MockupInspectorModel: ObservableObject {
     ) {
         self.rawImage = rawImage
         self.style = style
+        self.baselineStyle = style
+        self.lastPreset = Self.preset(matching: style)
         self.lastCommittedStyle = style
         schedulePreview()
     }
@@ -37,8 +41,18 @@ final class MockupInspectorModel: ObservableObject {
     }
 
     func apply(_ preset: MockupPreset) {
+        lastPreset = preset
         style = preset.style
         schedulePreview()
+    }
+
+    func reset() {
+        if let lastPreset {
+            apply(lastPreset)
+        } else {
+            style = baselineStyle
+            schedulePreview()
+        }
     }
 
     func commitStyle() {
@@ -64,8 +78,7 @@ final class MockupInspectorModel: ObservableObject {
         let style = style
         isRendering = true
         let rendered = await Task.detached(priority: .userInitiated) {
-            let previewSource = MockupInspectorModel.downscaled(raw, maximumEdge: 1024)
-            return MockupRenderer.render(previewSource, style: style)
+            MockupRenderer.render(raw, style: style, maximumDimension: 1200)
         }.value
         guard generation == previewGeneration else { return }
         isRendering = false
@@ -128,26 +141,12 @@ final class MockupInspectorModel: ObservableObject {
         onEdit?(style)
     }
 
-    nonisolated private static func downscaled(_ image: CGImage, maximumEdge: Int) -> CGImage {
-        let longEdge = max(image.width, image.height)
-        guard longEdge > maximumEdge else { return image }
-        let scale = CGFloat(maximumEdge) / CGFloat(longEdge)
-        let width = max(1, Int(CGFloat(image.width) * scale))
-        let height = max(1, Int(CGFloat(image.height) * scale))
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
-        else { return image }
-        context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        return context.makeImage() ?? image
+    private static func preset(matching style: MockupStyle) -> MockupPreset? {
+        MockupPreset.allCases.first { candidate in
+            var candidateStyle = candidate.style
+            candidateStyle.version = style.version
+            return candidateStyle == style
+        }
     }
 }
 
@@ -248,7 +247,7 @@ struct MockupInspectorView: View {
                 Button("Save…") { model.save() }
                 Button("Edit") { model.edit() }
                 Spacer()
-                Button("Reset") { model.apply(.light) }
+                Button("Reset") { model.reset() }
             }
         }
         .padding(16)
@@ -334,7 +333,10 @@ final class MockupInspectorPanel: NSPanel {
         level = .floating
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        contentView = NSHostingView(rootView: MockupInspectorView(model: model))
+        contentView = NSHostingView(
+            rootView: MockupInspectorView(model: model)
+                .environment(\.locale, AppLocalization.locale())
+        )
     }
 
     override func close() {

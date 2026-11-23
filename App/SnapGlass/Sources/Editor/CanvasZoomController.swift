@@ -7,6 +7,11 @@ import SwiftUI
 /// current scale so the toolbar label stays in sync.
 @MainActor
 final class CanvasZoomController: ObservableObject {
+    /// Upper bound for zoom relative to fit. Large captures need well over 8×
+    /// to reach one image pixel per point in a normal window (a 6K screenshot
+    /// needs roughly 10–13×).
+    static let maximumScale: CGFloat = 32
+
     /// Zoom relative to the fit-to-window size; 1 means the whole image is visible.
     @Published private(set) var scale: CGFloat = 1
     /// Scale relative to the image's own pixels, which is what "100%" refers to.

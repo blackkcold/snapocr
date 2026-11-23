@@ -29,7 +29,15 @@ swift test --package-path Packages/ScrollCore
 
 # 运行所有 Package 测试
 for pkg in Packages/*/; do swift test --package-path "$pkg" || break; done
+
+# 全量测试（全部 Package + App schemes）
+./scripts/test.sh
+
+# 后台临时测试（独立实例、独立数据根；不触碰运行中的 App）
+scripts/agent-test.sh scripts/agent-scenarios/audio-smoke.json
 ```
+
+测试分层、离屏画布渲染与 Agent 场景的隔离说明见 [TESTING.md](./TESTING.md)。
 
 ---
 

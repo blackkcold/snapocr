@@ -160,29 +160,6 @@ enum ScreenReleasePhase: Equatable {
     case stopRejected
 }
 
-enum RecordingStorage {
-    static let minimumStartFreeSpace: Int64 = 1_024 * 1_024 * 1_024
-    static let minimumContinueFreeSpace: Int64 = 512 * 1_024 * 1_024
-
-    static func availableBytes(at directory: URL) -> Int64? {
-        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
-        guard let attributes = try? FileManager.default.attributesOfFileSystem(forPath: directory.path),
-              let availableBytes = attributes[.systemFreeSize] as? NSNumber else {
-            return nil
-        }
-        return availableBytes.int64Value
-    }
-
-    static func formattedBytes(_ byteCount: Int64) -> String {
-        let language = UserDefaults.standard.string(forKey: PreferenceKeys.appLanguage)
-            ?? PreferenceDefaults.appLanguage
-        return ByteCountFormatStyle(
-            style: .file,
-            locale: (AppLanguage(rawValue: language) ?? .system).locale
-        ).format(byteCount)
-    }
-}
-
 @MainActor
 final class RecordingSessionController {
     private let captureOrchestrator: CaptureOrchestrator

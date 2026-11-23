@@ -57,7 +57,7 @@
 
 <p align="center">
   <a href="https://github.com/blackkcold/snapocr/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20Latest-v1.6.1-blue?style=for-the-badge&logo=apple" alt="Download">
+    <img src="https://img.shields.io/badge/Download%20Latest-v1.7.0-blue?style=for-the-badge&logo=apple" alt="Download">
   </a>
 </p>
 
@@ -246,7 +246,7 @@ brew install xcodegen swiftlint
 xcodegen generate
 
 # 构建 Release 产物（用固定证书签名）
-./scripts/build.sh --version 1.6.1 --sign
+./scripts/build.sh --version 1.7.0 --sign
 
 # 只做本地调试构建（ad-hoc，无法自动更新）
 ./scripts/build.sh --no-sign
@@ -295,6 +295,7 @@ SnapGlass/
 | [安全策略](Docs/SECURITY.md) | 安全边界与漏洞报告 |
 | [贡献指南](Docs/CONTRIBUTING.md) | 代码规范与 PR 流程 |
 | [发版流程](Docs/RELEASE.md) | 构建与发布规范 |
+| [测试指南](Docs/TESTING.md) | 自动化测试分层、离屏画布渲染与 Agent 后台场景 |
 | [CI/CD 说明](Docs/CI.md) | GitHub Actions 工作流 |
 | [更新日志](CHANGELOG.md) | 版本历史 |
 

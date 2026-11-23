@@ -263,7 +263,11 @@ extension EditableAnnotationCanvasNSView {
     ///
     /// The dragged node is drawn live on top of this bitmap (see
     /// `drawInteractiveNode`), so moving a node never re-renders the whole image.
-    func previewImage(for image: CGImage, baseImage: CGImage) -> CGImage? {
+    func previewImage(
+        for image: CGImage,
+        baseImage: CGImage,
+        maximumDimension: CGFloat
+    ) -> CGImage? {
         // Blur needs the underlying pixels, so it cannot be drawn standalone:
         // keep it in the rendered preview and let it re-render while dragged.
         var previewNodes = nodes
@@ -283,12 +287,6 @@ extension EditableAnnotationCanvasNSView {
             return nil
         }
 
-        let backingScale = window?.backingScaleFactor ?? 2
-        // 缩放时显示尺寸每帧都变；把渲染尺寸吸附到固定档位，否则缓存键
-        // 必然 miss，每一帧都会重新合成整张 5K 图。
-        let maximumDimension = CanvasRenderScale.quantize(
-            max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
-        )
         if let renderedPreview,
            renderedPreviewNodes == previewNodes,
            renderedPreviewSource === image,

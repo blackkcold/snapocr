@@ -99,6 +99,7 @@ struct ScreenshotShelfDragPreview: Equatable {
 /// Actions sent from the shelf view back to the manager.
 enum ScreenshotShelfAction {
     case edit(UUID)
+    case inspectMockup(UUID)
     case copy(UUID)
     case pin(UUID)
     case remove(UUID)

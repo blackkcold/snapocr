@@ -57,6 +57,7 @@ extension EditorViewModel {
             // style remains metadata and is applied only to file/copy exports.
             let image = try await Self.renderOffMain(doc)
             try await historySaver(image, mode, sourceEntryID, mockupStyle)
+            lastCommittedMockupStyle = mockupStyle
             let message: String = switch mode {
             case .newRecord: AppLocalization.string("Saved to history")
             case .overwriteOriginal: AppLocalization.string("History updated; original kept for restore")
@@ -94,7 +95,11 @@ extension EditorViewModel {
             rawValue: UserDefaults.standard.string(forKey: PreferenceKeys.captureImageFormat)
                 ?? PreferenceDefaults.captureImageFormat
         ) ?? .png
-        let format = ImageEncoder.containsTransparency(doc.baseImage) ? ImageFileFormat.png : configuredFormat
+        let style = mockupStyle
+        let hasTransparentBackground = style?.background.isTransparent == true
+        let format = (ImageEncoder.containsTransparency(doc.baseImage) || hasTransparentBackground)
+            ? ImageFileFormat.png
+            : configuredFormat
         let panel = NSSavePanel()
         // Both formats are offered; the file extension the user picks decides
         // how the image is encoded.
@@ -114,7 +119,12 @@ extension EditorViewModel {
                 onCompleted?(false)
                 return
             }
-            self.finishSaving(document: doc, url: url, onCompleted: onCompleted)
+            self.finishSaving(
+                document: doc,
+                url: url,
+                mockupStyle: style,
+                onCompleted: onCompleted
+            )
         }
     }
 
@@ -125,6 +135,7 @@ extension EditorViewModel {
     private func finishSaving(
         document: AnnotationDocument,
         url: URL,
+        mockupStyle style: MockupStyle?,
         onCompleted: ((Bool) -> Void)?
     ) {
         Self.lastSaveDirectory = url.deletingLastPathComponent()
@@ -135,7 +146,6 @@ extension EditorViewModel {
             ? PreferenceDefaults.captureJPEGQuality
             : UserDefaults.standard.double(forKey: PreferenceKeys.captureJPEGQuality)
 
-        let style = mockupStyle
         Task { [weak self] in
             do {
                 try await Self.writeRenderedDocument(
@@ -147,10 +157,12 @@ extension EditorViewModel {
                 )
                 guard let self else { return }
                 self.isWritingImage = false
-                self.showToast(
-                    message: AppLocalization.string("Saved to %@", url.lastPathComponent),
-                    type: .success
-                )
+                let savedMessage = (outputFormat == .jpeg && style?.isTransparent == true)
+                    ? AppLocalization.string(
+                        "JPEG cannot keep a transparent background; it will be filled with white"
+                    )
+                    : AppLocalization.string("Saved to %@", url.lastPathComponent)
+                self.showToast(message: savedMessage, type: .success)
                 self.markSaved(document: document)
                 self.logger.info("Saved annotated image to \(url.path())")
                 onCompleted?(true)
@@ -212,12 +224,18 @@ extension EditorViewModel {
 
     /// Applies the capture's presentation style to a fully rendered annotation
     /// image. The editable base image remains untouched for history.
+    ///
+    /// Throws when the style canvas cannot be allocated so callers never claim
+    /// they wrote a share image while actually writing the plain one.
     nonisolated static func applyingMockup(
         _ image: CGImage,
         style: MockupStyle?
-    ) -> CGImage {
+    ) throws -> CGImage {
         guard let style else { return image }
-        return MockupRenderer.render(image, style: style) ?? image
+        guard let rendered = MockupRenderer.render(image, style: style) else {
+            throw AnnotationError.renderFailed(reason: "share appearance render failed")
+        }
+        return rendered
     }
 
     /// Renders, optionally flattens, encodes and writes in one background pass.
@@ -230,7 +248,7 @@ extension EditorViewModel {
     ) async throws {
         try await Task.detached(priority: .userInitiated) {
             var image = try AnnotationInteractor().render(document)
-            image = EditorViewModel.applyingMockup(image, style: mockupStyle)
+            image = try EditorViewModel.applyingMockup(image, style: mockupStyle)
             if format == .jpeg {
                 image = EditorViewModel.flattenedOnWhite(image)
             }
@@ -255,21 +273,55 @@ extension EditorViewModel {
         }
         if isEnteringText { commitTextEntry() }
         guard let doc = document, !isWritingImage else { return }
+        let style = mockupStyle
         isWritingImage = true
         Task { [weak self] in
             do {
                 let image = try await Self.renderOffMain(doc)
-                guard let self else { return }
-                let style = self.mockupStyle
                 // Style compositing is a full-size pass; keep it off the main
                 // actor just like the annotation render.
-                let presented = await Task.detached(priority: .userInitiated) {
-                    Self.applyingMockup(image, style: style)
+                let presented = try await Task.detached(priority: .userInitiated) {
+                    try Self.applyingMockup(image, style: style)
                 }.value
                 try await ClipboardWriter.write(image: presented)
+                guard let self else { return }
                 self.isWritingImage = false
-                self.showToast(message: AppLocalization.string("Copied to clipboard"), type: .success)
+                let message = style == nil
+                    ? AppLocalization.string("Copied to clipboard")
+                    : AppLocalization.string("Copied share image")
+                self.showToast(message: message, type: .success)
                 self.logger.info("Copied annotated image to clipboard")
+            } catch {
+                guard let self else { return }
+                self.isWritingImage = false
+                self.showToast(
+                    message: AppLocalization.string("Copy failed: %@", error.localizedDescription),
+                    type: .error
+                )
+            }
+        }
+    }
+
+    /// Copies the annotated image without any share-appearance treatment.
+    public func copyOriginalToClipboard() {
+        guard !isApplyingCrop else {
+            showToast(message: AppLocalization.string("Processing…"), type: .info)
+            return
+        }
+        if isEnteringText { commitTextEntry() }
+        guard let doc = document, !isWritingImage else { return }
+        isWritingImage = true
+        Task { [weak self] in
+            do {
+                let image = try await Self.renderOffMain(doc)
+                try await ClipboardWriter.write(image: image)
+                guard let self else { return }
+                self.isWritingImage = false
+                self.showToast(
+                    message: AppLocalization.string("Copied original image"),
+                    type: .success
+                )
+                self.logger.info("Copied original annotated image to clipboard")
             } catch {
                 guard let self else { return }
                 self.isWritingImage = false

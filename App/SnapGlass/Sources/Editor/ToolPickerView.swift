@@ -283,7 +283,7 @@ struct ToolPickerView: View {
                     .frame(width: DS.Control.zoomButtonWidth, height: DS.Control.zoomButtonHeight)
             }
             .buttonStyle(.plain)
-            .disabled(zoomController.scale >= 7.999)
+            .disabled(zoomController.scale >= CanvasZoomController.maximumScale - 0.001)
             .help("Zoom in (⌘+)")
             .accessibilityLabel("Zoom in")
         }

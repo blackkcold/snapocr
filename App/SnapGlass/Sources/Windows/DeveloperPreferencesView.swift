@@ -8,6 +8,8 @@ struct DeveloperPreferencesView: View {
     private var devMode = PreferenceDefaults.developerMode
     @AppStorage(PreferenceKeys.engineComparison)
     private var engineComparison = PreferenceDefaults.engineComparison
+    @AppStorage(PreferenceKeys.editorShareCanvasPreview)
+    private var shareCanvasPreview = PreferenceDefaults.editorShareCanvasPreview
 
     var body: some View {
         ScrollView {
@@ -24,6 +26,15 @@ struct DeveloperPreferencesView: View {
                         PreferencesCardHeader(systemImage: "gearshape.2", title: "Diagnostics")
 
                         Toggle("Enable Engine Comparison", isOn: $engineComparison)
+                    }
+
+                    PreferencesCard {
+                        PreferencesCardHeader(systemImage: "rectangle.on.rectangle", title: "Editor Canvas")
+
+                        Toggle(
+                            "Show the share appearance on the editor canvas",
+                            isOn: $shareCanvasPreview
+                        )
                     }
                 }
             }

@@ -198,6 +198,7 @@ struct ScreenshotShelfView: View {
             onOpen: { model.perform(.edit(card.captureID)) },
             onCopy: { model.perform(.copy(card.captureID)) },
             onPin: { model.perform(.pin(card.captureID)) },
+            onShareAppearance: { model.perform(.inspectMockup(card.captureID)) },
             onRemove: { model.perform(.remove(card.captureID)) },
             onMoveLeft: { model.perform(.move(card.captureID, max(0, index - 1))) },
             onMoveRight: {

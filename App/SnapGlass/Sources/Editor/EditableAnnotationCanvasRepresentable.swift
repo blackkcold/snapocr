@@ -1,5 +1,6 @@
 import AnnotationCore
 import AppKit
+import CaptureCore
 import OCRCore
 import SharedKit
 import SwiftUI
@@ -7,6 +8,7 @@ import SwiftUI
 struct EditableAnnotationCanvasView: NSViewRepresentable {
     let image: CGImage
     let nodes: [AnnotationNode]
+    let shareStyle: MockupStyle?
     let tool: EditorTool
     let color: CGColor
     let lineWidth: CGFloat
@@ -55,13 +57,15 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: EditableAnnotationCanvasNSView, context: Context) {
-        if view.image !== image {
+        let imageChanged = view.image !== image
+        if imageChanged {
             // A new base image (first load or a crop) starts at fit-to-window.
-            view.zoomScale = 1
-            view.panOffset = .zero
+            view.lastImageSize = CGSize(width: image.width, height: image.height)
+            view.resetZoom()
         }
         zoomController.attach(view)
         view.image = image
+        view.applyShareStyle(shareStyle, preservingPresentation: !imageChanged)
         view.nodes = nodes.filter { $0.id != textEntryNode?.id }
         view.verticalCropOnly = verticalCropOnly
         view.currentTool = tool

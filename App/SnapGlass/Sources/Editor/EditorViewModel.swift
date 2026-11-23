@@ -28,6 +28,20 @@ public enum EditorHistorySaveMode: Sendable, Equatable {
     case overwriteOriginal
 }
 
+/// Which inspector page the editor is showing.
+public enum EditorInspectorTab: Hashable, Sendable {
+    case annotation
+    case share
+}
+
+/// State of the downscaled share-appearance preview.
+public enum SharePreviewState: Equatable, Sendable {
+    case idle
+    case rendering
+    case ready
+    case failed(String)
+}
+
 /// View model for the annotation editor window.
 ///
 /// Manages the annotation document lifecycle: creating documents from captured images,
@@ -126,6 +140,7 @@ public final class EditorViewModel: ObservableObject {
   public func attachSourceEntry(_ id: UUID) {
     guard sourceEntryID == nil else { return }
     sourceEntryID = id
+    scheduleShareStyleCommit()
   }
 
   /// The current toast message to display.
@@ -208,8 +223,25 @@ public final class EditorViewModel: ObservableObject {
   /// this is filled in later via `attachSourceEntry(_:)`.
   @Published public private(set) var sourceEntryID: UUID?
   /// Presentation style carried from capture; applied on export, never baked
-  /// into the editable base image.
-  public var mockupStyle: MockupStyle?
+  /// into the editable base image. `nil` means share appearance is off.
+  @Published public var mockupStyle: MockupStyle?
+  /// Downscaled preview of the current document + style, for the inspector.
+  @Published public internal(set) var sharePreview: CGImage?
+  @Published public internal(set) var sharePreviewState: SharePreviewState = .idle
+  /// Preset shown as selected in the share page; nil means custom.
+  @Published public internal(set) var selectedMockupPreset: MockupPreset?
+  /// Which inspector page is visible. The bottom-bar toggle drives this too.
+  @Published public var inspectorTab: EditorInspectorTab = .annotation
+  /// Capture mode string carried from the capture ("window", "scroll", ...).
+  let captureMode: String?
+  /// Writes only the presentation metadata for an existing history entry.
+  let historyStyleUpdater: @Sendable (UUID, String?) async throws -> Void
+  var lastEnabledMockupStyle: MockupStyle?
+  var baselineMockupStyle: MockupStyle?
+  var lastCommittedMockupStyle: MockupStyle?
+  var sharePreviewTask: Task<Void, Never>?
+  var sharePreviewGeneration = 0
+  var shareStyleCommitTask: Task<Void, Never>?
   private var pendingTextPoint: CGPoint?
   private var editingTextNodeID: UUID?
   var ocrTask: Task<Void, Never>?
@@ -226,8 +258,12 @@ public final class EditorViewModel: ObservableObject {
     interactor: AnnotationInteractor = AnnotationInteractor(),
     ocrPipeline: OCRPipeline = OCRPipeline(),
     barcodeEngine: VisionBarcodeEngine = VisionBarcodeEngine(),
-    historySaver: (@Sendable (CGImage, EditorHistorySaveMode, UUID?, MockupStyle?) async throws -> Void)? = nil
+    historySaver: (@Sendable (CGImage, EditorHistorySaveMode, UUID?, MockupStyle?) async throws -> Void)? = nil,
+    historyStyleUpdater: (@Sendable (UUID, String?) async throws -> Void)? = nil
   ) {
+    let contextStyle = context.mockupStyle
+    let fallbackStyle = Self.lastPersistedMockupStyle()
+    let effectiveStyle = contextStyle ?? fallbackStyle
     self.interactor = interactor
     self.supportsVerticalTrim = context.supportsVerticalTrim
     self.isVerticalTrimEnabled = context.startsInVerticalTrim
@@ -238,8 +274,14 @@ public final class EditorViewModel: ObservableObject {
       try await barcodeEngine.detect(in: image, types: types)
     }
     self.sourceEntryID = context.sourceEntryID
-    self.mockupStyle = context.mockupStyle
+    self.captureMode = context.captureMode
+    self.mockupStyle = contextStyle
+    self.lastEnabledMockupStyle = effectiveStyle
+    self.baselineMockupStyle = effectiveStyle
+    self.lastCommittedMockupStyle = contextStyle
+    self.selectedMockupPreset = effectiveStyle.flatMap(Self.preset(matching:))
     self.historySaver = historySaver ?? Self.defaultHistorySaver
+    self.historyStyleUpdater = historyStyleUpdater ?? Self.defaultHistoryStyleUpdater
     if let image {
       self.document = interactor.createDocument(from: image)
       if context.startsInVerticalTrim {
@@ -253,6 +295,8 @@ public final class EditorViewModel: ObservableObject {
   deinit {
     ocrTask?.cancel()
     barcodeTask?.cancel()
+    sharePreviewTask?.cancel()
+    shareStyleCommitTask?.cancel()
   }
 
   /// Converts the SwiftUI `Color` to a `CGColor` for the `AnnotationNode`.
@@ -278,6 +322,7 @@ public final class EditorViewModel: ObservableObject {
 
   func activateTool(_ tool: EditorTool) {
     cancelTextEntry()
+    inspectorTab = .annotation
     isVerticalTrimEnabled = false
     selectedTool = tool
     if tool == .ocr {
@@ -311,6 +356,7 @@ public final class EditorViewModel: ObservableObject {
       showToast(message: AppLocalization.string("Processing…"), type: .info)
       return
     }
+    inspectorTab = .annotation
 
     if node.tool == .crop {
       applyCropNode(node)

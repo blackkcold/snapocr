@@ -1,4 +1,5 @@
 import AnnotationCore
+import CaptureCore
 
 /// 画布渲染尺寸的量化档位。
 ///
@@ -128,11 +129,16 @@ final class EditableAnnotationCanvasNSView: NSView {
     }
 
     var imageDisplayRect: CGRect = .zero
-    /// Zoom relative to the fit-to-window size; 1 shows the whole image.
+    /// Share appearance drawn around the image. `nil` keeps the bare-image
+    /// canvas; every geometry consumer still reads `imageDisplayRect`.
+    var shareStyle: MockupStyle?
+    /// Zoom relative to the fit-to-window frame; 1 shows the whole canvas.
     var zoomScale: CGFloat = 1
     /// Pan offset in view points, applied after zoom.
     var panOffset: CGSize = .zero
-    /// Fit rect and image size from the last layout, used by the zoom math.
+    /// Fit rect of the whole treatment frame at zoom 1.
+    var fitCanvasRect: CGRect = .zero
+    /// Fit rect of the image content at zoom 1, used by 1:1 and pixel labels.
     var fitImageRect: CGRect = .zero
     var lastImageSize: CGSize = .zero
     /// True while the space bar is held for drag-to-pan.
@@ -405,14 +411,55 @@ final class EditableAnnotationCanvasNSView: NSView {
         if let image {
             let imageSize = CGSize(width: image.width, height: image.height)
             lastImageSize = imageSize
-            imageDisplayRect = imageRect(for: imageSize)
+            let layout = mockupLayout(for: imageSize)
+            let frame = canvasRect(for: imageSize)
+            let frameScale = frame.width / max(layout.canvasSize.width, 1)
+            imageDisplayRect = layout.contentRect(in: frame.origin, scale: frameScale)
+
             let backingScale = window?.backingScaleFactor ?? 2
-            let targetMaxDimension = CanvasRenderScale.quantize(
-                max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
+            // The annotated preview only follows the document. Sizing it from
+            // the treatment frame, floored by the view, keeps it stable while
+            // padding/radius/shadow sliders move.
+            let reference = max(frame.width, frame.height, bounds.width, bounds.height)
+            let targetMaxDimension = min(
+                CanvasRenderScale.quantize(reference * backingScale),
+                CGFloat(max(image.width, image.height))
             )
             let baseImage = baseDisplayImage(for: image, targetMaxDimension: targetMaxDimension)
-            let displayImage = previewImage(for: image, baseImage: baseImage) ?? baseImage
-            context.draw(displayImage, in: imageDisplayRect)
+            let displayImage = previewImage(
+                for: image,
+                baseImage: baseImage,
+                maximumDimension: targetMaxDimension
+            ) ?? baseImage
+
+            if let style = shareStyle {
+                if style.background.isTransparent {
+                    drawCheckerboard(in: frame, context: context)
+                }
+                // The same layout and draw call the exporter uses, so the canvas
+                // is the export rather than an approximation of it. The backdrop
+                // returns to view space so its tiles keep the same 8 pt size and
+                // phase as the padding checkerboard.
+                let viewTransform = context.ctm
+                MockupRenderer.draw(
+                    displayImage,
+                    style: style,
+                    layout: layout,
+                    in: context,
+                    origin: frame.origin,
+                    scale: frameScale,
+                    backdrop: { [weak self] context, _ in
+                        guard let self else { return }
+                        context.saveGState()
+                        context.concatenate(context.ctm.inverted())
+                        context.concatenate(viewTransform)
+                        self.drawCheckerboard(in: frame, context: context)
+                        context.restoreGState()
+                    }
+                )
+            } else {
+                context.draw(displayImage, in: imageDisplayRect)
+            }
 
             // The node being dragged or resized is excluded from the cached
             // preview and drawn live, so a drag never re-renders the whole image.
@@ -443,6 +490,46 @@ final class EditableAnnotationCanvasNSView: NSView {
         if currentTool == .picker {
             drawPickerOverlay(in: context)
         }
+    }
+
+    /// Cached 16×16 checkerboard used behind transparent share backgrounds.
+    private static let checkerTile: CGImage? = {
+        let size = 16
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: size,
+                  height: size,
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: colorSpace,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return nil }
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let base = CGColor(colorSpace: space, components: [0.17, 0.17, 0.17, 1]) ?? CGColor(gray: 0.17, alpha: 1)
+        let alternate = CGColor(colorSpace: space, components: [0.23, 0.23, 0.23, 1])
+            ?? CGColor(gray: 0.23, alpha: 1)
+        context.setFillColor(base)
+        context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+        context.setFillColor(alternate)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.fill(CGRect(x: 8, y: 8, width: 8, height: 8))
+        return context.makeImage()
+    }()
+
+    /// Paints the transparency checkerboard inside `rect`.
+    func drawCheckerboard(in rect: CGRect, context: CGContext) {
+        guard !rect.isEmpty else { return }
+        guard let tile = Self.checkerTile else {
+            context.setFillColor(CGColor(gray: 0.2, alpha: 1))
+            context.fill(rect)
+            return
+        }
+        context.saveGState()
+        context.clip(to: rect)
+        context.draw(tile, in: rect, byTiling: true)
+        context.restoreGState()
     }
 
     private func drawPickerOverlay(in context: CGContext) {
@@ -483,7 +570,10 @@ final class EditableAnnotationCanvasNSView: NSView {
                 + Self.colorLabelTextPadding * 2,
             height: lineHeight * 2 + 8
         )
-        let visible = bounds.intersection(imageDisplayRect)
+        let placementRect = shareStyle == nil
+            ? imageDisplayRect
+            : canvasRect(for: lastImageSize)
+        let visible = bounds.intersection(placementRect)
         let placementBounds = visible.isNull || visible.isEmpty ? bounds : visible
         return LabelPlacement.rect(size: size, near: point, inside: placementBounds)
     }

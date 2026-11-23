@@ -44,6 +44,7 @@ struct ScreenshotShelfDragOverlayView: View {
                     onOpen: {},
                     onCopy: {},
                     onPin: {},
+                    onShareAppearance: {},
                     onRemove: {},
                     onMoveLeft: {},
                     onMoveRight: {},

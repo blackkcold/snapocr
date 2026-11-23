@@ -60,7 +60,7 @@ public final class EditorWorkspace: ObservableObject {
             // otherwise an inspector change made after the tab opened would be
             // overwritten with the stale style on "Overwrite Original".
             tabs[index].context.mockupStyle = context.mockupStyle
-            tabs[index].viewModel.mockupStyle = context.mockupStyle
+            tabs[index].viewModel.adoptMockupStyle(context.mockupStyle)
             activeTabID = tabs[index].id
             return tabs[index]
         }
@@ -107,6 +107,7 @@ public final class EditorWorkspace: ObservableObject {
 
     public func close(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        tabs[index].viewModel.flushShareStyleCommit()
         tabs.remove(at: index)
         pendingCloseIDs.remove(id)
         if tabs.isEmpty {
@@ -163,6 +164,9 @@ public final class EditorWorkspace: ObservableObject {
     }
 
     private func closeWindow() {
+        for tab in tabs {
+            tab.viewModel.flushShareStyleCommit()
+        }
         closeWindowAction()
     }
 

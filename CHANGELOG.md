@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-23
+
+### Added
+- 编辑器新增「分享外观」页签：可开关，编辑背景模板、留白、圆角、投影、描边宽度与颜色；提供导出预览与大图预览；复制菜单区分分享图与原图。
+- 编辑器画布实时分享外观：开启后画布直接绘制背景、留白、圆角、投影与描边；Fit 显示整张卡片，⌘1 为图片像素 1:1，缩放时保持光标下的图片点。
+- 透明背景在画布内以棋盘格显示；画布与导出共用 `MockupLayout` 与 `MockupRenderer.draw`，不再是近似预览。
+- 开发者设置新增「编辑器画布」开关（`editor_shareCanvasPreview`，默认开启），可一键回到无外观画布。
+- 截图架右键新增「分享外观…」，补上此前只能通过键盘模式进入的入口。
+- 新增离屏画布渲染测试：直接渲染真实 `EditableAnnotationCanvasNSView`，与导出结果对照 padding、内容位置、透明棋盘格和描边；不需要运行中的 App 或屏幕/麦克风权限。
+- 新增 `Docs/TESTING.md`：说明自动化测试分层、后台 Agent 场景的隔离方式，以及「自动化通过即可发版、手动 GUI 检查可选」的规则。
+
+### Changed
+- 统一「分享外观」术语：设置卡、截图架、历史菜单、旧美化浮窗与编辑器使用同一名称；旧浮窗检查器注入应用语言，重置回到当前模板。
+- 分享外观数据升级到 v2：新增描边字段，旧 v1 历史 JSON 仍可解码；透明背景与 JPEG 格式提示更明确。
+- 抽出 `MockupLayout` 与 `MockupRenderer.draw`，画布与导出共用同一几何与绘制，不再各算一套。
+- 画布开关分享外观时：Fit 状态重新适配整张卡片，不裁切；已放大时保持图片的屏幕尺寸与中心，不打断细节编辑。
+- 标注预览缓存改为按画布 frame（下限为视图尺寸）量化，拖动留白/圆角/投影滑杆不再触发标注重渲染。
+
+### Verification status
+- 已运行：CaptureCore 686 tests、SharedKit 45 tests、EditorInteractionTests 136 tests，全部通过；Debug 构建通过；四语言本地化校验通过。
+- 自动化门槛已覆盖画布离屏渲染与画布/导出对齐；手动 GUI 检查（真实视觉、VoiceOver、透明 JPEG 导出、6K 缩放清晰度）保留为可选项，不再作为发版阻塞条件。
+
 ## [1.6.1] - 2026-11-23
 
 > 录制 P0 收尾：HUD、生命周期、恢复与录屏音频。
@@ -575,7 +597,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/blackkcold/snapocr/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/blackkcold/snapocr/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/blackkcold/snapocr/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/blackkcold/snapocr/compare/v1.5.0...v1.5.1

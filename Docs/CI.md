@@ -115,6 +115,8 @@ xcodebuild -project SnapGlass.xcodeproj -scheme SnapGlass -configuration Release
 ./scripts/test.sh
 ```
 
+测试分层、离屏画布渲染与 Agent 后台场景见 [`TESTING.md`](TESTING.md)。Agent 场景需要真实权限与已安装 App 的签名身份，不进入 CI 的 unit-test job。
+
 ---
 
 *最后更新: 2026-09-03*
