@@ -145,20 +145,8 @@ public final class VideoSegmentPlanner {
               frame.index > lastFrameIndex else {
             return .keepCurrent
         }
-        if epochTime == nil {
-            guard frame.isSync else { return .keepCurrent }
-            epochTime = frame.presentationTime
-            epochHostTime = lastHostTime
-            segmentStartTime = frame.presentationTime
-            segmentStartFrame = frame.index
-            segmentFirstFrameIsSync = true
-            nextChunkStartTime = frame.presentationTime
-            nextChunkStartFrame = frame.index
-            firstFrameIsSync = true
-            hasOpenFrame = true
-            lastFrameIndex = frame.index
-            lastFrameEndTime = CMTimeAdd(frame.presentationTime, frame.duration)
-            return .keepCurrent
+        if let decision = startEpochIfNeeded(frame) {
+            return decision
         }
 
         guard let chunkStart = nextChunkStartTime,
@@ -188,29 +176,69 @@ public final class VideoSegmentPlanner {
         let isSegmentBoundary = elapsedSegment >= maximumSegmentDuration
         let isChunkBoundary = elapsedChunk >= checkpointTarget
         guard isSegmentBoundary || isChunkBoundary else {
-            if !hasOpenFrame {
-                nextChunkStartFrame = frame.index
-                firstFrameIsSync = frame.isSync
-            }
-            lastFrameIndex = frame.index
-            self.lastFrameEndTime = maxTime(lastFrameEndTime, CMTimeAdd(frame.presentationTime, frame.duration))
-            hasOpenFrame = true
-            return .keepCurrent
+            return keepCurrentWithoutBoundary(frame)
         }
-
         guard frame.isSync else {
             lastFrameIndex = frame.index
-            self.lastFrameEndTime = maxTime(lastFrameEndTime, CMTimeAdd(frame.presentationTime, frame.duration))
+            self.lastFrameEndTime = maxTime(
+                lastFrameEndTime,
+                CMTimeAdd(frame.presentationTime, frame.duration)
+            )
             hasOpenFrame = true
             return .keepCurrent
         }
 
         let kind: ScreenBoundary.Kind = isSegmentBoundary ? .segment : .chunk
+        return emitBoundary(
+            kind: kind,
+            frame: frame,
+            segmentStartTime: segmentStartTime,
+            currentLastFrameEnd: currentLastFrameEnd
+        )
+    }
+
+    private func startEpochIfNeeded(_ frame: VideoFrameSample) -> ScreenBoundaryDecision? {
+        guard epochTime == nil else { return nil }
+        guard frame.isSync else { return .keepCurrent }
+        epochTime = frame.presentationTime
+        epochHostTime = lastHostTime
+        segmentStartTime = frame.presentationTime
+        segmentStartFrame = frame.index
+        segmentFirstFrameIsSync = true
+        nextChunkStartTime = frame.presentationTime
+        nextChunkStartFrame = frame.index
+        firstFrameIsSync = true
+        hasOpenFrame = true
+        lastFrameIndex = frame.index
+        lastFrameEndTime = CMTimeAdd(frame.presentationTime, frame.duration)
+        return .keepCurrent
+    }
+
+    private func keepCurrentWithoutBoundary(_ frame: VideoFrameSample) -> ScreenBoundaryDecision {
+        if !hasOpenFrame {
+            nextChunkStartFrame = frame.index
+            firstFrameIsSync = frame.isSync
+        }
+        lastFrameIndex = frame.index
+        lastFrameEndTime = maxTime(
+            lastFrameEndTime ?? .zero,
+            CMTimeAdd(frame.presentationTime, frame.duration)
+        )
+        hasOpenFrame = true
+        return .keepCurrent
+    }
+
+    private func emitBoundary(
+        kind: ScreenBoundary.Kind,
+        frame: VideoFrameSample,
+        segmentStartTime: CMTime,
+        currentLastFrameEnd: CMTime
+    ) -> ScreenBoundaryDecision {
         let maximumEnd = CMTimeAdd(
             segmentStartTime,
             CMTime(seconds: maximumSegmentDuration, preferredTimescale: 1_000_000)
         )
-        let requestedEnd = kind == .segment ? minTime(observedTime, maximumEnd) : observedTime
+        let requestedEnd = kind == .segment ? minTime(frame.presentationTime, maximumEnd) : frame.presentationTime
         let endTime = maxTime(currentLastFrameEnd, requestedEnd)
         if kind == .segment {
             let chunkBoundary = makeBoundary(kind: .chunk, endFrameIndex: frame.index, endTime: endTime)
@@ -225,9 +253,8 @@ public final class VideoSegmentPlanner {
             segmentFirstFrameIsSync = frame.isSync
         }
         lastFrameIndex = frame.index
-        self.lastFrameEndTime = CMTimeAdd(frame.presentationTime, frame.duration)
+        lastFrameEndTime = CMTimeAdd(frame.presentationTime, frame.duration)
         hasOpenFrame = true
-
         switch kind {
         case .chunk:
             return frame.isSync ? .cachedChunkBoundary(boundary) : .closeChunk(boundary)
