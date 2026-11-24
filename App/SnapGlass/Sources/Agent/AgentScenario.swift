@@ -326,31 +326,42 @@ struct AgentScenario: Codable, Equatable, Sendable {
         guard let scenarioMode = AgentScenarioMode(rawValue: mode) else {
             throw ValidationError.unknownMode(mode)
         }
-        if scenarioMode == .recover {
-            if let minimum = recoveryExpect?.minRecoverable, minimum < 0 {
-                throw ValidationError.invalidExpectation("minRecoverable must not be negative")
-            }
-            if let delta = recoveryExpect?.maxDurationDeltaSeconds, !delta.isFinite || delta <= 0 {
-                throw ValidationError.invalidExpectation("maxDurationDeltaSeconds must be positive")
-            }
-            return
+        switch scenarioMode {
+        case .recover:
+            try validateRecovery()
+        case .screen:
+            try validateScreen()
+        case .record:
+            try validateAudio()
         }
-        if scenarioMode == .screen {
-            guard screenSeconds.isFinite, screenSeconds > 0, screenSeconds <= 3_600 else {
-                throw ValidationError.invalidScreenSeconds(screenSeconds)
-            }
-            if let tolerance = screenExpect?.durationToleranceSeconds,
-               !tolerance.isFinite || tolerance <= 0 {
-                throw ValidationError.invalidExpectation("durationToleranceSeconds must be positive")
-            }
-            if let minimum = screenExpect?.minChunkBytes, minimum < 0 {
-                throw ValidationError.invalidExpectation("minChunkBytes must not be negative")
-            }
-            if let maximum = screenExpect?.maxChunkCount, maximum < 0 {
-                throw ValidationError.invalidExpectation("maxChunkCount must not be negative")
-            }
-            return
+    }
+
+    private func validateRecovery() throws {
+        if let minimum = recoveryExpect?.minRecoverable, minimum < 0 {
+            throw ValidationError.invalidExpectation("minRecoverable must not be negative")
         }
+        if let delta = recoveryExpect?.maxDurationDeltaSeconds, !delta.isFinite || delta <= 0 {
+            throw ValidationError.invalidExpectation("maxDurationDeltaSeconds must be positive")
+        }
+    }
+
+    private func validateScreen() throws {
+        guard screenSeconds.isFinite, screenSeconds > 0, screenSeconds <= 3_600 else {
+            throw ValidationError.invalidScreenSeconds(screenSeconds)
+        }
+        if let tolerance = screenExpect?.durationToleranceSeconds,
+           !tolerance.isFinite || tolerance <= 0 {
+            throw ValidationError.invalidExpectation("durationToleranceSeconds must be positive")
+        }
+        if let minimum = screenExpect?.minChunkBytes, minimum < 0 {
+            throw ValidationError.invalidExpectation("minChunkBytes must not be negative")
+        }
+        if let maximum = screenExpect?.maxChunkCount, maximum < 0 {
+            throw ValidationError.invalidExpectation("maxChunkCount must not be negative")
+        }
+    }
+
+    private func validateAudio() throws {
         guard audioSeconds.isFinite, audioSeconds > 0, audioSeconds <= 3_600 else {
             throw ValidationError.invalidAudioSeconds(audioSeconds)
         }
