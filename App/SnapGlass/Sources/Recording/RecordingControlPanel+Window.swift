@@ -37,6 +37,9 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
     private var failureScrollHeights: [RecordingHUDLayoutSignature: CGFloat] = [:]
     /// Guards `apply(state:)` against re-entry from a model change it caused.
     private var isApplying = false
+    /// The last state family written to the persisted log, so per-tick updates of the
+    /// same state do not spam it.
+    private var lastLoggedStateName: String?
     /// Whether a deferred measurement pass is already queued for the next main-loop turn.
     private var isMeasurementScheduled = false
     /// The size this panel last asked for, so a status tick during the correction
@@ -46,11 +49,17 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
     private var corner: RecordingHUDCorner
     private var isProgrammaticMove = false
     private var snapTask: Task<Void, Never>?
+    /// Shape-accurate shadow drawn below the capsule; see `RecordingHUDShadowWindow`.
+    private var shadowWindow: RecordingHUDShadowWindow?
     private let logger = Logger(subsystem: "com.snapglass", category: "recording.hud")
 
     var excludedWindowIDs: Set<CGWindowID> {
-        guard windowNumber > 0 else { return [] }
-        return [CGWindowID(windowNumber)]
+        var identifiers: Set<CGWindowID> = []
+        if windowNumber > 0 { identifiers.insert(CGWindowID(windowNumber)) }
+        if let shadowWindow, shadowWindow.windowNumber > 0 {
+            identifiers.insert(CGWindowID(shadowWindow.windowNumber))
+        }
+        return identifiers
     }
 
     /// The HUD accepts focus for VoiceOver and keyboard travel without activating the app.
@@ -98,14 +107,29 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         level = .floating
         backgroundColor = .clear
         isOpaque = false
-        hasShadow = true
+        // macOS 26 draws a window edge around the frame rectangle from the same
+        // property that draws the window shadow. This frame is exactly the capsule,
+        // so that edge showed as a square grey line across the capsule's round ends.
+        // `RecordingHUDShadowWindow` draws the capsule shadow instead.
+        hasShadow = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         isMovableByWindowBackground = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         delegate = self
+        // A key panel must not draw AppKit's rectangular focus ring around the
+        // hosting view: the ring follows the view's frame, not the capsule.
+        hostingView.focusRingType = .none
         contentView = hostingView
+
+        let shadowWindow = RecordingHUDShadowWindow()
+        self.shadowWindow = shadowWindow
+        shadowWindow.follow(
+            panelFrame: frame,
+            cornerRadius: RecordingHUDMetrics.cornerRadius,
+            animated: false
+        )
 
         model.onLayoutChange = { [weak self] in
             guard let self else { return }
@@ -115,6 +139,8 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
 
     override func orderFrontRegardless() {
         if AgentMode.isActive { AgentHUDMetrics.noteFirstVisible() }
+        syncShadow(to: frame, animated: false)
+        shadowWindow?.reveal()
         super.orderFrontRegardless()
         // `sharingType` is per-window and can be reset by ordering.
         sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
@@ -156,6 +182,14 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         if model.state != state { model.state = state }
 
         let signature = currentSignature()
+        if signature.logName != lastLoggedStateName {
+            lastLoggedStateName = signature.logName
+            // Persisted (unlike the per-tick debug lines), so a future freeze can be
+            // traced to the last state the panel actually accepted.
+            logger.notice(
+                "HUD state accepted=\(signature.logName, privacy: .public) visible=\(self.isVisible, privacy: .public) cache=\(self.sizeCache.size(for: signature) != nil, privacy: .public)"
+            )
+        }
         if let cached = sizeCache.lookup(signature) {
             applyFailureScrollHeight(for: signature)
             setSize(cached, animated: false)
@@ -182,14 +216,21 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
     func dismiss() {
         snapTask?.cancel()
         snapTask = nil
+        shadowWindow?.orderOut(nil)
         orderOut(nil)
         if windowNumber > 0 {
             RecordingWindowExclusionRegistry.shared.unregister(CGWindowID(windowNumber))
         }
     }
 
+    override func close() {
+        shadowWindow?.orderOut(nil)
+        super.close()
+    }
+
     func windowDidMove(_ notification: Notification) {
         guard !isProgrammaticMove else { return }
+        syncShadow(to: frame, animated: false)
         snapTask?.cancel()
         snapTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
@@ -213,9 +254,18 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         isProgrammaticMove = true
         setFrameOrigin(origin)
         isProgrammaticMove = false
+        syncShadow(to: frame, animated: false)
     }
 
     /// Applies one size to the window, keeping the panel in its corner.
+    ///
+    /// The window is never displayed synchronously here. `display: true` draws the
+    /// new SwiftUI content (Liquid Glass, meters, implicit animations) inside the
+    /// caller's main-actor turn; a status change that lands while the app is also
+    /// presenting or dismissing other windows can then block the main thread, and
+    /// the status change that asked for this frame never completes. Leaving the
+    /// draw to the next display cycle keeps the frame change itself cheap while
+    /// looking identical to the user.
     ///
     /// - Parameters:
     ///   - size: The size from the cache or the conservative fallback.
@@ -233,17 +283,41 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         lastRequestedSize = size
         isProgrammaticMove = true
         guard animated else {
-            setFrame(rect, display: true)
+            setFrame(rect, display: false)
+            hostingView.needsDisplay = true
             isProgrammaticMove = false
+            syncShadow(to: rect, animated: false)
             return
         }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = RecordingHUDMeasurementPolicy.correctionDuration
             context.allowsImplicitAnimation = true
-            animator().setFrame(rect, display: true)
+            animator().setFrame(rect, display: false)
+            shadowWindow?.follow(
+                panelFrame: rect,
+                cornerRadius: shadowCornerRadius(for: size),
+                animated: true
+            )
         } completionHandler: { [weak self] in
             self?.isProgrammaticMove = false
         }
+    }
+
+    /// The radius the capsule is actually drawn with for one panel size.
+    private func shadowCornerRadius(for size: CGSize) -> CGFloat {
+        if case .failure = model.state, model.failureExpanded {
+            return RecordingHUDMetrics.tallCornerRadius
+        }
+        return size.height / 2
+    }
+
+    /// Keeps the companion shadow on the capsule the panel is showing.
+    private func syncShadow(to panelRect: CGRect, animated: Bool) {
+        shadowWindow?.follow(
+            panelFrame: panelRect,
+            cornerRadius: shadowCornerRadius(for: panelRect.size),
+            animated: animated
+        )
     }
 
     /// The layout signature of what the panel shows right now.
@@ -281,18 +355,31 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         return size
     }
 
-    /// Queues at most one measurement for the next main-loop turn.
+    /// Queues at most one measurement for a later main-loop turn.
     ///
-    /// Only the state that is current when the turn runs is measured: a signature that
-    /// went stale in the meantime is dropped, never measured and never applied.
+    /// The deferral is a real runloop turn, not `Task.yield()`: a yield can resume
+    /// inside the same main-queue drain that is still presenting the status change,
+    /// which is exactly the shared turn this separation exists to avoid. Only the
+    /// state that is current when the turn runs is measured: a signature that went
+    /// stale in the meantime is dropped, never measured and never applied.
     private func scheduleMeasurement() {
         guard !isMeasurementScheduled else { return }
         isMeasurementScheduled = true
         Task { @MainActor [weak self] in
-            // Yield first: the measurement must never share a turn with the status
-            // change that asked for it.
-            await Task.yield()
-            self?.flushMeasurement()
+            do {
+                try await Task.sleep(for: .milliseconds(16))
+            } catch {
+                self?.isMeasurementScheduled = false
+                return
+            }
+            guard let self else { return }
+            guard !Task.isCancelled else {
+                // Never leave the flag set: a later correction pass would then be
+                // dropped forever.
+                self.isMeasurementScheduled = false
+                return
+            }
+            self.flushMeasurement()
         }
     }
 

@@ -162,12 +162,15 @@ struct MenuBarView: View {
         Button {
             Task { _ = await viewModel.stopAudioRecording() }
         } label: {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(localizedStopTitle(
-                    kind: .audio,
-                    duration: viewModel.audioRecordingElapsedSeconds(at: context.date)
-                ))
-            }
+            // The menu-bar scene is rendered by ControlCenter outside the app's
+            // window; a `TimelineView` here subscribes the remote scene to a
+            // per-second update and can block the main thread on its fence. The
+            // elapsed time is resolved when the menu is built (the menu is rebuilt
+            // when it opens), which is the moment the user reads it.
+            Text(localizedStopTitle(
+                kind: .audio,
+                duration: viewModel.audioRecordingElapsedSeconds(at: Date())
+            ))
         }
         .disabled(!RecordingMenuModel.isEnabled(
             kind: .audio,
@@ -180,9 +183,9 @@ struct MenuBarView: View {
         Button {
             Task { _ = await viewModel.stopRecordingAndSave() }
         } label: {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(localizedStopTitle(kind: .screen, duration: screenRecordingElapsed(at: context.date)))
-            }
+            // Static for the same reason as the audio stop title above: no live
+            // timeline in a ControlCenter-hosted menu scene.
+            Text(localizedStopTitle(kind: .screen, duration: screenRecordingElapsed(at: Date())))
         }
         .disabled(!RecordingMenuModel.isEnabled(
             kind: .screen,

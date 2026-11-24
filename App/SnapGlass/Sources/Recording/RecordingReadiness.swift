@@ -11,6 +11,29 @@ enum RecordingReadiness {
     static let firstVideoFrameDeadline: Duration = .seconds(5)
     /// How long to wait for the first real captured audio sample.
     static let firstAudioSampleDeadline: Duration = .seconds(15)
+    /// How long the main actor has to confirm that it presented the promoted
+    /// recording state after real audio arrived.
+    ///
+    /// This is not a media deadline: it exists because readiness success cancels
+    /// the first-sample deadline. Without a second bound, a main thread that stops
+    /// responding after readiness leaves capture running with nobody able to stop
+    /// it. The supervisor stops and saves the session itself at this deadline.
+    static let firstAudioPresentationDeadline: Duration = .seconds(8)
+    /// How long the main actor has to confirm that it presented the promoted
+    /// screen-recording state after the writer accepted its first frame.
+    ///
+    /// The screen promotion is a plain state update, but it still runs on the main
+    /// actor. A stalled actor must not leave the capture running unbounded.
+    static let firstScreenPresentationDeadline: Duration = .seconds(8)
+    /// How long a recording main actor may go without proving it is still alive.
+    ///
+    /// Once a recording is live, a periodic heartbeat is the only fact that
+    /// distinguishes "recording with a visible HUD" from "recording behind a
+    /// frozen interface". The supervisor stops and saves the session at this
+    /// deadline instead of capturing forever with no way for the user to stop it.
+    /// Screen sessions renew it from the monitoring loop; audio sessions renew it
+    /// from the progress consumer.
+    static let recordingLivenessDeadline: Duration = .seconds(10)
     /// How long a platform start call may run before the UI shows a bounded result.
     ///
     /// This covers the pipeline factory and the platform start call only. It never

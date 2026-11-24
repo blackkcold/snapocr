@@ -62,11 +62,6 @@ final class RecordingCaptureFramePanel: NSPanel {
         orderFrontRegardless()
     }
 
-    func update(rect: CGRect) {
-        guard frame != rect else { return }
-        setFrame(rect, display: true)
-    }
-
     func dismiss() {
         orderOut(nil)
         if windowNumber > 0 {

@@ -71,4 +71,23 @@ struct RecordingAudioSessionStateTests {
         state.apply(.stopCompleted(saved: true))
         #expect(state.state == .finished)
     }
+
+    /// A promotion-stall stop can arrive after the session already reached
+    /// `.recording`: the main actor presented the promoted state, then stopped
+    /// responding. Finishing must still be possible for that live state, or the
+    /// app refuses every later recording until relaunch.
+    @Test("A stop after the promoted state still finalizes")
+    func promotedSessionStillFinalizes() {
+        var state = RecordingAudioSessionStateMachine()
+        state.apply(.begin)
+        state.apply(.started)
+        #expect(state.state == .recording)
+
+        state.apply(.stopRequested)
+        state.beginFinalization()
+        state.apply(.stopCompleted(saved: true))
+
+        #expect(state.state == .finished)
+        #expect(state.legacyStatus == .idle)
+    }
 }

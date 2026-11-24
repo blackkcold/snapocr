@@ -71,8 +71,6 @@ public enum PreferenceKeys {
     public static let recordingOutputLayout = "recording_outputLayout"
     /// Whether the screenshot shelf hides while a recording is active.
     public static let recordingHideShelfWhileRecording = "recording_hideShelfWhileRecording"
-    /// Whether the menu bar recording indicator shows elapsed duration.
-    public static let recordingMenuBarDuration = "recording_menuBarDuration"
     /// Optional keyboard shortcut for audio-only recordings; empty means none.
     public static let recordingAudioShortcut = "recording_audioShortcut"
     /// Whether the audio-only recording shortcut hint has been shown.
@@ -184,8 +182,6 @@ public enum PreferenceDefaults {
     public static let recordingOutputLayout = "mixed"
     /// Keep the screenshot shelf visible during recordings by default.
     public static let recordingHideShelfWhileRecording = false
-    /// Show the elapsed recording duration in the menu bar by default.
-    public static let recordingMenuBarDuration = true
     /// Define no audio-only recording shortcut by default.
     public static let recordingAudioShortcut = ""
     /// Treat the audio-only shortcut hint as not yet shown by default.

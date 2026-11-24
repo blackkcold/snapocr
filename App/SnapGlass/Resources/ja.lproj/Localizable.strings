@@ -764,7 +764,7 @@
 "Screen recording source tracks are embedded separately in the video." = "画面収録のソーストラックは個別に動画へ埋め込まれます。";
 "Screen recording folder" = "画面収録フォルダ";
 "This folder is used for screen recordings. Existing files are not moved." = "このフォルダは画面収録に使用されます。既存のファイルは移動しません。";
-"Shelf visibility and menu-bar duration apply to every recording." = "シェルフの表示とメニューバーの経過時間はすべての録音に適用されます。";
+"Shelf visibility applies to every recording." = "シェルフの表示はすべての録音に適用されます。";
 "Panel appearance is shared by audio and screen recordings." = "コントロールパネルの外観は音声録音と画面収録で共有されます。";
 "Panel opacity and hover restore are unavailable while the panel is hidden." = "パネルを非表示にしている間は、不透明度とホバー復元を変更できません。";
 "Segmentation & Safety" = "分割と安全性";
@@ -773,7 +773,6 @@
 "Crash recovery" = "クラッシュ復旧";
 "Always On" = "常に有効";
 "Hide Screenshot Shelf while recording" = "録音中にスクリーンショット棚を隠す";
-"Show recording duration in the menu bar" = "メニューバーに録音時間を表示";
 "Estimated screen recording size per minute: %@" = "画面収録の1分あたりの推定サイズ：%@";
 "Estimated audio recording size per minute: %@" = "音声録音の1分あたりの推定サイズ：%@";
 "Stop Audio Recording (%@)" = "音声録音を停止（%@）";
@@ -893,6 +892,10 @@
 "Screen recording saved" = "画面収録を保存しました";
 "Saving recording before quitting" = "終了する前に録音を保存しています";
 "No audio samples were received. The recording was stopped." = "音声サンプルを受信できませんでした。録音を停止しました。";
+"The recording stopped because the interface stopped responding. Audio captured up to that point was saved." = "画面が応答しなくなったため録音を停止しました。それまでの音声は保存されています。";
+"The recording stopped because the interface stopped responding before any audio could be saved." = "画面が応答しなくなったため録音を停止しました。音声は保存されていません。";
+"The screen recording stopped because the interface stopped responding. The video was saved: %@" = "画面が応答しなくなったため画面収録を停止しました。それまでの映像は保存されています：%@";
+"The screen recording stopped because the interface stopped responding, and the video could not be finalized." = "画面が応答しなくなったため画面収録を停止しました。映像をファイナライズできませんでした。";
 "No video frames were received. The recording was stopped." = "ビデオフレームを受信できませんでした。収録を停止しました。";
 "Waiting for the first audio sample…" = "最初の音声サンプルを待っています…";
 "Waiting for the first frame to be written…" = "最初のフレームが書き込まれるのを待っています…";

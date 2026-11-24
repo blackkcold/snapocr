@@ -132,6 +132,78 @@ struct ScreenSegmentSealServiceTests {
         #expect(audioTracks.count == 1)
     }
 
+    /// The audio source can stop delivering samples a few milliseconds before the
+    /// final video frame closes. The sealer pads that tail with silence, so the
+    /// published coverage must span the video range; otherwise the ledger rejects
+    /// the publication with `invalidPublication` and the whole recording is lost.
+    @Test func aShortAudioTailPublishesCoverageAtTheVideoEnd() async throws {
+        let sessionRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ScreenSealShortTail-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sessionRoot) }
+
+        let segmentRoot = sessionRoot.appendingPathComponent("segment-00000000", isDirectory: true)
+        try FileManager.default.createDirectory(at: segmentRoot, withIntermediateDirectories: true)
+        let dimensions = CGSize(width: 320, height: 240)
+        let chunkURL = segmentRoot.appendingPathComponent("chunk-00000000.mp4")
+        let bridge = try ScreenVideoWriterBridge(
+            destinationURL: chunkURL,
+            configuration: RecordingConfiguration(resolutionLimit: dimensions),
+            dimensions: dimensions
+        )
+        for index in 0..<10 {
+            try bridge.append(video: makeVideoSample(dimensions: dimensions, index: index))
+        }
+        _ = try await bridge.finish()
+        // 47_040 of the 48_000 samples the video range expects: the last 20 ms are
+        // silence the sealer must add.
+        let audioBundle = try await makeAudioBundle(
+            sessionRoot: sessionRoot,
+            segmentRoot: segmentRoot,
+            totalFrames: 47_040
+        )
+
+        let record = ScreenCheckpointRecord(
+            segmentIndex: 0,
+            chunkIndex: 0,
+            videoURL: chunkURL,
+            videoRange: RecordingSampleRange(startSample: 0, sampleCount: 48_000),
+            audioCheckpoint: nil,
+            coverage: RecordingSegmentCoverage(
+                segmentIndex: 0,
+                segmentStartSample: 0,
+                segmentEndSample: 48_000,
+                tracks: []
+            ),
+            contentHashes: [:]
+        )
+        let context = RecordingSealContext(
+            sessionID: UUID(),
+            kind: .screen,
+            layout: .separateTracks,
+            sampleRate: 48_000,
+            outputStem: "sealed-short-tail",
+            destinationDirectory: sessionRoot
+        )
+        let hook = PublicationCoverageCapture()
+
+        _ = try await ScreenSegmentSealService(publicationHooks: [hook]).seal(
+            [record],
+            audio: audioBundle,
+            segmentID: UUID(),
+            context: context
+        )
+
+        let coverage = try #require(await hook.capturedCoverage())
+        #expect(coverage.segmentStartSample == 0)
+        #expect(coverage.segmentEndSample == 48_000)
+        let track = try #require(coverage.tracks.first { $0.role == "system" })
+        #expect(track.lastSample == 47_040)
+        #expect(track.missingRanges == [
+            RecordingSampleRange(startSample: 47_040, sampleCount: 960)
+        ])
+    }
+
     @Test func zeroVideoCheckpointsFailWithoutPublishingAnEmptyMP4() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ScreenSegmentSealServiceTests-\(UUID().uuidString)", isDirectory: true)
@@ -158,7 +230,8 @@ struct ScreenSegmentSealServiceTests {
     /// Writes a real audio checkpoint into the segment and returns its bundle.
     private func makeAudioBundle(
         sessionRoot: URL,
-        segmentRoot: URL
+        segmentRoot: URL,
+        totalFrames: Int64 = 4_800
     ) async throws -> RecordingSegmentCheckpointBundle {
         let audioWriter = try RecordingCheckpointWriter(
             directory: segmentRoot,
@@ -167,21 +240,24 @@ struct ScreenSegmentSealServiceTests {
             sampleRate: 48_000,
             roles: [.system]
         )
-        for block in 0..<10 {
-            let start = Int64(block) * 480
+        var written: Int64 = 0
+        while written < totalFrames {
+            let count = Int(min(480, totalFrames - written))
+            let start = written
             try await audioWriter.append(AudioPCMBlock(
                 role: .system,
-                range: SampleRange(startSample: start, sampleCount: 480),
+                range: SampleRange(startSample: start, sampleCount: Int64(count)),
                 sampleRate: 48_000,
                 channelCount: 2,
-                frameCount: 480,
-                hostTime: UInt64(block) * 10_000_000,
+                frameCount: count,
+                hostTime: UInt64(written) * 10_000,
                 channels: [
-                    [Float](repeating: 0.1, count: 480),
-                    [Float](repeating: 0.1, count: 480),
+                    [Float](repeating: 0.1, count: count),
+                    [Float](repeating: 0.1, count: count),
                 ],
                 isSilence: false
             ))
+            written += Int64(count)
         }
         return try await audioWriter.finishSegmentBundle()
     }
@@ -228,6 +304,20 @@ struct ScreenSegmentSealServiceTests {
             throw ScreenSealTestError.sampleBufferFailed(bufferStatus)
         }
         return sampleBuffer
+    }
+}
+
+private actor PublicationCoverageCapture: SegmentPublicationHooking {
+    private var coverage: RecordingSegmentCoverage?
+
+    func beforePublish(_ candidate: SegmentPublicationCandidate) async throws {
+        if coverage == nil {
+            coverage = candidate.coverage
+        }
+    }
+
+    func capturedCoverage() -> RecordingSegmentCoverage? {
+        coverage
     }
 }
 

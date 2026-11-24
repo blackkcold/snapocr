@@ -19,8 +19,6 @@ struct RecordingPreferencesView: View {
     private var customOutputDirectoryPath = ""
     @AppStorage(PreferenceKeys.recordingHideShelfWhileRecording)
     private var hideShelfWhileRecording = PreferenceDefaults.recordingHideShelfWhileRecording
-    @AppStorage(PreferenceKeys.recordingMenuBarDuration)
-    private var menuBarDuration = PreferenceDefaults.recordingMenuBarDuration
 
     @AppStorage(PreferenceKeys.recordingVideoCodec)
     private var videoCodec = PreferenceDefaults.recordingVideoCodec
@@ -185,10 +183,9 @@ struct RecordingPreferencesView: View {
                 .onChange(of: hideShelfWhileRecording) { _ in
                     viewModel.refreshRecordingShelfVisibility()
                 }
-            Toggle("Show recording duration in the menu bar", isOn: $menuBarDuration)
 
             PreferencesCardCaption(
-                text: "Shelf visibility and menu-bar duration apply to every recording."
+                text: "Shelf visibility applies to every recording."
             )
         }
     }

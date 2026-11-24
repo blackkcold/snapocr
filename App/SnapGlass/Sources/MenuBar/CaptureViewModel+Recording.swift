@@ -403,9 +403,31 @@ extension CaptureViewModel {
 
     func configureRecording() {
         recordingSessionController.onStatusChange = { [weak self] status in
-            self?.recordingStatus = status
-            if status == .idle {
-                AudioRecordingMenuState.clear()
+            // The status item label is hosted in a ControlCenter remote scene, and
+            // this callback runs inside the recording controller's state change —
+            // the same main-actor turn that presents the recording HUD and that
+            // follows the menu bar popover dismissal which started the recording.
+            // Publishing the status there makes two separate AppKit transactions
+            // depend on each other; one runloop turn later is visually identical and
+            // keeps the label render off that turn.
+            guard let self else { return }
+            self.recordingStatusSequence += 1
+            let sequence = self.recordingStatusSequence
+            Task { @MainActor [weak self] in
+                // A real suspension, not just a task hop: the label lives in a
+                // ControlCenter remote scene, and resuming inside the same
+                // main-queue drain would keep its render in the recording
+                // transition turn this deferral exists to leave.
+                do {
+                    try await Task.sleep(for: .milliseconds(16))
+                } catch {
+                    return
+                }
+                guard let self, sequence == self.recordingStatusSequence else { return }
+                self.recordingStatus = status
+                if status == .idle {
+                    AudioRecordingMenuState.clear()
+                }
             }
         }
         recordingSessionController.onScreenshotShelfRecordingChange = { [weak self] isActive in

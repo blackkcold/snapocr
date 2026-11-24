@@ -764,7 +764,7 @@
 "Screen recording source tracks are embedded separately in the video." = "屏幕录制的来源音轨会分别内嵌到视频中。";
 "Screen recording folder" = "屏幕录制文件夹";
 "This folder is used for screen recordings. Existing files are not moved." = "此文件夹用于屏幕录制。现有文件不会被移动。";
-"Shelf visibility and menu-bar duration apply to every recording." = "截图架隐藏与菜单栏时长适用于所有录制。";
+"Shelf visibility applies to every recording." = "截图架隐藏适用于所有录制。";
 "Panel appearance is shared by audio and screen recordings." = "控制面板外观由音频与屏幕录制共享。";
 "Panel opacity and hover restore are unavailable while the panel is hidden." = "面板隐藏时无法调整不透明度与悬停恢复。";
 "Segmentation & Safety" = "分段与安全";
@@ -773,7 +773,6 @@
 "Crash recovery" = "崩溃恢复";
 "Always On" = "始终启用";
 "Hide Screenshot Shelf while recording" = "录制时隐藏截图架";
-"Show recording duration in the menu bar" = "在菜单栏显示录制时长";
 "Estimated screen recording size per minute: %@" = "录屏每分钟预计大小：%@";
 "Estimated audio recording size per minute: %@" = "纯音频每分钟预计大小：%@";
 "Stop Audio Recording (%@)" = "停止音频录制（%@）";
@@ -893,6 +892,10 @@
 "Screen recording saved" = "屏幕录制已保存";
 "Saving recording before quitting" = "退出前正在保存录制";
 "No audio samples were received. The recording was stopped." = "未收到音频样本，录制已停止。";
+"The recording stopped because the interface stopped responding. Audio captured up to that point was saved." = "界面无响应，录制已停止；此前的音频已保存。";
+"The recording stopped because the interface stopped responding before any audio could be saved." = "界面无响应，录制已停止，未能保存任何音频。";
+"The screen recording stopped because the interface stopped responding. The video was saved: %@" = "界面无响应，录屏已停止；此前的视频已保存：%@";
+"The screen recording stopped because the interface stopped responding, and the video could not be finalized." = "界面无响应，录屏已停止，视频未能完成封装。";
 "No video frames were received. The recording was stopped." = "未收到视频帧，录制已停止。";
 "Waiting for the first audio sample…" = "正在等待第一个音频样本…";
 "Waiting for the first frame to be written…" = "正在等待第一帧写入…";

@@ -1,6 +1,7 @@
 // swiftlint:disable file_length
 import AudioToolbox
 import Foundation
+import OSLog
 
 /// Drives one asynchronous pump callback at a monotonic cadence.
 public protocol AudioTickScheduling: Sendable {
@@ -203,6 +204,7 @@ public final class AudioRecordingEngine: AudioRecordingControlling, @unchecked S
   private let gate = AudioControlGate()
   private let stateLock = NSLock()
   private let progress = AudioProgressBroadcaster()
+  private let logger = Logger(subsystem: "com.snapglass", category: "recording.engine")
   private var state = State()
 
   /// Creates an engine for one recording session and later fresh sessions.
@@ -827,6 +829,9 @@ extension AudioRecordingEngine {
         state.failure = message
       }
     }
+    // A tick failure silently stops every later tick. Without this line the session
+    // looks like "waiting forever" with no diagnostic anywhere.
+    logger.error("audio tick failed: \(message, privacy: .public)")
   }
 
   private func publishProgress() {

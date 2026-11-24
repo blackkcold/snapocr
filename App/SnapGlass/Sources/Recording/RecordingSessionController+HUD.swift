@@ -12,10 +12,22 @@ extension RecordingSessionController {
         guard audioProgressTask == nil else { return }
         let stream = pipeline.makeProgressStream()
         audioProgressTask = Task { @MainActor [weak self] in
+            var lastHeartbeat: ContinuousClock.Instant?
             for await progress in stream {
                 guard !Task.isCancelled, let self,
                       generation == self.sessionGeneration,
                       self.audioSessionID == progress.sessionID else { break }
+                // Renew the liveness lease before any UI work. The progress stream
+                // fires at most every 100 ms; the lease is 10 s, so one beat every
+                // two seconds is enough and keeps the actor hop off the common path.
+                // A tick failure or a frozen main actor stops the beats, and the
+                // supervisor then stops and saves the session instead of recording
+                // until the app is force-quit.
+                let now = ContinuousClock().now
+                if lastHeartbeat.map({ $0.duration(to: now) >= .seconds(2) }) ?? true {
+                    lastHeartbeat = now
+                    await self.settlementSupervisor.heartbeat(generation: generation)
+                }
                 self.audioProgress = progress
                 self.updateAudioSilenceWarning(progress)
                 self.updateAudioHUD()
@@ -516,6 +528,12 @@ extension RecordingSessionController {
         didAnnounceScreenRelease = false
         controlPanel?.dismiss()
         controlPanel = nil
+        // A new request starts with a fresh control surface, so the previous
+        // session's "hide the panel" choice must not leak into it. This is the
+        // shared entry for audio, screen, and agent requests; without the reset a
+        // screen start after a closed audio result kept every `updateStatus` from
+        // reaching the countdown panel, freezing it at "3" while capture ran.
+        panelHiddenByUser = false
         Task { @MainActor [weak self] in await self?.closeAudioPreview() }
     }
 
@@ -532,6 +550,21 @@ extension RecordingSessionController {
 
     func storeCorner(_ corner: RecordingHUDCorner) {
         defaults.set(corner.rawValue, forKey: PreferenceKeys.recordingHUDCorner)
+    }
+
+    /// Creates the panel for the current stage and retires the one it replaces.
+    ///
+    /// One session may only ever have one control panel on screen. The panel is
+    /// borderless, floating, and never released when closed, so a panel that loses
+    /// `controlPanel` stays visible forever: nothing else holds a reference to
+    /// dismiss it, and `finishSession` can only clean up the current panel. That is
+    /// how a preparing capsule froze on "Checking the recording folder…" next to the
+    /// recording bar, and one more was stranded per session. Replacement is therefore
+    /// the only place that may create a second panel, and it always dismisses first.
+    func installControlPanel(on screen: NSScreen?) -> RecordingControlPanel {
+        let panel = makeControlPanel(on: screen)
+        RecordingHUDPanelSlot.install(panel, into: &controlPanel) { $0.dismiss() }
+        return panel
     }
 
     func makeControlPanel(on screen: NSScreen?) -> RecordingControlPanel {
@@ -576,6 +609,10 @@ extension RecordingSessionController {
         guard RecordingHUDPreferences.showsCaptureFrame(in: defaults),
               let rect = captureFrameRect(for: selection) else { return }
         let panel = RecordingCaptureFramePanel(rect: rect)
+        // A frame that survives its replacement has no owner left to order it out:
+        // the panel is borderless, floating, and never released when closed, so it
+        // would stay on screen around an area that is no longer being recorded.
+        captureFramePanel?.dismiss()
         captureFramePanel = panel
         panel.present()
     }

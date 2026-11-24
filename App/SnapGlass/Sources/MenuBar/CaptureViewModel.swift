@@ -34,6 +34,13 @@ public final class CaptureViewModel: ObservableObject {
     /// The current UI-facing screen-recording phase.
     @Published var recordingStatus: RecordingSessionStatus = .idle
 
+    /// Monotonic sequence for status updates applied one runloop later.
+    ///
+    /// The update is deferred so the status item label render never shares the
+    /// recording controller's transition turn. Only the newest status may land, so a
+    /// delayed older update can never overwrite a newer one.
+    var recordingStatusSequence = 0
+
     /// A failed recording that is still awaiting the user's attention.
     @Published var recordingFailure: RecordingControlPanelFailure?
 

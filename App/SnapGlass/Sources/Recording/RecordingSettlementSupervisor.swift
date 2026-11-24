@@ -7,6 +7,10 @@ enum RecordingSettlementReason: String, Sendable {
     case requested
     /// The readiness deadline expired before any real media arrived.
     case deadline
+    /// Real media arrived, but the main actor never confirmed that it presented
+    /// the recording state. The interface is unresponsive; the session is stopped
+    /// and saved from the supervisor so capture cannot run unbounded.
+    case promotionStalled
 }
 
 /// The durable result of one stop.
@@ -114,6 +118,8 @@ actor RecordingSettlementSupervisor {
         var kind: RecordingKind?
         var armedAt: ContinuousClock.Instant
         var mediaStartedAt: ContinuousClock.Instant?
+        /// When the main actor confirmed it presented the recording state.
+        var presentationAcknowledgedAt: ContinuousClock.Instant?
         var settleStartedAt: ContinuousClock.Instant?
         var settledAt: ContinuousClock.Instant?
         var reason: RecordingSettlementReason?
@@ -137,6 +143,15 @@ actor RecordingSettlementSupervisor {
         var reason: RecordingSettlementReason?
         var mediaStarted = false
         var readinessFailure: String?
+        /// How long the UI has to acknowledge the promoted recording state after
+        /// real media arrived, before the supervisor stops the session itself.
+        let promotionDeadline: Duration
+        var promotionDeadlineTask: Task<Void, Never>?
+        /// How long the main actor may go without a heartbeat once it acknowledged
+        /// the promotion. `nil` for kinds that do not run a liveness lease.
+        let livenessDeadline: Duration?
+        var livenessTask: Task<Void, Never>?
+        var presentationAcknowledged = false
     }
 
     /// Poll interval for ``Readiness/poll``.
@@ -150,6 +165,7 @@ actor RecordingSettlementSupervisor {
     private var active: Armed?
     private var armedAt = ContinuousClock().now
     private var mediaStartedAt: ContinuousClock.Instant?
+    private var presentationAcknowledgedAt: ContinuousClock.Instant?
     private var settleStartedAt: ContinuousClock.Instant?
     private var settledAt: ContinuousClock.Instant?
     private var settledGeneration: UUID?
@@ -187,6 +203,10 @@ actor RecordingSettlementSupervisor {
     ///   - generation: The request generation this session belongs to.
     ///   - kind: Audio or screen; decides the failure kind and the event kind.
     ///   - deadline: How long readiness may take before the stop runs.
+    ///   - promotionDeadline: How long the main actor has to acknowledge that it
+    ///     presented the recording state after readiness succeeded. When it never
+    ///     acknowledges, the interface is unresponsive and the session is stopped
+    ///     and saved here instead of running unbounded.
     ///   - readiness: The single readiness source to watch.
     ///   - stop: The one stop for this ticket. Runs off the main actor.
     /// - Returns: The ticket every later settle/disarm call must present.
@@ -194,13 +214,21 @@ actor RecordingSettlementSupervisor {
         generation: UUID,
         kind: RecordingKind,
         deadline: Duration,
+        promotionDeadline: Duration = .seconds(8),
+        livenessDeadline: Duration? = nil,
         readiness: Readiness,
         stop: @escaping @Sendable () async throws -> RecordingSettlement
     ) -> Ticket {
         disarmActive()
         resetDiagnostics()
         let ticket = Ticket(id: UUID(), generation: generation)
-        var slot = Armed(ticket: ticket, kind: kind, stop: stop)
+        var slot = Armed(
+            ticket: ticket,
+            kind: kind,
+            stop: stop,
+            promotionDeadline: promotionDeadline,
+            livenessDeadline: livenessDeadline
+        )
         active = slot
         armedAt = clock.now
 
@@ -251,6 +279,7 @@ actor RecordingSettlementSupervisor {
         guard let slot = active, slot.ticket == ticket else { return }
         slot.deadlineTask?.cancel()
         slot.readinessTask?.cancel()
+        slot.promotionDeadlineTask?.cancel()
         active = nil
     }
 
@@ -261,6 +290,7 @@ actor RecordingSettlementSupervisor {
             kind: active?.kind ?? settledKind,
             armedAt: armedAt,
             mediaStartedAt: mediaStartedAt,
+            presentationAcknowledgedAt: presentationAcknowledgedAt,
             settleStartedAt: settleStartedAt,
             settledAt: settledAt,
             reason: lastReason,
@@ -348,9 +378,73 @@ actor RecordingSettlementSupervisor {
         slot.deadlineTask = nil
         slot.readinessTask?.cancel()
         slot.readinessTask = nil
+        slot.promotionDeadlineTask?.cancel()
+        // Every kind arms the promotion watchdog: readiness success cancels the
+        // only other deadline, so a main actor that never presents the promoted
+        // state would otherwise leave capture running with nobody able to stop it.
+        // The screen recording also arms a continuous liveness lease once the
+        // promotion is acknowledged; the monitoring loop renews it.
+        let promotionDeadline = slot.promotionDeadline
+        slot.promotionDeadlineTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.sleep(promotionDeadline)
+            } catch {
+                return
+            }
+            await self.promotionDeadlineReached(ticket)
+        }
         active = slot
         mediaStartedAt = clock.now
         continuation.yield(.mediaStarted(generation: ticket.generation, kind: slot.kind))
+    }
+
+    /// Records that the main actor presented the recording state for a session.
+    ///
+    /// The supervisor needs this confirmation only to know the interface is alive:
+    /// readiness alone is not proof, because the promotion is delivered on the main
+    /// actor. A session whose promotion is never acknowledged is stopped here and
+    /// saved, instead of capturing forever behind a frozen interface.
+    ///
+    /// - Parameter generation: The session generation whose promotion was presented.
+    func acknowledgePresentation(generation: UUID) {
+        guard var slot = active, slot.ticket.generation == generation,
+              slot.mediaStarted, slot.settlement == nil,
+              slot.settleTask == nil,
+              !slot.presentationAcknowledged else { return }
+        slot.presentationAcknowledged = true
+        slot.promotionDeadlineTask?.cancel()
+        slot.promotionDeadlineTask = nil
+        if let livenessDeadline = slot.livenessDeadline {
+            let ticket = slot.ticket
+            armLiveness(slot: &slot, deadline: livenessDeadline, ticket: ticket)
+        }
+        active = slot
+        presentationAcknowledgedAt = clock.now
+    }
+
+    /// Proves the main actor is still alive after the promotion was presented.
+    ///
+    /// Each recording kind renews the same lease from the work that proves its
+    /// interface is responsive: the screen monitoring loop for screen sessions and
+    /// the progress consumer for audio sessions. A main actor that stops sending
+    /// them is indistinguishable from a frozen interface, so the supervisor stops
+    /// and saves the session instead of capturing forever behind a window the user
+    /// cannot operate.
+    ///
+    /// - Parameter generation: The session whose main actor is still alive.
+    func heartbeat(generation: UUID) {
+        guard var slot = active,
+              slot.ticket.generation == generation,
+              slot.mediaStarted,
+              slot.presentationAcknowledged,
+              slot.settlement == nil,
+              slot.settleTask == nil,
+              let deadline = slot.livenessDeadline
+        else { return }
+        let ticket = slot.ticket
+        armLiveness(slot: &slot, deadline: deadline, ticket: ticket)
+        active = slot
     }
 
     // MARK: - Settlement
@@ -359,6 +453,49 @@ actor RecordingSettlementSupervisor {
         guard let slot = active, slot.ticket == ticket,
               !slot.mediaStarted, slot.settlement == nil, slot.settleTask == nil else { return }
         _ = beginSettlement(ticket: ticket, reason: .deadline)
+    }
+
+    /// Stops a session whose promoted state was never presented.
+    ///
+    /// The session had real media, so the readiness deadline was cancelled. If the
+    /// main actor cannot confirm presentation, the interface is unresponsive and
+    /// waiting longer would only accumulate audio nobody can stop.
+    ///
+    /// - Parameter ticket: The armed session whose promotion deadline expired.
+    private func promotionDeadlineReached(_ ticket: Ticket) {
+        guard let slot = active, slot.ticket == ticket,
+              slot.mediaStarted, !slot.presentationAcknowledged,
+              slot.settlement == nil, slot.settleTask == nil else { return }
+        _ = beginSettlement(ticket: ticket, reason: .promotionStalled)
+    }
+
+    /// Arms one liveness lease for a recording whose promotion was presented.
+    ///
+    /// The lease is renewed by ``heartbeat(generation:)``; it is deliberately
+    /// separate from the promotion deadline so a healthy recording is not stopped
+    /// just because its interface was slow once.
+    private func armLiveness(slot: inout Armed, deadline: Duration, ticket: Ticket) {
+        slot.livenessTask?.cancel()
+        slot.livenessTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.sleep(deadline)
+            } catch {
+                return
+            }
+            await self.livenessDeadlineReached(ticket)
+        }
+    }
+
+    /// Stops a recording whose main actor stopped heartbeating.
+    ///
+    /// The interface was already presented, so this is a post-promotion stall: the
+    /// capture is real but nobody can operate the stop control anymore.
+    private func livenessDeadlineReached(_ ticket: Ticket) {
+        guard let slot = active, slot.ticket == ticket,
+              slot.mediaStarted, slot.presentationAcknowledged,
+              slot.settlement == nil, slot.settleTask == nil else { return }
+        _ = beginSettlement(ticket: ticket, reason: .promotionStalled)
     }
 
     @discardableResult
@@ -375,6 +512,10 @@ actor RecordingSettlementSupervisor {
         slot.deadlineTask = nil
         slot.readinessTask?.cancel()
         slot.readinessTask = nil
+        slot.promotionDeadlineTask?.cancel()
+        slot.promotionDeadlineTask = nil
+        slot.livenessTask?.cancel()
+        slot.livenessTask = nil
         settleStartedAt = clock.now
         lastReason = reason
 
@@ -413,6 +554,10 @@ actor RecordingSettlementSupervisor {
         // the event is dropped so it cannot touch a newer session.
         slot.settlement = settlement
         slot.settleTask = nil
+        slot.promotionDeadlineTask?.cancel()
+        slot.promotionDeadlineTask = nil
+        slot.livenessTask?.cancel()
+        slot.livenessTask = nil
         active = slot
         continuation.yield(
             .settled(
@@ -428,11 +573,14 @@ actor RecordingSettlementSupervisor {
         guard let slot = active else { return }
         slot.deadlineTask?.cancel()
         slot.readinessTask?.cancel()
+        slot.promotionDeadlineTask?.cancel()
+        slot.livenessTask?.cancel()
         active = nil
     }
 
     private func resetDiagnostics() {
         mediaStartedAt = nil
+        presentationAcknowledgedAt = nil
         settleStartedAt = nil
         settledAt = nil
         settledGeneration = nil

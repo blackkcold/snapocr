@@ -15,8 +15,8 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "1.7.0"
-    CURRENT_PROJECT_VERSION: "5"
+    MARKETING_VERSION: "1.7.2"
+    CURRENT_PROJECT_VERSION: "9"
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
@@ -192,6 +192,7 @@ targets:
       - path: App/SnapGlass/Sources/Recording/RecordingHUDPresentation.swift
       - path: App/SnapGlass/Sources/Recording/RecordingHUDMeasurement.swift
       - path: App/SnapGlass/Sources/Recording/RecordingWindowExclusionRegistry.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingHUDPanelSlot.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportSummary.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportRoot.swift

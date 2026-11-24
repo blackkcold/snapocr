@@ -60,11 +60,46 @@ scripts/agent-test.sh scripts/agent-scenarios/audio-smoke.json --timeout 120
 
 Agent 场景依赖真实屏幕/音频权限与已安装 App 的签名身份，因此**不放进** `scripts/test.sh`，在录制相关改动或发版前按需运行。失败时保留 `.build/agent-runs/<timestamp>/`，其中包含 `report.json`、`sample`、`spindump`、signpost 与用户目录差异。
 
+## 菜单栏约束（远程 scene）
+
+`MenuBarStatusLabel`（标签）与 `MenuBarView`（菜单内容）由 ControlCenter 的远程 scene 渲染，不是 App 自己的窗口。**标签必须保持静态**：禁止 `TimelineView`、定时器，禁止在录制开始时改变状态项宽度。实时计时器会让主线程卡在远程 scene 的 fence 上（2026-11-24 的 1.7.1 首秒卡死即此）。动态内容（录制时长等）放在菜单弹层里，打开菜单时按当前时间格式化。
+
+`AgentMode` 不构造 SwiftUI scene（无 `MenuBarExtra`、无状态栏远程 scene），因此 agent 场景**覆盖不到**这条路径；涉及菜单栏的改版必须做一次真实入口冒烟。
+
+## 卡死取证协议（beachball / 主线程冻结）
+
+复现彩色转圈时**先不要强退**，按顺序取证，再终止进程：
+
+```bash
+# 1. 采样（5 秒，足以看出主线程栈）
+sample SnapGlass 5 -file /tmp/snapglass-hang-$(date +%H%M%S).txt
+
+# 2. 同窗口日志：把 --start / --end 换成卡死前 30 秒与卡死后 30 秒
+log show --start '2026-11-24 14:40:55' --end '2026-11-24 14:42:00' \
+  --predicate 'process == "SnapGlass" OR process == "ControlCenter"' \
+  --info --debug > /tmp/snapglass-hang-window.log
+
+# 3. 进程与会话现场（之后才强退）
+ps -o pid,stat,%cpu,etime -p $(pgrep -x SnapGlass)
+ls -l ~/Movies/SnapGlass/Recordings/.SnapGlassSessions/
+```
+
+| 栈顶特征 | 结论 |
+|---|---|
+| `NSHostingView.layout` / SwiftUI / `CA::Transaction::commit` / `_NSWindowTransformAnimation` | HUD 渲染或合成 |
+| `NSHostingController.sizeThatFits` | HUD 测量 |
+| `NSSceneFenceAction` / FrontBoard / `_waitForSceneUpdate` / `__waitForFence` | ControlCenter 远程 scene fence |
+| `xpc_connection_send_message_with_reply_sync` / `mach_msg` 同步等待 | 同步 XPC 或框架调用 |
+| `NSLock` / `os_unfair_lock` / `DispatchSemaphore`（非主线程持有） | 锁反转 |
+| `mach_msg2_trap` 且上层是 `NSApplication` run loop | 只是空闲，需重抓并同时 spindump |
+
+录制中主线程冻结超过 10 秒时，结算 supervisor 会自行停止并保存（见 `RecordingReadiness.recordingLivenessDeadline`）；因此取证时如果界面恢复，录制可能已经按“界面停止响应”文案结束，这是预期行为，不是二次故障。
+
 ## 发版门槛
 
 1. `./scripts/test.sh` 全绿；
 2. `./scripts/build.sh --sign` 成功（或由 release 流程完成）；
-3. 如本次改动涉及录制/权限/菜单栏，额外跑相关 agent 场景；
+3. 如本次改动涉及录制/权限/**菜单栏**，额外跑相关 agent 场景，并做一次真实菜单栏冒烟：从 `MenuBarExtra` 开始一次录音，确认 1 秒内进入录音态、菜单栏与 HUD 均无卡死；
 4. 本地化校验 `./scripts/check-localization.sh` 通过。
 
 手动 GUI 检查（真实视觉、VoiceOver、透明 JPEG 导出、6K 缩放清晰度）保留为可选项：建议在发版后或用户验收时执行，不作为自动化发版的阻塞条件。

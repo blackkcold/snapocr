@@ -16,7 +16,10 @@ struct ScreenshotShelfSessionDirectoryTests {
     }
 
     @Test func legacyNamesHaveNoOwner() {
-        let name = "session-\(UUID().uuidString)"
+        // A UUID's first segment can be all digits, which the owner parser would
+        // legitimately read as a PID. Use a deterministic non-numeric legacy name so
+        // this test does not fail on roughly one UUID in forty.
+        let name = "session-legacy-\(UUID().uuidString)"
         #expect(ScreenshotShelfSessionDirectoryPolicy.ownerPID(fromDirectoryName: name) == nil)
     }
 

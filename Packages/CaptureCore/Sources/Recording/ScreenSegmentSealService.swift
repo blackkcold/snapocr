@@ -153,11 +153,11 @@ public actor ScreenSegmentSealService {
 
         let hash = try RecordingLedgerFileSystem.sha256(of: transaction.partialURL)
         let hashes = [transaction.finalURL.lastPathComponent: hash]
-        let coverage = audio?.coverage ?? RecordingSegmentCoverage(
+        let coverage = Self.publicationCoverage(
+            audio?.coverage,
             segmentIndex: first.segmentIndex,
             segmentStartSample: startSample,
-            segmentEndSample: endSample,
-            tracks: []
+            segmentEndSample: endSample
         )
         let stagedFiles = Dictionary(uniqueKeysWithValues: trackMap.keys.map { ($0, transaction.partialURL) })
         let candidate = SegmentPublicationCandidate(
@@ -516,5 +516,99 @@ public actor ScreenSegmentSealService {
         case "microphone": .microphone
         default: nil
         }
+    }
+
+    /// Returns coverage that describes the sealed output, not the narrower audio bundle.
+    ///
+    /// The sealer pads a short audio tail with silence up to the last video sample.
+    /// The audio bundle's own coverage may end a few milliseconds earlier: the source
+    /// can stop delivering samples before the final video frame is closed. Publishing
+    /// that narrower range makes the ledger reject the intent, because its coverage
+    /// must match the video's effective range. Missing ranges are kept (they are the
+    /// honest audio-loss signal) but clamped to the sealed segment.
+    private static func publicationCoverage(
+        _ audio: RecordingSegmentCoverage?,
+        segmentIndex: Int,
+        segmentStartSample: Int64,
+        segmentEndSample: Int64
+    ) -> RecordingSegmentCoverage {
+        guard let audio else {
+            return RecordingSegmentCoverage(
+                segmentIndex: segmentIndex,
+                segmentStartSample: segmentStartSample,
+                segmentEndSample: segmentEndSample,
+                tracks: []
+            )
+        }
+        let tracks = audio.tracks.map { track in
+            var missing = track.missingRanges.compactMap { range -> RecordingSampleRange? in
+                let start = max(range.startSample, segmentStartSample)
+                let end = min(range.endSample, segmentEndSample)
+                guard end > start else { return nil }
+                return RecordingSampleRange(startSample: start, sampleCount: end - start)
+            }
+            // The audio bundle stops at the audio source's last sample, while the
+            // sealed segment now runs to the video end. Record that padded tail (and
+            // any padded head) as missing so the coverage stays honest.
+            if let first = track.firstSample, first > segmentStartSample {
+                missing.append(
+                    RecordingSampleRange(
+                        startSample: segmentStartSample,
+                        sampleCount: first - segmentStartSample
+                    )
+                )
+            }
+            if let last = track.lastSample, last < segmentEndSample {
+                missing.append(
+                    RecordingSampleRange(startSample: last, sampleCount: segmentEndSample - last)
+                )
+            }
+            if track.firstSample == nil, segmentEndSample > segmentStartSample {
+                missing.append(
+                    RecordingSampleRange(
+                        startSample: segmentStartSample,
+                        sampleCount: segmentEndSample - segmentStartSample
+                    )
+                )
+            }
+            return RecordingTrackCoverage(
+                role: track.role,
+                sampleRate: track.sampleRate,
+                channelCount: track.channelCount,
+                wasActive: track.wasActive,
+                firstSample: track.firstSample,
+                lastSample: track.lastSample,
+                missingRanges: Self.merged(missing),
+                writerSynthesizedSilenceFrames: track.writerSynthesizedSilenceFrames
+            )
+        }
+        return RecordingSegmentCoverage(
+            segmentIndex: segmentIndex,
+            segmentStartSample: segmentStartSample,
+            segmentEndSample: segmentEndSample,
+            tracks: tracks
+        )
+    }
+
+    /// Sorts and merges overlapping or adjacent sample ranges.
+    private static func merged(_ ranges: [RecordingSampleRange]) -> [RecordingSampleRange] {
+        let ordered = ranges.sorted { $0.startSample < $1.startSample }
+        var result: [RecordingSampleRange] = []
+        for range in ordered {
+            guard let last = result.last else {
+                result.append(range)
+                continue
+            }
+            if range.startSample <= last.startSample + last.sampleCount {
+                let end = max(last.endSample, range.endSample)
+                result[result.count - 1] = RecordingSampleRange(
+                    startSample: last.startSample,
+                    sampleCount: end - last.startSample
+                )
+            } else {
+                result.append(range)
+            }
+        }
+        return result
     }
 }

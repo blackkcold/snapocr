@@ -764,7 +764,7 @@
 "Screen recording source tracks are embedded separately in the video." = "Screen recording source tracks are embedded separately in the video.";
 "Screen recording folder" = "Screen recording folder";
 "This folder is used for screen recordings. Existing files are not moved." = "This folder is used for screen recordings. Existing files are not moved.";
-"Shelf visibility and menu-bar duration apply to every recording." = "Shelf visibility and menu-bar duration apply to every recording.";
+"Shelf visibility applies to every recording." = "Shelf visibility applies to every recording.";
 "Panel appearance is shared by audio and screen recordings." = "Panel appearance is shared by audio and screen recordings.";
 "Panel opacity and hover restore are unavailable while the panel is hidden." = "Panel opacity and hover restore are unavailable while the panel is hidden.";
 "Segmentation & Safety" = "Segmentation & Safety";
@@ -773,7 +773,6 @@
 "Crash recovery" = "Crash recovery";
 "Always On" = "Always On";
 "Hide Screenshot Shelf while recording" = "Hide Screenshot Shelf while recording";
-"Show recording duration in the menu bar" = "Show recording duration in the menu bar";
 "Estimated screen recording size per minute: %@" = "Estimated screen recording size per minute: %@";
 "Estimated audio recording size per minute: %@" = "Estimated audio recording size per minute: %@";
 "Stop Audio Recording (%@)" = "Stop Audio Recording (%@)";
@@ -893,6 +892,10 @@
 "Screen recording saved" = "Screen recording saved";
 "Saving recording before quitting" = "Saving recording before quitting";
 "No audio samples were received. The recording was stopped." = "No audio samples were received. The recording was stopped.";
+"The recording stopped because the interface stopped responding. Audio captured up to that point was saved." = "The recording stopped because the interface stopped responding. Audio captured up to that point was saved.";
+"The recording stopped because the interface stopped responding before any audio could be saved." = "The recording stopped because the interface stopped responding before any audio could be saved.";
+"The screen recording stopped because the interface stopped responding. The video was saved: %@" = "The screen recording stopped because the interface stopped responding. The video was saved: %@";
+"The screen recording stopped because the interface stopped responding, and the video could not be finalized." = "The screen recording stopped because the interface stopped responding, and the video could not be finalized.";
 "No video frames were received. The recording was stopped." = "No video frames were received. The recording was stopped.";
 "Waiting for the first audio sample…" = "Waiting for the first audio sample…";
 "Waiting for the first frame to be written…" = "Waiting for the first frame to be written…";

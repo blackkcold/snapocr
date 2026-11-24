@@ -7,6 +7,7 @@
 import AppKit
 import CaptureCore
 import Foundation
+import OSLog
 import SharedKit
 
 @preconcurrency import ScreenCaptureKit
@@ -177,6 +178,12 @@ final class RecordingSessionController {
     var onFailureChange: ((RecordingControlPanelFailure?) -> Void)?
     /// Resolves microphone access for a screen source that includes the microphone.
     var onRequestScreenMicrophoneAccess: (() async -> Bool)?
+
+    /// Persisted diagnosis for a status that never reached the control panel.
+    ///
+    /// The panel's own log only records what it accepted. A status dropped before
+    /// the panel sees it is invisible there, so the controller records it here.
+    private let logger = Logger(subsystem: "com.snapglass", category: "recording.hud")
 
     private var activeSession: RecordingSessionSnapshot?
     var sessionScreen: NSScreen?
@@ -822,6 +829,8 @@ final class RecordingSessionController {
             generation: generation,
             kind: .audio,
             deadline: deadline,
+            promotionDeadline: RecordingReadiness.firstAudioPresentationDeadline,
+            livenessDeadline: RecordingReadiness.recordingLivenessDeadline,
             readiness: readiness,
             stop: { [pipeline] in
                 // `RecordingSessionPipeline.stop()` is idempotent and actor-isolated;
@@ -1107,10 +1116,14 @@ final class RecordingSessionController {
             return
         }
 
-        // A deadline stop never passed through the requested-stop path, so move the
-        // state machine to finalizing here. Without this the session would stay
-        // `.starting` and the next recording would be refused.
-        if reason == .deadline, audioStateMachine.state == .starting {
+        // A deadline or promotion-stall stop never passed through the requested-stop
+        // path, so move the state machine to finalizing here. A promotion stall can
+        // arrive while the state machine already reported `.recording` (the main
+        // actor processed the promotion but then stopped responding), so both live
+        // states must be able to finish; without this the session would stay in
+        // `.recording`, refuse the next recording, and never show its result.
+        if reason != .requested,
+           audioStateMachine.state == .starting || audioStateMachine.state == .recording {
             audioStateMachine.apply(.stopRequested)
             audioStateMachine.beginFinalization()
         }
@@ -1127,6 +1140,27 @@ final class RecordingSessionController {
                     )
                 )
                 return
+            }
+            if reason == .promotionStalled {
+                if Self.audioResultWasSaved(result) {
+                    onMessage?(
+                        AppLocalization.string(
+                            "The recording stopped because the interface stopped responding. Audio captured up to that point was saved."
+                        ),
+                        .info
+                    )
+                } else {
+                    completeAudioSession(
+                        with: Self.audioResult(
+                            result,
+                            failure: AppLocalization.string(
+                                "The recording stopped because the interface stopped responding before any audio could be saved."
+                            )
+                        ),
+                        errorClass: .timeout
+                    )
+                    return
+                }
             }
             completeAudioSession(with: result, outputURL: outputURL)
         case let .failed(_, message):
@@ -1176,8 +1210,40 @@ final class RecordingSessionController {
             switch kind {
             case .audio:
                 handleAudioReadiness(generation: generation)
+                // The acknowledgement must represent a main actor that is still
+                // alive after the promotion turn, not merely one that reached the
+                // state change: the panel's first draw of the promoted state can
+                // happen after this turn (the HUD no longer displays synchronously).
+                // A later turn that never runs is exactly the frozen-interface case
+                // the supervisor must catch.
+                Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: .milliseconds(50))
+                    } catch {
+                        return
+                    }
+                    guard let self else { return }
+                    await self.settlementSupervisor.acknowledgePresentation(
+                        generation: generation
+                    )
+                }
             case .screen:
                 await handleScreenFirstFrame(generation: generation)
+                // The screen promotion is a plain state update, but it still runs
+                // on the main actor. Confirm it on a later turn so a frozen actor
+                // cannot be mistaken for a healthy one; the supervisor then stops
+                // and saves the session itself instead of capturing unbounded.
+                Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: .milliseconds(50))
+                    } catch {
+                        return
+                    }
+                    guard let self else { return }
+                    await self.settlementSupervisor.acknowledgePresentation(
+                        generation: generation
+                    )
+                }
             }
         case let .settled(generation, kind, settlement, reason):
             switch kind {
@@ -1219,7 +1285,11 @@ final class RecordingSessionController {
         )
     }
 
-    private func completeAudioSession(with result: AudioRecordingResult, outputURL: URL? = nil) {
+    private func completeAudioSession(
+        with result: AudioRecordingResult,
+        outputURL: URL? = nil,
+        errorClass: RecordingDiagnosticErrorClass? = nil
+    ) {
         guard lastAudioResult == nil else { return }
         lastAudioResult = result
         latestAudioOutputURL = outputURL
@@ -1238,7 +1308,7 @@ final class RecordingSessionController {
             registerRecoveryMaterials(sessionID: result.sessionID)
             if cancelRequested { outcomeState.beginSession() }
         }
-        settleTerminal(wasSaved: saved)
+        settleTerminal(wasSaved: saved, errorClass: errorClass)
         updateStatus(audioStateMachine.legacyStatus)
         if saved, result.segmentCount > 0, !panelHiddenByUser, !RecordingHUDPreferences.isHidden(in: defaults) {
             if controlPanel == nil { controlPanel = makeControlPanel(on: NSScreen.main) }
@@ -1511,9 +1581,12 @@ final class RecordingSessionController {
     private func beginCountdown(for selection: RecordingSourceSelection) {
         let screen = screen(for: selection.displayID)
         sessionScreen = screen
-        let panel = makeControlPanel(on: screen)
-        controlPanel = panel
-        if !RecordingHUDPreferences.isHidden(in: defaults) {
+        let panel = installControlPanel(on: screen)
+        // The panel is shown only when the same visibility facts that gate every
+        // later `updateStatus` allow it. Presenting a panel that updates will
+        // ignore leaves a live but frozen countdown on screen, which is worse than
+        // no panel: the user sees a Cancel button that can no longer act.
+        if !panelHiddenByUser, !RecordingHUDPreferences.isHidden(in: defaults) {
             panel.present(state: .countdown(3))
         }
         showCaptureFrame(for: selection)
@@ -1693,6 +1766,8 @@ final class RecordingSessionController {
                 generation: generation,
                 kind: .screen,
                 deadline: RecordingReadiness.firstVideoFrameDeadline,
+                promotionDeadline: RecordingReadiness.firstScreenPresentationDeadline,
+                livenessDeadline: RecordingReadiness.recordingLivenessDeadline,
                 readiness: .poll {
                     if await coordinator.hasWrittenVideoFrame() { return .ready }
                     if let reason = await coordinator.writerFailureDescription() {
@@ -1819,6 +1894,10 @@ final class RecordingSessionController {
         else { return }
         // A cancelled first-frame wait must never promote the settled session.
         guard screenStartOwnership.firstFrameAccepted(generation: generation) else { return }
+        // From this point the session is a recording, so any later stop — including
+        // one the supervisor starts because the interface stalled — must publish the
+        // segment instead of classifying the session as a failed start.
+        screenStopIntent = .recordingStop
         screenReleaseDestination = nil
         outcomeState.markRecordingStarted()
         recordingStartedAt = Date()
@@ -2030,12 +2109,15 @@ final class RecordingSessionController {
         finalURL: URL,
         reason: String?,
         generation: UUID,
-        audioFailure: String? = nil
+        audioFailure: String? = nil,
+        messageOverride: String? = nil
     ) -> Bool {
         _ = screenStartOwnership.stopConfirmed(generation: generation)
         screenReleaseDestination = nil
         let message: String
-        if audioFailure != nil {
+        if let messageOverride {
+            message = messageOverride
+        } else if audioFailure != nil {
             // The video is complete; say plainly that only the audio is missing.
             message = AppLocalization.string(
                 "The system audio could not be recorded. The video was saved: %@",
@@ -2173,7 +2255,17 @@ final class RecordingSessionController {
         }
         let relay = screenStopRelay
         let unconfirmed = await relay?.wasUnconfirmedStreamStop() ?? false
-        let intent = reason == .deadline ? .startCleanup : (screenStopIntent ?? .startCleanup)
+        // A supervisor-initiated stall happens after real media started, so it is
+        // a recording stop even when the requested-stop path never ran.
+        let intent: ScreenStopIntent
+        switch reason {
+        case .deadline:
+            intent = .startCleanup
+        case .promotionStalled:
+            intent = .recordingStop
+        case .requested:
+            intent = screenStopIntent ?? .startCleanup
+        }
         let stopReason = screenStopReason
         screenStopIntent = nil
         screenStopReason = nil
@@ -2230,6 +2322,26 @@ final class RecordingSessionController {
         switch settlement {
         case let .screen(outcome):
             guard outcome.isSaved, let url = outcome.latestPublishedURL else {
+                // A post-promotion stall with no published segment is still a real
+                // recording that could not be finished; say why instead of
+                // reporting a generic writer failure.
+                if reason == .promotionStalled {
+                    if !outcome.segmentURLs.isEmpty {
+                        registerRecoveryMaterials(
+                            sessionID: outcome.sessionID,
+                            urls: outcome.segmentURLs
+                        )
+                    }
+                    screenPipelineAdapter = nil
+                    finishSession(success: false, errorClass: .timeout)
+                    onMessage?(
+                        AppLocalization.string(
+                            "The screen recording stopped because the interface stopped responding, and the video could not be finalized."
+                        ),
+                        .error
+                    )
+                    return false
+                }
                 let failure = ScreenRecordingEngineError.finalizationFailed(
                     outcome.failure ?? "The screen recording did not publish a video segment.",
                     partialURL: materialRoot
@@ -2248,11 +2360,18 @@ final class RecordingSessionController {
                 return false
             }
             screenPipelineAdapter = nil
+            let stalledMessage = reason == .promotionStalled
+                ? AppLocalization.string(
+                    "The screen recording stopped because the interface stopped responding. The video was saved: %@",
+                    url.lastPathComponent
+                )
+                : nil
             return finishScreenRecording(
                 finalURL: url,
                 reason: stopReason,
                 generation: generation,
-                audioFailure: outcome.audioFailure
+                audioFailure: outcome.audioFailure,
+                messageOverride: stalledMessage
             )
         case let .failed(_, message):
             screenPipelineAdapter = nil
@@ -2416,6 +2535,10 @@ final class RecordingSessionController {
                       generation == self.sessionGeneration,
                       self.status == .recording
                 else { return }
+                // Renew the liveness lease before doing any work this turn. If the
+                // main actor stops here, the supervisor stops and saves the session
+                // instead of capturing forever behind a frozen window.
+                await self.settlementSupervisor.heartbeat(generation: generation)
                 await self.reportMissingFramesIfNeeded()
                 guard generation == self.sessionGeneration, self.status == .recording else { return }
                 if let reason = await self.recordingInterruptionReason() {
@@ -2601,7 +2724,10 @@ final class RecordingSessionController {
     func updateStatus(_ status: RecordingSessionStatus) {
         self.status = status
         onStatusChange?(status)
-        guard !panelHiddenByUser else { return }
+        guard !panelHiddenByUser else {
+            logSuppressedHUDUpdate(status)
+            return
+        }
         switch status {
         case .countdown(let seconds):
             controlPanel?.update(state: .countdown(seconds))
@@ -2643,6 +2769,29 @@ final class RecordingSessionController {
                 )
             }
         }
+    }
+
+    /// Records a status that never reached the control panel.
+    ///
+    /// A countdown tick is intentionally silent. A transition into a live session
+    /// is not: if it is dropped, the user sees a panel that can no longer act
+    /// while capture is already running. Persisting that fact makes the next
+    /// occurrence diagnosable from the log alone.
+    private func logSuppressedHUDUpdate(_ status: RecordingSessionStatus) {
+        let name: String
+        switch status {
+        case .starting:
+            name = "starting"
+        case .recording:
+            name = "recording"
+        case .saving:
+            name = "saving"
+        case .idle, .selectingSource, .countdown:
+            return
+        }
+        logger.fault(
+            "HUD update suppressed status=\(name, privacy: .public) panelVisible=\(self.controlPanel?.isVisible == true, privacy: .public)"
+        )
     }
 
     func finishSession(success: Bool, errorClass: RecordingDiagnosticErrorClass? = nil) {

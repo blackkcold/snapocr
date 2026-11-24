@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-24
+
+> 录制稳定性收尾：卡死、音频落盘、HUD 与录屏音频。
+
+### Fixed
+- 修复关闭录音结果卡片后开始录屏时倒计时停在 3 秒、面板不再更新且 Cancel 无效：新录制请求会重置会话级隐藏标志，倒计时与后续状态使用同一可见性判据；被抑制的 `starting`/`recording`/`saving` 现在写入 fault 日志，下一次同类问题可直接从日志定位。
+- 屏幕录制在首帧写入后新增主线程呈现确认与存活心跳看门狗：界面停止响应 8–10 秒时由结算 supervisor 自行停止并保存，不再无限录制；界面无响应导致的停录提供四语言提示。
+- 音频录制接入同一 10 秒存活租约：progress 消费任务每 2 秒续租；主线程冻结或音频 tick 静默停止时，supervisor 自行停止并保存，不再无限录音。
+- 修复录屏带系统音频时整段无法发布：音频源可能在最后一个视频帧闭合前 10–20 ms 停止供样，旧逻辑把音频覆盖的短尾当成发布覆盖不匹配（`invalidPublication`），导致视频块与 CAF 都在、却没有任何成品。sealer 现在按视频有效区间发布覆盖，把补齐的静音尾保留为缺失区间，既诚实又能落盘。
+- 修复录制开始时录制条旁边同时停留在「正在检查录制文件夹…」：倒计时替换控制面板时没有关闭准备阶段的面板，旧面板失去引用却永久可见，且每录一次再泄漏一块。面板替换现在统一经 `RecordingHUDPanelSlot`，替换前必定 `dismiss`。
+- 修复录制框替换时未关闭旧框：上一轮的红色录制框会留在屏幕上围住一个已不再录制的区域。
+- 修复录制条周围一圈方形灰线：macOS 26 会按窗口矩形绘制窗口边线，而录制条的窗口恰好就是胶囊外接矩形。录制条不再使用系统窗口阴影，改由贴合胶囊形状的独立阴影窗口绘制，并关闭 AppKit 的矩形焦点环。
+- 修复 1.7.1 起录后首秒卡死：菜单栏状态项由 ControlCenter 远程 scene 渲染，录制开始时插入的实时时长 `TimelineView` 会让主线程卡在远程 scene/fence 上。菜单栏标签改为静态状态指示（图标 + 红点），不再插入实时计时器，也不再在起录时改变状态项宽度。
+- 录制时长移入菜单弹层：打开菜单时按当前时间格式化显示，不再使用每秒刷新的 `TimelineView`。
+- 移除已不适用的“在菜单栏显示录制时长”偏好；菜单栏标签的静态约束与真实入口冒烟写入 `Docs/TESTING.md`，避免回归。
+- 录音不再卡在「正在等待第一个音频样本…」：首样本到达后的 HUD 提升不再同步强制显示，尺寸测量延后到下一个主循环回合；状态栏时长标签只渲染一趟，录制状态更新与 HUD 呈现错开一个回合。
+- 首样本就绪后新增「呈现确认」看门狗：8 秒内主线程未确认已呈现录音态时，由结算 supervisor 自行停止并落盘，界面卡死不再导致无限录制或强制退出后的孤儿会话。
+- 提升停滞的会话可从 `.starting` 与 `.recording` 正常进入 finalizing，修复首轮收尾条件只覆盖 `.starting` 时可能无法再次录音的问题。
+- 音频 tick 失败写入持久化日志；界面无响应导致的停录提供四语言文案（已保存 / 未保存两种）。
+- 删除 `RecordingCaptureFramePanel.update(rect:)` 这条从未调用的 `display: true` 死代码。
+
+### Added
+- `Docs/TESTING.md` 增加卡死取证协议：`sample` / `spindump` / 日志窗口与栈顶判读表，并注明 AgentMode 覆盖不到菜单栏远程 scene。
+
+### Changed
+- `scripts/test.sh` 现在以 `xcodebuild` 退出码判定 App scheme 失败；此前只要输出里出现 `Test run with`，失败的 scheme 也会被报成通过。
+- 修复 `RecordingWindowExclusionRegistryTests` 在 xctest 中因 `isReleasedWhenClosed` 双重释放导致的 `EXC_BAD_ACCESS`；此前两个用例被误判为“本机环境崩溃”并从验证口径中排除。
+
+### Verification status
+- 已运行：Debug 与 Release 构建通过；八个 Package 测试全部通过；App schemes Editor 136、WindowLifecycle 155、BarcodePanel 7 全部通过；四语言本地化校验通过；`git diff --check` 干净。
+- 真实菜单栏与 HUD 目视冒烟待在本机完成（安装包 1.7.2 / build 9）。
+
 ## [1.7.0] - 2026-11-23
 
 ### Added
@@ -597,7 +629,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/blackkcold/snapocr/compare/v1.7.0...v1.7.2
 [1.7.0]: https://github.com/blackkcold/snapocr/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/blackkcold/snapocr/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/blackkcold/snapocr/compare/v1.5.1...v1.6.0

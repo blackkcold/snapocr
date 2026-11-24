@@ -229,9 +229,10 @@ struct RecordingSettlementSupervisorTests {
         defer { harness.stop() }
         let counter = StopCounter()
         let sessionID = UUID()
+        let generation = UUID()
         let (stream, continuation) = AsyncStream<RecordingProgress>.makeStream()
         let ticket = await harness.supervisor.arm(
-            generation: UUID(),
+            generation: generation,
             kind: .audio,
             deadline: .seconds(15),
             readiness: .audioProgress(stream),
@@ -244,6 +245,9 @@ struct RecordingSettlementSupervisorTests {
         continuation.yield(progress(sessionID, capturedSamples: 1))
         let started = await harness.log.waitForMediaStarted()
         #expect(started)
+        // The presentation watchdog only stays quiet when the UI confirms that it
+        // presented the promoted state; an alive main actor always does this.
+        await harness.supervisor.acknowledgePresentation(generation: generation)
         continuation.yield(progress(sessionID, capturedSamples: 2))
 
         // Let the deadline sleep finish; it must not stop anything now.
@@ -263,6 +267,286 @@ struct RecordingSettlementSupervisorTests {
         #expect(callsAfterStop == 1)
         let reasons = await harness.log.settledReasons
         #expect(reasons == [.requested])
+    }
+
+    /// The freeze this supervisor guards against: real media arrived, the readiness
+    /// deadline was therefore cancelled, but the main actor never confirmed that it
+    /// presented the recording state. Capture must be stopped and saved anyway.
+    @Test("A promoted recording without a UI acknowledgement stops as a promotion stall")
+    func promotionStallStopsWithoutAcknowledgement() async {
+        let gate = SleepGate()
+        let harness = SupervisorHarness(sleep: { _ in await gate.wait() })
+        defer { harness.stop() }
+        let counter = StopCounter()
+        let sessionID = UUID()
+        let generation = UUID()
+        let (stream, continuation) = AsyncStream<RecordingProgress>.makeStream()
+        _ = await harness.supervisor.arm(
+            generation: generation,
+            kind: .audio,
+            deadline: .seconds(15),
+            promotionDeadline: .seconds(8),
+            readiness: .audioProgress(stream),
+            stop: {
+                await counter.record()
+                return .audio(audioResult(sessionID, segmentCount: 1))
+            }
+        )
+
+        continuation.yield(progress(sessionID, capturedSamples: 1))
+        let started = await harness.log.waitForMediaStarted()
+        #expect(started)
+
+        // The UI never acknowledges: the app is wedged. The promotion deadline is
+        // the only remaining stop, and it must run the single stop once.
+        await gate.open()
+        let settled = await harness.log.waitForSettled()
+        #expect(settled)
+        let reasons = await harness.log.settledReasons
+        #expect(reasons == [.promotionStalled])
+        let calls = await counter.calls
+        #expect(calls == 1)
+
+        // A late acknowledgement cannot undo the saved settlement or stop twice.
+        await harness.supervisor.acknowledgePresentation(generation: generation)
+        let settledAfter = await harness.log.settledCount
+        #expect(settledAfter == 1)
+        let callsAfter = await counter.calls
+        #expect(callsAfter == 1)
+    }
+
+    /// The presentation watchdog covers both kinds. Screen readiness used to be
+    /// exempt, which left a recording with real frames and a frozen interface with
+    /// no bounded stop at all.
+    @Test("Screen promotion without a UI acknowledgement stops as a promotion stall")
+    func screenPromotionStallStopsWithoutAcknowledgement() async {
+        let harness = SupervisorHarness(sleep: { try await Task.sleep(for: $0) })
+        defer { harness.stop() }
+        let counter = StopCounter()
+        let sessionID = UUID()
+        let generation = UUID()
+        _ = await harness.supervisor.arm(
+            generation: generation,
+            kind: .screen,
+            deadline: .seconds(60),
+            promotionDeadline: .milliseconds(60),
+            readiness: .poll { .ready },
+            stop: {
+                await counter.record()
+                return .screen(ScreenRecordingOutcome(
+                    sessionID: sessionID,
+                    segmentURLs: [],
+                    droppedFrameCount: 0,
+                    failure: nil
+                ))
+            }
+        )
+
+        let started = await harness.log.waitForMediaStarted()
+        #expect(started)
+        // The interface never confirms the promotion.
+        let settled = await harness.log.waitForSettled()
+        #expect(settled)
+        let reasons = await harness.log.settledReasons
+        #expect(reasons == [.promotionStalled])
+        let calls = await counter.calls
+        #expect(calls == 1)
+    }
+
+    /// A healthy screen promotion confirms on the next main-actor turn and must
+    /// not be stopped by the watchdog.
+    @Test("A screen promotion acknowledgement disarms the watchdog")
+    func screenAcknowledgementDisarmsPromotionWatchdog() async {
+        let harness = SupervisorHarness(sleep: { try await Task.sleep(for: $0) })
+        defer { harness.stop() }
+        let counter = StopCounter()
+        let sessionID = UUID()
+        let generation = UUID()
+        _ = await harness.supervisor.arm(
+            generation: generation,
+            kind: .screen,
+            deadline: .seconds(60),
+            promotionDeadline: .milliseconds(400),
+            readiness: .poll { .ready },
+            stop: {
+                await counter.record()
+                return .screen(ScreenRecordingOutcome(
+                    sessionID: sessionID,
+                    segmentURLs: [],
+                    droppedFrameCount: 0,
+                    failure: nil
+                ))
+            }
+        )
+
+        let started = await harness.log.waitForMediaStarted()
+        #expect(started)
+        await harness.supervisor.acknowledgePresentation(generation: generation)
+        try? await Task.sleep(for: .milliseconds(700))
+        let settledCount = await harness.log.settledCount
+        #expect(settledCount == 0)
+        let calls = await counter.calls
+        #expect(calls == 0)
+    }
+
+    /// After the promotion, the screen monitoring loop renews a liveness lease.
+    /// If the main actor stops renewing it, the supervisor must stop and save the
+    /// recording instead of capturing forever behind a frozen interface.
+    @Test("Screen liveness stops when the main actor stops heartbeating")
+    func screenLivenessStopsWhenHeartbeatsStop() async {
+        let harness = SupervisorHarness(sleep: { try await Task.sleep(for: $0) })
+        defer { harness.stop() }
+        let counter = StopCounter()
+        let sessionID = UUID()
+        let generation = UUID()
+        _ = await harness.supervisor.arm(
+            generation: generation,
+            kind: .screen,
+            deadline: .seconds(60),
+            promotionDeadline: .milliseconds(400),
+            livenessDeadline: .milliseconds(200),
+            readiness: .poll { .ready },
+            stop: {
+                await counter.record()
+                return .screen(ScreenRecordingOutcome(
+                    sessionID: sessionID,
+                    segmentURLs: [],
+                    droppedFrameCount: 0,
+                    failure: nil
+                ))
+            }
+        )
+
+        let started = await harness.log.waitForMediaStarted()
+        #expect(started)
+        await harness.supervisor.acknowledgePresentation(generation: generation)
+
+        // Ten beats at 50 ms keep the 200 ms lease alive.
+        for _ in 0..<10 {
+            await harness.supervisor.heartbeat(generation: generation)
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let settledWhileHealthy = await harness.log.settledCount
+        #expect(settledWhileHealthy == 0)
+
+        // Stop beating: the lease expires and the single stop runs.
+        let settled = await harness.log.waitForSettled()
+        #expect(settled)
+        let reasons = await harness.log.settledReasons
+        #expect(reasons == [.promotionStalled])
+        let calls = await counter.calls
+        #expect(calls == 1)
+    }
+
+    /// Audio recordings use the same lease as screen recordings, renewed by the
+    /// progress consumer. A frozen main actor stops the beats and the session is
+    /// stopped and saved from the supervisor.
+    @Test("Audio liveness stops when the progress consumer stops heartbeating")
+    func audioLivenessStopsWhenHeartbeatsStop() async {
+        let harness = SupervisorHarness(sleep: { try await Task.sleep(for: $0) })
+        defer { harness.stop() }
+        let counter = StopCounter()
+        let sessionID = UUID()
+        let generation = UUID()
+        let (stream, continuation) = AsyncStream<RecordingProgress>.makeStream()
+        _ = await harness.supervisor.arm(
+            generation: generation,
+            kind: .audio,
+            deadline: .seconds(60),
+            promotionDeadline: .milliseconds(400),
+            livenessDeadline: .milliseconds(200),
+            readiness: .audioProgress(stream),
+            stop: {
+                await counter.record()
+                return .audio(audioResult(sessionID, segmentCount: 1))
+            }
+        )
+
+        continuation.yield(progress(sessionID, capturedSamples: 1))
+        let started = await harness.log.waitForMediaStarted()
+        #expect(started)
+        await harness.supervisor.acknowledgePresentation(generation: generation)
+
+        // Progress beats at 50 ms keep the 200 ms lease alive.
+        for _ in 0..<10 {
+            await harness.supervisor.heartbeat(generation: generation)
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let settledWhileHealthy = await harness.log.settledCount
+        #expect(settledWhileHealthy == 0)
+
+        let settled = await harness.log.waitForSettled()
+        #expect(settled)
+        let reasons = await harness.log.settledReasons
+        #expect(reasons == [.promotionStalled])
+        let calls = await counter.calls
+        #expect(calls == 1)
+    }
+
+    /// The watchdog is identity-bound: an acknowledgement for another session must
+    /// not silence this one.
+    @Test("An acknowledgement for another generation does not cancel the watchdog")
+    func acknowledgementForAnotherGenerationIsIgnored() async {
+        let gate = SleepGate()
+        let harness = SupervisorHarness(sleep: { _ in await gate.wait() })
+        defer { harness.stop() }
+        let counter = StopCounter()
+        let sessionID = UUID()
+        let (stream, continuation) = AsyncStream<RecordingProgress>.makeStream()
+        _ = await harness.supervisor.arm(
+            generation: UUID(),
+            kind: .audio,
+            deadline: .seconds(15),
+            promotionDeadline: .seconds(8),
+            readiness: .audioProgress(stream),
+            stop: {
+                await counter.record()
+                return .audio(audioResult(sessionID))
+            }
+        )
+
+        continuation.yield(progress(sessionID, capturedSamples: 1))
+        let started = await harness.log.waitForMediaStarted()
+        #expect(started)
+        await harness.supervisor.acknowledgePresentation(generation: UUID())
+        await gate.open()
+        let settled = await harness.log.waitForSettled()
+        #expect(settled)
+        let reasons = await harness.log.settledReasons
+        #expect(reasons == [.promotionStalled])
+    }
+
+    /// Disarming replaces the session; the promotion watchdog must not survive it.
+    @Test("Disarming after readiness cancels the promotion watchdog")
+    func disarmCancelsPromotionWatchdog() async {
+        let gate = SleepGate()
+        let harness = SupervisorHarness(sleep: { _ in await gate.wait() })
+        defer { harness.stop() }
+        let counter = StopCounter()
+        let sessionID = UUID()
+        let (stream, continuation) = AsyncStream<RecordingProgress>.makeStream()
+        let ticket = await harness.supervisor.arm(
+            generation: UUID(),
+            kind: .audio,
+            deadline: .seconds(15),
+            promotionDeadline: .seconds(8),
+            readiness: .audioProgress(stream),
+            stop: {
+                await counter.record()
+                return .audio(audioResult(sessionID))
+            }
+        )
+
+        continuation.yield(progress(sessionID, capturedSamples: 1))
+        let started = await harness.log.waitForMediaStarted()
+        #expect(started)
+        await harness.supervisor.disarm(ticket: ticket)
+        await gate.open()
+        try? await Task.sleep(for: .milliseconds(100))
+        let settled = await harness.log.settledCount
+        #expect(settled == 0)
+        let calls = await counter.calls
+        #expect(calls == 0)
     }
 
     /// S4: progress that only reflects checkpoint coverage (elapsed time, age,

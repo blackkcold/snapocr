@@ -764,7 +764,7 @@
 "Screen recording source tracks are embedded separately in the video." = "화면 녹화의 소스 트랙은 동영상에 개별적으로 포함됩니다.";
 "Screen recording folder" = "화면 녹화 폴더";
 "This folder is used for screen recordings. Existing files are not moved." = "이 폴더는 화면 녹화에 사용됩니다. 기존 파일은 이동되지 않습니다.";
-"Shelf visibility and menu-bar duration apply to every recording." = "스크린샷 선반 표시와 메뉴 막대 경과 시간은 모든 녹음에 적용됩니다.";
+"Shelf visibility applies to every recording." = "스크린샷 선반 표시는 모든 녹음에 적용됩니다.";
 "Panel appearance is shared by audio and screen recordings." = "컨트롤 패널 모양은 오디오 녹음과 화면 녹화에서 공유됩니다.";
 "Panel opacity and hover restore are unavailable while the panel is hidden." = "패널이 숨겨져 있는 동안에는 불투명도와 호버 복원을 변경할 수 없습니다.";
 "Segmentation & Safety" = "분할 및 안전";
@@ -773,7 +773,6 @@
 "Crash recovery" = "충돌 복구";
 "Always On" = "항상 켜짐";
 "Hide Screenshot Shelf while recording" = "녹화 중 스크린샷 선반 숨기기";
-"Show recording duration in the menu bar" = "메뉴 막대에 녹화 시간 표시";
 "Estimated screen recording size per minute: %@" = "화면 녹화 분당 예상 크기: %@";
 "Estimated audio recording size per minute: %@" = "오디오 녹음 분당 예상 크기: %@";
 "Stop Audio Recording (%@)" = "오디오 녹음 중지 (%@)";
@@ -893,6 +892,10 @@
 "Screen recording saved" = "화면 녹화가 저장되었습니다";
 "Saving recording before quitting" = "종료하기 전에 녹음을 저장하는 중";
 "No audio samples were received. The recording was stopped." = "오디오 샘플을 받지 못했습니다. 녹음이 중지되었습니다.";
+"The recording stopped because the interface stopped responding. Audio captured up to that point was saved." = "인터페이스가 응답하지 않아 녹음이 중지되었습니다. 그때까지의 오디오는 저장되었습니다.";
+"The recording stopped because the interface stopped responding before any audio could be saved." = "인터페이스가 응답하지 않아 녹음이 중지되었습니다. 저장된 오디오가 없습니다.";
+"The screen recording stopped because the interface stopped responding. The video was saved: %@" = "인터페이스가 응답하지 않아 화면 녹화가 중지되었습니다. 그때까지의 영상은 저장되었습니다: %@";
+"The screen recording stopped because the interface stopped responding, and the video could not be finalized." = "인터페이스가 응답하지 않아 화면 녹화가 중지되었습니다. 영상을 마무리하지 못했습니다.";
 "No video frames were received. The recording was stopped." = "비디오 프레임을 받지 못했습니다. 녹화가 중지되었습니다.";
 "Waiting for the first audio sample…" = "첫 오디오 샘플을 기다리는 중…";
 "Waiting for the first frame to be written…" = "첫 프레임이 기록되기를 기다리는 중…";
