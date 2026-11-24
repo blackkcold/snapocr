@@ -205,7 +205,7 @@ public struct RecordingSpaceBudget: Sendable {
             RecordingWriteRoot(
                 url: recordingRoot,
                 requiredBytes: Self.minimumStartRequirement(for: configuration)
-            )
+            ),
         ]
         self.expectedVolumeUUID = expectedVolumeUUID
     }

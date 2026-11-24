@@ -597,8 +597,7 @@ struct RecordingExportView: View {
             Spacer(minLength: 4)
             Button("Export") {
                 Task {
-                    do { _ = try await viewModel.export() }
-                    catch { }
+                    do { _ = try await viewModel.export() } catch { }
                 }
             }
             .keyboardShortcut(.return, modifiers: .command)

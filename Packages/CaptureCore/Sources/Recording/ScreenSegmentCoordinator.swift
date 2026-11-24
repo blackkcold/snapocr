@@ -97,7 +97,7 @@ public enum ScreenSegmentCoordinatorError: Error, Equatable, Sendable {
 }
 
 /// Coordinates one screen stream, durable video chunks, and a stable audio sink facade.
-public actor ScreenSegmentCoordinator: AudioCheckpointSink, Sendable {
+public actor ScreenSegmentCoordinator: AudioCheckpointSink {
     /// Ledger identity for this screen session.
     public nonisolated let sessionID: UUID
 

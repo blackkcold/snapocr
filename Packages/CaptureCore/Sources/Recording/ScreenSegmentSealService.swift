@@ -79,8 +79,7 @@ public actor ScreenSegmentSealService {
         let firstVideo = try await videoTrack(for: ordered[0].videoURL)
         logger.info("screen.seal chunks=\(ordered.count) videoTrackReady")
         let writer: AVAssetWriter
-        do { writer = try AVAssetWriter(outputURL: transaction.partialURL, fileType: .mp4) }
-        catch { throw ScreenSegmentSealError.writerFailed }
+        do { writer = try AVAssetWriter(outputURL: transaction.partialURL, fileType: .mp4) } catch { throw ScreenSegmentSealError.writerFailed }
 
         let videoInput = AVAssetWriterInput(
             mediaType: .video,
@@ -197,8 +196,7 @@ public actor ScreenSegmentSealService {
         // created from: a track from another instance makes `canAdd` fail.
         let asset = AVURLAsset(url: url)
         let tracks: [AVAssetTrack]
-        do { tracks = try await asset.loadTracks(withMediaType: .video) }
-        catch {
+        do { tracks = try await asset.loadTracks(withMediaType: .video) } catch {
             logger.error("screen.seal loadTracks failed: \(String(describing: error))")
             throw ScreenSegmentSealError.videoTrackUnavailable
         }
@@ -207,8 +205,7 @@ public actor ScreenSegmentSealService {
             throw ScreenSegmentSealError.videoTrackUnavailable
         }
         let descriptions: [CMFormatDescription]
-        do { descriptions = try await track.load(.formatDescriptions) }
-        catch {
+        do { descriptions = try await track.load(.formatDescriptions) } catch {
             logger.error("screen.seal format descriptions failed: \(String(describing: error))")
             throw ScreenSegmentSealError.videoTrackUnavailable
         }
@@ -230,8 +227,7 @@ public actor ScreenSegmentSealService {
     private func firstVideoMediaOrigin(for url: URL) async throws -> CMTime {
         let source = try await videoTrack(for: url)
         let reader: AVAssetReader
-        do { reader = try AVAssetReader(asset: source.asset) }
-        catch { throw ScreenSegmentSealError.videoTrackUnavailable }
+        do { reader = try AVAssetReader(asset: source.asset) } catch { throw ScreenSegmentSealError.videoTrackUnavailable }
         let output = AVAssetReaderTrackOutput(track: source.track, outputSettings: nil)
         guard reader.canAdd(output) else { throw ScreenSegmentSealError.videoTrackUnavailable }
         reader.add(output)
@@ -282,8 +278,7 @@ public actor ScreenSegmentSealService {
         let source = try await videoTrack(for: url)
         logger.info("screen.seal append chunk track ready")
         let reader: AVAssetReader
-        do { reader = try AVAssetReader(asset: source.asset) }
-        catch {
+        do { reader = try AVAssetReader(asset: source.asset) } catch {
             logger.error("screen.seal reader init failed: \(String(describing: error))")
             throw ScreenSegmentSealError.videoTrackUnavailable
         }
@@ -383,8 +378,7 @@ public actor ScreenSegmentSealService {
         mediaOrigin: CMTime
     ) async throws {
         let file: AVAudioFile
-        do { file = try AVAudioFile(forReading: url) }
-        catch { throw ScreenSegmentSealError.audioReadFailed }
+        do { file = try AVAudioFile(forReading: url) } catch { throw ScreenSegmentSealError.audioReadFailed }
         let format = file.processingFormat
         guard Int(format.sampleRate.rounded()) == 48_000,
               format.commonFormat == .pcmFormatFloat32,
@@ -400,8 +394,7 @@ public actor ScreenSegmentSealService {
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)) else {
                 throw ScreenSegmentSealError.audioReadFailed
             }
-            do { try file.read(into: buffer, frameCount: AVAudioFrameCount(count)) }
-            catch { throw ScreenSegmentSealError.audioReadFailed }
+            do { try file.read(into: buffer, frameCount: AVAudioFrameCount(count)) } catch { throw ScreenSegmentSealError.audioReadFailed }
             guard Int(buffer.frameLength) == count, let channelData = buffer.floatChannelData else {
                 throw ScreenSegmentSealError.audioReadFailed
             }
@@ -455,8 +448,7 @@ public actor ScreenSegmentSealService {
 
     private func audioFormat(at url: URL) throws -> (sampleRate: Int, channelCount: Int) {
         let file: AVAudioFile
-        do { file = try AVAudioFile(forReading: url) }
-        catch { throw ScreenSegmentSealError.audioReadFailed }
+        do { file = try AVAudioFile(forReading: url) } catch { throw ScreenSegmentSealError.audioReadFailed }
         let format = file.processingFormat
         guard Int(format.sampleRate.rounded()) == 48_000,
               format.commonFormat == .pcmFormatFloat32,

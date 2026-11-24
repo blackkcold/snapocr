@@ -369,7 +369,7 @@ private struct PendingTick {
 }
 
 /// Bridges T1's append/commit sink to T7's segmented coordinator and T9's journal.
-public actor LedgerCheckpointSink: AudioCheckpointSink, Sendable {
+public actor LedgerCheckpointSink: AudioCheckpointSink {
     private let coordinator: SegmentedWriterCoordinator
     private let ledger: RecordingSessionLedger
     private let spaceGate: (any RecordingSpaceGating)?
@@ -751,7 +751,7 @@ private actor LazyMicrophoneSource: AudioFrameSource, AudioSourceReconfiguration
         let capture = AVAudioEngineMicrophoneCaptureEngine()
         guard let format = capture.currentFormat,
               format.commonFormat == .pcmFormatFloat32,
-              (format.channelCount == 1 || format.channelCount == 2),
+              format.channelCount == 1 || format.channelCount == 2,
               format.sampleRate > 0
         else { throw AudioSourceError.invalidFormat }
         let sourceFormat = AudioSourceFormat(

@@ -752,7 +752,7 @@ public actor ScreenRecordingSessionCoordinator {
             let capture = AVAudioEngineMicrophoneCaptureEngine()
             guard let format = capture.currentFormat,
                   format.commonFormat == .pcmFormatFloat32,
-                  (format.channelCount == 1 || format.channelCount == 2),
+                  format.channelCount == 1 || format.channelCount == 2,
                   format.sampleRate.isFinite,
                   format.sampleRate > 0 else {
                 throw AudioSourceError.invalidFormat

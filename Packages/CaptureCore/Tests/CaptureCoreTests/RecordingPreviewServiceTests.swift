@@ -105,7 +105,7 @@ struct RecordingPreviewServiceTests {
             tracks: [RecordingTrackCoverage(
                 role: "mixed", sampleRate: 48_000, channelCount: 1, wasActive: true,
                 firstSample: 0, lastSample: 2, missingRanges: [], writerSynthesizedSilenceFrames: 0
-            )]
+            ),]
         )
     }
 

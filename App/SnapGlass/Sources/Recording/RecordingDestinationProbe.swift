@@ -133,7 +133,7 @@ struct RecordingDestinationProbe: Sendable {
                     probedDirectory: probedDirectory,
                     volume: identity
                 )
-            case .locationUnavailable, .creationFailed(_):
+            case .locationUnavailable, .creationFailed:
                 return .locationUnavailable
             case .capacityUnreadable, .located:
                 return .capacityUnreadable
@@ -171,7 +171,7 @@ struct RecordingDestinationProbe: Sendable {
                 throw isCustom
                     ? RecordingDestinationError.customDirectoryUnavailable
                     : RecordingDestinationError.defaultDirectoryUnavailable
-            case .capacityUnreadable, .ready(_, _, _), .creationFailed(_):
+            case .capacityUnreadable, .ready, .creationFailed:
                 throw isCustom
                     ? RecordingDestinationError.customDirectoryUnavailable
                     : RecordingDestinationError.defaultDirectoryUnavailable
@@ -206,7 +206,7 @@ struct RecordingDestinationProbe: Sendable {
                     probedDirectory: probedDirectory,
                     volume: identity
                 )
-            case .locationUnavailable, .creationFailed(_):
+            case .locationUnavailable, .creationFailed:
                 return .locationUnavailable
             case .capacityUnreadable, .located:
                 return .capacityUnreadable

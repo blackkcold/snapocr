@@ -8,8 +8,7 @@ public enum RecordingPortableMetadata {
         guard url.pathExtension.lowercased() == "m4a",
               RecordingLedgerFileSystem.isRegularFile(url)
         else { throw RecordingSealError.metadataInvalid }
-        do { try RecordingLedgerFileSystem.validateNoSymlink(url) }
-        catch { throw RecordingSealError.metadataInvalid }
+        do { try RecordingLedgerFileSystem.validateNoSymlink(url) } catch { throw RecordingSealError.metadataInvalid }
 
         let directory = url.deletingLastPathComponent()
         let temporary = directory.appendingPathComponent(".SnapGlass-\(UUID().uuidString)-portable.m4a")

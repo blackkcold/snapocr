@@ -341,8 +341,7 @@ private enum RecordingExportWorker {
                 metadata = [item]
             case .publishedMedia:
                 let record: SegmentPortableRecord
-                do { record = try await SegmentPortableMetadata.read(from: url) }
-                catch { throw ExportError.missingSource }
+                do { record = try await SegmentPortableMetadata.read(from: url) } catch { throw ExportError.missingSource }
                 let named = record.tracks.filter { URL(fileURLWithPath: $0.fileName).lastPathComponent == url.lastPathComponent }
                 let tracks = named.isEmpty && record.tracks.count == 1 ? record.tracks : named
                 guard !tracks.isEmpty else { throw ExportError.missingSource }
@@ -411,7 +410,7 @@ private enum RecordingExportWorker {
                 range: SampleRange(startSample: record.startSample, sampleCount: record.sampleCount),
                 sampleRate: track.sampleRate, channelCount: track.channelCount,
                 primingFrames: 0, remainderFrames: 0
-            )]
+            ),]
         }
         throw ExportError.missingSource
     }
@@ -831,8 +830,7 @@ private final class ExportAssetWriter {
             throw ExportError.passthroughUnsupported
         }
         let writer: AVAssetWriter
-        do { writer = try AVAssetWriter(outputURL: url, fileType: type) }
-        catch { throw ExportError.publishFailed(stagingURL: url) }
+        do { writer = try AVAssetWriter(outputURL: url, fileType: type) } catch { throw ExportError.publishFailed(stagingURL: url) }
         var inputs: [AVAssetWriterInput] = []
         var videoInput: AVAssetWriterInput?
         if let sourceVideo {

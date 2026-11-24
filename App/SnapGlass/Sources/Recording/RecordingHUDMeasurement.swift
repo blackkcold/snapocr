@@ -54,16 +54,6 @@ struct RecordingHUDLayoutSignature: Hashable, Sendable {
     let content: Content
     /// The language the visible text renders in.
     let language: String
-
-    /// Creates one layout signature.
-    ///
-    /// - Parameters:
-    ///   - content: The state reduced to its size-changing fields.
-    ///   - language: The identifier of the language the text renders in.
-    init(content: Content, language: String) {
-        self.content = content
-        self.language = language
-    }
 }
 
 extension RecordingHUDLayoutSignature {
