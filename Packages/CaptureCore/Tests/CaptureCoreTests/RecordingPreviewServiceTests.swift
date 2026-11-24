@@ -109,12 +109,24 @@ struct RecordingPreviewServiceTests {
         )
     }
 
-    private func makePaths() throws -> (root: URL, sessionRoot: URL, indexURL: URL, sessionID: UUID) {
+    private struct PreviewPaths {
+        let root: URL
+        let sessionRoot: URL
+        let indexURL: URL
+        let sessionID: UUID
+    }
+
+    private func makePaths() throws -> PreviewPaths {
         let root = TestTemporaryDirectory.root("Task09-Preview")
         let sessionID = UUID()
         let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
         try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
-        return (root, sessionRoot, root.appendingPathComponent("recording-index.json"), sessionID)
+        return PreviewPaths(
+            root: root,
+            sessionRoot: sessionRoot,
+            indexURL: root.appendingPathComponent("recording-index.json"),
+            sessionID: sessionID
+        )
     }
 }

@@ -69,12 +69,24 @@ struct RecordingSessionLedgerTests {
         }
     }
 
-    private func makePaths() throws -> (root: URL, sessionRoot: URL, indexURL: URL, sessionID: UUID) {
+    private struct LedgerPaths {
+        let root: URL
+        let sessionRoot: URL
+        let indexURL: URL
+        let sessionID: UUID
+    }
+
+    private func makePaths() throws -> LedgerPaths {
         let root = TestTemporaryDirectory.root("Task09-Ledger")
         let sessionID = UUID()
         let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
         try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
-        return (root, sessionRoot, root.appendingPathComponent("recording-index.json"), sessionID)
+        return LedgerPaths(
+            root: root,
+            sessionRoot: sessionRoot,
+            indexURL: root.appendingPathComponent("recording-index.json"),
+            sessionID: sessionID
+        )
     }
 }

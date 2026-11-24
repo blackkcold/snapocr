@@ -15,64 +15,15 @@ struct RecordingReadinessTruthTests {
     /// Ledger coverage is 5 s of writer-synthesized silence; the engine reports
     /// zero real captured frames until the test explicitly releases real frames.
     @Test func checkpointCoverageNeverBecomesCapturedSamples() async throws {
-        let root = TestTemporaryDirectory.root("S4-ReadinessTruth")
-        defer { try? FileManager.default.removeItem(at: root) }
-        let sessionID = UUID()
-        let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
-            .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
-        let outputRoot = root.appendingPathComponent("output", isDirectory: true)
-        try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
-
-        let indexURL = root.appendingPathComponent("recording-index.json")
-        let ledger = try RecordingSessionLedger(
-            sessionRoot: sessionRoot, indexURL: indexURL, sessionID: sessionID
-        )
-        let configuration = AudioRecordingConfiguration(
-            kind: .audio, mode: .system, layout: .mixed, sampleRate: 48_000,
-            channelCountByRole: [.mixed: 1], bitRate: 96_000
-        )
-        let coordinator = try SegmentedWriterCoordinator(plan: AudioSegmentPlan()) { boundary in
-            let directory = sessionRoot.appendingPathComponent(
-                String(format: "segment-%08d", boundary.index), isDirectory: true
-            )
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-            return try RecordingCheckpointWriter(
-                directory: directory,
-                sessionRoot: sessionRoot,
-                segment: boundary,
-                sampleRate: 48_000,
-                roles: [.mixed]
-            )
-        }
-        let sealService = RecordingSealService(publicationHooks: [LedgerPublicationHook(ledger: ledger)])
-
-        let syntheticFrames = 240_000  // 5 s of writer-synthesized silence
-        let realCapturedSamples: Int64 = 4_800
-        let engine = CheckpointCoverageEngine(
-            sessionID: sessionID,
-            checkpointFrames: syntheticFrames,
-            realCapturedSamples: realCapturedSamples
-        )
-        let pipeline = try RecordingSessionPipeline(
-            roots: RecordingPipelineRoots(
-                sessionRoot: root, indexURL: indexURL, outputDirectory: outputRoot
-            ),
-            ledger: ledger, coordinator: coordinator, sealService: sealService,
-            engineFactory: { _, sink, _ in engine.attach(sink: sink) }
-        )
-
-        let stream = pipeline.makeProgressStream()
-        let collector = ProgressCollector()
-        let consumer = Task {
-            for await value in stream {
-                await collector.append(value)
-            }
-        }
-        defer {
-            consumer.cancel()
-            engine.stopEmitting()
-        }
+        let harness = try ReadinessHarness()
+        defer { harness.tearDown() }
+        let engine = harness.engine
+        let pipeline = harness.pipeline
+        let collector = harness.collector
+        let ledger = harness.ledger
+        let configuration = harness.configuration
+        let syntheticFrames = harness.syntheticFrames
+        let realCapturedSamples = harness.realCapturedSamples
 
         try await pipeline.start(configuration)
 
@@ -126,6 +77,90 @@ struct RecordingReadinessTruthTests {
         #expect(latest.elapsedSeconds >= 4.5)
 
         _ = await pipeline.stop()
+    }
+}
+
+private struct ReadinessHarness {
+    let root: URL
+    let engine: CheckpointCoverageEngine
+    let pipeline: RecordingSessionPipeline
+    let collector: ProgressCollector
+    let ledger: RecordingSessionLedger
+    let configuration: AudioRecordingConfiguration
+    let syntheticFrames: Int
+    let realCapturedSamples: Int64
+    private let consumer: Task<Void, Never>
+
+    init() throws {
+        let root = TestTemporaryDirectory.root("S4-ReadinessTruth")
+        let sessionID = UUID()
+        let sessionRoot = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
+            .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
+        let outputRoot = root.appendingPathComponent("output", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
+
+        let indexURL = root.appendingPathComponent("recording-index.json")
+        let ledger = try RecordingSessionLedger(
+            sessionRoot: sessionRoot, indexURL: indexURL, sessionID: sessionID
+        )
+        let configuration = AudioRecordingConfiguration(
+            kind: .audio, mode: .system, layout: .mixed, sampleRate: 48_000,
+            channelCountByRole: [.mixed: 1], bitRate: 96_000
+        )
+        let coordinator = try SegmentedWriterCoordinator(plan: AudioSegmentPlan()) { boundary in
+            let directory = sessionRoot.appendingPathComponent(
+                String(format: "segment-%08d", boundary.index), isDirectory: true
+            )
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+            return try RecordingCheckpointWriter(
+                directory: directory,
+                sessionRoot: sessionRoot,
+                segment: boundary,
+                sampleRate: 48_000,
+                roles: [.mixed]
+            )
+        }
+        let sealService = RecordingSealService(publicationHooks: [LedgerPublicationHook(ledger: ledger)])
+
+        let syntheticFrames = 240_000  // 5 s of writer-synthesized silence
+        let realCapturedSamples: Int64 = 4_800
+        let engine = CheckpointCoverageEngine(
+            sessionID: sessionID,
+            checkpointFrames: syntheticFrames,
+            realCapturedSamples: realCapturedSamples
+        )
+        let pipeline = try RecordingSessionPipeline(
+            roots: RecordingPipelineRoots(
+                sessionRoot: root, indexURL: indexURL, outputDirectory: outputRoot
+            ),
+            ledger: ledger, coordinator: coordinator, sealService: sealService,
+            engineFactory: { _, sink, _ in engine.attach(sink: sink) }
+        )
+
+        let stream = pipeline.makeProgressStream()
+        let collector = ProgressCollector()
+        let consumer = Task {
+            for await value in stream {
+                await collector.append(value)
+            }
+        }
+
+        self.root = root
+        self.engine = engine
+        self.pipeline = pipeline
+        self.collector = collector
+        self.ledger = ledger
+        self.configuration = configuration
+        self.syntheticFrames = syntheticFrames
+        self.realCapturedSamples = realCapturedSamples
+        self.consumer = consumer
+    }
+
+    func tearDown() {
+        consumer.cancel()
+        engine.stopEmitting()
+        try? FileManager.default.removeItem(at: root)
     }
 }
 
