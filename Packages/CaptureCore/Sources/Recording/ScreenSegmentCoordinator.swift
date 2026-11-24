@@ -104,7 +104,7 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
     let planner: VideoSegmentPlanner
     private let videoWriterFactory: @Sendable (ScreenBoundary) throws -> ScreenVideoWriterBridge
     private let audioSinkFactory: @Sendable (ScreenBoundary) throws -> any SegmentCheckpointSink
-    private let ledger: RecordingSessionLedger
+    let ledger: RecordingSessionLedger
     private let seal: ScreenSegmentSealService
     let hostTicksPerSecond = AudioSourceTimestampMapper.nativeHostTicksPerSecond()
 
@@ -170,35 +170,12 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
     /// Nothing in this type moves or deletes these files.
     public nonisolated var materialRoot: URL { ledger.sessionRoot }
 
-    /// Number of frames dropped by completed and currently active video writers.
-    public func droppedVideoFrameCount() -> Int64 {
-        let active = currentVideoWriter?.droppedFrameCount ?? 0
-        let (total, overflow) = completedVideoDropCount.addingReportingOverflow(active)
-        return overflow ? Int64.max : total
-    }
-
     /// Whether the active video writer has accepted at least one frame.
     ///
     /// This is set only after `AVAssetWriterInput.append` accepts a sample. Queue
     /// acceptance in `ScreenRecordingEngine` is not enough: frames can still be
     /// rejected or dropped before they reach the writer.
     public private(set) var hasWrittenVideoFrame = false
-
-    /// Privacy-safe writer counters for the whole session.
-    ///
-    /// Combines every finished chunk with the live one, so a failure that closed a
-    /// chunk is still visible while the next chunk writes.
-    public func writerDiagnostics() -> ScreenWriterDiagnostics {
-        completedWriterDiagnostics.combined(with: currentVideoWriter?.diagnostics ?? .idle)
-    }
-
-    /// Published screen MP4 URLs in segment order, read from the durable ledger.
-    public func publishedVideoURLs() async throws -> [URL] {
-        try await ledger.snapshot().segments
-            .filter { $0.state == .published }
-            .sorted { $0.index < $1.index }
-            .compactMap(\.videoURL)
-    }
 
     /// Supplies immutable destination and metadata settings before capture starts.
     public func configureSealContext(_ context: RecordingSealContext) {
