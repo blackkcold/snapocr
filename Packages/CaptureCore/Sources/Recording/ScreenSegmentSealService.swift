@@ -79,7 +79,11 @@ public actor ScreenSegmentSealService {
         let firstVideo = try await videoTrack(for: ordered[0].videoURL)
         logger.info("screen.seal chunks=\(ordered.count) videoTrackReady")
         let writer: AVAssetWriter
-        do { writer = try AVAssetWriter(outputURL: transaction.partialURL, fileType: .mp4) } catch { throw ScreenSegmentSealError.writerFailed }
+        do {
+            writer = try AVAssetWriter(outputURL: transaction.partialURL, fileType: .mp4)
+        } catch {
+            throw ScreenSegmentSealError.writerFailed
+        }
 
         let videoInput = AVAssetWriterInput(
             mediaType: .video,
@@ -227,7 +231,11 @@ public actor ScreenSegmentSealService {
     private func firstVideoMediaOrigin(for url: URL) async throws -> CMTime {
         let source = try await videoTrack(for: url)
         let reader: AVAssetReader
-        do { reader = try AVAssetReader(asset: source.asset) } catch { throw ScreenSegmentSealError.videoTrackUnavailable }
+        do {
+            reader = try AVAssetReader(asset: source.asset)
+        } catch {
+            throw ScreenSegmentSealError.videoTrackUnavailable
+        }
         let output = AVAssetReaderTrackOutput(track: source.track, outputSettings: nil)
         guard reader.canAdd(output) else { throw ScreenSegmentSealError.videoTrackUnavailable }
         reader.add(output)
@@ -394,7 +402,11 @@ public actor ScreenSegmentSealService {
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)) else {
                 throw ScreenSegmentSealError.audioReadFailed
             }
-            do { try file.read(into: buffer, frameCount: AVAudioFrameCount(count)) } catch { throw ScreenSegmentSealError.audioReadFailed }
+            do {
+                try file.read(into: buffer, frameCount: AVAudioFrameCount(count))
+            } catch {
+                throw ScreenSegmentSealError.audioReadFailed
+            }
             guard Int(buffer.frameLength) == count, let channelData = buffer.floatChannelData else {
                 throw ScreenSegmentSealError.audioReadFailed
             }
@@ -467,10 +479,12 @@ public actor ScreenSegmentSealService {
                   let record = try? RecordingCheckpointSidecar.decode(data, path: candidate.path),
                   record.tracks.contains(where: { $0.fileName == url.lastPathComponent })
             else { continue }
-            let roleURLs = Dictionary(uniqueKeysWithValues: record.tracks.compactMap { track -> (RecordingTrackRole, URL)? in
-                guard let role = Self.role(for: track.role) else { return nil }
-                return (role, directory.appendingPathComponent(track.fileName))
-            })
+            let roleURLs = Dictionary(
+                uniqueKeysWithValues: record.tracks.compactMap { track -> (RecordingTrackRole, URL)? in
+                    guard let role = Self.role(for: track.role) else { return nil }
+                    return (role, directory.appendingPathComponent(track.fileName))
+                }
+            )
             return CheckpointCommit(
                 checkpointID: record.checkpointID,
                 segmentIndex: record.segmentIndex,

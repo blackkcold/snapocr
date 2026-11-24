@@ -338,14 +338,17 @@ extension RecordingSessionController {
         switch phase {
         case .startUnconfirmed:
             reason = AppLocalization.string(
+                // swiftlint:disable:next line_length
                 "SnapGlass has not confirmed what happened to the capture it tried to start, so recording stays disabled. If this does not clear, quit SnapGlass and open it again. Anything already written stays in your recordings folder."
             )
         case .stopUnconfirmed:
             reason = AppLocalization.string(
+                // swiftlint:disable:next line_length
                 "SnapGlass has asked the capture stream to stop and has not confirmed it yet. Recording stays disabled until it does. If this does not clear, quit SnapGlass and open it again. Written files are kept."
             )
         case .stopRejected:
             reason = AppLocalization.string(
+                // swiftlint:disable:next line_length
                 "The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one."
             )
         }

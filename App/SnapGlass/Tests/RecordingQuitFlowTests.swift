@@ -313,35 +313,35 @@ struct RecordingDestinationRecheckTests {
 
     @Test("A success after A is cancelled and B starts never starts A or finishes B")
     func staleSuccessDoesNotAffectB() async {
-        let a = RecordingRequestIdentity(kind: .screen)
-        let b = RecordingRequestIdentity(kind: .screen)
-        let harness = RecheckHarness(current: a)
+        let requestA = RecordingRequestIdentity(kind: .screen)
+        let requestB = RecordingRequestIdentity(kind: .screen)
+        let harness = RecheckHarness(current: requestA)
         let aGate = SuspendedDestinationVerification()
         let bGate = SuspendedDestinationVerification()
 
         let aRecheck = RecordingDestinationRecheck(
-            request: a,
+            request: requestA,
             verify: { try await aGate.verify() },
             isCurrent: { harness.isCurrent($0) },
-            onVerified: { harness.started.append(a) },
+            onVerified: { harness.started.append(requestA) },
             onFailure: { _ in
-                harness.reportedFailures.append(a)
-                harness.finished.append(a)
+                harness.reportedFailures.append(requestA)
+                harness.finished.append(requestA)
             }
         )
         let aTask = Task { await aRecheck.run() }
         await aGate.waitUntilStarted()
 
         // A is cancelled and B starts while A's recheck is still suspended.
-        harness.current = b
+        harness.current = requestB
         let bRecheck = RecordingDestinationRecheck(
-            request: b,
+            request: requestB,
             verify: { try await bGate.verify() },
             isCurrent: { harness.isCurrent($0) },
-            onVerified: { harness.started.append(b) },
+            onVerified: { harness.started.append(requestB) },
             onFailure: { _ in
-                harness.reportedFailures.append(b)
-                harness.finished.append(b)
+                harness.reportedFailures.append(requestB)
+                harness.finished.append(requestB)
             }
         )
         let bTask = Task { await bRecheck.run() }
@@ -352,45 +352,45 @@ struct RecordingDestinationRecheckTests {
         #expect(harness.started.isEmpty)
         #expect(harness.reportedFailures.isEmpty)
         #expect(harness.finished.isEmpty)
-        #expect(harness.current == b)
+        #expect(harness.current == requestB)
 
         bGate.succeed()
         await bTask.value
-        #expect(harness.started == [b])
+        #expect(harness.started == [requestB])
         #expect(harness.reportedFailures.isEmpty)
         #expect(harness.finished.isEmpty)
     }
 
     @Test("A failure after A is cancelled and B starts never reports or finishes B")
     func staleFailureDoesNotAffectB() async {
-        let a = RecordingRequestIdentity(kind: .screen)
-        let b = RecordingRequestIdentity(kind: .screen)
-        let harness = RecheckHarness(current: a)
+        let requestA = RecordingRequestIdentity(kind: .screen)
+        let requestB = RecordingRequestIdentity(kind: .screen)
+        let harness = RecheckHarness(current: requestA)
         let aGate = SuspendedDestinationVerification()
         let bGate = SuspendedDestinationVerification()
 
         let aRecheck = RecordingDestinationRecheck(
-            request: a,
+            request: requestA,
             verify: { try await aGate.verify() },
             isCurrent: { harness.isCurrent($0) },
-            onVerified: { harness.started.append(a) },
+            onVerified: { harness.started.append(requestA) },
             onFailure: { _ in
-                harness.reportedFailures.append(a)
-                harness.finished.append(a)
+                harness.reportedFailures.append(requestA)
+                harness.finished.append(requestA)
             }
         )
         let aTask = Task { await aRecheck.run() }
         await aGate.waitUntilStarted()
 
-        harness.current = b
+        harness.current = requestB
         let bRecheck = RecordingDestinationRecheck(
-            request: b,
+            request: requestB,
             verify: { try await bGate.verify() },
             isCurrent: { harness.isCurrent($0) },
-            onVerified: { harness.started.append(b) },
+            onVerified: { harness.started.append(requestB) },
             onFailure: { _ in
-                harness.reportedFailures.append(b)
-                harness.finished.append(b)
+                harness.reportedFailures.append(requestB)
+                harness.finished.append(requestB)
             }
         )
         let bTask = Task { await bRecheck.run() }
@@ -401,29 +401,29 @@ struct RecordingDestinationRecheckTests {
         #expect(harness.started.isEmpty)
         #expect(harness.reportedFailures.isEmpty)
         #expect(harness.finished.isEmpty)
-        #expect(harness.current == b)
+        #expect(harness.current == requestB)
 
         bGate.succeed()
         await bTask.value
-        #expect(harness.started == [b])
+        #expect(harness.started == [requestB])
         #expect(harness.reportedFailures.isEmpty)
         #expect(harness.finished.isEmpty)
     }
 
     @Test("The current request receives its success")
     func currentSuccessStarts() async {
-        let a = RecordingRequestIdentity(kind: .screen)
-        let harness = RecheckHarness(current: a)
+        let requestA = RecordingRequestIdentity(kind: .screen)
+        let harness = RecheckHarness(current: requestA)
         let gate = SuspendedDestinationVerification()
 
         let recheck = RecordingDestinationRecheck(
-            request: a,
+            request: requestA,
             verify: { try await gate.verify() },
             isCurrent: { harness.isCurrent($0) },
-            onVerified: { harness.started.append(a) },
+            onVerified: { harness.started.append(requestA) },
             onFailure: { _ in
-                harness.reportedFailures.append(a)
-                harness.finished.append(a)
+                harness.reportedFailures.append(requestA)
+                harness.finished.append(requestA)
             }
         )
         let task = Task { await recheck.run() }
@@ -431,25 +431,25 @@ struct RecordingDestinationRecheckTests {
         gate.succeed()
         await task.value
 
-        #expect(harness.started == [a])
+        #expect(harness.started == [requestA])
         #expect(harness.reportedFailures.isEmpty)
         #expect(harness.finished.isEmpty)
     }
 
     @Test("The current request receives its failure")
     func currentFailureReports() async {
-        let a = RecordingRequestIdentity(kind: .screen)
-        let harness = RecheckHarness(current: a)
+        let requestA = RecordingRequestIdentity(kind: .screen)
+        let harness = RecheckHarness(current: requestA)
         let gate = SuspendedDestinationVerification()
 
         let recheck = RecordingDestinationRecheck(
-            request: a,
+            request: requestA,
             verify: { try await gate.verify() },
             isCurrent: { harness.isCurrent($0) },
-            onVerified: { harness.started.append(a) },
+            onVerified: { harness.started.append(requestA) },
             onFailure: { _ in
-                harness.reportedFailures.append(a)
-                harness.finished.append(a)
+                harness.reportedFailures.append(requestA)
+                harness.finished.append(requestA)
             }
         )
         let task = Task { await recheck.run() }
@@ -458,8 +458,8 @@ struct RecordingDestinationRecheckTests {
         await task.value
 
         #expect(harness.started.isEmpty)
-        #expect(harness.reportedFailures == [a])
-        #expect(harness.finished == [a])
+        #expect(harness.reportedFailures == [requestA])
+        #expect(harness.finished == [requestA])
     }
 }
 

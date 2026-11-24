@@ -160,25 +160,25 @@ enum RecordingLedgerFileSystem {
     }
 
     static func syncFile(_ url: URL) throws {
-        let fd = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+        let fileDescriptor = url.withUnsafeFileSystemRepresentation { path -> Int32 in
             guard let path else { return -1 }
             return Darwin.open(path, O_RDONLY | O_NOFOLLOW)
         }
-        guard fd >= 0 else { throw RecordingLedgerFileError.ioFailure }
-        defer { _ = Darwin.close(fd) }
-        if Darwin.fcntl(fd, F_FULLFSYNC) == -1, Darwin.fsync(fd) != 0 {
+        guard fileDescriptor >= 0 else { throw RecordingLedgerFileError.ioFailure }
+        defer { _ = Darwin.close(fileDescriptor) }
+        if Darwin.fcntl(fileDescriptor, F_FULLFSYNC) == -1, Darwin.fsync(fileDescriptor) != 0 {
             throw RecordingLedgerFileError.ioFailure
         }
     }
 
     static func syncDirectory(_ url: URL) throws {
-        let fd = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+        let fileDescriptor = url.withUnsafeFileSystemRepresentation { path -> Int32 in
             guard let path else { return -1 }
             return Darwin.open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
         }
-        guard fd >= 0 else { throw RecordingLedgerFileError.ioFailure }
-        defer { _ = Darwin.close(fd) }
-        guard Darwin.fsync(fd) == 0 else { throw RecordingLedgerFileError.ioFailure }
+        guard fileDescriptor >= 0 else { throw RecordingLedgerFileError.ioFailure }
+        defer { _ = Darwin.close(fileDescriptor) }
+        guard Darwin.fsync(fileDescriptor) == 0 else { throw RecordingLedgerFileError.ioFailure }
     }
 
     static func atomicWrite(_ data: Data, to url: URL) throws {

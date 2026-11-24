@@ -200,6 +200,7 @@ enum RecordingReadinessError: LocalizedError, Equatable {
             AppLocalization.string("Loading the recording sources took too long. Try again.")
         case .videoWriterWaitTimedOut:
             AppLocalization.string(
+                // swiftlint:disable:next line_length
                 "Frames arrived, but the video writer did not accept the first frame in time. The recording was stopped."
             )
         case .videoWriterFailed:

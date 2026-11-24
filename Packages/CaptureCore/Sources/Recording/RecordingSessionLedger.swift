@@ -256,7 +256,11 @@ public actor RecordingSessionLedger {
         else { throw RecordingSessionLedgerError.invalidPath }
         let root: URL
         if fileManager.fileExists(atPath: sessionRoot.path) {
-            do { root = try RecordingLedgerFileSystem.canonicalDirectory(sessionRoot, create: false) } catch { throw mapPathError(error) }
+            do {
+                root = try RecordingLedgerFileSystem.canonicalDirectory(sessionRoot, create: false)
+            } catch {
+                throw mapPathError(error)
+            }
         } else {
             let parent = sessionRoot.deletingLastPathComponent()
             guard fileManager.fileExists(atPath: parent.path) else {
@@ -274,7 +278,11 @@ public actor RecordingSessionLedger {
             )
         } catch { throw mapPathError(error) }
         let index = indexParent.appendingPathComponent(indexURL.lastPathComponent).standardizedFileURL
-        do { try RecordingLedgerFileSystem.validateNoSymlink(index, allowingMissing: true) } catch { throw mapPathError(error) }
+        do {
+            try RecordingLedgerFileSystem.validateNoSymlink(index, allowingMissing: true)
+        } catch {
+            throw mapPathError(error)
+        }
         return (root, index)
     }
 
@@ -488,10 +496,18 @@ public actor RecordingSessionLedger {
         fileManager: FileManager = .default
     ) async throws -> RecordingSessionLedger {
         let root: URL
-        do { root = try RecordingLedgerFileSystem.canonicalDirectory(recordingRoot, create: false) } catch { throw mapPathError(error) }
+        do {
+            root = try RecordingLedgerFileSystem.canonicalDirectory(recordingRoot, create: false)
+        } catch {
+            throw mapPathError(error)
+        }
         let relative = ".SnapGlassSessions/\(sessionID.uuidString.lowercased())"
         let sessionRoot: URL
-        do { sessionRoot = try RecordingLedgerFileSystem.resolve(relative, under: root) } catch { throw mapPathError(error) }
+        do {
+            sessionRoot = try RecordingLedgerFileSystem.resolve(relative, under: root)
+        } catch {
+            throw mapPathError(error)
+        }
         let cached = try cachedRecord(sessionID: sessionID, indexURL: indexURL, fileManager: fileManager)
         do {
             return try RecordingSessionLedger(
@@ -514,7 +530,9 @@ public actor RecordingSessionLedger {
         let entries = try await allEntries(
             in: recordingRoot, indexURL: indexURL, fileManager: RecordingSendableFileManager(fileManager)
         )
-        return entries.map(\.record).filter { $0.segments.contains(where: { $0.state == .published || $0.state == .missing }) }
+        return entries.map(\.record).filter {
+            $0.segments.contains(where: { $0.state == .published || $0.state == .missing })
+        }
     }
 
     public static func recoverableSessions(
@@ -537,7 +555,10 @@ public actor RecordingSessionLedger {
             recoverable.append(contentsOf: details)
         }
         return recoverable.sorted {
-            $0.sessionID == $1.sessionID ? $0.segmentIndex < $1.segmentIndex : $0.sessionID.uuidString < $1.sessionID.uuidString
+            if $0.sessionID == $1.sessionID {
+                return $0.segmentIndex < $1.segmentIndex
+            }
+            return $0.sessionID.uuidString < $1.sessionID.uuidString
         }
     }
 
@@ -580,9 +601,20 @@ public actor RecordingSessionLedger {
             guard RecordingLedgerFileSystem.isRegularFile(manifestURL) else {
                 throw RecordingSessionLedgerError.invalidPublication
             }
-            do { record = try JSONDecoder().decode(SegmentPortableRecord.self, from: Data(contentsOf: manifestURL)) } catch { throw RecordingSessionLedgerError.invalidPublication }
+            do {
+                record = try JSONDecoder().decode(
+                    SegmentPortableRecord.self,
+                    from: Data(contentsOf: manifestURL)
+                )
+            } catch {
+                throw RecordingSessionLedgerError.invalidPublication
+            }
         } else {
-            do { record = try await RecordingPortableMetadata.read(from: productURL) } catch { throw RecordingSessionLedgerError.invalidPublication }
+            do {
+                record = try await RecordingPortableMetadata.read(from: productURL)
+            } catch {
+                throw RecordingSessionLedgerError.invalidPublication
+            }
         }
         guard record.segmentID == intent.segmentID, record.segmentIndex == intent.segmentIndex,
               record.startSample == intent.effectiveRange.startSample,
@@ -661,7 +693,15 @@ public actor RecordingSessionLedger {
         for checkpoint in state.checkpoints.values where state.published[checkpoint.segmentID] != nil {
             for item in checkpoint.files.values {
                 let url: URL
-                do { url = try RecordingLedgerFileSystem.resolve(item.relativePath, under: sessionRoot, allowingMissing: true) } catch { throw Self.mapPathError(error) }
+                do {
+                    url = try RecordingLedgerFileSystem.resolve(
+                        item.relativePath,
+                        under: sessionRoot,
+                        allowingMissing: true
+                    )
+                } catch {
+                    throw Self.mapPathError(error)
+                }
                 guard !leasedPaths.contains(url.standardizedFileURL.path),
                       RecordingLedgerFileSystem.isRegularFile(url),
                       (try? RecordingLedgerFileSystem.sha256(of: url)) == item.sha256
@@ -735,18 +775,18 @@ public actor RecordingSessionLedger {
             }
             try RecordingLedgerFileSystem.validateNoSymlink(sessionRoot)
             let journal = sessionRoot.appendingPathComponent("journal.ndjson")
-            let fd = journal.withUnsafeFileSystemRepresentation { path -> Int32 in
+            let fileDescriptor = journal.withUnsafeFileSystemRepresentation { path -> Int32 in
                 guard let path else { return -1 }
                 return Darwin.open(path, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0o600)
             }
-            guard fd >= 0 else { throw RecordingSessionLedgerError.ioFailure }
+            guard fileDescriptor >= 0 else { throw RecordingSessionLedgerError.ioFailure }
             var writeError = false
             lineData.withUnsafeBytes { rawBuffer in
                 guard let base = rawBuffer.baseAddress else { writeError = true; return }
                 var remaining = rawBuffer.count
                 var cursor = base
                 while remaining > 0 {
-                    let written = Darwin.write(fd, cursor, remaining)
+                    let written = Darwin.write(fileDescriptor, cursor, remaining)
                     if written < 0 {
                         if errno == EINTR { continue }
                         writeError = true
@@ -757,12 +797,12 @@ public actor RecordingSessionLedger {
                     cursor = cursor.advanced(by: written)
                 }
             }
-            if writeError || Darwin.fsync(fd) != 0 {
-                _ = Darwin.close(fd)
+            if writeError || Darwin.fsync(fileDescriptor) != 0 {
+                _ = Darwin.close(fileDescriptor)
                 try? reloadJournal()
                 throw RecordingSessionLedgerError.ioFailure
             }
-            guard Darwin.close(fd) == 0 else {
+            guard Darwin.close(fileDescriptor) == 0 else {
                 try? reloadJournal()
                 throw RecordingSessionLedgerError.ioFailure
             }
@@ -811,9 +851,17 @@ public actor RecordingSessionLedger {
             }
             guard schema == 1 else { throw RecordingSessionLedgerError.journalCorrupt }
             let line: LedgerJournalLine
-            do { line = try JSONDecoder().decode(LedgerJournalLine.self, from: lineData) } catch { throw RecordingSessionLedgerError.journalCorrupt }
+            do {
+                line = try JSONDecoder().decode(LedgerJournalLine.self, from: lineData)
+            } catch {
+                throw RecordingSessionLedgerError.journalCorrupt
+            }
             let encodedCore: Data
-            do { encodedCore = try encoder.encode(line.core) } catch { throw RecordingSessionLedgerError.journalCorrupt }
+            do {
+                encodedCore = try encoder.encode(line.core)
+            } catch {
+                throw RecordingSessionLedgerError.journalCorrupt
+            }
             guard line.core.sequence == loaded.sequence + 1,
                   line.core.previousHash == loaded.lastHash,
                   Self.hash(encodedCore) == line.hash
@@ -1085,7 +1133,10 @@ public actor RecordingSessionLedger {
         } catch { return false }
     }
 
-    private func candidateProductURLs(_ intent: RecordingPublishIntent, useFinal: Bool = false) throws -> [String: URL] {
+    private func candidateProductURLs(
+        _ intent: RecordingPublishIntent,
+        useFinal: Bool = false
+    ) throws -> [String: URL] {
         if intent.isDirectory {
             let product = useFinal ? intent.reservedFinalURL : intent.stagingURL
             return Dictionary(uniqueKeysWithValues: intent.contentHashes.keys.map {
@@ -1099,7 +1150,11 @@ public actor RecordingSessionLedger {
         let record = try currentRecord()
         let safeRoot = recordingRoot.standardizedFileURL
         let relative: String
-        do { relative = try RecordingLedgerFileSystem.validateChild(sessionRoot, under: safeRoot) } catch { throw Self.mapPathError(error) }
+        do {
+            relative = try RecordingLedgerFileSystem.validateChild(sessionRoot, under: safeRoot)
+        } catch {
+            throw Self.mapPathError(error)
+        }
         let currentEntry = RecordingIndexRecord.Entry(
             sessionID: sessionID, sessionRootRelativePath: relative, record: record
         )
@@ -1146,7 +1201,11 @@ public actor RecordingSessionLedger {
         let index = RecordingIndexRecord(entries: entriesByID.values.sorted {
             $0.sessionID.uuidString < $1.sessionID.uuidString
         }, updatedAt: now())
-        do { try RecordingLedgerFileSystem.atomicWrite(try Self.encode(index), to: indexURL) } catch { throw Self.mapPathError(error) }
+        do {
+            try RecordingLedgerFileSystem.atomicWrite(try Self.encode(index), to: indexURL)
+        } catch {
+            throw Self.mapPathError(error)
+        }
     }
 
     private func ensureWritable() throws {
@@ -1345,7 +1404,8 @@ public actor RecordingSessionLedger {
             return try? RecordingLedgerFileSystem.resolve(relative, under: sessionRoot)
         }
         if ordered.isEmpty, let materialURL = segment.materialURL {
-            return (try? RecordingLedgerFileSystem.validateChild(materialURL, under: sessionRoot)).map { _ in [materialURL] } ?? []
+            return (try? RecordingLedgerFileSystem.validateChild(materialURL, under: sessionRoot))
+                .map { _ in [materialURL] } ?? []
         }
         return ordered
     }
@@ -1391,7 +1451,11 @@ public actor RecordingSessionLedger {
             var seen: Set<String> = []
             for (role, relative) in segment.files {
                 try RecordingLedgerFileSystem.validateRelativePath(relative)
-                let resolved = try RecordingLedgerFileSystem.resolve(relative, under: outputRoot, allowingMissing: allowMissingFiles)
+                let resolved = try RecordingLedgerFileSystem.resolve(
+                    relative,
+                    under: outputRoot,
+                    allowingMissing: allowMissingFiles
+                )
                 let expected = intent.isDirectory
                     ? intent.reservedFinalURL.appendingPathComponent(URL(fileURLWithPath: relative).lastPathComponent)
                     : intent.reservedFinalURL
@@ -1403,7 +1467,8 @@ public actor RecordingSessionLedger {
                         let expectedHash = intent.isDirectory
                             ? intent.contentHashes[resolved.lastPathComponent]
                             : intent.contentHashes[intent.reservedFinalURL.lastPathComponent]
-                        guard let expectedHash, try RecordingLedgerFileSystem.sha256(of: resolved) == expectedHash else {
+                        guard let expectedHash,
+                              try RecordingLedgerFileSystem.sha256(of: resolved) == expectedHash else {
                             throw RecordingSessionLedgerError.invalidPublication
                         }
                     } else if !allowMissingFiles || RecordingLedgerFileSystem.mode(at: resolved) != nil {
@@ -1423,7 +1488,11 @@ public actor RecordingSessionLedger {
         fileManager: RecordingSendableFileManager
     ) async throws -> [RecordingIndexRecord.Entry] {
         let root: URL
-        do { root = try RecordingLedgerFileSystem.canonicalDirectory(recordingRoot, create: false) } catch { throw mapPathError(error) }
+        do {
+            root = try RecordingLedgerFileSystem.canonicalDirectory(recordingRoot, create: false)
+        } catch {
+            throw mapPathError(error)
+        }
         let sessionsDirectory = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
         guard fileManager.value.fileExists(atPath: sessionsDirectory.path) else { return [] }
         do { try RecordingLedgerFileSystem.validateNoSymlink(sessionsDirectory) } catch { throw mapPathError(error) }
@@ -1461,7 +1530,11 @@ public actor RecordingSessionLedger {
             }
             let record = try await ledger.snapshot()
             let relative: String
-            do { relative = try RecordingLedgerFileSystem.validateChild(child, under: root) } catch { throw mapPathError(error) }
+            do {
+                relative = try RecordingLedgerFileSystem.validateChild(child, under: root)
+            } catch {
+                throw mapPathError(error)
+            }
             result.append(.init(sessionID: id, sessionRootRelativePath: relative, record: record))
         }
         return result

@@ -564,7 +564,9 @@ final class RecordingExportViewModel: ObservableObject {
             return result
         } catch {
             let exportError = error as? ExportError
-                ?? (Task.isCancelled ? ExportError.cancelled(stagingURL: nil) : ExportError.publishFailed(stagingURL: nil))
+                ?? (Task.isCancelled
+                    ? ExportError.cancelled(stagingURL: nil)
+                    : ExportError.publishFailed(stagingURL: nil))
             message = .export(exportError)
             await finishExportReleasingLeases(using: service, exportID: exportID)
             throw exportError

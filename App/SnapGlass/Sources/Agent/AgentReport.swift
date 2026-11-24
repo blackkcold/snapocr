@@ -174,7 +174,7 @@ struct AgentReport: Codable, Equatable, Sendable {
         var checkpointIntervalSeconds: Int64
     }
 
-    var ok: Bool  // swiftlint:disable:this identifier_name
+    var ok: Bool
     var scenario: String
     var app: AppFacts
     var session: SessionFacts
@@ -190,7 +190,7 @@ struct AgentReport: Codable, Equatable, Sendable {
     var errors: [String]
 
     private enum CodingKeys: String, CodingKey {
-        case ok  // swiftlint:disable:this identifier_name
+        case ok
         case scenario
         case app
         case session

@@ -358,8 +358,7 @@ private final class CheckpointCoverageEngine: AudioRecordingControlling, @unchec
 
     nonisolated func makeProgressStream() -> AsyncStream<RecordingProgress> {
         let id = UUID()
-        let stream = AsyncStream<RecordingProgress>(bufferingPolicy: .bufferingNewest(8)) {
-            continuation in
+        let stream = AsyncStream<RecordingProgress>(bufferingPolicy: .bufferingNewest(8)) { continuation in
             lock.lock()
             continuations[id] = continuation
             if let latest { continuation.yield(latest) }

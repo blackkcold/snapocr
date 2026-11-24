@@ -104,7 +104,10 @@ struct RecordingPipelineSpaceGateTests {
         let valid = RecordingBacklogPolicy(highWatermarkBytes: 1_000, lowWatermarkBytes: 100)
         #expect(valid.admit(.captureCheckpoint, backlogBytes: 50_000) == .run)
         #expect(valid.admit(.seal, backlogBytes: 1_001) == .defer(reason: "seal backlog is above the high watermark"))
-        #expect(valid.admit(.exportThumbnail, backlogBytes: 101) == .defer(reason: "optional export is below seal priority"))
+        #expect(
+            valid.admit(.exportThumbnail, backlogBytes: 101)
+                == .defer(reason: "optional export is below seal priority")
+        )
     }
 
     private func makeGate(

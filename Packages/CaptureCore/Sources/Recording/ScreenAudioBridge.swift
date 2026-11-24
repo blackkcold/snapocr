@@ -71,7 +71,10 @@ public final class ScreenAudioBridge: @unchecked Sendable {
               CMSampleBufferDataIsReady(sampleBuffer),
               let info = Self.streamInfo(sampleBuffer),
               loadBufferList(sampleBuffer, bufferCount: info.bufferCount),
-              let result = write(frameCount: frameCount, hostTime: hostTime(for: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)))
+              let result = write(
+                  frameCount: frameCount,
+                  hostTime: hostTime(for: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+              )
         else {
             throw ScreenAudioBridgeError.invalidSample
         }
@@ -168,7 +171,11 @@ public final class ScreenAudioBridge: @unchecked Sendable {
                 else { return nil }
                 planarPointers[channel] = UnsafeBufferPointer(start: data, count: frameCount)
             }
-            return systemRing.write(planar: Array(planarPointers.prefix(channelCount)), frameCount: frameCount, hostTime: hostTime)
+            return systemRing.write(
+                planar: Array(planarPointers.prefix(channelCount)),
+                frameCount: frameCount,
+                hostTime: hostTime
+            )
         }
         guard bufferList.count == 1,
               bufferList[0].mNumberChannels == UInt32(channelCount),
@@ -239,7 +246,11 @@ public final class ScreenAudioOutputReuse: NSObject, SCStreamOutput, @unchecked 
         attachedStream = nil
     }
 
-    public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+    public func stream(
+        _ stream: SCStream,
+        didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
+        of type: SCStreamOutputType
+    ) {
         guard type == .audio else { return }
         try? bridge.appendSystem(sampleBuffer: sampleBuffer)
     }

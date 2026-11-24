@@ -756,7 +756,12 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
             let first = commit.range.startSample
             var missing: [RecordingSampleRange] = []
             if first > videoRange.startSample {
-                missing.append(RecordingSampleRange(startSample: videoRange.startSample, sampleCount: first - videoRange.startSample))
+                missing.append(
+                    RecordingSampleRange(
+                        startSample: videoRange.startSample,
+                        sampleCount: first - videoRange.startSample
+                    )
+                )
             }
             let videoEnd = videoRange.startSample + videoRange.sampleCount
             if end < videoEnd {
@@ -791,7 +796,10 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
         let duration = sourceDuration.isValid && sourceDuration.isNumeric && CMTimeCompare(sourceDuration, .zero) > 0
             ? sourceDuration
             : CMTime(value: 1, timescale: 30)
-        let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[CFString: Any]]
+        let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer,
+            createIfNecessary: false
+        ) as? [[CFString: Any]]
         let notSync = attachments?.first?[kCMSampleAttachmentKey_NotSync] as? NSNumber
         return VideoFrameSample(
             index: index,
@@ -815,7 +823,10 @@ private extension ScreenBoundaryDecision {
     var boundaryEndTime: CMTime? {
         switch self {
         case .keepCurrent: nil
-        case .closeChunk(let boundary), .closeSegment(let boundary), .cachedChunkBoundary(let boundary): boundary.endTime
+        case .closeChunk(let boundary),
+            .closeSegment(let boundary),
+            .cachedChunkBoundary(let boundary):
+            boundary.endTime
         }
     }
 }

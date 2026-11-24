@@ -56,6 +56,7 @@ struct RecordingExportView: View {
             }
             Button("Cancel", role: .cancel) { discardTarget = nil }
         } message: {
+            // swiftlint:disable:next line_length
             Text("The recording folder moves to the Trash. You can restore it from the Trash until the Trash is emptied.")
         }
         .task {
@@ -401,7 +402,13 @@ struct RecordingExportView: View {
             }
             .toggleStyle(.checkbox)
             .disabled(isMissing || segment.state != .published)
-            .accessibilityHint(Text(isMissing ? "This segment is missing and cannot be selected." : "Press Space to select or deselect this segment."))
+            .accessibilityHint(
+                Text(
+                    isMissing
+                        ? "This segment is missing and cannot be selected."
+                        : "Press Space to select or deselect this segment."
+                )
+            )
 
             Spacer(minLength: 2)
 
@@ -626,9 +633,13 @@ struct RecordingExportView: View {
         case .overLimit(let seconds):
             AppLocalization.string("Export exceeds the 1:59:30 limit by %@.", Self.duration(seconds))
         case .incompatibleCodec:
-            AppLocalization.string("Selected video segments use incompatible codecs. Export them separately or choose audio-only.")
+            AppLocalization.string(
+                "Selected video segments use incompatible codecs. Export them separately or choose audio-only."
+            )
         case .missingSource:
-            AppLocalization.string("A selected source is unavailable. Use Locate to inspect the recording folder or deselect that segment.")
+            AppLocalization.string(
+                "A selected source is unavailable. Use Locate to inspect the recording folder or deselect that segment."
+            )
         case .destinationUnavailable:
             AppLocalization.string("Choose an existing writable destination folder and a valid output name.")
         case .passthroughUnsupported:
@@ -641,9 +652,13 @@ struct RecordingExportView: View {
         case .listingFailed:
             return AppLocalization.string("Could not read completed recordings from the configured recording folder.")
         case .sessionUnavailable:
-            return AppLocalization.string("This recording is no longer available. Refresh the session list and try again.")
+            return AppLocalization.string(
+                "This recording is no longer available. Refresh the session list and try again."
+            )
         case .previewUnavailable:
-            return AppLocalization.string("This segment is not available for preview. Use Locate to inspect the recording folder.")
+            return AppLocalization.string(
+                "This segment is not available for preview. Use Locate to inspect the recording folder."
+            )
         case .previewFailed:
             return AppLocalization.string("Audio preview could not be started.")
         case .export(let error):
@@ -664,25 +679,43 @@ struct RecordingExportView: View {
         case .overLimit(let seconds):
             return AppLocalization.string("Export exceeds the 1:59:30 limit by %@.", Self.duration(seconds))
         case .incompatibleCodec:
-            return AppLocalization.string("Selected video segments use incompatible codecs. Export them separately or choose audio-only.")
+            return AppLocalization.string(
+                "Selected video segments use incompatible codecs. Export them separately or choose audio-only."
+            )
         case .missingSource:
-            return AppLocalization.string("A selected source is unavailable. The original recording was kept; use Locate or choose another segment.")
+            return AppLocalization.string(
+                // swiftlint:disable:next line_length
+                "A selected source is unavailable. The original recording was kept; use Locate or choose another segment."
+            )
         case .destinationUnavailable:
-            return AppLocalization.string("The destination is unavailable. The original recording was kept; choose an existing folder.")
+            return AppLocalization.string(
+                "The destination is unavailable. The original recording was kept; choose an existing folder."
+            )
         case .passthroughUnsupported:
-            return AppLocalization.string("Video passthrough is unavailable for this trim. The original recording was kept; adjust the trim or choose audio-only.")
+            return AppLocalization.string(
+                // swiftlint:disable:next line_length
+                "Video passthrough is unavailable for this trim. The original recording was kept; adjust the trim or choose audio-only."
+            )
         case .exportInProgress:
             return AppLocalization.string("An export is already in progress.")
         case .cancelled(let stagingURL):
             guard let stagingURL else {
                 return AppLocalization.string("Export cancelled. The original recording was kept.")
             }
-            return AppLocalization.string("Export cancelled. The original and staging output were kept at %@.", stagingURL.path)
+            return AppLocalization.string(
+                "Export cancelled. The original and staging output were kept at %@.",
+                stagingURL.path
+            )
         case .publishFailed(let stagingURL):
             guard let stagingURL else {
-                return AppLocalization.string("Export failed. The original recording was kept; choose another destination and retry.")
+                return AppLocalization.string(
+                    "Export failed. The original recording was kept; choose another destination and retry."
+                )
             }
-            return AppLocalization.string("Export failed. The original and staging output were kept at %@.", stagingURL.path)
+            return AppLocalization.string(
+                "Export failed. The original and staging output were kept at %@.",
+                stagingURL.path
+            )
         }
     }
 
@@ -694,7 +727,10 @@ struct RecordingExportView: View {
         case .directory:
             name = "\(spec.destination.stem)/"
         }
-        return AppLocalization.string("Planned output: %@", spec.destination.directory.appendingPathComponent(name).path)
+        return AppLocalization.string(
+            "Planned output: %@",
+            spec.destination.directory.appendingPathComponent(name).path
+        )
     }
 
     private func chooseOutputDirectory() {
@@ -743,7 +779,12 @@ private struct RecordingExportTrimSheet: View {
         self.onSave = onSave
         let start = Double(segment.startSample)
         _startSeconds = State(initialValue: max(0, Double(range.startSample) - start) / 48_000)
-        _endSeconds = State(initialValue: min(Double(segment.sampleCount), Double(range.startSample + range.sampleCount) - start) / 48_000)
+        _endSeconds = State(
+            initialValue: min(
+                Double(segment.sampleCount),
+                Double(range.startSample + range.sampleCount) - start
+            ) / 48_000
+        )
     }
 
     private var duration: Double { Double(max(1, segment.sampleCount)) / 48_000 }

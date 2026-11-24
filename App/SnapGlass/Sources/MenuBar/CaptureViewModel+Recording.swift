@@ -110,9 +110,10 @@ enum RecordingAudioPreferenceStore {
 
     static func audioConfiguration(in defaults: UserDefaults = .standard) -> AudioRecordingConfiguration {
         let mode = mode(for: .audio, in: defaults)
-        let layout: AudioOutputLayout = defaults.string(forKey: PreferenceKeys.recordingOutputLayout) == "separateTracks"
-            ? .separateTracks
-            : .mixed
+        let layout: AudioOutputLayout =
+            defaults.string(forKey: PreferenceKeys.recordingOutputLayout) == "separateTracks"
+                ? .separateTracks
+                : .mixed
         let bitRate = bitRate(for: .audio, in: defaults)
 
         let channels: [RecordingTrackRole: Int]
@@ -336,7 +337,9 @@ extension CaptureViewModel {
         let result = await applyAudioRoute(RouteEvent(atSample: 0, mode: mode, deviceID: nil))
         if case let .unchanged(reason) = result, reason != "microphone access is unavailable" {
             showToast(
-                message: AppLocalization.string("The audio source could not be changed; the current source is unchanged."),
+                message: AppLocalization.string(
+                    "The audio source could not be changed; the current source is unchanged."
+                ),
                 type: .error
             )
         }
@@ -458,7 +461,9 @@ extension CaptureViewModel {
     }
 
     func refreshRecordingShelfVisibility() {
-        let statusIsRecording = recordingStatus == .starting || recordingStatus == .recording || recordingStatus == .saving
+        let statusIsRecording = recordingStatus == .starting
+            || recordingStatus == .recording
+            || recordingStatus == .saving
         setRecordingShelfVisibility(isRecording: isAudioRecordingActive || statusIsRecording)
     }
 

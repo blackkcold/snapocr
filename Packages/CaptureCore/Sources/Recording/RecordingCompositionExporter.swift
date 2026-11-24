@@ -310,7 +310,10 @@ private enum RecordingExportWorker {
         }
     }
 
-    private static func audioSources(_ cursors: [ExportAudioCursor], for outputRole: RecordingTrackRole) -> [ExportAudioCursor] {
+    private static func audioSources(
+        _ cursors: [ExportAudioCursor],
+        for outputRole: RecordingTrackRole
+    ) -> [ExportAudioCursor] {
         if outputRole == .mixed {
             let alreadyMixed = cursors.filter { $0.role == .mixed }
             if !alreadyMixed.isEmpty { return alreadyMixed }
@@ -341,8 +344,14 @@ private enum RecordingExportWorker {
                 metadata = [item]
             case .publishedMedia:
                 let record: SegmentPortableRecord
-                do { record = try await SegmentPortableMetadata.read(from: url) } catch { throw ExportError.missingSource }
-                let named = record.tracks.filter { URL(fileURLWithPath: $0.fileName).lastPathComponent == url.lastPathComponent }
+                do {
+                    record = try await SegmentPortableMetadata.read(from: url)
+                } catch {
+                    throw ExportError.missingSource
+                }
+                let named = record.tracks.filter {
+                    URL(fileURLWithPath: $0.fileName).lastPathComponent == url.lastPathComponent
+                }
                 let tracks = named.isEmpty && record.tracks.count == 1 ? record.tracks : named
                 guard !tracks.isEmpty else { throw ExportError.missingSource }
                 metadata = tracks.compactMap { track in
@@ -395,7 +404,11 @@ private enum RecordingExportWorker {
         }
     }
 
-    private static func checkpointMetadata(url: URL, segmentIndex: Int) throws -> [ExportAudioTrackMetadata] {        let siblings = try FileManager.default.contentsOfDirectory(
+    private static func checkpointMetadata(
+        url: URL,
+        segmentIndex: Int
+    ) throws -> [ExportAudioTrackMetadata] {
+        let siblings = try FileManager.default.contentsOfDirectory(
             at: url.deletingLastPathComponent(), includingPropertiesForKeys: nil
         ).filter { $0.lastPathComponent.hasPrefix("checkpoint-") && $0.pathExtension == "json" }
         for sidecar in siblings {
@@ -504,6 +517,9 @@ private enum RecordingExportWorker {
         guard let rawFormat = track.formatDescriptions.first else {
             throw ExportError.passthroughUnsupported
         }
+        // `formatDescriptions` is documented as [CMFormatDescription]; the
+        // Objective-C bridge exposes it as [Any].
+        // swiftlint:disable:next force_cast
         let format = rawFormat as! CMFormatDescription
         let subtype = CMFormatDescriptionGetMediaSubType(format)
         let codec: String
@@ -706,14 +722,18 @@ private final class ExportAudioCursor {
             for channel in 0..<channelCount {
                 let stride = buffer.format.isInterleaved ? channelCount : 1
                 for frame in 0..<Int(frameCount) {
-                    channels[channel][frame] = data[buffer.format.isInterleaved ? 0 : channel][frame * stride + (buffer.format.isInterleaved ? channel : 0)]
+                    let sourceChannel = buffer.format.isInterleaved ? 0 : channel
+                    let sourceFrame = frame * stride + (buffer.format.isInterleaved ? channel : 0)
+                    channels[channel][frame] = data[sourceChannel][sourceFrame]
                 }
             }
         } else if let data = buffer.int16ChannelData {
             for channel in 0..<channelCount {
                 let stride = buffer.format.isInterleaved ? channelCount : 1
                 for frame in 0..<Int(frameCount) {
-                    let raw = data[buffer.format.isInterleaved ? 0 : channel][frame * stride + (buffer.format.isInterleaved ? channel : 0)]
+                    let sourceChannel = buffer.format.isInterleaved ? 0 : channel
+                    let sourceFrame = frame * stride + (buffer.format.isInterleaved ? channel : 0)
+                    let raw = data[sourceChannel][sourceFrame]
                     channels[channel][frame] = Float(raw) / 32_768
                 }
             }
@@ -830,7 +850,11 @@ private final class ExportAssetWriter {
             throw ExportError.passthroughUnsupported
         }
         let writer: AVAssetWriter
-        do { writer = try AVAssetWriter(outputURL: url, fileType: type) } catch { throw ExportError.publishFailed(stagingURL: url) }
+        do {
+            writer = try AVAssetWriter(outputURL: url, fileType: type)
+        } catch {
+            throw ExportError.publishFailed(stagingURL: url)
+        }
         var inputs: [AVAssetWriterInput] = []
         var videoInput: AVAssetWriterInput?
         if let sourceVideo {

@@ -486,7 +486,10 @@ public enum RecordingExportPlanner {
         let segments = foundSegments.sorted {
             $0.index == $1.index ? $0.startSample < $1.startSample : $0.index < $1.index
         }
-        guard segments.allSatisfy({ $0.state == .published && $0.index >= 0 && $0.startSample >= 0 && $0.sampleCount > 0 })
+        guard segments.allSatisfy({
+            $0.state == .published && $0.index >= 0
+                && $0.startSample >= 0 && $0.sampleCount > 0
+        })
         else { throw ExportError.missingSource }
 
         var requestedByID: [UUID: SampleRange] = [:]
@@ -585,7 +588,11 @@ public enum RecordingExportPlanner {
         })
         let outputSpec = ExportOutputSpec(
             destination: selection.destination, shape: outputShape, videoCodec: videoCodec,
-            audioFormat: ExportAudioFormat(codec: "aac", sampleRate: Int(sessionSampleRate), channelCountByRole: channelCounts)
+            audioFormat: ExportAudioFormat(
+                codec: "aac",
+                sampleRate: Int(sessionSampleRate),
+                channelCountByRole: channelCounts
+            )
         )
         var clips: [ExportClip] = []
         var sourceRanges: [ExportSourceRange] = []
@@ -602,8 +609,14 @@ public enum RecordingExportPlanner {
                 urls = uniqueURLs(urls)
                 sourceRanges.append(ExportSourceRange(
                     segmentID: segment.id, segmentIndex: segment.index, role: ExportTrackRole(outputRole),
-                    requested: ExportSampleRange(startSample: requested.startSample, sampleCount: requested.sampleCount),
-                    effective: ExportSampleRange(startSample: effective.startSample, sampleCount: effective.sampleCount),
+                    requested: ExportSampleRange(
+                        startSample: requested.startSample,
+                        sampleCount: requested.sampleCount
+                    ),
+                    effective: ExportSampleRange(
+                        startSample: effective.startSample,
+                        sampleCount: effective.sampleCount
+                    ),
                     videoRange: videoByID[segment.id], videoTrackIndex: segment.videoTrackIndex,
                     segmentRange: ExportSampleRange(startSample: segment.startSample, sampleCount: segment.sampleCount),
                     sourceFiles: urls
@@ -633,7 +646,9 @@ public enum RecordingExportPlanner {
     }
 
     private static func assessment(for plan: ExportPlan, disabledReason: ExportDisabledReason?) -> ExportAssessment {
-        let requestedDuration = plan.clips.reduce(0.0) { $0 + Double($1.requestedRange.sampleCount) / Double(sessionSampleRate) }
+        let requestedDuration = plan.clips.reduce(0.0) {
+            $0 + Double($1.requestedRange.sampleCount) / Double(sessionSampleRate)
+        }
         return ExportAssessment(
             requestedRanges: plan.requestedRanges, effectiveRanges: plan.effectiveRanges,
             requestedDuration: requestedDuration, effectiveDuration: plan.estimatedDuration,
@@ -727,7 +742,13 @@ public enum RecordingExportPlanner {
                       (1...2).contains(track.channelCount)
                 else { throw ExportError.missingSource }
                 result.append(PlannerAudioDescriptor(
-                    role: role, url: url, urls: [url], range: SampleRange(startSample: record.startSample, sampleCount: record.sampleCount),
+                    role: role,
+                    url: url,
+                    urls: [url],
+                    range: SampleRange(
+                        startSample: record.startSample,
+                        sampleCount: record.sampleCount
+                    ),
                     sampleRate: track.sampleRate, channelCount: track.channelCount, mediaKind: mediaKind
                 ))
             case .publishedMedia:
@@ -762,7 +783,11 @@ public enum RecordingExportPlanner {
         return result
     }
 
-    private static func roles(for url: URL, segment: PublishedSegment, layout: AudioOutputLayout) -> [RecordingTrackRole] {
+    private static func roles(
+        for url: URL,
+        segment: PublishedSegment,
+        layout: AudioOutputLayout
+    ) -> [RecordingTrackRole] {
         let fileRoles = segment.files.compactMap { rawRole, relative -> RecordingTrackRole? in
             guard URL(fileURLWithPath: relative).lastPathComponent == url.lastPathComponent else { return nil }
             return recordingRole(rawRole)
@@ -858,7 +883,10 @@ public enum RecordingExportPlanner {
                     reader.cancelReading()
                     throw ExportError.passthroughUnsupported
                 }
-                let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[CFString: Any]]
+                let attachments = CMSampleBufferGetSampleAttachmentsArray(
+                    sample,
+                    createIfNecessary: false
+                ) as? [[CFString: Any]]
                 for index in 0..<count {
                     let timing = timings[index]
                     guard timing.presentationTimeStamp.isValid, timing.decodeTimeStamp.isValid else {
@@ -869,7 +897,7 @@ public enum RecordingExportPlanner {
                         ? (attachments?[index][kCMSampleAttachmentKey_NotSync] as? Bool ?? false)
                         : false
                     if !notSync, CMTimeCompare(timing.presentationTimeStamp, requestedStart) <= 0,
-                       startKeyframe == nil || CMTimeCompare(timing.presentationTimeStamp, startKeyframe!) > 0 {
+                       startKeyframe.map({ CMTimeCompare(timing.presentationTimeStamp, $0) > 0 }) ?? true {
                         startKeyframe = timing.presentationTimeStamp
                     }
                     if CMTimeCompare(timing.presentationTimeStamp, requestedEnd) < 0 {
@@ -877,7 +905,7 @@ public enum RecordingExportPlanner {
                             ? timing.duration
                             : .zero
                         let sampleEnd = CMTimeAdd(timing.presentationTimeStamp, duration)
-                        if sampleEnd.isValid, endTime == nil || CMTimeCompare(sampleEnd, endTime!) > 0 {
+                        if sampleEnd.isValid, endTime.map({ CMTimeCompare(sampleEnd, $0) > 0 }) ?? true {
                             endTime = sampleEnd
                         }
                     }
@@ -977,10 +1005,13 @@ public enum RecordingExportPlanner {
         var videoBytes: Int64 = 0
         if videoPassthrough {
             for clip in clips {
-                guard let segment = segments.first(where: { $0.id == clip.segmentID }), let url = segment.videoURL,
-                      let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value,
+                guard let segment = segments.first(where: { $0.id == clip.segmentID }),
+                      let url = segment.videoURL,
                       segment.sampleCount > 0
                 else { continue }
+                guard let size = (try? FileManager.default.attributesOfItem(
+                    atPath: url.path
+                )[.size] as? NSNumber)?.int64Value else { continue }
                 let selected = min(segment.sampleCount, clip.effectiveRange.sampleCount)
                 videoBytes = saturatingAdd(videoBytes, max(0, size) * selected / segment.sampleCount)
             }

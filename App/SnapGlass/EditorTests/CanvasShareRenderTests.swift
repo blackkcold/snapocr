@@ -87,19 +87,19 @@ struct CanvasShareRenderTests {
     ) -> NSColor {
         let scaleX = CGFloat(bitmap.pixelsWide) / max(viewSize.width, 1)
         let scaleY = CGFloat(bitmap.pixelsHigh) / max(viewSize.height, 1)
-        let x = min(max(Int((point.x * scaleX).rounded()), 0), bitmap.pixelsWide - 1)
+        let pixelX = min(max(Int((point.x * scaleX).rounded()), 0), bitmap.pixelsWide - 1)
         let flippedY = bitmap.pixelsHigh - 1 - Int((point.y * scaleY).rounded())
-        let y = min(max(flippedY, 0), bitmap.pixelsHigh - 1)
-        return bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) ?? .clear
+        let pixelY = min(max(flippedY, 0), bitmap.pixelsHigh - 1)
+        return bitmap.colorAt(x: pixelX, y: pixelY)?.usingColorSpace(.sRGB) ?? .clear
     }
 
     private func color(
         in bitmap: NSBitmapImageRep,
         normalized point: CGPoint
     ) -> NSColor {
-        let x = min(max(Int((point.x * CGFloat(bitmap.pixelsWide)).rounded()), 0), bitmap.pixelsWide - 1)
-        let y = min(max(Int(((1 - point.y) * CGFloat(bitmap.pixelsHigh)).rounded()), 0), bitmap.pixelsHigh - 1)
-        return bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) ?? .clear
+        let pixelX = min(max(Int((point.x * CGFloat(bitmap.pixelsWide)).rounded()), 0), bitmap.pixelsWide - 1)
+        let pixelY = min(max(Int(((1 - point.y) * CGFloat(bitmap.pixelsHigh)).rounded()), 0), bitmap.pixelsHigh - 1)
+        return bitmap.colorAt(x: pixelX, y: pixelY)?.usingColorSpace(.sRGB) ?? .clear
     }
 
     private func expectClose(

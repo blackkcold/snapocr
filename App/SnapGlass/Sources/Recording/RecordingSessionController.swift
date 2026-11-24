@@ -1145,6 +1145,7 @@ final class RecordingSessionController {
                 if Self.audioResultWasSaved(result) {
                     onMessage?(
                         AppLocalization.string(
+                            // swiftlint:disable:next line_length
                             "The recording stopped because the interface stopped responding. Audio captured up to that point was saved."
                         ),
                         .info
@@ -1154,6 +1155,7 @@ final class RecordingSessionController {
                         with: Self.audioResult(
                             result,
                             failure: AppLocalization.string(
+                                // swiftlint:disable:next line_length
                                 "The recording stopped because the interface stopped responding before any audio could be saved."
                             )
                         ),
@@ -1518,6 +1520,7 @@ final class RecordingSessionController {
             guard permitted else {
                 onMessage?(
                     AppLocalization.string(
+                        // swiftlint:disable:next line_length
                         "Microphone access is needed for the selected screen-audio source. Enable it in System Settings, or choose a source without the microphone."
                     ),
                     .error
@@ -2336,6 +2339,7 @@ final class RecordingSessionController {
                     finishSession(success: false, errorClass: .timeout)
                     onMessage?(
                         AppLocalization.string(
+                            // swiftlint:disable:next line_length
                             "The screen recording stopped because the interface stopped responding, and the video could not be finalized."
                         ),
                         .error
@@ -2426,6 +2430,7 @@ final class RecordingSessionController {
     ) -> RecordingControlPanelFailure {
         RecordingControlPanelFailure(
             reason: reason ?? AppLocalization.string(
+                // swiftlint:disable:next line_length
                 "The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one."
             ),
             canRetry: canRetry,
@@ -2790,6 +2795,8 @@ final class RecordingSessionController {
             return
         }
         logger.fault(
+            // OSLog interpolation cannot be concatenated.
+            // swiftlint:disable:next line_length
             "HUD update suppressed status=\(name, privacy: .public) panelVisible=\(self.controlPanel?.isVisible == true, privacy: .public)"
         )
     }

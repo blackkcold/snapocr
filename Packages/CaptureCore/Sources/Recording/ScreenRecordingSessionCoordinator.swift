@@ -199,7 +199,8 @@ private struct ScreenVideoFrameEvent: @unchecked Sendable {
 /// Coordinates one SCK video stream, its screen segments, and T6 audio capture.
 public actor ScreenRecordingSessionCoordinator {
     private let engine: ScreenRecordingEngine
-    private let segmentCompositionFactory: @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition
+    private let segmentCompositionFactory:
+        @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition
     private let audioEngineFactory: @Sendable (
         AudioRecordingConfiguration,
         any AudioCheckpointSink & Sendable,
@@ -228,7 +229,8 @@ public actor ScreenRecordingSessionCoordinator {
     /// Creates a coordinator around the existing screen stream engine.
     public init(
         engine: ScreenRecordingEngine,
-        segmentCompositionFactory: @escaping @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition,
+        segmentCompositionFactory:
+            @escaping @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition,
         audioEngineFactory: @escaping @Sendable (
             AudioRecordingConfiguration,
             any AudioCheckpointSink & Sendable,
@@ -355,7 +357,9 @@ public actor ScreenRecordingSessionCoordinator {
                 configuration,
                 audioOutputReuse: reuseAudio,
                 onVideoFrame: { sampleBuffer, hostTime in
-                    switch queue.continuation.yield(ScreenVideoFrameEvent(sampleBuffer: sampleBuffer, hostTime: hostTime)) {
+                    switch queue.continuation.yield(
+                        ScreenVideoFrameEvent(sampleBuffer: sampleBuffer, hostTime: hostTime)
+                    ) {
                     case .enqueued:
                         .accepted
                     case .dropped:
@@ -537,7 +541,8 @@ public actor ScreenRecordingSessionCoordinator {
         if let lastOutcome {
             guard let url = lastOutcome.latestPublishedURL else {
                 throw ScreenRecordingSessionCoordinatorError.audioFinalizationFailed(
-                    lastOutcome.failure ?? ScreenRecordingSessionCoordinatorError.noPublishedSegments.localizedDescription
+                    lastOutcome.failure
+                        ?? ScreenRecordingSessionCoordinatorError.noPublishedSegments.localizedDescription
                 )
             }
             try await engine.finishSegmentedSession()

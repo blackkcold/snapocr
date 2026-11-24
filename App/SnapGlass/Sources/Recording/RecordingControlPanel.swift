@@ -86,17 +86,18 @@ enum RecordingHUDLabels {
     static func preparation(kind: RecordingKind, phase: RecordingPreparationPhase) -> String {
         switch phase {
         case .checkingPermission:
-            kind == .audio
-                ? AppLocalization.string("Checking microphone access…")
-                : AppLocalization.string("Checking screen recording access…")
+            if kind == .audio {
+                return AppLocalization.string("Checking microphone access…")
+            }
+            return AppLocalization.string("Checking screen recording access…")
         case .waitingForAuthorization:
-            AppLocalization.string("Waiting for recording access…")
+            return AppLocalization.string("Waiting for recording access…")
         case .loadingSources:
-            AppLocalization.string("Loading recording sources…")
+            return AppLocalization.string("Loading recording sources…")
         case .choosingSource:
-            AppLocalization.string("Waiting for a source selection…")
+            return AppLocalization.string("Waiting for a source selection…")
         case .verifyingDestination:
-            AppLocalization.string("Checking the recording folder…")
+            return AppLocalization.string("Checking the recording folder…")
         }
     }
 
@@ -461,7 +462,11 @@ struct RecordingControlPanelView: View {
                 Button(action: actions.onToggleAudioDetails) {
                     Text(
                         expanded
-                            ? AppLocalization.string("%d saved · current segment %d", presentation.savedCount, segmentNumber)
+                            ? AppLocalization.string(
+                                "%d saved · current segment %d",
+                                presentation.savedCount,
+                                segmentNumber
+                            )
                             : AppLocalization.string("Segment %d", segmentNumber)
                     )
                     .font(.system(size: 10, weight: .medium))

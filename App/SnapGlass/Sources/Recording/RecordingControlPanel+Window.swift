@@ -187,6 +187,8 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
             // Persisted (unlike the per-tick debug lines), so a future freeze can be
             // traced to the last state the panel actually accepted.
             logger.notice(
+                // OSLog interpolation cannot be concatenated.
+                // swiftlint:disable:next line_length
                 "HUD state accepted=\(signature.logName, privacy: .public) visible=\(self.isVisible, privacy: .public) cache=\(self.sizeCache.size(for: signature) != nil, privacy: .public)"
             )
         }
@@ -194,6 +196,7 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
             applyFailureScrollHeight(for: signature)
             setSize(cached, animated: false)
             logger.debug(
+                // swiftlint:disable:next line_length
                 "HUD apply state=\(signature.logName, privacy: .public) signature=\(Self.signatureCode(signature), privacy: .public) cache=hit"
             )
         } else {
@@ -201,6 +204,7 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
             setSize(fallback, animated: false)
             scheduleMeasurement()
             logger.debug(
+                // swiftlint:disable:next line_length
                 "HUD apply state=\(signature.logName, privacy: .public) signature=\(Self.signatureCode(signature), privacy: .public) cache=miss"
             )
         }
@@ -406,6 +410,7 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         applyFailureScrollHeight(for: signature)
         setSize(measured, animated: true, force: true)
         logger.debug(
+            // swiftlint:disable:next line_length
             "HUD corrected state=\(signature.logName, privacy: .public) signature=\(Self.signatureCode(signature), privacy: .public) width=\(Int(measured.width)) height=\(Int(measured.height))"
         )
     }
@@ -467,6 +472,7 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
         sizeCache.store(size, for: signature)
         failureScrollHeights[signature] = scrollHeight
         logger.debug(
+            // swiftlint:disable:next line_length
             "HUD measured state=\(signature.logName, privacy: .public) signature=\(Self.signatureCode(signature), privacy: .public) ms=\(millis) cached=\(self.sizeCache.count)"
         )
     }
@@ -480,6 +486,7 @@ final class RecordingControlPanel: NSPanel, NSWindowDelegate {
     ) {
         let millis = Self.milliseconds(from: start, to: clock.now)
         logger.fault(
+            // swiftlint:disable:next line_length
             "HUD measurement over budget state=\(signature.logName, privacy: .public) signature=\(Self.signatureCode(signature), privacy: .public) ms=\(millis)"
         )
         let fallback = RecordingHUDMeasurementPolicy.fallbackSize(

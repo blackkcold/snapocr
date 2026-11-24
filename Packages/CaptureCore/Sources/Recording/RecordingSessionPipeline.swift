@@ -87,12 +87,22 @@ public struct RecordingSessionRecord: Codable, Sendable, Hashable {
         switch try values.decode(String.self, forKey: .kind) {
         case "audio": kind = .audio
         case "screen": kind = .screen
-        default: throw DecodingError.dataCorruptedError(forKey: .kind, in: values, debugDescription: "Unknown recording kind")
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .kind,
+                in: values,
+                debugDescription: "Unknown recording kind"
+            )
         }
         switch try values.decode(String.self, forKey: .layout) {
         case "mixed": layout = .mixed
         case "separateTracks": layout = .separateTracks
-        default: throw DecodingError.dataCorruptedError(forKey: .layout, in: values, debugDescription: "Unknown audio layout")
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .layout,
+                in: values,
+                debugDescription: "Unknown audio layout"
+            )
         }
         startedAt = try values.decode(Date.self, forKey: .startedAt)
         segments = try values.decode([PublishedSegment].self, forKey: .segments)
