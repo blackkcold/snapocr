@@ -748,10 +748,16 @@ extension AudioMixPump {
     }
   }
 
+  private struct SourceBlockResult {
+    let block: AudioPCMBlock
+    let gap: Int
+    let level: Float
+  }
+
   private func sourceBlockLocked(
     role: RecordingTrackRole,
     assembly: TickAssembly
-  ) throws -> (block: AudioPCMBlock, gap: Int, level: Float) {
+  ) throws -> SourceBlockResult {
     let target: Int
     if let configured = channelCountByRole[role] {
       target = configured
@@ -764,15 +770,15 @@ extension AudioMixPump {
       assembly.deliverable?.contains(role) ?? true,
       var pipeline = pipelines[role]
     else {
-      return (
-        Self.silenceBlock(
+      return SourceBlockResult(
+        block: Self.silenceBlock(
           role: role,
           range: assembly.range,
           hostTime: assembly.hostTime,
           channels: target
         ),
-        assembly.frames,
-        0
+        gap: assembly.frames,
+        level: 0
       )
     }
     try readMoreLocked(&pipeline, minimumOutputFrames: assembly.frames)
@@ -796,7 +802,7 @@ extension AudioMixPump {
       channels: channels,
       isSilence: isSilence
     )
-    return (block, popped.gap, level)
+    return SourceBlockResult(block: block, gap: popped.gap, level: level)
   }
 
   private static func rmsLevel(_ channels: [[Float]]) -> Float {
