@@ -52,50 +52,71 @@ enum AppLocalization {
         localize: (String) -> String
     ) -> String {
         if let pipelineError = error as? RecordingPipelineError {
-            switch pipelineError {
-            case .alreadyStarted:
-                return localize("A recording is already starting or in progress.")
-            case .invalidConfiguration:
-                return localize("The recording settings are invalid.")
-            case let .spacePreflightDenied(decision):
-                return spaceBudgetDescription(decision, localize: localize)
-            case .journalUnavailable:
-                return localize("The recording session is unavailable.")
-            case .engineUnavailable:
-                return localize("The audio recording engine could not start.")
-            }
+            return pipelineErrorDescription(pipelineError, localize: localize)
         }
         if let engineError = error as? ScreenRecordingEngineError {
             return recordingErrorDescription(engineError, localize: localize)
         }
         if let coordinatorError = error as? ScreenRecordingSessionCoordinatorError {
-            switch coordinatorError {
-            case .alreadyStarted:
-                return localize("A recording is already starting or in progress.")
-            case .notStarted:
-                return localize("The recording session is unavailable.")
-            case .noPublishedSegments:
-                return localize("The screen recording did not publish a video segment.")
-            case .invalidConfiguration:
-                return localize("The recording settings are invalid.")
-            case .audioFinalizationFailed:
-                return localize("Screen-recording audio could not be finalized.")
-            case .streamStopUnconfirmed:
-                // swiftlint:disable:next line_length
-                return localize("The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one.")
-            }
+            return coordinatorErrorDescription(coordinatorError, localize: localize)
         }
         if let configurationError = error as? RecordingConfigurationError {
-            switch configurationError {
-            case .unsupportedCodec:
-                return localize("The selected video codec is not supported by the media writer.")
-            case .unsupportedSystemAudioFormat:
-                return localize("The selected system audio format is unavailable.")
-            case .invalidConfiguration:
-                return localize("The recording settings are invalid.")
-            }
+            return configurationErrorDescription(configurationError, localize: localize)
         }
         return error.localizedDescription
+    }
+
+    private static func pipelineErrorDescription(
+        _ error: RecordingPipelineError,
+        localize: (String) -> String
+    ) -> String {
+        switch error {
+        case .alreadyStarted:
+            return localize("A recording is already starting or in progress.")
+        case .invalidConfiguration:
+            return localize("The recording settings are invalid.")
+        case let .spacePreflightDenied(decision):
+            return spaceBudgetDescription(decision, localize: localize)
+        case .journalUnavailable:
+            return localize("The recording session is unavailable.")
+        case .engineUnavailable:
+            return localize("The audio recording engine could not start.")
+        }
+    }
+
+    private static func coordinatorErrorDescription(
+        _ error: ScreenRecordingSessionCoordinatorError,
+        localize: (String) -> String
+    ) -> String {
+        switch error {
+        case .alreadyStarted:
+            return localize("A recording is already starting or in progress.")
+        case .notStarted:
+            return localize("The recording session is unavailable.")
+        case .noPublishedSegments:
+            return localize("The screen recording did not publish a video segment.")
+        case .invalidConfiguration:
+            return localize("The recording settings are invalid.")
+        case .audioFinalizationFailed:
+            return localize("Screen-recording audio could not be finalized.")
+        case .streamStopUnconfirmed:
+            // swiftlint:disable:next line_length
+            return localize("The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one.")
+        }
+    }
+
+    private static func configurationErrorDescription(
+        _ error: RecordingConfigurationError,
+        localize: (String) -> String
+    ) -> String {
+        switch error {
+        case .unsupportedCodec:
+            return localize("The selected video codec is not supported by the media writer.")
+        case .unsupportedSystemAudioFormat:
+            return localize("The selected system audio format is unavailable.")
+        case .invalidConfiguration:
+            return localize("The recording settings are invalid.")
+        }
     }
 
     static func recordingErrorDescription(
