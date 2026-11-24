@@ -105,24 +105,27 @@ public enum RecordingSignposts {
         }
     }
 
+    private static let eventNames: [String: StaticString] = [
+        "audio.preparing": "audio.preparing",
+        "audio.starting": "audio.starting",
+        "audio.recording": "audio.recording",
+        "audio.saving": "audio.saving",
+        "audio.finished": "audio.finished",
+        "audio.failed": "audio.failed",
+        "audio.cancelled": "audio.cancelled",
+        "audio.quitResolved": "audio.quitResolved",
+        "screen.preparing": "screen.preparing",
+        "screen.starting": "screen.starting",
+        "screen.recording": "screen.recording",
+        "screen.saving": "screen.saving",
+        "screen.finished": "screen.finished",
+        "screen.failed": "screen.failed",
+        "screen.cancelled": "screen.cancelled",
+        "screen.quitResolved": "screen.quitResolved",
+    ]
+
     private static func eventName(for phase: RecordingPhase, kind: RecordingKind) -> StaticString {
-        switch (kind, phase) {
-        case (.audio, .preparing): "audio.preparing"
-        case (.audio, .starting): "audio.starting"
-        case (.audio, .recording): "audio.recording"
-        case (.audio, .saving): "audio.saving"
-        case (.audio, .finished): "audio.finished"
-        case (.audio, .failed): "audio.failed"
-        case (.audio, .cancelled): "audio.cancelled"
-        case (.audio, .quitResolved): "audio.quitResolved"
-        case (.screen, .preparing): "screen.preparing"
-        case (.screen, .starting): "screen.starting"
-        case (.screen, .recording): "screen.recording"
-        case (.screen, .saving): "screen.saving"
-        case (.screen, .finished): "screen.finished"
-        case (.screen, .failed): "screen.failed"
-        case (.screen, .cancelled): "screen.cancelled"
-        case (.screen, .quitResolved): "screen.quitResolved"
-        }
+        let prefix = kind == .audio ? "audio" : "screen"
+        return eventNames["\(prefix).\(phase.rawValue)"] ?? "unknown"
     }
 }
