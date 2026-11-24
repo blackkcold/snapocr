@@ -195,6 +195,10 @@ targets:
       - path: App/SnapGlass/Sources/Recording/RecordingHUDPanelSlot.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportSummary.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel+Sessions.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel+Assessment.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel+Preview.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingExportViewModel+Export.swift
       - path: App/SnapGlass/Sources/Recording/RecordingExportRoot.swift
       - path: App/SnapGlass/Sources/Recording/RecordingRecoveryService.swift
       - path: App/SnapGlass/Sources/Agent/AgentMode.swift
