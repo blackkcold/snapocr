@@ -19,12 +19,14 @@ struct ScreenRecordingPipelineAdapterTests {
         let excluded: Set<CGWindowID> = [41, 42]
 
         let configuration = ScreenRecordingPipelineAdapter.makeStartConfiguration(
-            source: source,
-            video: video,
-            audioMode: .systemAndMicrophone,
-            audioBitRate: 192_000,
-            destinationDirectory: URL(fileURLWithPath: "/recordings"),
-            excludedWindowIDs: excluded
+            ScreenStartConfigurationInput(
+                source: source,
+                video: video,
+                audioMode: .systemAndMicrophone,
+                audioBitRate: 192_000,
+                destinationDirectory: URL(fileURLWithPath: "/recordings"),
+                excludedWindowIDs: excluded
+            )
         )
 
         #expect(configuration.source == source)
@@ -41,12 +43,14 @@ struct ScreenRecordingPipelineAdapterTests {
     @Test("A muted screen configuration has no fabricated audio tracks")
     func mutedScreenConfigurationHasNoAudioTracks() {
         let configuration = ScreenRecordingPipelineAdapter.makeStartConfiguration(
-            source: .display(displayID: 12),
-            video: RecordingConfiguration(),
-            audioMode: .none,
-            audioBitRate: 128_000,
-            destinationDirectory: URL(fileURLWithPath: "/recordings"),
-            excludedWindowIDs: []
+            ScreenStartConfigurationInput(
+                source: .display(displayID: 12),
+                video: RecordingConfiguration(),
+                audioMode: .none,
+                audioBitRate: 128_000,
+                destinationDirectory: URL(fileURLWithPath: "/recordings"),
+                excludedWindowIDs: []
+            )
         )
 
         #expect(configuration.audio.mode == .none)
@@ -78,12 +82,14 @@ struct ScreenRecordingPipelineAdapterTests {
         )
 
         let configuration = ScreenRecordingPipelineAdapter.makeStartConfiguration(
-            source: .display(displayID: 12),
-            video: RecordingConfiguration(),
-            audioMode: .system,
-            audioBitRate: 128_000,
-            destinationDirectory: URL(fileURLWithPath: "/recordings"),
-            excludedWindowIDs: []
+            ScreenStartConfigurationInput(
+                source: .display(displayID: 12),
+                video: RecordingConfiguration(),
+                audioMode: .system,
+                audioBitRate: 128_000,
+                destinationDirectory: URL(fileURLWithPath: "/recordings"),
+                excludedWindowIDs: []
+            )
         )
         try await adapter.start(configuration, onFailure: { _ in })
         let stopped = try await adapter.stopAndSave()

@@ -1720,13 +1720,15 @@ final class RecordingSessionController {
             let screenMode = session.screenAudioMode
             let audioBitRate = session.screenAudioBitRate
             let startConfiguration = ScreenRecordingPipelineAdapter.makeStartConfiguration(
-                source: session.selection.source,
-                video: session.configuration,
-                audioMode: screenMode,
-                audioBitRate: audioBitRate,
-                destinationDirectory: session.destinationDirectory,
-                excludedWindowIDs: excludedWindowIDs,
-                sourceDimensions: screenSourceDimensions(for: session.selection)
+                ScreenStartConfigurationInput(
+                    source: session.selection.source,
+                    video: session.configuration,
+                    audioMode: screenMode,
+                    audioBitRate: audioBitRate,
+                    destinationDirectory: session.destinationDirectory,
+                    excludedWindowIDs: excludedWindowIDs,
+                    sourceDimensions: screenSourceDimensions(for: session.selection)
+                )
             )
             screenPipelineAdapter = adapter
             try await adapter.start(

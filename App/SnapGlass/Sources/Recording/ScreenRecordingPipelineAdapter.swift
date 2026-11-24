@@ -2,6 +2,34 @@ import CaptureCore
 import CoreGraphics
 import Foundation
 
+struct ScreenStartConfigurationInput {
+    let source: RecordingSource
+    let video: RecordingConfiguration
+    let audioMode: AudioSourceMode
+    let audioBitRate: Int
+    let destinationDirectory: URL
+    let excludedWindowIDs: Set<CGWindowID>
+    let sourceDimensions: CGSize?
+
+    init(
+        source: RecordingSource,
+        video: RecordingConfiguration,
+        audioMode: AudioSourceMode,
+        audioBitRate: Int,
+        destinationDirectory: URL,
+        excludedWindowIDs: Set<CGWindowID>,
+        sourceDimensions: CGSize? = nil
+    ) {
+        self.source = source
+        self.video = video
+        self.audioMode = audioMode
+        self.audioBitRate = audioBitRate
+        self.destinationDirectory = destinationDirectory
+        self.excludedWindowIDs = excludedWindowIDs
+        self.sourceDimensions = sourceDimensions
+    }
+}
+
 /// Adapts the app's existing start, stop, retry, and quit flows to screen segments.
 @MainActor
 struct ScreenRecordingPipelineAdapter {
@@ -58,14 +86,16 @@ struct ScreenRecordingPipelineAdapter {
 
     /// Builds the immutable core configuration from the selected screen audio mode.
     nonisolated static func makeStartConfiguration(
-        source: RecordingSource,
-        video: RecordingConfiguration,
-        audioMode: AudioSourceMode,
-        audioBitRate: Int,
-        destinationDirectory: URL,
-        excludedWindowIDs: Set<CGWindowID>,
-        sourceDimensions: CGSize? = nil
+        _ input: ScreenStartConfigurationInput
     ) -> ScreenRecordingStartConfiguration {
+        let source = input.source
+        let video = input.video
+        let audioMode = input.audioMode
+        let audioBitRate = input.audioBitRate
+        let destinationDirectory = input.destinationDirectory
+        let excludedWindowIDs = input.excludedWindowIDs
+        let sourceDimensions = input.sourceDimensions
+
         let channels: [RecordingTrackRole: Int]
         switch audioMode {
         case .system:
