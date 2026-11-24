@@ -191,7 +191,7 @@ public enum ScreenRecordingSessionCoordinatorError: LocalizedError, Equatable, S
     }
 }
 
-private struct ScreenVideoFrameEvent: @unchecked Sendable {
+struct ScreenVideoFrameEvent: @unchecked Sendable {
     let sampleBuffer: CMSampleBuffer
     let hostTime: UInt64
 }
@@ -201,30 +201,32 @@ public actor ScreenRecordingSessionCoordinator {
     private let engine: ScreenRecordingEngine
     private let segmentCompositionFactory:
         @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition
-    private let audioEngineFactory: @Sendable (
+    // Session state below is `internal` because the frame pipeline and its failure
+    // bookkeeping live in `ScreenRecordingSessionCoordinator+FramePipeline.swift`.
+    let audioEngineFactory: @Sendable (
         AudioRecordingConfiguration,
         any AudioCheckpointSink & Sendable,
         AudioSampleClock
     ) throws -> any AudioRecordingControlling & Sendable
     private let audio: ScreenAudioBridge
 
-    private var configuration: ScreenRecordingStartConfiguration?
-    private var composition: ScreenSegmentComposition?
-    private var audioEngine: (any AudioRecordingControlling & Sendable)?
+    var configuration: ScreenRecordingStartConfiguration?
+    var composition: ScreenSegmentComposition?
+    var audioEngine: (any AudioRecordingControlling & Sendable)?
     private var frameContinuation: AsyncStream<ScreenVideoFrameEvent>.Continuation?
     private var frameTask: Task<Void, Never>?
-    private var tickTask: Task<Void, Never>?
-    private var onFailure: (@Sendable (String) -> Void)?
-    private var processingFailure: String?
+    var tickTask: Task<Void, Never>?
+    var onFailure: (@Sendable (String) -> Void)?
+    var processingFailure: String?
     /// The first audio failure for this session, when the audio track could not start.
     ///
     /// Audio is optional for a screen recording: the video keeps recording and the
     /// user is told the audio was not captured instead of losing the whole take.
-    private var audioFailureReason: String?
+    var audioFailureReason: String?
     private var lastOutcome: ScreenRecordingOutcome?
-    private var isStopping = false
-    private let frameStreamDropCounter = ScreenRecordingDropCounter()
-    private let logger = Logger(subsystem: "com.snapglass", category: "screen.session")
+    var isStopping = false
+    let frameStreamDropCounter = ScreenRecordingDropCounter()
+    let logger = Logger(subsystem: "com.snapglass", category: "screen.session")
 
     /// Creates a coordinator around the existing screen stream engine.
     public init(
@@ -307,27 +309,8 @@ public actor ScreenRecordingSessionCoordinator {
         guard self.configuration == nil, !isStopping else {
             throw ScreenRecordingSessionCoordinatorError.alreadyStarted
         }
-        guard configuration.audio.kind == .screen,
-              configuration.audio.layout == .separateTracks,
-              configuration.audio.sampleRate == 48_000,
-              configuration.video.frameRateLimit > 0,
-              configuration.destinationDirectory.isFileURL
-        else { throw ScreenRecordingSessionCoordinatorError.invalidConfiguration }
-
-        let composition = try segmentCompositionFactory(configuration)
-        try await composition.coordinator.registerSession(
-            kind: .screen,
-            layout: .separateTracks
-        )
-        await composition.coordinator.configureSealContext(RecordingSealContext(
-            sessionID: composition.coordinator.sessionID,
-            kind: .screen,
-            layout: .separateTracks,
-            sampleRate: configuration.audio.sampleRate,
-            outputStem: "Recording-\(composition.coordinator.sessionID.uuidString.lowercased())",
-            destinationDirectory: configuration.destinationDirectory,
-            bitRate: configuration.audio.bitRate
-        ))
+        try validateStartConfiguration(configuration)
+        let composition = try await makeRegisteredComposition(configuration)
 
         let queue = AsyncStream.makeStream(
             of: ScreenVideoFrameEvent.self,
@@ -348,6 +331,53 @@ public actor ScreenRecordingSessionCoordinator {
             return try await self.retryPublish()
         }
 
+        try await startVideoCapture(
+            configuration: configuration,
+            continuation: queue.continuation,
+            onFailure: onFailure
+        )
+        startBoundaryTicks()
+    }
+
+    /// Checks the audio and video fields the segment and audio writers require.
+    private func validateStartConfiguration(
+        _ configuration: ScreenRecordingStartConfiguration
+    ) throws {
+        guard configuration.audio.kind == .screen,
+              configuration.audio.layout == .separateTracks,
+              configuration.audio.sampleRate == 48_000,
+              configuration.video.frameRateLimit > 0,
+              configuration.destinationDirectory.isFileURL
+        else { throw ScreenRecordingSessionCoordinatorError.invalidConfiguration }
+    }
+
+    /// Builds the first composition and registers it with the session journal.
+    private func makeRegisteredComposition(
+        _ configuration: ScreenRecordingStartConfiguration
+    ) async throws -> ScreenSegmentComposition {
+        let composition = try segmentCompositionFactory(configuration)
+        try await composition.coordinator.registerSession(
+            kind: .screen,
+            layout: .separateTracks
+        )
+        await composition.coordinator.configureSealContext(RecordingSealContext(
+            sessionID: composition.coordinator.sessionID,
+            kind: .screen,
+            layout: .separateTracks,
+            sampleRate: configuration.audio.sampleRate,
+            outputStem: "Recording-\(composition.coordinator.sessionID.uuidString.lowercased())",
+            destinationDirectory: configuration.destinationDirectory,
+            bitRate: configuration.audio.bitRate
+        ))
+        return composition
+    }
+
+    /// Starts the shared capture stream and unwinds the stream state on a failed start.
+    private func startVideoCapture(
+        configuration: ScreenRecordingStartConfiguration,
+        continuation: AsyncStream<ScreenVideoFrameEvent>.Continuation,
+        onFailure: @escaping @Sendable (String) -> Void
+    ) async throws {
         let reuseAudio = configuration.audio.mode == .system
             || configuration.audio.mode == .systemAndMicrophone
             ? ScreenAudioOutputReuse(bridge: audio)
@@ -357,7 +387,7 @@ public actor ScreenRecordingSessionCoordinator {
                 configuration,
                 audioOutputReuse: reuseAudio,
                 onVideoFrame: { sampleBuffer, hostTime in
-                    switch queue.continuation.yield(
+                    switch continuation.yield(
                         ScreenVideoFrameEvent(sampleBuffer: sampleBuffer, hostTime: hostTime)
                     ) {
                     case .enqueued:
@@ -378,7 +408,7 @@ public actor ScreenRecordingSessionCoordinator {
                 }
             )
         } catch {
-            queue.continuation.finish()
+            continuation.finish()
             await frameTask?.value
             frameTask = nil
             frameContinuation = nil
@@ -395,7 +425,6 @@ public actor ScreenRecordingSessionCoordinator {
             self.onFailure = nil
             throw error
         }
-        startBoundaryTicks()
     }
 
     /// Whether the active video writer has accepted at least one frame.
@@ -571,272 +600,6 @@ public actor ScreenRecordingSessionCoordinator {
         try await engine.finishSegmentedSession()
         await engine.installSegmentedRetryHandler(nil)
         return url
-    }
-
-    private func consume(_ event: ScreenVideoFrameEvent) async {
-        guard let configuration, let composition, processingFailure == nil else {
-            // The consumer stage: a consumed frame that cannot reach a writer.
-            frameStreamDropCounter.increment()
-            return
-        }
-        do {
-            try await composition.coordinator.append(video: event.sampleBuffer, at: event.hostTime)
-        } catch {
-            frameStreamDropCounter.increment()
-            logger.error("screen.session frame rejected: \(String(reflecting: error))")
-            recordFailure(error.localizedDescription)
-            return
-        }
-        guard audioEngine == nil, audioFailureReason == nil,
-              configuration.audio.mode != .none,
-              let epoch = await composition.coordinator.recordingEpochHostTime() else { return }
-        do {
-            let clock = AudioSampleClock(
-                epochHostTime: epoch,
-                hostTicksPerSecond: AudioSourceTimestampMapper.nativeHostTicksPerSecond(),
-                sampleRate: configuration.audio.sampleRate
-            )
-            let engine = try audioEngineFactory(configuration.audio, composition.audioSink, clock)
-            try await engine.start(configuration.audio)
-            audioEngine = engine
-        } catch {
-            logger.error("screen.session audio start failed: \(String(reflecting: error))")
-            recordAudioFailure(error.localizedDescription)
-        }
-    }
-
-    private func startBoundaryTicks() {
-        tickTask?.cancel()
-        tickTask = Task { [weak self] in
-            let clock = ContinuousClock()
-            while !Task.isCancelled {
-                do {
-                    try await clock.sleep(for: .seconds(1))
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                await self?.advanceBoundaryTick()
-            }
-        }
-    }
-
-    private func advanceBoundaryTick() async {
-        guard !isStopping, processingFailure == nil, let composition else { return }
-        do {
-            try await composition.coordinator.tick(hostTime: AudioGetCurrentHostTime())
-        } catch {
-            recordFailure(error.localizedDescription)
-        }
-    }
-
-    private func recordFailure(_ reason: String) {
-        guard processingFailure == nil else { return }
-        processingFailure = reason
-        logger.error("screen.session failure: \(reason)")
-        onFailure?(reason)
-    }
-
-    /// Records an audio-start failure without stopping the video.
-    ///
-    /// The video writer, the freeze-frame ticks, and the boundary ticks keep
-    /// running; the app tells the user the system audio was not captured when the
-    /// file is saved. Audio is attempted once per session.
-    ///
-    /// - Parameter reason: The audio engine's failure description.
-    private func recordAudioFailure(_ reason: String) {
-        guard audioFailureReason == nil else { return }
-        audioFailureReason = reason
-        logger.error("screen.session audio unavailable; the video keeps recording: \(reason)")
-    }
-
-    private static func makeComposition(
-        configuration: ScreenRecordingStartConfiguration,
-        roots: RecordingPipelineRoots
-    ) throws -> ScreenSegmentComposition {
-        let sessionID = UUID()
-        let recordingRoot = try RecordingLedgerFileSystem.canonicalDirectory(roots.sessionRoot, create: true)
-        let sessionsRoot = try RecordingLedgerFileSystem.canonicalDirectory(
-            recordingRoot.appendingPathComponent(".SnapGlassSessions", isDirectory: true),
-            create: true
-        )
-        let sessionRoot = sessionsRoot.appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
-        try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: false)
-        let ledger = try RecordingSessionLedger(
-            sessionRoot: sessionRoot,
-            indexURL: roots.indexURL,
-            sessionID: sessionID
-        )
-        let planner = try VideoSegmentPlanner(frameRate: configuration.video.frameRateLimit)
-        let plannerReference = ScreenSegmentPlannerReference(planner: planner)
-        let roles = Set(configuration.audio.channelCountByRole.keys.filter {
-            $0 == .system || $0 == .microphone
-        })
-        let videoDimensions = configuration.video.validatedEvenOutputDimensions(
-            for: configuration.sourceDimensions ?? configuration.video.resolutionLimit
-        ) ?? configuration.video.resolutionLimit
-
-        let videoFactory: @Sendable (ScreenBoundary) throws -> ScreenVideoWriterBridge = { boundary in
-            let segmentRoot = sessionRoot.appendingPathComponent(
-                String(format: "segment-%08d", boundary.segmentIndex),
-                isDirectory: true
-            )
-            try FileManager.default.createDirectory(at: segmentRoot, withIntermediateDirectories: true)
-            let url = segmentRoot.appendingPathComponent(
-                String(format: "chunk-%08d.mp4", boundary.chunkIndex)
-            )
-            return try ScreenVideoWriterBridge(
-                destinationURL: url,
-                configuration: configuration.video,
-                dimensions: videoDimensions
-            )
-        }
-        let audioFactory: @Sendable (ScreenBoundary) throws -> any SegmentCheckpointSink = { boundary in
-            let startSample: Int64
-            if let epoch = plannerReference.recordingEpoch {
-                let delta = CMTimeSubtract(boundary.startTime, epoch)
-                let value = CMTimeConvertScale(delta, timescale: 48_000, method: .roundTowardZero)
-                guard value.isValid, value.isNumeric, value.value >= 0 else {
-                    throw ScreenRecordingSessionCoordinatorError.invalidConfiguration
-                }
-                startSample = value.value
-            } else {
-                startSample = 0
-            }
-            let (endSample, overflow) = startSample.addingReportingOverflow(3_540 * 48_000)
-            guard !overflow else { throw ScreenRecordingSessionCoordinatorError.invalidConfiguration }
-            let segmentBoundary = SegmentBoundary(
-                index: boundary.segmentIndex,
-                startSample: startSample,
-                endSample: endSample
-            )
-            guard !roles.isEmpty else { return ScreenNoAudioSegmentSink(segmentBoundary: segmentBoundary) }
-            let segmentRoot = sessionRoot.appendingPathComponent(
-                String(format: "segment-%08d", boundary.segmentIndex),
-                isDirectory: true
-            )
-            try FileManager.default.createDirectory(at: segmentRoot, withIntermediateDirectories: true)
-            return try RecordingCheckpointWriter(
-                directory: segmentRoot,
-                sessionRoot: sessionRoot,
-                segment: segmentBoundary,
-                sampleRate: configuration.audio.sampleRate,
-                roles: roles
-            )
-        }
-        let seal = ScreenSegmentSealService(
-            publicationHooks: [LedgerPublicationHook(ledger: ledger)]
-        )
-        let coordinator = ScreenSegmentCoordinator(
-            planner: planner,
-            videoWriterFactory: videoFactory,
-            audioSinkFactory: audioFactory,
-            ledger: ledger,
-            seal: seal
-        )
-        return ScreenSegmentComposition(coordinator: coordinator, audioSink: coordinator)
-    }
-
-    private static func makeAudioEngine(
-        configuration: AudioRecordingConfiguration,
-        sink: any AudioCheckpointSink & Sendable,
-        clock: AudioSampleClock,
-        systemRing: AudioSourceRingBuffer,
-        hostTicksPerSecond: UInt64
-    ) throws -> any AudioRecordingControlling & Sendable {
-        guard configuration.kind == .screen,
-              configuration.mode != .none,
-              configuration.layout == .separateTracks,
-              configuration.sampleRate == 48_000
-        else { throw ScreenRecordingSessionCoordinatorError.invalidConfiguration }
-
-        let system = ScreenRingAudioFrameSource(ring: systemRing, hostTicksPerSecond: hostTicksPerSecond)
-        var sources: [RecordingTrackRole: any AudioFrameSource] = [.system: system]
-        if configuration.mode == .microphone || configuration.mode == .systemAndMicrophone {
-            let authorizer = AVMicrophoneAuthorizer()
-            let capture = AVAudioEngineMicrophoneCaptureEngine()
-            guard let format = capture.currentFormat,
-                  format.commonFormat == .pcmFormatFloat32,
-                  format.channelCount == 1 || format.channelCount == 2,
-                  format.sampleRate.isFinite,
-                  format.sampleRate > 0 else {
-                throw AudioSourceError.invalidFormat
-            }
-            let sourceFormat = AudioSourceFormat(
-                sampleRate: Int(format.sampleRate.rounded()),
-                channelCount: Int(format.channelCount)
-            )
-            let microphoneRing = try AudioSourceRingBuffer(
-                role: .microphone,
-                sampleRate: sourceFormat.sampleRate,
-                channelCount: sourceFormat.channelCount,
-                hostTicksPerSecond: hostTicksPerSecond
-            )
-            sources[.microphone] = MicrophoneSource(
-                ringBuffer: microphoneRing,
-                authorizer: authorizer,
-                engine: capture,
-                deviceMonitor: CoreAudioDeviceChangeMonitor(),
-                format: sourceFormat,
-                hostTicksPerSecond: hostTicksPerSecond
-            )
-        }
-        let authorizer = AVMicrophoneAuthorizer()
-        let routeController = AudioRouteController(authorizer: authorizer, sources: sources)
-        let pump = AudioMixPump(
-            clock: clock,
-            policy: AudioMixPolicy(sampleRate: configuration.sampleRate),
-            layout: configuration.layout,
-            blockFrames: 480,
-            channelCountByRole: configuration.channelCountByRole
-        )
-        return AudioRecordingEngine(
-            sink: sink,
-            clock: clock,
-            sources: sources,
-            routeController: routeController,
-            pump: pump
-        )
-    }
-}
-
-/// Sendability bridge for the epoch read performed by a factory owned by `ScreenSegmentCoordinator`.
-/// The closure is only invoked from that actor, which serializes all access with planner mutation.
-private final class ScreenSegmentPlannerReference: @unchecked Sendable {
-    private let planner: VideoSegmentPlanner
-
-    init(planner: VideoSegmentPlanner) {
-        self.planner = planner
-    }
-
-    var recordingEpoch: CMTime? { planner.recordingEpoch }
-}
-
-private struct ScreenNoAudioSegmentSink: SegmentCheckpointSink {
-    let segmentBoundary: SegmentBoundary
-
-    func append(_ block: AudioPCMBlock) async throws {
-        throw RecordingCheckpointError.invalidConfiguration
-    }
-
-    func commitCheckpoint() async throws -> CheckpointCommit {
-        throw RecordingCheckpointError.emptyCheckpoint
-    }
-
-    func finishSegment() async throws -> SegmentCheckpointSet {
-        SegmentCheckpointSet(segmentIndex: segmentBoundary.index, checkpoints: [])
-    }
-
-    func finishSegmentBundle() async throws -> RecordingSegmentCheckpointBundle {
-        RecordingSegmentCheckpointBundle(
-            checkpoints: SegmentCheckpointSet(segmentIndex: segmentBoundary.index, checkpoints: []),
-            coverage: RecordingSegmentCoverage(
-                segmentIndex: segmentBoundary.index,
-                segmentStartSample: segmentBoundary.startSample,
-                segmentEndSample: segmentBoundary.endSample,
-                tracks: []
-            )
-        )
     }
 }
 
