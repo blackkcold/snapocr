@@ -106,27 +106,11 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
     /// High backlog may defer additional seals, but never prevents the first seal
     /// from draining an otherwise idle queue.
     public func admitSeal(segmentIndex: Int, backlogBytes: Int64) async -> RecordingSealAdmission {
-        guard backlog.isValid, segmentIndex >= 0, backlogBytes >= 0 else {
-            _ = publishStopping(
-                requiredBytes: .max,
-                availableBytes: 0,
-                backlogBytes: max(0, backlogBytes),
-                reason: "invalid seal admission input or backlog policy"
-            )
-            return .stop(reason: "invalid seal admission input or backlog policy")
-        }
-        lastBacklogBytes = backlogBytes
-        updateBacklogPressure(backlogBytes)
-
-        guard !activeSeals.contains(segmentIndex) else {
-            let reason = "seal for segment is already admitted"
-            publishCurrentStatus(reason: reason)
-            return .defer(reason: reason)
-        }
-        guard activeSeals.count < backlog.maximumConcurrentSeals else {
-            let reason = "maximum concurrent seals reached"
-            publishCurrentStatus(reason: reason)
-            return .defer(reason: reason)
+        if let preflight = preflightSealAdmission(
+            segmentIndex: segmentIndex,
+            backlogBytes: backlogBytes
+        ) {
+            return preflight
         }
 
         let capacity = budget.capacitySnapshot()
@@ -191,6 +175,49 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
             reason: backlogPressureActive ? "seal backlog is draining" : nil
         ))
         return .run
+    }
+
+    private func preflightSealAdmission(
+        segmentIndex: Int,
+        backlogBytes: Int64
+    ) -> RecordingSealAdmission? {
+        guard backlog.isValid, segmentIndex >= 0, backlogBytes >= 0 else {
+            return stopAdmission(
+                requiredBytes: .max,
+                availableBytes: 0,
+                backlogBytes: max(0, backlogBytes),
+                reason: "invalid seal admission input or backlog policy"
+            )
+        }
+        lastBacklogBytes = backlogBytes
+        updateBacklogPressure(backlogBytes)
+
+        guard !activeSeals.contains(segmentIndex) else {
+            let reason = "seal for segment is already admitted"
+            publishCurrentStatus(reason: reason)
+            return .defer(reason: reason)
+        }
+        guard activeSeals.count < backlog.maximumConcurrentSeals else {
+            let reason = "maximum concurrent seals reached"
+            publishCurrentStatus(reason: reason)
+            return .defer(reason: reason)
+        }
+        return nil
+    }
+
+    private func stopAdmission(
+        requiredBytes: Int64,
+        availableBytes: Int64,
+        backlogBytes: Int64,
+        reason: String
+    ) -> RecordingSealAdmission {
+        _ = publishStopping(
+            requiredBytes: requiredBytes,
+            availableBytes: availableBytes,
+            backlogBytes: backlogBytes,
+            reason: reason
+        )
+        return .stop(reason: reason)
     }
 
     /// Releases a previously admitted seal slot and refreshes the bounded status stream.
