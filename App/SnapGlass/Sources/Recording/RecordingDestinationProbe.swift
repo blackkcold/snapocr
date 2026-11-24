@@ -373,92 +373,147 @@ private final class DestinationProbeEngine: @unchecked Sendable {
         expectedVolumeUUID: String?
     ) -> DestinationProbeResult {
         let fileManager = FileManager.default
-
         switch request {
         case .prepareCustom:
-            guard isWritableDirectory(directory, fileManager),
-                  customVolumeIsAcceptable(
-                      directory,
-                      expectedVolumeUUID: expectedVolumeUUID
-                  ) else {
-                return .locationUnavailable
-            }
-            return readCapacity(at: directory)
-
+            return prepareCustom(
+                directory: directory,
+                expectedVolumeUUID: expectedVolumeUUID,
+                fileManager: fileManager
+            )
         case .prepareDefault:
-            if existsAsNonDirectory(directory, fileManager) {
-                return .locationUnavailable
-            }
-            do {
-                try fileManager.createDirectory(
-                    at: directory,
-                    withIntermediateDirectories: true
-                )
-            } catch {
-                return .creationFailed(error.localizedDescription)
-            }
-            guard isWritableDirectory(directory, fileManager) else {
-                return .locationUnavailable
-            }
-            return readCapacity(at: directory)
-
+            return prepareDefault(directory: directory, fileManager: fileManager)
         case .inspectCustom:
-            guard isWritableDirectory(directory, fileManager),
-                  customVolumeIsAcceptable(
-                      directory,
-                      expectedVolumeUUID: expectedVolumeUUID
-                  ) else {
-                return .locationUnavailable
-            }
-            return readCapacity(at: directory)
-
+            return inspectCustom(
+                directory: directory,
+                expectedVolumeUUID: expectedVolumeUUID,
+                fileManager: fileManager
+            )
         case .inspectDefault:
-            if existsAsNonDirectory(directory, fileManager) {
-                return .locationUnavailable
-            }
-            guard let probed = nearestExistingDirectory(
-                for: directory,
-                fileManager: fileManager
-            ), isWritableDirectory(probed, fileManager) else {
-                return .locationUnavailable
-            }
-            return readCapacity(at: probed)
-
+            return inspectDefault(directory: directory, fileManager: fileManager)
         case .validateCustom:
-            guard isWritableDirectory(directory, fileManager),
-                  customVolumeIsAcceptable(
-                      directory,
-                      expectedVolumeUUID: expectedVolumeUUID
-                  ) else {
-                return .locationUnavailable
-            }
-            return .located
-
-        case .validateDefault:
-            if existsAsNonDirectory(directory, fileManager) {
-                return .locationUnavailable
-            }
-            if fileManager.fileExists(atPath: directory.path) {
-                return isWritableDirectory(directory, fileManager) ? .located : .locationUnavailable
-            }
-            guard let probed = nearestExistingDirectory(
-                for: directory,
+            return validateCustom(
+                directory: directory,
+                expectedVolumeUUID: expectedVolumeUUID,
                 fileManager: fileManager
-            ), isWritableDirectory(probed, fileManager) else {
-                return .locationUnavailable
-            }
-            return .located
-
+            )
+        case .validateDefault:
+            return validateDefault(directory: directory, fileManager: fileManager)
         case .capacity:
-            guard isWritableDirectory(directory, fileManager),
-                  customVolumeIsAcceptable(
-                      directory,
-                      expectedVolumeUUID: expectedVolumeUUID
-                  ) else {
-                return .locationUnavailable
-            }
-            return readCapacity(at: directory)
+            return capacity(
+                directory: directory,
+                expectedVolumeUUID: expectedVolumeUUID,
+                fileManager: fileManager
+            )
         }
+    }
+
+    private static func prepareCustom(
+        directory: URL,
+        expectedVolumeUUID: String?,
+        fileManager: FileManager
+    ) -> DestinationProbeResult {
+        guard customLocationIsUsable(
+            directory: directory,
+            expectedVolumeUUID: expectedVolumeUUID,
+            fileManager: fileManager
+        ) else { return .locationUnavailable }
+        return readCapacity(at: directory)
+    }
+
+    private static func prepareDefault(
+        directory: URL,
+        fileManager: FileManager
+    ) -> DestinationProbeResult {
+        if existsAsNonDirectory(directory, fileManager) {
+            return .locationUnavailable
+        }
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            return .creationFailed(error.localizedDescription)
+        }
+        guard isWritableDirectory(directory, fileManager) else {
+            return .locationUnavailable
+        }
+        return readCapacity(at: directory)
+    }
+
+    private static func inspectCustom(
+        directory: URL,
+        expectedVolumeUUID: String?,
+        fileManager: FileManager
+    ) -> DestinationProbeResult {
+        guard customLocationIsUsable(
+            directory: directory,
+            expectedVolumeUUID: expectedVolumeUUID,
+            fileManager: fileManager
+        ) else { return .locationUnavailable }
+        return readCapacity(at: directory)
+    }
+
+    private static func inspectDefault(
+        directory: URL,
+        fileManager: FileManager
+    ) -> DestinationProbeResult {
+        if existsAsNonDirectory(directory, fileManager) {
+            return .locationUnavailable
+        }
+        guard let probed = nearestExistingDirectory(for: directory, fileManager: fileManager),
+              isWritableDirectory(probed, fileManager) else {
+            return .locationUnavailable
+        }
+        return readCapacity(at: probed)
+    }
+
+    private static func validateCustom(
+        directory: URL,
+        expectedVolumeUUID: String?,
+        fileManager: FileManager
+    ) -> DestinationProbeResult {
+        customLocationIsUsable(
+            directory: directory,
+            expectedVolumeUUID: expectedVolumeUUID,
+            fileManager: fileManager
+        ) ? .located : .locationUnavailable
+    }
+
+    private static func validateDefault(
+        directory: URL,
+        fileManager: FileManager
+    ) -> DestinationProbeResult {
+        if existsAsNonDirectory(directory, fileManager) {
+            return .locationUnavailable
+        }
+        if fileManager.fileExists(atPath: directory.path) {
+            return isWritableDirectory(directory, fileManager) ? .located : .locationUnavailable
+        }
+        guard let probed = nearestExistingDirectory(for: directory, fileManager: fileManager),
+              isWritableDirectory(probed, fileManager) else {
+            return .locationUnavailable
+        }
+        return .located
+    }
+
+    private static func capacity(
+        directory: URL,
+        expectedVolumeUUID: String?,
+        fileManager: FileManager
+    ) -> DestinationProbeResult {
+        guard customLocationIsUsable(
+            directory: directory,
+            expectedVolumeUUID: expectedVolumeUUID,
+            fileManager: fileManager
+        ) else { return .locationUnavailable }
+        return readCapacity(at: directory)
+    }
+
+    private static func customLocationIsUsable(
+        directory: URL,
+        expectedVolumeUUID: String?,
+        fileManager: FileManager
+    ) -> Bool {
+        isWritableDirectory(directory, fileManager)
+            && customVolumeIsAcceptable(directory, expectedVolumeUUID: expectedVolumeUUID)
     }
 
     /// Accepts a custom write path only when its volume identity still matches.
