@@ -15,6 +15,9 @@ swift-format lint -p Packages/OCRCore/Sources/OCRPipeline.swift --configuration 
 # Lint
 swiftlint lint --config .swiftlint.yml
 
+# 让 git blame 跳过纯格式化提交（一次性）
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+
 # 生成工程
 xcodegen generate
 
