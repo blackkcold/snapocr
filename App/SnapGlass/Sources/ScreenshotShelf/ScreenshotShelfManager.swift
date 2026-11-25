@@ -79,6 +79,7 @@ final class ScreenshotShelfManager {
     var collapseToRail: Bool
     var captureSuppressionCount = 0
     var isRecordingActive = false
+    var isRecordingShelfHidden = false
     var isFullScreenSuppressed = false
     var isEditingSuppressed = false
 
@@ -103,10 +104,10 @@ final class ScreenshotShelfManager {
         })
     }
     var hasItems: Bool { !state.entries.isEmpty }
-    var canToggle: Bool { isEnabled && hasItems && !isRecordingActive }
+    var canToggle: Bool { isEnabled && hasItems && !isRecordingShelfHidden }
     var isVisible: Bool { phase == .visible || phase == .appearing }
     var shouldPresentPanel: Bool {
-        isEnabled && hasItems && !isRecordingActive && presentationState.shouldPresentPanel
+        isEnabled && hasItems && !isRecordingShelfHidden && presentationState.shouldPresentPanel
     }
     var displayScreen: NSScreen? {
         ScreenshotShelfScreenResolver.screen(for: activeDisplayID)
@@ -329,7 +330,7 @@ final class ScreenshotShelfManager {
 
     func show() {
         refreshPreferences()
-        guard isEnabled, hasItems, !isRecordingActive, !isEditingSuppressed else { return }
+        guard isEnabled, hasItems, !isRecordingShelfHidden, !isEditingSuppressed else { return }
         cancelCollapseTasks()
         modeState.expand()
         presentationState.show()
@@ -394,17 +395,20 @@ final class ScreenshotShelfManager {
         scheduleCollapseIfNeeded()
     }
 
-    func setRecordingActive(_ active: Bool) {
-        guard isRecordingActive != active else { return }
+    func setRecordingActive(_ active: Bool, hideShelf: Bool = false) {
+        let shouldHideShelf = active && hideShelf
+        guard isRecordingActive != active || isRecordingShelfHidden != shouldHideShelf else { return }
+        let wasShelfHidden = isRecordingShelfHidden
         isRecordingActive = active
-        if active {
+        isRecordingShelfHidden = shouldHideShelf
+        if !wasShelfHidden && shouldHideShelf {
             presentationState.beginSuppression(.recording)
-        } else {
+        } else if wasShelfHidden && !shouldHideShelf {
             presentationState.endSuppression(.recording)
         }
         updateModeSuppression()
-        refreshPresentation(immediate: active)
-        if !active { scheduleCollapseIfNeeded() }
+        refreshPresentation(immediate: shouldHideShelf)
+        if !shouldHideShelf { scheduleCollapseIfNeeded() }
     }
 
     func remove(captureID: UUID) {

@@ -1,0 +1,23 @@
+{
+  "name": "screen-10s",
+  "mode": "screen",
+  "audioSeconds": 1,
+  "screenSeconds": 10,
+  "firstSampleDeadlineSeconds": 10,
+  "simulateMainStallMs": 0,
+  "simulateStallAfterStart": false,
+  "audioMode": "none",
+  "hudWarmup": false,
+  "expect": {
+    "artifactPlayable": true,
+    "becameRecording": true
+  },
+  "screenExpect": {
+    "writerStart": true,
+    "published": true,
+    "becameWaitingForFrame": true,
+    "minChunkBytes": 1,
+    "noZeroByteChunks": true,
+    "durationToleranceSeconds": 2.5
+  }
+}

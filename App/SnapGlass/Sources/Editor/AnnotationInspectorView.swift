@@ -40,12 +40,14 @@ struct AnnotationInspectorView: View {
     }
 
     private var headerIcon: String {
+        if viewModel.inspectorTab == .share { return "sparkles" }
         if isPickerActive { return "eyedropper" }
         if viewModel.selectedTool == .crop { return "crop" }
         return "slider.horizontal.3"
     }
 
     private var headerTitle: LocalizedStringKey {
+        if viewModel.inspectorTab == .share { return "Share-ready look" }
         if isPickerActive { return "Color Picker" }
         if viewModel.selectedTool == .crop { return "Crop" }
         if isEditingSelection { return "Edit \(Text(toolDisplayName))" }
@@ -60,40 +62,59 @@ struct AnnotationInspectorView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: DS.Space.s12) {
-                HStack {
-                    Label {
-                        Text(headerTitle)
-                    } icon: {
-                        Image(systemName: headerIcon)
-                    }
-                    .font(.headline)
-
-                    Spacer()
-
-                    if isEditingSelection {
-                        Button(role: .destructive, action: viewModel.removeSelectedNode) {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(.plain)
-                        .frame(width: DS.Hit.small, height: DS.Hit.small)
-                        .contentShape(Rectangle())
-                        .help("Delete selected annotation")
-                        .accessibilityLabel("Delete selected annotation")
-                    }
+        VStack(spacing: 0) {
+            HStack {
+                Label {
+                    Text(headerTitle)
+                } icon: {
+                    Image(systemName: headerIcon)
                 }
+                .font(.headline)
 
-                if hasContext {
-                    controls
-                } else {
-                    emptyState
+                Spacer()
+
+                if viewModel.inspectorTab == .annotation, isEditingSelection {
+                    Button(role: .destructive, action: viewModel.removeSelectedNode) {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: DS.Hit.small, height: DS.Hit.small)
+                    .contentShape(Rectangle())
+                    .help("Delete selected annotation")
+                    .accessibilityLabel("Delete selected annotation")
                 }
-
-                Spacer(minLength: 0)
             }
-            .padding(DS.Space.s12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Space.s12)
+            .padding(.top, DS.Space.s12)
+            .padding(.bottom, DS.Space.s8)
+
+            Picker("Inspector page", selection: $viewModel.inspectorTab) {
+                Text("Annotation").tag(EditorInspectorTab.annotation)
+                Text("Share-ready look").tag(EditorInspectorTab.share)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, DS.Space.s12)
+            .padding(.bottom, DS.Space.s8)
+            .accessibilityLabel("Inspector page")
+
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: DS.Space.s12) {
+                    if viewModel.inspectorTab == .annotation {
+                        if hasContext {
+                            controls
+                        } else {
+                            emptyState
+                        }
+                    } else {
+                        ShareAppearanceInspectorView(viewModel: viewModel)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(DS.Space.s12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .frame(minWidth: 240, idealWidth: 240, maxWidth: 280)
         .glassSurface(

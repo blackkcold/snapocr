@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// A share-ready screenshot treatment: background, padding, rounded corners,
-/// and a soft shadow. All metrics are ratios of the image's reference edge so
+/// shadow and border. All metrics are ratios of the image's reference edge so
 /// a 6K fullscreen capture and a small region capture keep the same visual
 /// weight.
 public struct MockupStyle: Codable, Equatable, Sendable {
@@ -24,16 +24,34 @@ public struct MockupStyle: Codable, Equatable, Sendable {
         case transparent
         case solid(red: CGFloat, green: CGFloat, blue: CGFloat)
         case linear(stops: [ColorStop], angle: CGFloat)
+
+        /// Whether the exported canvas keeps transparency outside the image.
+        public var isTransparent: Bool {
+            if case .transparent = self { return true }
+            return false
+        }
+    }
+
+    /// Border colour resolved against the image edge.
+    ///
+    /// `automatic` picks a light or dark hairline from the background
+    /// luminance; the custom case is stored as sRGB components.
+    public enum BorderColor: Codable, Equatable, Sendable {
+        case automatic
+        case custom(red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat)
     }
 
     /// Schema version for forward-compatible decoding.
-    public var version: Int = 1
+    public var version: Int = 2
     public var background: Background
     public var paddingRatio: CGFloat
     public var cornerRadiusRatio: CGFloat
     public var shadowBlurRatio: CGFloat
     public var shadowOpacity: CGFloat
     public var shadowOffsetRatio: CGFloat
+    /// Border stroke width as a ratio of the reference edge. Zero disables it.
+    public var borderWidthRatio: CGFloat
+    public var borderColor: BorderColor
 
     public init(
         background: Background,
@@ -41,7 +59,9 @@ public struct MockupStyle: Codable, Equatable, Sendable {
         cornerRadiusRatio: CGFloat = 0.012,
         shadowBlurRatio: CGFloat = 0.03,
         shadowOpacity: CGFloat = 0.28,
-        shadowOffsetRatio: CGFloat = 0.012
+        shadowOffsetRatio: CGFloat = 0.012,
+        borderWidthRatio: CGFloat = 0,
+        borderColor: BorderColor = .automatic
     ) {
         self.background = background
         self.paddingRatio = paddingRatio
@@ -49,6 +69,45 @@ public struct MockupStyle: Codable, Equatable, Sendable {
         self.shadowBlurRatio = shadowBlurRatio
         self.shadowOpacity = shadowOpacity
         self.shadowOffsetRatio = shadowOffsetRatio
+        self.borderWidthRatio = borderWidthRatio
+        self.borderColor = borderColor
+    }
+
+    /// Whether the style leaves any transparent pixels in the exported canvas.
+    public var isTransparent: Bool {
+        background.isTransparent
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case background
+        case paddingRatio
+        case cornerRadiusRatio
+        case shadowBlurRatio
+        case shadowOpacity
+        case shadowOffsetRatio
+        case borderWidthRatio
+        case borderColor
+    }
+
+    /// Decodes older records that predate the border fields.
+    ///
+    /// Swift's synthesized decoder does not apply property defaults for
+    /// missing keys, so adding a field without this initializer would make
+    /// every historical style silently fail to decode and fall back to the
+    /// raw image. Every field is therefore optional on the wire.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedVersion = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        version = max(decodedVersion, 2)
+        background = try container.decodeIfPresent(Background.self, forKey: .background) ?? .transparent
+        paddingRatio = try container.decodeIfPresent(CGFloat.self, forKey: .paddingRatio) ?? 0.08
+        cornerRadiusRatio = try container.decodeIfPresent(CGFloat.self, forKey: .cornerRadiusRatio) ?? 0.012
+        shadowBlurRatio = try container.decodeIfPresent(CGFloat.self, forKey: .shadowBlurRatio) ?? 0.03
+        shadowOpacity = try container.decodeIfPresent(CGFloat.self, forKey: .shadowOpacity) ?? 0.28
+        shadowOffsetRatio = try container.decodeIfPresent(CGFloat.self, forKey: .shadowOffsetRatio) ?? 0.012
+        borderWidthRatio = try container.decodeIfPresent(CGFloat.self, forKey: .borderWidthRatio) ?? 0
+        borderColor = try container.decodeIfPresent(BorderColor.self, forKey: .borderColor) ?? .automatic
     }
 }
 

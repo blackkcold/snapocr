@@ -17,6 +17,15 @@ enum AppLocalization {
         language(in: defaults).locale
     }
 
+    /// A stable identifier for the language the UI renders in.
+    ///
+    /// Part of the recording HUD's layout-signature key: the same state measures a
+    /// different width per translation, so a language change invalidates a cached size.
+    static var languageIdentifier: String {
+        let selected = language(in: .standard)
+        return "\(selected.rawValue):\(selected.locale.identifier)"
+    }
+
     private static func bundle() -> Bundle {
         guard let identifier = language(in: .standard).resourceIdentifier,
               let path = Bundle.main.path(forResource: identifier, ofType: "lproj"),
@@ -42,20 +51,72 @@ enum AppLocalization {
         _ error: Error,
         localize: (String) -> String
     ) -> String {
+        if let pipelineError = error as? RecordingPipelineError {
+            return pipelineErrorDescription(pipelineError, localize: localize)
+        }
         if let engineError = error as? ScreenRecordingEngineError {
             return recordingErrorDescription(engineError, localize: localize)
         }
+        if let coordinatorError = error as? ScreenRecordingSessionCoordinatorError {
+            return coordinatorErrorDescription(coordinatorError, localize: localize)
+        }
         if let configurationError = error as? RecordingConfigurationError {
-            switch configurationError {
-            case .unsupportedCodec:
-                return localize("The selected video codec is not supported by the media writer.")
-            case .unsupportedSystemAudioFormat:
-                return localize("The selected system audio format is unavailable.")
-            case .invalidConfiguration:
-                return localize("The recording settings are invalid.")
-            }
+            return configurationErrorDescription(configurationError, localize: localize)
         }
         return error.localizedDescription
+    }
+
+    private static func pipelineErrorDescription(
+        _ error: RecordingPipelineError,
+        localize: (String) -> String
+    ) -> String {
+        switch error {
+        case .alreadyStarted:
+            return localize("A recording is already starting or in progress.")
+        case .invalidConfiguration:
+            return localize("The recording settings are invalid.")
+        case let .spacePreflightDenied(decision):
+            return spaceBudgetDescription(decision, localize: localize)
+        case .journalUnavailable:
+            return localize("The recording session is unavailable.")
+        case .engineUnavailable:
+            return localize("The audio recording engine could not start.")
+        }
+    }
+
+    private static func coordinatorErrorDescription(
+        _ error: ScreenRecordingSessionCoordinatorError,
+        localize: (String) -> String
+    ) -> String {
+        switch error {
+        case .alreadyStarted:
+            return localize("A recording is already starting or in progress.")
+        case .notStarted:
+            return localize("The recording session is unavailable.")
+        case .noPublishedSegments:
+            return localize("The screen recording did not publish a video segment.")
+        case .invalidConfiguration:
+            return localize("The recording settings are invalid.")
+        case .audioFinalizationFailed:
+            return localize("Screen-recording audio could not be finalized.")
+        case .streamStopUnconfirmed:
+            // swiftlint:disable:next line_length
+            return localize("The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one.")
+        }
+    }
+
+    private static func configurationErrorDescription(
+        _ error: RecordingConfigurationError,
+        localize: (String) -> String
+    ) -> String {
+        switch error {
+        case .unsupportedCodec:
+            return localize("The selected video codec is not supported by the media writer.")
+        case .unsupportedSystemAudioFormat:
+            return localize("The selected system audio format is unavailable.")
+        case .invalidConfiguration:
+            return localize("The recording settings are invalid.")
+        }
     }
 
     static func recordingErrorDescription(
@@ -86,6 +147,8 @@ enum AppLocalization {
                 localize: localize
             )
             return "\(localizedReason) \(retainedPartial)"
+        case .previousStreamNotStopped:
+            return localize("The previous capture stream has not stopped yet. Wait for it to stop, then record again.")
         }
     }
 
@@ -102,6 +165,29 @@ enum AppLocalization {
             arguments: [underlyingReason],
             localize: localize
         )
+    }
+
+    private static func spaceBudgetDescription(
+        _ decision: SpaceBudgetDecision,
+        localize: (String) -> String
+    ) -> String {
+        switch decision.denial {
+        case let .insufficient(_, available, required)?:
+            return formatted(
+                "Not enough space: %@ available, %@ required.",
+                arguments: [
+                    RecordingStorage.formattedBytes(available),
+                    RecordingStorage.formattedBytes(required),
+                ],
+                localize: localize
+            )
+        case .capacityUnreadable(_)?:
+            return localize("Could not check free space in the recording folder.")
+        case .locationUnavailable(_, _)?:
+            return localize("The selected recording folder is unavailable. Choose it again in Preferences.")
+        case .none:
+            return localize("At least 1 GB of free space is required to start recording.")
+        }
     }
 
     private static func formatted(

@@ -78,139 +78,122 @@ struct AboutPreferencesView: View {
 // MARK: - Updates
 
 struct UpdatesPreferencesView: View {
-    @EnvironmentObject private var viewModel: CaptureViewModel
+    @EnvironmentObject private var updater: UpdaterManager
 
     var body: some View {
         ScrollView {
             PreferencesCardGrid {
                 PreferencesCard {
-                    PreferencesCardHeader(systemImage: "arrow.down.circle", title: "Update")
-
-                    LabeledContent("Current version") {
-                        Text(currentVersion)
-                            .monospacedDigit()
+                    PreferencesCardHeader(systemImage: "arrow.down.circle", title: "Update") {
+                        Text(verbatim: versionLabel)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.primary.opacity(0.06), in: Capsule())
                     }
-
-                    Divider()
 
                     stateContent
 
                     Divider()
 
-                    footnote
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Automatically check for updates", isOn: autoCheckBinding)
+                        Toggle("Automatically download and install updates", isOn: autoDownloadBinding)
+                            .disabled(!updater.automaticallyChecksForUpdates || !updater.allowsAutomaticUpdates)
+                    }
+
+                    Divider()
+
+                    PreferencesCardCaption(text: footnote)
                 }
             }
         }
     }
 
+    // MARK: State
+
     @ViewBuilder
     private var stateContent: some View {
-        switch viewModel.updateCheckState {
-        case .idle:
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Check GitHub Releases for a newer version.")
+        VStack(alignment: .leading, spacing: 12) {
+            if let blocker = updater.pendingBlocker {
+                pendingBanner(blocker)
+            }
+
+            switch updater.state {
+            case .idle:
+                Text("Check for updates from GitHub Releases.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
                 Button("Check for Updates...") {
-                    viewModel.checkForUpdates()
+                    updater.checkForUpdates()
                 }
                 .buttonStyle(.borderedProminent)
-            }
 
-        case .checking:
-            statusHeader(
-                systemImage: "arrow.triangle.2.circlepath",
-                tint: .accentColor,
-                title: AppLocalization.string("Checking for Updates...")
-            ) {
-                ProgressView()
-                    .controlSize(.small)
-            }
+            case .checking:
+                statusHeader(
+                    systemImage: "arrow.triangle.2.circlepath",
+                    tint: .accentColor,
+                    title: AppLocalization.string("Checking for Updates...")
+                ) {
+                    ProgressView()
+                        .controlSize(.small)
+                }
 
-        case .upToDate(let latestVersion):
-            VStack(alignment: .leading, spacing: 12) {
+            case .upToDate(let version):
                 statusHeader(
                     systemImage: "checkmark.seal.fill",
                     tint: .green,
                     title: AppLocalization.string("SnapGlass is Up to Date"),
                     detail: AppLocalization.string(
                         "You are running the latest version (%@).",
-                        latestVersion.description
+                        version
                     )
                 )
 
                 Button("Check Again") {
-                    viewModel.checkForUpdates()
+                    updater.checkForUpdates()
                 }
                 .buttonStyle(.bordered)
-            }
 
-        case .available(let release):
-            VStack(alignment: .leading, spacing: 12) {
+            case .available(let update):
                 statusHeader(
-                    systemImage: "arrow.down.circle.fill",
-                    tint: .accentColor,
-                    title: AppLocalization.string("SnapGlass %@ is Available", release.tagName),
-                    detail: AppLocalization.string("A new version is ready to download.")
-                )
-
-                releaseNotes(for: release)
-
-                HStack(spacing: 10) {
-                    Button("Download Update") {
-                        viewModel.downloadUpdate(release)
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("View on GitHub") {
-                        NSWorkspace.shared.open(release.releasePageURL)
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-
-        case .downloading(let release):
-            statusHeader(
-                systemImage: "arrow.down.circle",
-                tint: .accentColor,
-                title: AppLocalization.string("Downloading Update..."),
-                detail: AppLocalization.string(
-                    "SnapGlass %@ is being downloaded and verified.",
-                    release.tagName
-                )
-            ) {
-                ProgressView()
-                    .controlSize(.small)
-            }
-
-        case .readyToInstall(let release, let fileURL):
-            VStack(alignment: .leading, spacing: 12) {
-                statusHeader(
-                    systemImage: "checkmark.circle.fill",
-                    tint: .green,
-                    title: AppLocalization.string("Update Ready to Install"),
-                    detail: AppLocalization.string(
-                        "SnapGlass %@ has been downloaded and verified.",
-                        release.tagName
-                    )
+                    systemImage: update.isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle.fill",
+                    tint: update.isDownloaded ? .green : .accentColor,
+                    title: update.isDownloaded
+                        ? AppLocalization.string("Update Ready to Install")
+                        : AppLocalization.string("SnapGlass %@ is Available", update.displayVersion),
+                    detail: update.isDownloaded
+                        ? AppLocalization.string(
+                            "SnapGlass %@ has been downloaded and verified.",
+                            update.displayVersion
+                        )
+                        : AppLocalization.string("A new version is ready to download.")
                 )
 
                 HStack(spacing: 10) {
-                    Button("Open Installer") {
-                        viewModel.installDownloadedUpdate(release, at: fileURL)
+                    if update.isDownloaded {
+                        Button("Install and Relaunch...") {
+                            updater.presentUpdate()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Download and Install...") {
+                            updater.presentUpdate()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
 
-                    Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                    if let notesURL = update.releaseNotesURL {
+                        Button("Release Notes") {
+                            NSWorkspace.shared.open(notesURL)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
                 }
-            }
 
-        case .checkFailed(let message):
-            VStack(alignment: .leading, spacing: 12) {
+            case .failed(let message):
                 statusHeader(
                     systemImage: "exclamationmark.triangle.fill",
                     tint: .orange,
@@ -219,49 +202,31 @@ struct UpdatesPreferencesView: View {
                 )
 
                 Button("Try Again") {
-                    viewModel.checkForUpdates()
+                    updater.checkForUpdates()
                 }
                 .buttonStyle(.borderedProminent)
-            }
-
-        case .downloadFailed(let release, let message):
-            VStack(alignment: .leading, spacing: 12) {
-                statusHeader(
-                    systemImage: "exclamationmark.triangle.fill",
-                    tint: .orange,
-                    title: AppLocalization.string("Update Download Failed"),
-                    detail: message
-                )
-
-                HStack(spacing: 10) {
-                    Button("Try Again") {
-                        viewModel.downloadUpdate(release)
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("View on GitHub") {
-                        NSWorkspace.shared.open(release.releasePageURL)
-                    }
-                    .buttonStyle(.bordered)
-                }
             }
         }
     }
 
-    private func statusHeader(
-        systemImage: String,
-        tint: Color,
-        title: String,
-        detail: String? = nil
-    ) -> some View {
-        statusHeader(
-            systemImage: systemImage,
-            tint: tint,
-            title: title,
-            detail: detail
-        ) {
-            EmptyView()
+    private func pendingBanner(_ blocker: UpdateBlocker) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: blocker == .recording ? "record.circle" : "square.and.pencil")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.orange)
+
+            Text(LocalizedStringKey(blocker.message))
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color.orange.opacity(0.10),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
     }
 
     private func statusHeader<Accessory: View>(
@@ -300,44 +265,45 @@ struct UpdatesPreferencesView: View {
         }
     }
 
-    @ViewBuilder
-    private func releaseNotes(for release: UpdateRelease) -> some View {
-        let notes = release.releaseNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !notes.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("What's New")
-                    .font(.subheadline.weight(.semibold))
-
-                Text(String(notes.prefix(1_500)))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(
-                Color.primary.opacity(0.045),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
+    private func statusHeader(
+        systemImage: String,
+        tint: Color,
+        title: String,
+        detail: String? = nil
+    ) -> some View {
+        statusHeader(
+            systemImage: systemImage,
+            tint: tint,
+            title: title,
+            detail: detail
+        ) {
+            EmptyView()
         }
     }
 
-    @ViewBuilder
-    private var footnote: some View {
-        if case .readyToInstall = viewModel.updateCheckState {
-            PreferencesCardCaption(text: LocalizedStringKey(
-                "SnapGlass will quit after opening the installer. Save your work first."
-            ))
-        } else {
-            PreferencesCardCaption(text: LocalizedStringKey(
-                "Updates are downloaded from the GitHub Releases page "
-                    + "and verified with SHA-256 before saving."
-            ))
-        }
+    // MARK: Bindings
+
+    private var autoCheckBinding: Binding<Bool> {
+        Binding(
+            get: { updater.automaticallyChecksForUpdates },
+            set: { updater.automaticallyChecksForUpdates = $0 }
+        )
     }
 
-    private var currentVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    private var autoDownloadBinding: Binding<Bool> {
+        Binding(
+            get: { updater.automaticallyDownloadsUpdates },
+            set: { updater.automaticallyDownloadsUpdates = $0 }
+        )
+    }
+
+    private var versionLabel: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        return "\(short) (\(build))"
+    }
+
+    private var footnote: LocalizedStringKey {
+        "Updates are downloaded from the GitHub Releases page and verified with Sparkle's EdDSA signature."
     }
 }

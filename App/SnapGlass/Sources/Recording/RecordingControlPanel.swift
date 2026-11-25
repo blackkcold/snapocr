@@ -1,14 +1,19 @@
 import AppKit
 import CaptureCore
+import OSLog
 import SharedKit
 import SwiftUI
 
 /// What the floating recording control panel shows.
 enum RecordingControlPanelState: Equatable {
+    case preparing(kind: RecordingKind, phase: RecordingPreparationPhase)
     case countdown(Int)
-    case starting
+    case starting(kind: RecordingKind, phase: RecordingStartPhase)
     case recording(startedAt: Date)
-    case saving(fileName: String?)
+    case saving(kind: RecordingKind, fileName: String?, isBeforeQuit: Bool)
+    case audioRecording(RecordingHUDPresentation, expanded: Bool, silenceWarning: Bool)
+    case audioFinalizing(savedSegments: Int, previewReady: Bool, previewPlaying: Bool)
+    case audioFinished(savedSegments: Int, outputURL: URL?, previewReady: Bool, previewPlaying: Bool)
     case failure(RecordingControlPanelFailure)
     case notice(String)
 }
@@ -29,6 +34,12 @@ struct RecordingControlPanelActions {
     var onDismiss: () -> Void
     var onHideWhileSaving: () -> Void
     var onCornerChange: (RecordingHUDCorner) -> Void
+    var onToggleAudioDetails: () -> Void
+    var onPreview: () -> Void
+    var onStopPreview: () -> Void
+    var onOpenLatest: (URL?) -> Void
+    var onOpenRecordings: () -> Void
+    var onJoinExport: () -> Void
 }
 
 /// Observable state shared with the hosted SwiftUI view.
@@ -36,35 +47,113 @@ struct RecordingControlPanelActions {
 /// The panel updates this model instead of replacing `rootView`, so hover and timer state survive
 /// every status tick.
 @MainActor
-private final class RecordingControlPanelModel: ObservableObject {
+final class RecordingControlPanelModel: ObservableObject {
     @Published var state: RecordingControlPanelState
     @Published var surfaceOpacity: Double
     @Published var hoverRestore: Bool
+    /// Whether a persistent failure shows its full reason instead of one truncated line.
+    @Published var failureExpanded = false
+    /// Height of the scrollable reason column when the expanded error is too tall for the card.
+    @Published var failureScrollHeight: CGFloat?
+
+    /// Called after a change that alters the view's measured height, such as expanding a failure.
+    var onLayoutChange: (@MainActor () -> Void)?
 
     init(state: RecordingControlPanelState, surfaceOpacity: Double, hoverRestore: Bool) {
         self.state = state
         self.surfaceOpacity = surfaceOpacity
         self.hoverRestore = hoverRestore
     }
+
+    /// Expands or collapses the failure reason and asks the panel to remeasure.
+    func toggleFailureExpansion() {
+        failureExpanded.toggle()
+        onLayoutChange?()
+    }
 }
 
-private struct RecordingControlPanelView: View {
+/// The four-language text shared by the live HUD and its measurement view.
+///
+/// Both views resolve the same keys, so a measured size always matches what the live
+/// capsule renders. Resetting a key here updates the size and the presentation together.
+enum RecordingHUDLabels {
+    /// The preparation step text for one capture kind.
+    ///
+    /// - Parameters:
+    ///   - kind: The capture kind of the session.
+    ///   - phase: The preparation step being shown.
+    /// - Returns: The localized label.
+    static func preparation(kind: RecordingKind, phase: RecordingPreparationPhase) -> String {
+        switch phase {
+        case .checkingPermission:
+            if kind == .audio {
+                return AppLocalization.string("Checking microphone access…")
+            }
+            return AppLocalization.string("Checking screen recording access…")
+        case .waitingForAuthorization:
+            return AppLocalization.string("Waiting for recording access…")
+        case .loadingSources:
+            return AppLocalization.string("Loading recording sources…")
+        case .choosingSource:
+            return AppLocalization.string("Waiting for a source selection…")
+        case .verifyingDestination:
+            return AppLocalization.string("Checking the recording folder…")
+        }
+    }
+
+    /// Maps the truthful start stage to the four-language keys.
+    ///
+    /// `startingScreenWriter` is an in-flight start, not a preparation step; the
+    /// first-frame phase only claims that the writer has not accepted a frame yet.
+    ///
+    /// - Parameter phase: The start stage being shown.
+    /// - Returns: The localized label.
+    static func starting(phase: RecordingStartPhase) -> String {
+        switch phase {
+        case .startingAudioPipeline:
+            AppLocalization.string("Starting audio recording…")
+        case .awaitingFirstAudioSample:
+            AppLocalization.string("Waiting for the first audio sample…")
+        case .startingScreenWriter:
+            AppLocalization.string("Starting screen recording…")
+        case .awaitingFirstVideoFrame:
+            AppLocalization.string("Waiting for the first frame to be written…")
+        }
+    }
+
+    /// The label for the audio sources being captured.
+    ///
+    /// - Parameter mode: The audio sources of the session.
+    /// - Returns: The localized label.
+    static func audioMode(_ mode: AudioSourceMode) -> String {
+        switch mode {
+        case .system: AppLocalization.string("System Audio")
+        case .microphone: AppLocalization.string("Microphone")
+        case .systemAndMicrophone: AppLocalization.string("System Audio + Microphone")
+        case .none: AppLocalization.string("No Audio")
+        }
+    }
+
+    /// The saving label, kept as a localization key so the injected locale resolves it.
+    ///
+    /// - Parameters:
+    ///   - kind: The capture kind being saved.
+    ///   - isBeforeQuit: Whether the save runs as part of quitting.
+    /// - Returns: The localization key.
+    static func saving(kind: RecordingKind, isBeforeQuit: Bool) -> LocalizedStringKey {
+        if isBeforeQuit { return "Saving recording before quitting" }
+        return kind == .audio ? "Saving audio recording" : "Saving screen recording"
+    }
+}
+
+struct RecordingControlPanelView: View {
     @ObservedObject var model: RecordingControlPanelModel
     let actions: RecordingControlPanelActions
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) var reduceTransparency
     @State private var hovered = false
     @State private var pulsing = false
-
-    private var size: CGSize {
-        switch model.state {
-        case .countdown: RecordingHUDMetrics.countdownSize
-        case .starting, .recording: RecordingHUDMetrics.recordingSize
-        case .saving: RecordingHUDMetrics.savingSize
-        case .failure: RecordingHUDMetrics.failureSize
-        case .notice: RecordingHUDMetrics.noticeSize
-        }
-    }
 
     private var surfaceOpacity: Double {
         if model.hoverRestore, hovered { return 1 }
@@ -72,37 +161,110 @@ private struct RecordingControlPanelView: View {
     }
 
     var body: some View {
+        if usesTallShape {
+            decorated(
+                RoundedRectangle(
+                    cornerRadius: RecordingHUDMetrics.tallCornerRadius,
+                    style: .continuous
+                )
+            )
+        } else {
+            decorated(Capsule(style: .continuous))
+        }
+    }
+
+    /// A multi-line error would be clipped by a capsule of the same height, so it uses a
+    /// rounded rectangle; every single-line state keeps the capsule silhouette.
+    private var usesTallShape: Bool {
+        guard case .failure = model.state else { return false }
+        return model.failureExpanded
+    }
+
+    private func decorated<S: InsettableShape>(_ shape: S) -> some View {
+        sizedSurface
+            .glassSurface(
+                shape,
+                elevation: .floating,
+                castsShadow: false,
+                surfaceOpacity: surfaceOpacity
+            )
+            .contentShape(shape)
+            .onHover { hovered = $0 }
+            .animation(reduceMotion ? nil : .easeOut(duration: DS.Motion.fast), value: hovered)
+            .accessibilityElement(children: .contain)
+            .environment(\.locale, AppLocalization.locale())
+    }
+
+    /// Fills the window frame produced by the panel's size cache.
+    ///
+    /// Sizing happens in `RecordingControlPanelMeasureView`; this view only presents.
+    @ViewBuilder
+    private var sizedSurface: some View {
+        if centersContent {
+            // No internal spacer: split the spare width on both sides so the
+            // measured capsule stays visually centered in the minimum width.
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                surface
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            surface.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+    }
+
+    /// States without their own spacer keep the old centered capsule look.
+    private var centersContent: Bool {
+        switch model.state {
+        case .recording, .notice, .audioRecording, .audioFinalizing, .audioFinished:
+            true
+        case .preparing, .countdown, .starting, .saving, .failure:
+            false
+        }
+    }
+
+    private var surface: some View {
         HStack(spacing: 8) {
             content
         }
         .padding(.horizontal, 12)
-        .frame(width: size.width, height: size.height)
-        .glassSurface(
-            Capsule(style: .continuous),
-            elevation: .floating,
-            castsShadow: false,
-            surfaceOpacity: surfaceOpacity
-        )
-        .contentShape(Capsule(style: .continuous))
-        .onHover { hovered = $0 }
-        .animation(reduceMotion ? nil : .easeOut(duration: DS.Motion.fast), value: hovered)
-        .accessibilityElement(children: .contain)
+        .padding(.vertical, surfaceVerticalPadding)
+    }
+
+    /// Multi-line preparing/starting rows need breathing room; the stable recording
+    /// capsule keeps zero vertical padding so its 40 pt height never changes.
+    private var surfaceVerticalPadding: CGFloat {
+        switch model.state {
+        case .preparing, .starting: 6
+        case .countdown, .recording, .saving, .audioRecording, .audioFinalizing, .audioFinished, .failure, .notice: 0
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         switch model.state {
+        case let .preparing(kind, phase):
+            preparing(kind: kind, phase: phase)
         case let .countdown(seconds):
             countdown(seconds)
-        case .starting:
-            spinner
-            Text("Starting recording…")
-                .font(.system(size: DS.Typography.t12, weight: .medium))
-                .lineLimit(1)
+        case let .starting(_, phase):
+            starting(phase: phase)
         case let .recording(startedAt):
             recording(startedAt: startedAt)
-        case let .saving(fileName):
-            saving(fileName: fileName)
+        case let .saving(kind, fileName, isBeforeQuit):
+            saving(kind: kind, fileName: fileName, isBeforeQuit: isBeforeQuit)
+        case let .audioRecording(presentation, expanded, silenceWarning):
+            audioRecording(presentation, expanded: expanded, silenceWarning: silenceWarning)
+        case let .audioFinalizing(savedSegments, previewReady, previewPlaying):
+            audioFinalizing(savedSegments: savedSegments, previewReady: previewReady, previewPlaying: previewPlaying)
+        case let .audioFinished(savedSegments, outputURL, previewReady, previewPlaying):
+            audioFinished(
+                savedSegments: savedSegments,
+                outputURL: outputURL,
+                previewReady: previewReady,
+                previewPlaying: previewPlaying
+            )
         case let .failure(failure):
             failureView(failure)
         case let .notice(text):
@@ -115,6 +277,30 @@ private struct RecordingControlPanelView: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
         }
+    }
+
+    @ViewBuilder
+    private func preparing(kind: RecordingKind, phase: RecordingPreparationPhase) -> some View {
+        spinner
+        Text(RecordingHUDLabels.preparation(kind: kind, phase: phase))
+            .font(.system(size: DS.Typography.t12, weight: .medium))
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
+
+        Spacer(minLength: 4)
+
+        Button(action: actions.onCancel) {
+            Text("Cancel")
+                .font(.system(size: DS.Typography.t12, weight: .medium))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(.primary.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help("Cancel Recording")
+        .accessibilityLabel(Text("Cancel Recording"))
     }
 
     @ViewBuilder
@@ -144,8 +330,33 @@ private struct RecordingControlPanelView: View {
                 .background(Capsule().fill(.primary.opacity(0.08)))
         }
         .buttonStyle(.plain)
+        .fixedSize()
         .help("Cancel Recording Countdown")
         .accessibilityLabel(Text("Cancel Recording Countdown"))
+    }
+
+    @ViewBuilder
+    private func starting(phase: RecordingStartPhase) -> some View {
+        spinner
+        Text(RecordingHUDLabels.starting(phase: phase))
+            .font(.system(size: DS.Typography.t12, weight: .medium))
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
+
+        Spacer(minLength: 4)
+
+        Button(action: actions.onCancel) {
+            Text("Cancel")
+                .font(.system(size: DS.Typography.t12, weight: .medium))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(.primary.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help("Cancel Recording")
+        .accessibilityLabel(Text("Cancel Recording"))
     }
 
     @ViewBuilder
@@ -162,23 +373,35 @@ private struct RecordingControlPanelView: View {
             .accessibilityHidden(true)
 
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            Text(RecordingHUDTimeFormatter.string(elapsed: context.date.timeIntervalSince(startedAt)))
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+            elapsedText(context.date.timeIntervalSince(startedAt))
         }
-        .frame(minWidth: 44, alignment: .leading)
+        .frame(minWidth: 56, alignment: .leading)
 
         Rectangle()
             .fill(.primary.opacity(0.15))
             .frame(width: 1, height: 18)
+            .accessibilityHidden(true)
 
         stopButton
     }
 
+    /// Renders the elapsed label.
+    ///
+    /// The width is reserved for `RecordingHUDWorstCaseText.duration` by the measurement
+    /// view, so a ticking clock never resizes the window.
+    private func elapsedText(_ elapsed: TimeInterval) -> some View {
+        let value = RecordingHUDTimeFormatter.string(elapsed: elapsed)
+        return Text(value)
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .accessibilityLabel(Text("Elapsed recording time"))
+            .accessibilityValue(Text(value))
+    }
+
     @ViewBuilder
-    private func saving(fileName: String?) -> some View {
+    private func saving(kind: RecordingKind, fileName: String?, isBeforeQuit: Bool) -> some View {
         spinner
-        Text("Saving recording…")
+        Text(RecordingHUDLabels.saving(kind: kind, isBeforeQuit: isBeforeQuit))
             .font(.system(size: DS.Typography.t12, weight: .medium))
             .lineLimit(1)
 
@@ -204,25 +427,85 @@ private struct RecordingControlPanelView: View {
         .accessibilityLabel(Text("Close"))
     }
 
+
+    var closeWhileSavingButton: some View {
+        Button(action: actions.onHideWhileSaving) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(.primary.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .help("Close")
+        .accessibilityLabel(Text("Close"))
+    }
+
     @ViewBuilder
     private func failureView(_ failure: RecordingControlPanelFailure) -> some View {
+        if model.failureExpanded {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
+                    failureIcon
+                    if let scrollHeight = model.failureScrollHeight {
+                        ScrollView(.vertical, showsIndicators: true) {
+                            expandedFailureText(failure)
+                        }
+                        .frame(height: scrollHeight)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        expandedFailureText(failure)
+                    }
+                }
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    failureActions(failure, expanded: true)
+                }
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            failureIcon
+            Text(failure.reason)
+                .font(.system(size: DS.Typography.t12, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+                .help(failure.reason)
+                .accessibilityLabel(Text(failure.reason))
+
+            Spacer(minLength: 4)
+
+            failureActions(failure, expanded: false)
+        }
+    }
+
+    private var failureIcon: some View {
         Image(systemName: "exclamationmark.triangle.fill")
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(.red)
+            .accessibilityHidden(true)
+    }
 
+    private func expandedFailureText(_ failure: RecordingControlPanelFailure) -> some View {
         Text(failure.reason)
             .font(.system(size: DS.Typography.t12, weight: .medium))
-            .lineLimit(1)
-            .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
+            .accessibilityLabel(Text(failure.reason))
+    }
 
-        Spacer(minLength: 4)
+    private func errorDetailsLabel(expanded: Bool) -> LocalizedStringKey {
+        expanded ? "Hide Error Details" : "Show Error Details"
+    }
 
+    @ViewBuilder
+    private func failureActions(_ failure: RecordingControlPanelFailure, expanded: Bool) -> some View {
         if failure.canRetry {
             Button("Retry", action: actions.onRetry)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.mini)
                 .tint(.red)
+                .fixedSize()
         }
 
         Button { actions.onReveal(failure.partialURL) } label: {
@@ -232,8 +515,20 @@ private struct RecordingControlPanelView: View {
                 .background(Circle().fill(.primary.opacity(0.08)))
         }
         .buttonStyle(.plain)
+        .fixedSize()
         .help("Show in Finder")
         .accessibilityLabel(Text("Show in Finder"))
+
+        Button { model.toggleFailureExpansion() } label: {
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.primary.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help(errorDetailsLabel(expanded: expanded))
+        .accessibilityLabel(Text(errorDetailsLabel(expanded: expanded)))
 
         Button(action: actions.onDismiss) {
             Image(systemName: "xmark")
@@ -242,15 +537,16 @@ private struct RecordingControlPanelView: View {
                 .background(Circle().fill(.primary.opacity(0.08)))
         }
         .buttonStyle(.plain)
+        .fixedSize()
         .help("Close")
         .accessibilityLabel(Text("Close"))
     }
 
-    private var stopButton: some View {
+    var stopButton: some View {
         Button(action: actions.onStop) {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(Color.red)
-                .frame(width: 22, height: 22)
+                .frame(width: 28, height: 28)
                 .overlay {
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(.white)
@@ -258,6 +554,7 @@ private struct RecordingControlPanelView: View {
                 }
         }
         .buttonStyle(.plain)
+        .fixedSize()
         .help("Stop and Save")
         .accessibilityLabel(Text("Stop and Save"))
     }
@@ -266,151 +563,6 @@ private struct RecordingControlPanelView: View {
         ProgressView()
             .controlSize(.small)
             .frame(width: 16, height: 16)
-    }
-}
-
-/// Floating capsule that reports and controls one screen recording.
-///
-/// The window is exactly the size of the capsule and relies on the system window shadow
-/// (`hasShadow = true`), so the shadow is drawn outside the window and can never be clipped by the
-/// frame. Opacity applies to the surface only; text keeps full contrast.
-@MainActor
-final class RecordingControlPanel: NSPanel, NSWindowDelegate {
-    private let actions: RecordingControlPanelActions
-    private let model: RecordingControlPanelModel
-    private let hostingView: NSHostingView<RecordingControlPanelView>
-    private var screenFrame: CGRect
-    private var corner: RecordingHUDCorner
-    private var isProgrammaticMove = false
-    private var snapTask: Task<Void, Never>?
-
-    var excludedWindowIDs: Set<CGWindowID> {
-        guard windowNumber > 0 else { return [] }
-        return [CGWindowID(windowNumber)]
-    }
-
-    init(
-        on screen: NSScreen?,
-        corner: RecordingHUDCorner,
-        opacity: Double,
-        hoverRestore: Bool,
-        actions: RecordingControlPanelActions
-    ) {
-        let screenFrame = screen?.visibleFrame
-            ?? NSScreen.main?.visibleFrame
-            ?? CGRect(x: 0, y: 0, width: 1_440, height: 900)
-        let model = RecordingControlPanelModel(
-            state: .countdown(3),
-            surfaceOpacity: opacity,
-            hoverRestore: hoverRestore
-        )
-        let hostingView = NSHostingView(rootView: RecordingControlPanelView(model: model, actions: actions))
-        let size = RecordingHUDMetrics.countdownSize
-        let origin = RecordingHUDPlacement.origin(for: corner, size: size, in: screenFrame)
-
-        self.actions = actions
-        self.model = model
-        self.hostingView = hostingView
-        self.screenFrame = screenFrame
-        self.corner = corner
-
-        super.init(
-            contentRect: CGRect(origin: origin, size: size),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        isFloatingPanel = true
-        level = .floating
-        backgroundColor = .clear
-        isOpaque = false
-        hasShadow = true
-        hidesOnDeactivate = false
-        isReleasedWhenClosed = false
-        isMovableByWindowBackground = true
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
-        delegate = self
-        contentView = hostingView
-    }
-
-    override func orderFrontRegardless() {
-        super.orderFrontRegardless()
-        // `sharingType` is per-window and can be reset by ordering.
-        sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
-    }
-
-    /// Borderless panels must keep their exact frame near screen edges.
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
-
-    func present(state: RecordingControlPanelState) {
-        update(state: state)
-        orderFrontRegardless()
-    }
-
-    func update(state: RecordingControlPanelState) {
-        guard model.state != state else { return }
-        model.state = state
-        resize(for: state)
-    }
-
-    func updateAppearance(opacity: Double, hoverRestore: Bool) {
-        model.surfaceOpacity = opacity
-        model.hoverRestore = hoverRestore
-    }
-
-    func dismiss() {
-        snapTask?.cancel()
-        snapTask = nil
-        orderOut(nil)
-    }
-
-    func windowDidMove(_ notification: Notification) {
-        guard !isProgrammaticMove else { return }
-        snapTask?.cancel()
-        snapTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled else { return }
-            self?.snapToCorner()
-        }
-    }
-
-    private func snapToCorner() {
-        let newCorner = RecordingHUDPlacement.nearestCorner(
-            to: frame.origin,
-            size: frame.size,
-            in: screenFrame
-        )
-        if newCorner != corner {
-            corner = newCorner
-            actions.onCornerChange(newCorner)
-        }
-        let origin = RecordingHUDPlacement.origin(for: corner, size: frame.size, in: screenFrame)
-        guard origin != frame.origin else { return }
-        isProgrammaticMove = true
-        setFrameOrigin(origin)
-        isProgrammaticMove = false
-    }
-
-    private func resize(for state: RecordingControlPanelState) {
-        let size = Self.size(for: state)
-        guard frame.size != size else { return }
-        let origin = RecordingHUDPlacement.origin(for: corner, size: size, in: screenFrame)
-        isProgrammaticMove = true
-        setFrame(CGRect(origin: origin, size: size), display: true)
-        isProgrammaticMove = false
-    }
-
-    private static func size(for state: RecordingControlPanelState) -> CGSize {
-        switch state {
-        case .countdown: RecordingHUDMetrics.countdownSize
-        case .starting, .recording: RecordingHUDMetrics.recordingSize
-        case .saving: RecordingHUDMetrics.savingSize
-        case .failure: RecordingHUDMetrics.failureSize
-        case .notice: RecordingHUDMetrics.noticeSize
-        }
+            .accessibilityHidden(true)
     }
 }

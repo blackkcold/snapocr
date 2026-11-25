@@ -18,6 +18,12 @@ echo "▸ Bumping version: $CURRENT → $NEW_VERSION"
 
 echo "$NEW_VERSION" > version.txt
 
+# Sparkle compares CFBundleVersion, so the build number must increase on every
+# release, including re-releases of the same marketing version.
+CURRENT_BUILD="$(tr -d '[:space:]' < build.txt)"
+NEW_BUILD=$((CURRENT_BUILD + 1))
+echo "$NEW_BUILD" > build.txt
+
 sed -i '' "s/MARKETING_VERSION: \".*\"/MARKETING_VERSION: \"$NEW_VERSION\"/" project.yml
 
 if [ -f "CHANGELOG.md" ] && ! grep -q "## \[$NEW_VERSION\]" CHANGELOG.md; then
@@ -37,12 +43,12 @@ if [ -f "CHANGELOG.md" ] && ! grep -q "## \[$NEW_VERSION\]" CHANGELOG.md; then
 " CHANGELOG.md
 fi
 
-git add version.txt project.yml CHANGELOG.md
+git add version.txt build.txt project.yml CHANGELOG.md
 git commit -m "chore: bump version to $NEW_VERSION"
 git tag "v$NEW_VERSION"
 
 echo ""
-echo "✅ Version bumped: $CURRENT → $NEW_VERSION"
+echo "✅ Version bumped: $CURRENT → $NEW_VERSION (build $CURRENT_BUILD → $NEW_BUILD)"
 echo "   Tag: v$NEW_VERSION"
 echo ""
 echo "   Next: scripts/build.sh to create release"

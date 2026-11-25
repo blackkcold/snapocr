@@ -18,6 +18,7 @@ extension EditorViewModel {
   public func selectNode(_ id: UUID?) {
     selectedNodeID = id
     guard let node = selectedNode else { return }
+    inspectorTab = .annotation
     selectedColor = Color(nsColor: NSColor(cgColor: node.color ?? cgColor) ?? .red)
     strokeWidth = node.lineWidth
     annotationOpacity = node.opacity

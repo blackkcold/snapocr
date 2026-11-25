@@ -7,8 +7,133 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-24
+
+> 录制稳定性收尾：卡死、音频落盘、HUD 与录屏音频。
+
+### Fixed
+- 修复关闭录音结果卡片后开始录屏时倒计时停在 3 秒、面板不再更新且 Cancel 无效：新录制请求会重置会话级隐藏标志，倒计时与后续状态使用同一可见性判据；被抑制的 `starting`/`recording`/`saving` 现在写入 fault 日志，下一次同类问题可直接从日志定位。
+- 屏幕录制在首帧写入后新增主线程呈现确认与存活心跳看门狗：界面停止响应 8–10 秒时由结算 supervisor 自行停止并保存，不再无限录制；界面无响应导致的停录提供四语言提示。
+- 音频录制接入同一 10 秒存活租约：progress 消费任务每 2 秒续租；主线程冻结或音频 tick 静默停止时，supervisor 自行停止并保存，不再无限录音。
+- 修复录屏带系统音频时整段无法发布：音频源可能在最后一个视频帧闭合前 10–20 ms 停止供样，旧逻辑把音频覆盖的短尾当成发布覆盖不匹配（`invalidPublication`），导致视频块与 CAF 都在、却没有任何成品。sealer 现在按视频有效区间发布覆盖，把补齐的静音尾保留为缺失区间，既诚实又能落盘。
+- 修复录制开始时录制条旁边同时停留在「正在检查录制文件夹…」：倒计时替换控制面板时没有关闭准备阶段的面板，旧面板失去引用却永久可见，且每录一次再泄漏一块。面板替换现在统一经 `RecordingHUDPanelSlot`，替换前必定 `dismiss`。
+- 修复录制框替换时未关闭旧框：上一轮的红色录制框会留在屏幕上围住一个已不再录制的区域。
+- 修复录制条周围一圈方形灰线：macOS 26 会按窗口矩形绘制窗口边线，而录制条的窗口恰好就是胶囊外接矩形。录制条不再使用系统窗口阴影，改由贴合胶囊形状的独立阴影窗口绘制，并关闭 AppKit 的矩形焦点环。
+- 修复 1.7.1 起录后首秒卡死：菜单栏状态项由 ControlCenter 远程 scene 渲染，录制开始时插入的实时时长 `TimelineView` 会让主线程卡在远程 scene/fence 上。菜单栏标签改为静态状态指示（图标 + 红点），不再插入实时计时器，也不再在起录时改变状态项宽度。
+- 录制时长移入菜单弹层：打开菜单时按当前时间格式化显示，不再使用每秒刷新的 `TimelineView`。
+- 移除已不适用的“在菜单栏显示录制时长”偏好；菜单栏标签的静态约束与真实入口冒烟写入 `Docs/TESTING.md`，避免回归。
+- 录音不再卡在「正在等待第一个音频样本…」：首样本到达后的 HUD 提升不再同步强制显示，尺寸测量延后到下一个主循环回合；状态栏时长标签只渲染一趟，录制状态更新与 HUD 呈现错开一个回合。
+- 首样本就绪后新增「呈现确认」看门狗：8 秒内主线程未确认已呈现录音态时，由结算 supervisor 自行停止并落盘，界面卡死不再导致无限录制或强制退出后的孤儿会话。
+- 提升停滞的会话可从 `.starting` 与 `.recording` 正常进入 finalizing，修复首轮收尾条件只覆盖 `.starting` 时可能无法再次录音的问题。
+- 音频 tick 失败写入持久化日志；界面无响应导致的停录提供四语言文案（已保存 / 未保存两种）。
+- 删除 `RecordingCaptureFramePanel.update(rect:)` 这条从未调用的 `display: true` 死代码。
+
+### Added
+- `Docs/TESTING.md` 增加卡死取证协议：`sample` / `spindump` / 日志窗口与栈顶判读表，并注明 AgentMode 覆盖不到菜单栏远程 scene。
+
+### Changed
+- `scripts/test.sh` 现在以 `xcodebuild` 退出码判定 App scheme 失败；此前只要输出里出现 `Test run with`，失败的 scheme 也会被报成通过。
+- 修复 `RecordingWindowExclusionRegistryTests` 在 xctest 中因 `isReleasedWhenClosed` 双重释放导致的 `EXC_BAD_ACCESS`；此前两个用例被误判为“本机环境崩溃”并从验证口径中排除。
+
+### Verification status
+- 已运行：Debug 与 Release 构建通过；八个 Package 测试全部通过；App schemes Editor 136、WindowLifecycle 155、BarcodePanel 7 全部通过；四语言本地化校验通过；`git diff --check` 干净。
+- 真实菜单栏与 HUD 目视冒烟待在本机完成（安装包 1.7.2 / build 9）。
+
+## [1.7.0] - 2026-11-23
+
+### Added
+- 编辑器新增「分享外观」页签：可开关，编辑背景模板、留白、圆角、投影、描边宽度与颜色；提供导出预览与大图预览；复制菜单区分分享图与原图。
+- 编辑器画布实时分享外观：开启后画布直接绘制背景、留白、圆角、投影与描边；Fit 显示整张卡片，⌘1 为图片像素 1:1，缩放时保持光标下的图片点。
+- 透明背景在画布内以棋盘格显示；画布与导出共用 `MockupLayout` 与 `MockupRenderer.draw`，不再是近似预览。
+- 开发者设置新增「编辑器画布」开关（`editor_shareCanvasPreview`，默认开启），可一键回到无外观画布。
+- 截图架右键新增「分享外观…」，补上此前只能通过键盘模式进入的入口。
+- 新增离屏画布渲染测试：直接渲染真实 `EditableAnnotationCanvasNSView`，与导出结果对照 padding、内容位置、透明棋盘格和描边；不需要运行中的 App 或屏幕/麦克风权限。
+- 新增 `Docs/TESTING.md`：说明自动化测试分层、后台 Agent 场景的隔离方式，以及「自动化通过即可发版、手动 GUI 检查可选」的规则。
+
+### Changed
+- 统一「分享外观」术语：设置卡、截图架、历史菜单、旧美化浮窗与编辑器使用同一名称；旧浮窗检查器注入应用语言，重置回到当前模板。
+- 分享外观数据升级到 v2：新增描边字段，旧 v1 历史 JSON 仍可解码；透明背景与 JPEG 格式提示更明确。
+- 抽出 `MockupLayout` 与 `MockupRenderer.draw`，画布与导出共用同一几何与绘制，不再各算一套。
+- 画布开关分享外观时：Fit 状态重新适配整张卡片，不裁切；已放大时保持图片的屏幕尺寸与中心，不打断细节编辑。
+- 标注预览缓存改为按画布 frame（下限为视图尺寸）量化，拖动留白/圆角/投影滑杆不再触发标注重渲染。
+
+### Verification status
+- 已运行：CaptureCore 686 tests、SharedKit 45 tests、EditorInteractionTests 136 tests，全部通过；Debug 构建通过；四语言本地化校验通过。
+- 自动化门槛已覆盖画布离屏渲染与画布/导出对齐；手动 GUI 检查（真实视觉、VoiceOver、透明 JPEG 导出、6K 缩放清晰度）保留为可选项，不再作为发版阻塞条件。
+
+## [1.6.1] - 2026-11-23
+
+> 录制 P0 收尾：HUD、生命周期、恢复与录屏音频。
+
+### Fixed
+- 录制状态按真实媒体推进：屏幕仅在视频写入器接受首帧后进入录制，音频仅在收到真实样本后进入录制；取消、停止与退出在底层调用不返回时给出有界且诚实的结果，不把后台保存说成已保存。
+- 起录请求在权限/选源之前先确定单一 generation 身份，真正拿到选源后再冻结会话快照；迟到的权限、选源、启动、首帧与停止结果按“是否当前身份 + 是否仍持资源”分流，旧请求不写新 UI，持资源者只清理一次或登记恢复材料。
+- 屏幕启动取消明确区分“start 尚未返回”和“start 已返回、仍在等首帧”：后者立即对现存 adapter 发起唯一一次停止，迟到首帧不再把已收敛的会话提升回录制；未确认停流保留占用，确认后同进程可再次起录。
+- 倒计时结束后仍悬挂的目录复查不再保留最后一秒倒计时，改为真实、可取消的“准备录制保存位置”状态；复查的成功/失败只在请求仍为当前身份时交接，A 取消且 B 开始后，A 的迟到结果不会启动、报错或结束 B。
+- 迟到的音频启动会在自己的代际内停止其管线，不再留下继续运行的麦克风/音频流；新增独立于首帧/首样本计时的启动看门狗，正常慢保存不受影响。
+- 屏幕启动失败回调与中断轮询加入代际与所有权判定，过期回调不再停止新会话；退出超时时保留仍在保存的会话引用，只提示稍后重试。
+- `RecordingPipelineError.alreadyStarted` 等启动错误改用可操作的本地化文案，不再退回到原始 error 描述。
+- 录屏准备期（权限检查与来源枚举）现在有可见状态且可取消；已授权时枚举有界，授权提示未决时改为等待授权而不是超时失败；取消后迟到的探针、启动与停止结果不再影响后续会话。
+- 屏幕停止改为显式确认：未确认停流不关闭分段、不封装、不允许开始新会话；停止迟迟不返回时给出有界提示并可用 Finder 定位已写文件，已录内容保留。
+- 首帧失败区分为写入器失败、未收到采集帧、写入器等待超时三类，不再统一报同一错误；Finder 或 Spotlight 重新打开应用会恢复被隐藏的录制面板。
+- 录屏视频写入器：sync 帧有界等待（≤250 ms 分片轮询），`startWriting` 失败与 append 拒绝立即取消并删除当前 chunk；停止路径不再同线程重入自锁；sealer 使用同一 asset 实例的 track，避免 `videoTrackUnavailable`；静态画面以重复末帧保时长，10 秒录制不再塌缩成 2 帧。
+- 录屏 + 系统音频：屏幕环缓冲 source 的 `commitReconfiguration` 由恒定失败改为返回真实 generation，消除每次录屏的 `initial route commit failed`；sealer 改为并发喂视频与音频，修复多输入交错死锁；音频 flush 加单槽闸门，修复 actor 重入导致的范围断裂。
+- 系统音频启动失败改为非致命：视频、freeze-frame 与边界 tick 继续，保存时提示“系统音频未能录制，视频已保存”，不再让 10 秒录屏塌缩为 0.07 秒。
+- 启动时扫描磁盘上未登记的录制材料，经用户确认后收编并导出；0 字节媒体不进入列表；失败或取消留下的材料登记为可恢复，不自动删除。
+
+### Changed
+- 录制目标目录校验与容量探测、音频管线构造移出主线程；屏幕内容枚举在启动快照后按需刷新；HUD 电平更新不再触发布局或改变窗口尺寸。
+- 录制设置拆分为音频与屏幕页：输出目录与 AAC 码率按 kind 独立持久化，旧共享值一次性迁移；屏幕与音频来源键、历史与导出发现保持不变。
+- 失败或取消后的恢复材料与活动保存分离，只登记 ledger 会话材料，不自动删除、不阻塞退出。
+- 起录空间检查只读实际写入卷，移除对无写入的 Application Support 恢复目录的容量读取，外置盘录制不再被内盘剩余空间误挡；录制中的 512 MiB 保护、checkpoint/seal/tail 预留与 59 分钟分段不变。
+- 自定义录制目录记录并核对卷 UUID，兼容旧设置里的 `/Volumes/<Name>` 挂载点；默认目录尚未创建时按已确认存在的上级目录读取同一卷容量，自定义外置路径不回退到内盘。
+- 空间检查结果拆分为位置不可用、容量读不到、确实不足三种；不足时显示实际可用与需求，设置页与起录使用同一探针和同一需求口径。
+- 来源选择复用探针已枚举的结果，音频起录的容量读取由两次降为一次（按调用点的静态计数，不是实测性能结论）。
+- 录制检查点间隔缩短到 10 秒（此前为分钟级），崩溃后最多丢失约 10 秒；`maximumCheckpointAge` 300 秒上限与 59 分钟分段不变。
+- 新增隔离的 agent 测试通道：独立根目录、独立偏好与索引，与用户库隔离；用于真实录音/录屏/卡死/恢复场景的端到端验收。
+
+### Verification status
+- 最终构建（v1.6.1，build 4）通过：CaptureCore 673/673、App WindowLifecycle 141/141（跳过既有的 RecordingWindowExclusionRegistry 2 例崩溃）、SharedKit 45/45；`check-localization.sh` 通过；Release 通用二进制签名构建（arm64 + x86_64，含 Sparkle 内嵌签名）exit 0。
+- 隔离 agent 实例、最终构建的真实场景 10/10 通过：audio-smoke 3.41 s（HUD 首现 55 ms）、audio-10s 10.49 s、audio-smoke-default-source 3.63 s、stall-main 6.46 s（主线程卡死 6007 ms 期间完成结算）、deadline-during-stall（settlementDuringStall=true、stopCalls=1）、recover-orphan 22.02 s（adopted=1、幂等、0 字节隐藏）、screen-10s 10.108 s / 3.41 MB、screen-10s-audio 9.650 s / 2.54 MB（1 video + 1 audio 48 kHz）、screen-10s-audio-degraded 9.258 s（音频失败但视频完整）、screen-permission-denied（立即失败，无残留）。
+- 用户库与正在运行的 App 未受影响：`~/Movies/SnapGlass` 11 文件 / 4 会话 / 索引 4 条 / defaults 哈希不变；pid 52603 全程存活；所有运行使用隔离 agent root，未 `tccutil reset`。
+- 未验证：HUD/失败面板/权限引导的真实点击；系统音频的主观听感；录屏中途 SCK 无效帧仍按既有语义判致命（4 次 10 秒录制中 1 次提前结束）。CI 的 SwiftLint 全仓检查当前有 203 处历史/本轮违规，tag 发版路径未运行该检查。
+
+## [1.6.0] - 2026-11-13
+
+> 录制功能全量交付。以下为发版说明，不代表已完成运行期验收。
+
+### Added
+- 纯音频录制：系统声音、麦克风及两者组合；默认来源与本次来源分离，运行中切源不重开会话；单轨混音与来源分轨。
+- 分段与恢复基础：CAF 检查点、会话 journal／索引、预览租约、双卷空间预算和低空间安全停止接线；正常可见段上限 59 分钟。
+- 录音菜单、无默认绑定的录音快捷键、双路电平 HUD、录音会话窗口与四语言文案。
+- 选段、裁剪、试听与拼接导出界面及真实导出核心；主动导出上限 1 小时 59 分 30 秒，视频使用压缩样本直通路径，试听增益与导出增益分离。
+- 录屏多来源内嵌音轨、独立恢复 chunk／可见 segment 协调器，以及同一 ScreenCaptureKit stream 的音频复用接线。
+
+### Changed
+- 录制期间允许普通与滚动截图；截图架默认保持可见，只按显式偏好隐藏。录制窗口排除改为运行时更新 filter，不重启时间轴。
+- 退出收尾等待实际保存结果；录音码率配置传递到编码器，恢复和导出失败保留自有暂存材料。
+- 修正隔离 SourcePackages 构建时 Embed Sparkle 的框架路径选择，保留默认回退；支持显式路径配置，不改变签名、更新功能或依赖版本。
+
+### Verification status
+- 发版前运行 CaptureCore 全量单测 644 条，全部通过；`release.yml` 只跑 SharedKit 测试与签名构建，不跑 CaptureCore 单测与 lint。
+- Core、纯 App 模型 target 和包含 SwiftUI 窗口的完整无签名 SnapGlass Debug 构建均有 exit 0 记录；编译与单测通过不代表媒体、权限或 GUI 行为通过。
+- 未做专项评测、GUI／TCC、真实采集与独立复核；实际媒体时间守恒、多音轨、恢复、长跑、四语言截断与辅助功能行为未验收。
+
+## [1.5.1] - 2026-11-12
+
 ### Changed
 - 截图架拖动改为原位低透明虚影占位：拖动全程不移动兄弟卡片、不计算插入目标、不排序；松手、取消或拖出后移回时恢复原顺序。拖到外部应用仍复制真实文件并保留架内卡片。
+
+## [1.5.0] - 2026-11-11
+
+### Changed
+- 代码签名从 ad-hoc 改为固定自签名证书 `SnapGlass Code Signing`。Bundle ID `com.snapglass.app` 与证书身份被冻结，升级后屏幕录制授权不再每次重置（从 1.4.x 升到本版会重置一次）。
+- 自动更新迁移到 Sparkle 2.10.1：EdDSA 校验更新包与 feed、原地替换、失败保留旧版；存在未保存标注或正在录屏时自动推迟安装。
+- 「更新」设置页重做：显示当前版本、可用版本与下载/安装状态，可开关自动检查与自动安装；菜单栏图标发现新版本时显示提示点。
+- 发布流水线在 CI 内导入签名证书与 EdDSA 私钥，发布前校验签名身份、构建号递增、feed 签名与包签名。
+
+### Removed
+- 移除自研 `UpdateService`、安装器交接与「强制最新版本」开发者开关。`SnapGlass-update.json` 仍会为 1.4.x 客户端保留，直到 1.6.0。
 
 ## [1.4.2] - 2026-11-11
 
@@ -504,7 +629,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/blackkcold/snapocr/compare/v1.7.0...v1.7.2
+[1.7.0]: https://github.com/blackkcold/snapocr/compare/v1.6.1...v1.7.0
+[1.6.1]: https://github.com/blackkcold/snapocr/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/blackkcold/snapocr/compare/v1.5.1...v1.6.0
+[1.5.1]: https://github.com/blackkcold/snapocr/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/blackkcold/snapocr/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/blackkcold/snapocr/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/blackkcold/snapocr/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/blackkcold/snapocr/compare/v1.3.1...v1.4.0

@@ -191,6 +191,8 @@ extension ScreenshotShelfManager {
             // The editor suppresses the shelf for as long as its window is open;
             // hiding here would clear the show intent and lose the shelf for good.
             onEdit?(captureID)
+        case .inspectMockup(let captureID):
+            onInspectMockup?(captureID)
         case .copy(let captureID):
             onCopy?(captureID)
         case .pin(let captureID):

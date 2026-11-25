@@ -31,9 +31,7 @@ extension CaptureViewModel {
 
     private func startAreaCapture() {
         Task {
-            guard !isCapturing,
-                  !isScrollCaptureActive,
-                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy) else { return }
+            guard !isCapturing, !isScrollCaptureActive else { return }
             isCapturing = true
             defer { isCapturing = false }
 
@@ -307,9 +305,7 @@ extension CaptureViewModel {
 
     private func startWindowCapture(destination: CaptureDestination) {
         Task {
-            guard !isCapturing,
-                  !isScrollCaptureActive,
-                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy) else { return }
+            guard !isCapturing, !isScrollCaptureActive else { return }
             isCapturing = true
             defer { isCapturing = false }
 
@@ -422,9 +418,7 @@ extension CaptureViewModel {
         managesCaptureState: Bool = true
     ) async {
         if managesCaptureState {
-            guard !isCapturing,
-                  !isScrollCaptureActive,
-                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy) else { return }
+            guard !isCapturing, !isScrollCaptureActive else { return }
             isCapturing = true
         }
         defer {
@@ -551,10 +545,7 @@ extension CaptureViewModel {
     /// Captures every display into one canvas using the saved compact/physical plan.
     public func captureAllDisplays() {
         Task {
-            guard !isCapturing,
-                  !isScrollCaptureActive,
-                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy)
-            else { return }
+            guard !isCapturing, !isScrollCaptureActive else { return }
             isCapturing = true
             defer { isCapturing = false }
 
@@ -622,10 +613,7 @@ extension CaptureViewModel {
     /// rules as the merged canvas.
     public func captureEachDisplay() {
         Task {
-            guard !isCapturing,
-                  !isScrollCaptureActive,
-                  RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: isRecordingBusy)
-            else { return }
+            guard !isCapturing, !isScrollCaptureActive else { return }
             isCapturing = true
             defer { isCapturing = false }
 

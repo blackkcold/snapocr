@@ -67,6 +67,7 @@ final class WindowSelectionPanel: NSPanel {
             panel.onActivity = onActivity
             retain(panel)
             panel.orderFrontRegardless()
+            RecordingWindowExclusionRegistry.shared.register(panel)
             panel.makeKey()
         }
     }

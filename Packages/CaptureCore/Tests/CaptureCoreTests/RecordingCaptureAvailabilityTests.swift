@@ -9,8 +9,4 @@ struct RecordingCaptureAvailabilityTests {
         #expect(!RecordingCaptureAvailability.canBeginRecording(isCapturing: false, isScrollCaptureActive: true))
     }
 
-    @Test func screenshotCaptureCannotStartWhileRecordingIsBusy() {
-        #expect(RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: false))
-        #expect(!RecordingCaptureAvailability.canBeginCapture(isRecordingBusy: true))
-    }
 }

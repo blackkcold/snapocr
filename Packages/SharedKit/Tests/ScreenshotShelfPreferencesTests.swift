@@ -111,6 +111,13 @@ struct ScreenshotShelfPreferencesTests {
         try Data("keep this recording".utf8).write(to: existingFile)
 
         RecordingDestinationPreferences.setCustomDirectory(customDirectory, in: defaults)
+        let expectedVolumeUUID = (try? customDirectory.resourceValues(
+            forKeys: [.volumeUUIDStringKey]
+        ))?.volumeUUIDString
+        #expect(
+            RecordingDestinationPreferences.customDirectoryVolumeUUID(in: defaults)
+                == expectedVolumeUUID
+        )
         let resolved = RecordingDestinationPreferences.directory(
             in: defaults,
             moviesDirectory: moviesDirectory
@@ -118,6 +125,7 @@ struct ScreenshotShelfPreferencesTests {
         #expect(resolved == customDirectory)
 
         RecordingDestinationPreferences.reset(in: defaults)
+        #expect(RecordingDestinationPreferences.customDirectoryVolumeUUID(in: defaults) == nil)
         #expect(
             RecordingDestinationPreferences.directory(in: defaults, moviesDirectory: moviesDirectory)
                 == moviesDirectory

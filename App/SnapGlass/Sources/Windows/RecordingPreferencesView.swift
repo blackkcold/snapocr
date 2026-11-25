@@ -1,8 +1,25 @@
 import AppKit
+import CaptureCore
 import SharedKit
 import SwiftUI
 
+/// Settings for screen recordings.
+///
+/// Video quality, screen audio, and the screen destination live here. Audio-only
+/// source, layout, bitrate, and destination live on the Audio Recording page.
 struct RecordingPreferencesView: View {
+    @EnvironmentObject private var viewModel: CaptureViewModel
+    @AppStorage(PreferenceKeys.recordingScreenAudioMode)
+    private var screenAudioMode = PreferenceDefaults.recordingScreenAudioMode
+    @AppStorage(PreferenceKeys.recordingScreenAudioBitRate)
+    private var screenAudioBitRate = PreferenceDefaults.recordingScreenAudioBitRate
+    @AppStorage(PreferenceKeys.recordingSystemAudio)
+    private var systemAudio = PreferenceDefaults.recordingSystemAudio
+    @AppStorage(PreferenceKeys.recordingScreenCustomOutputDirectory)
+    private var customOutputDirectoryPath = ""
+    @AppStorage(PreferenceKeys.recordingHideShelfWhileRecording)
+    private var hideShelfWhileRecording = PreferenceDefaults.recordingHideShelfWhileRecording
+
     @AppStorage(PreferenceKeys.recordingVideoCodec)
     private var videoCodec = PreferenceDefaults.recordingVideoCodec
     @AppStorage(PreferenceKeys.recordingResolution)
@@ -11,8 +28,6 @@ struct RecordingPreferencesView: View {
     private var frameRate = PreferenceDefaults.recordingFrameRate
     @AppStorage(PreferenceKeys.recordingAverageVideoBitrate)
     private var averageVideoBitrate = PreferenceDefaults.recordingAverageVideoBitrate
-    @AppStorage(PreferenceKeys.recordingSystemAudio)
-    private var systemAudio = PreferenceDefaults.recordingSystemAudio
     @AppStorage(PreferenceKeys.recordingHUDOpacity)
     private var hudOpacity = PreferenceDefaults.recordingHUDOpacity
     @AppStorage(PreferenceKeys.recordingHUDHoverRestore)
@@ -23,24 +38,53 @@ struct RecordingPreferencesView: View {
     private var showCaptureFrame = PreferenceDefaults.recordingShowCaptureFrame
     @AppStorage(PreferenceKeys.recordingRevealOnFinish)
     private var revealOnFinish = PreferenceDefaults.recordingRevealOnFinish
-    @AppStorage(PreferenceKeys.recordingCustomOutputDirectory)
-    private var customOutputDirectoryPath = ""
-    @State private var availableSpace: Int64?
+
+    @State private var resolvedScreenAudioMode = PreferenceDefaults.recordingScreenAudioMode
+    @State private var destinationCapacity: RecordingDestinationCapacity?
+    @State private var capacityTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
             PreferencesCardGrid {
-                videoCard
-                controlPanelCard
+                screenCard
                 destinationCard
+                safetyCard
+                controlPanelCard
             }
         }
-        .onAppear(perform: refreshAvailableSpace)
+        .onAppear(perform: preparePreferences)
+        .onDisappear(perform: cancelCapacityRead)
     }
 
-    private var videoCard: some View {
+    private var screenCard: some View {
         PreferencesCard {
-            PreferencesCardHeader(systemImage: "record.circle", title: "Video")
+            PreferencesCardHeader(systemImage: "record.circle", title: "Screen Recording")
+
+            Picker("Screen recording audio", selection: screenAudioModeBinding) {
+                Text("System Audio").tag("system")
+                Text("Microphone").tag("microphone")
+                Text("System Audio + Microphone").tag("systemAndMicrophone")
+                Text("No Audio").tag("none")
+            }
+            .pickerStyle(.menu)
+            .accessibilityHint(Text("Default for Next Recording"))
+
+            Picker("Screen audio quality", selection: screenBitRateBinding) {
+                Text("Economy · 96 kbps").tag(96_000)
+                Text("Standard · 128 kbps").tag(128_000)
+                Text("High · 192 kbps").tag(192_000)
+                Text("Maximum · 256 kbps").tag(256_000)
+            }
+            .pickerStyle(.menu)
+
+            PreferencesCardCaption(
+                text: "Selected AAC bitrate is applied to each encoded track."
+            )
+            PreferencesCardCaption(
+                text: "Screen recording source tracks are embedded separately in the video."
+            )
+
+            Divider()
 
             Picker("Codec", selection: videoCodecBinding) {
                 Text("H.264").tag("h264")
@@ -74,12 +118,75 @@ struct RecordingPreferencesView: View {
             }
             .pickerStyle(.menu)
 
-            Toggle("Include system audio", isOn: $systemAudio)
-
             PreferencesCardCaption(
                 text: "HEVC typically uses half the H.264 bitrate for a similar quality target."
             )
-            PreferencesCardCaption(text: "Estimated size per minute: \(estimatedSize)")
+            PreferencesCardCaption(text: "Default for Next Recording")
+        }
+    }
+
+    private var destinationCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "folder", title: "Storage")
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(destinationDescription)
+                    .font(.callout)
+                    .foregroundStyle(destinationUnavailable ? .red : .secondary)
+                    .textSelection(.enabled)
+                    .accessibilityLabel(Text("Screen recording folder"))
+                    .accessibilityValue(Text(destinationDescription))
+
+                capacityStatus
+            }
+
+            HStack {
+                Button("Choose Folder…", action: chooseDirectory)
+                    .buttonStyle(.borderedProminent)
+                    .help("Choose a folder for new screen recordings")
+
+                Button("Open Folder", action: openDirectory)
+                    .disabled(!directoryIsAvailable)
+                    .help("Open Folder")
+
+                Button("Reset to Default", action: resetDirectory)
+                    .disabled(!hasCustomDestination)
+            }
+
+            PreferencesCardCaption(
+                text: "This folder is used for screen recordings. Existing files are not moved."
+            )
+            PreferencesCardCaption(
+                text: "Changing the destination does not move existing recordings or create this folder."
+            )
+            PreferencesCardCaption(
+                text: "Estimated screen recording size per minute: \(estimatedScreenSize)"
+            )
+        }
+        .onChange(of: customOutputDirectoryPath) { _ in
+            refreshCapacity()
+        }
+    }
+
+    private var safetyCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "checkmark.shield", title: "Segmentation & Safety")
+
+            LabeledContent("Maximum segment length", value: "59 minutes")
+            LabeledContent {
+                Text("Checks for unfinished recordings at launch")
+            } label: {
+                Text("Crash recovery")
+            }
+
+            Toggle("Hide Screenshot Shelf while recording", isOn: $hideShelfWhileRecording)
+                .onChange(of: hideShelfWhileRecording) { _ in
+                    viewModel.refreshRecordingShelfVisibility()
+                }
+
+            PreferencesCardCaption(
+                text: "Shelf visibility applies to every recording."
+            )
         }
     }
 
@@ -90,6 +197,7 @@ struct RecordingPreferencesView: View {
             HStack(spacing: 10) {
                 Text("Panel opacity")
                 Slider(value: hudOpacityBinding, in: RecordingHUDPreferences.opacityRange, step: 0.05)
+                    .accessibilityLabel(Text("Panel opacity"))
                 Text("\(Int((hudOpacity * 100).rounded()))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -104,9 +212,86 @@ struct RecordingPreferencesView: View {
             Toggle("Reveal in Finder when a recording finishes", isOn: $revealOnFinish)
 
             PreferencesCardCaption(
+                text: "Panel appearance is shared by audio and screen recordings."
+            )
+            PreferencesCardCaption(
+                text: "Panel opacity and hover restore are unavailable while the panel is hidden."
+            )
+            PreferencesCardCaption(
                 text: "The panel never covers the captured area; drag it to another corner at any time."
             )
         }
+    }
+
+    @ViewBuilder
+    private var capacityStatus: some View {
+        if let capacity = destinationCapacity {
+            switch capacity {
+            case let .available(bytes, probedDirectory, _):
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Available space: \(RecordingStorage.formattedBytes(bytes))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(
+                            Text("Available space: \(RecordingStorage.formattedBytes(bytes))")
+                        )
+                    if probedDirectory.standardizedFileURL != destinationDirectory?.standardizedFileURL {
+                        Text("The default folder will be created when recording starts.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if bytes < startRequirement {
+                        Text(insufficientSpaceMessage(available: bytes, required: startRequirement))
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .accessibilityLabel(
+                                Text(insufficientSpaceMessage(available: bytes, required: startRequirement))
+                            )
+                    }
+                }
+            case .locationUnavailable:
+                Group {
+                    if hasCustomDestination {
+                        Text("The selected recording folder is unavailable. Choose it again in Preferences.")
+                    } else {
+                        Text("The default recording folder is unavailable.")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.red)
+            case .capacityUnreadable:
+                Text("Could not check free space in the recording folder.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else if !hasCustomDestination {
+            Text("The default folder will be created when recording starts.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var screenAudioModeBinding: Binding<String> {
+        Binding(
+            get: { resolvedScreenAudioMode },
+            set: { newValue in
+                resolvedScreenAudioMode = newValue
+                screenAudioMode = newValue
+                let mode = RecordingAudioPreferenceMigration.mode(fromPreferenceValue: newValue) ?? .system
+                systemAudio = mode == .system || mode == .systemAndMicrophone
+            }
+        )
+    }
+
+    private var screenBitRateBinding: Binding<Int> {
+        Binding(
+            get: {
+                RecordingAudioPreferenceStore.supportedBitRates.contains(screenAudioBitRate)
+                    ? screenAudioBitRate
+                    : RecordingAudioPreferenceStore.defaultBitRate
+            },
+            set: { screenAudioBitRate = $0 }
+        )
     }
 
     private var hudOpacityBinding: Binding<Double> {
@@ -116,47 +301,6 @@ struct RecordingPreferencesView: View {
                 hudOpacity = min(max(newValue, RecordingHUDPreferences.opacityRange.lowerBound), 1)
             }
         )
-    }
-
-    private var destinationCard: some View {
-        PreferencesCard {
-            PreferencesCardHeader(systemImage: "folder", title: "Destination")
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(destinationDescription)
-                    .font(.callout)
-                    .foregroundStyle(destinationUnavailable ? .red : .secondary)
-                    .textSelection(.enabled)
-
-                if let availableSpace {
-                    Text("Available space: \(RecordingStorage.formattedBytes(availableSpace))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if !hasCustomDestination {
-                    Text("The default folder will be created when recording starts.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            HStack {
-                Button("Choose Folder…", action: chooseDirectory)
-                    .buttonStyle(.borderedProminent)
-
-                Button("Open Folder", action: openDirectory)
-                    .disabled(!directoryExists)
-
-                Button("Reset to Default", action: resetDirectory)
-                    .disabled(!hasCustomDestination)
-            }
-
-            PreferencesCardCaption(
-                text: "Changing the destination does not move existing recordings or create this folder."
-            )
-        }
-        .onChange(of: customOutputDirectoryPath) { _ in
-            refreshAvailableSpace()
-        }
     }
 
     private var videoCodecBinding: Binding<String> {
@@ -174,35 +318,70 @@ struct RecordingPreferencesView: View {
     }
 
     private var hasCustomDestination: Bool {
-        !customOutputDirectoryPath.isEmpty
+        RecordingDestinationPreferences.customDirectory(for: .screen) != nil
     }
 
-    private var directory: URL? {
-        RecordingDestinationPreferences.directory()
-    }
-
-    private var directoryExists: Bool {
-        guard let directory else { return false }
-        var isDirectory = ObjCBool(false)
-        return FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory)
-            && isDirectory.boolValue
-    }
-
-    private var destinationUnavailable: Bool {
-        hasCustomDestination && !directoryExists
+    private var destinationDirectory: URL? {
+        RecordingDestinationPreferences.directory(for: .screen)
     }
 
     private var destinationDescription: String {
-        if let customDirectory = RecordingDestinationPreferences.customDirectory() {
+        if let customDirectory = RecordingDestinationPreferences.customDirectory(for: .screen) {
             return customDirectory.path
         }
         return "Movies/SnapGlass/Recordings"
     }
 
-    private var estimatedSize: String {
-        let audioBitrate = systemAudio ? 128_000 : 0
-        let estimatedBytes = Int64(averageVideoBitrate + audioBitrate) * 60 / 8
-        return RecordingStorage.formattedBytes(estimatedBytes)
+    private var directoryIsAvailable: Bool {
+        guard let destinationDirectory,
+              let capacity = destinationCapacity else { return false }
+        guard case let .available(_, probedDirectory, _) = capacity else { return false }
+        return probedDirectory.standardizedFileURL == destinationDirectory.standardizedFileURL
+    }
+
+    private var destinationUnavailable: Bool {
+        guard let capacity = destinationCapacity else { return false }
+        if case .locationUnavailable = capacity { return true }
+        return false
+    }
+
+    private var startRequirement: Int64 {
+        RecordingStorage.minimumStartFreeSpace
+    }
+
+    private func insufficientSpaceMessage(
+        available: Int64,
+        required: Int64
+    ) -> LocalizedStringKey {
+        let availableText = RecordingStorage.formattedBytes(available)
+        let requiredText = RecordingStorage.formattedBytes(required)
+        return "Not enough space: \(availableText) available, \(requiredText) required."
+    }
+
+    private var estimatedScreenSize: String {
+        let mode = RecordingAudioPreferenceMigration.mode(
+            fromPreferenceValue: screenAudioModeBinding.wrappedValue
+        ) ?? .system
+        let audioTrackCount: Int
+        switch mode {
+        case .none:
+            audioTrackCount = 0
+        case .system, .microphone:
+            audioTrackCount = 1
+        case .systemAndMicrophone:
+            audioTrackCount = 2
+        }
+        let encodedBitsPerSecond = averageVideoBitrate
+            + (screenBitRateBinding.wrappedValue * audioTrackCount)
+        return RecordingStorage.formattedBytes(Int64(encodedBitsPerSecond) * 60 / 8)
+    }
+
+    private func preparePreferences() {
+        RecordingDestinationPreferences.seedLegacySharedValuesIfNeeded()
+        refreshCapacity()
+        resolvedScreenAudioMode = RecordingAudioPreferenceMigration.preferenceValue(
+            for: RecordingAudioPreferenceStore.mode(for: .screen)
+        )
     }
 
     private func chooseDirectory() {
@@ -215,27 +394,46 @@ struct RecordingPreferencesView: View {
         panel.prompt = AppLocalization.string("Choose Folder")
 
         guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
-        RecordingDestinationPreferences.setCustomDirectory(selectedURL)
+        RecordingDestinationPreferences.setCustomDirectory(selectedURL, for: .screen)
         customOutputDirectoryPath = selectedURL.standardizedFileURL.path
-        refreshAvailableSpace()
+        refreshCapacity()
     }
 
     private func openDirectory() {
-        guard directoryExists, let directory else { return }
-        NSWorkspace.shared.open(directory)
+        guard let destinationDirectory else { return }
+        NSWorkspace.shared.open(destinationDirectory)
     }
 
     private func resetDirectory() {
-        RecordingDestinationPreferences.reset()
+        RecordingDestinationPreferences.reset(for: .screen)
         customOutputDirectoryPath = ""
-        refreshAvailableSpace()
+        refreshCapacity()
     }
 
-    private func refreshAvailableSpace() {
-        guard let directory else {
-            availableSpace = nil
+    private func refreshCapacity() {
+        capacityTask?.cancel()
+        destinationCapacity = nil
+        guard let destinationDirectory else {
+            destinationCapacity = .locationUnavailable
             return
         }
-        availableSpace = RecordingStorage.availableBytes(at: directory)
+        let isCustom = hasCustomDestination
+        let expectedVolumeUUID = isCustom
+            ? RecordingDestinationPreferences.customDirectoryVolumeUUID(for: .screen)
+            : nil
+        capacityTask = Task { @MainActor in
+            let capacity = await RecordingDestinationProbe.inspect(
+                directory: destinationDirectory,
+                isCustom: isCustom,
+                expectedVolumeUUID: expectedVolumeUUID
+            )
+            guard !Task.isCancelled else { return }
+            destinationCapacity = capacity
+        }
+    }
+
+    private func cancelCapacityRead() {
+        capacityTask?.cancel()
+        capacityTask = nil
     }
 }

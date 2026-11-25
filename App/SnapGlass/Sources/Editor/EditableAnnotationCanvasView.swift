@@ -1,4 +1,5 @@
 import AnnotationCore
+import CaptureCore
 
 /// 画布渲染尺寸的量化档位。
 ///
@@ -128,11 +129,16 @@ final class EditableAnnotationCanvasNSView: NSView {
     }
 
     var imageDisplayRect: CGRect = .zero
-    /// Zoom relative to the fit-to-window size; 1 shows the whole image.
+    /// Share appearance drawn around the image. `nil` keeps the bare-image
+    /// canvas; every geometry consumer still reads `imageDisplayRect`.
+    var shareStyle: MockupStyle?
+    /// Zoom relative to the fit-to-window frame; 1 shows the whole canvas.
     var zoomScale: CGFloat = 1
     /// Pan offset in view points, applied after zoom.
     var panOffset: CGSize = .zero
-    /// Fit rect and image size from the last layout, used by the zoom math.
+    /// Fit rect of the whole treatment frame at zoom 1.
+    var fitCanvasRect: CGRect = .zero
+    /// Fit rect of the image content at zoom 1, used by 1:1 and pixel labels.
     var fitImageRect: CGRect = .zero
     var lastImageSize: CGSize = .zero
     /// True while the space bar is held for drag-to-pan.
@@ -176,19 +182,19 @@ final class EditableAnnotationCanvasNSView: NSView {
     }
     var resizePointerOffset: CGPoint = .zero
     private var trackingAreaReference: NSTrackingArea?
-    private var hoverPoint: CGPoint = .zero
+    var hoverPoint: CGPoint = .zero
     var pickerHoverColor: SampledColor?
     var pickerRegionRect: CGRect = .zero
     /// 上一次取色的时间戳（30Hz 限流）与同一像素判定。
-    private var pickerLastSampleTime: CFTimeInterval = 0
-    private var pickerSampleKey: String = ""
-    private var pickerPendingPoint: CGPoint?
-    private var pickerPendingWorkItem: DispatchWorkItem?
+    var pickerLastSampleTime: CFTimeInterval = 0
+    var pickerSampleKey: String = ""
+    var pickerPendingPoint: CGPoint?
+    var pickerPendingWorkItem: DispatchWorkItem?
     /// 色值标签当前占用的矩形，用于只失效这一块而不是整张画布。
-    private var pickerLabelRect: CGRect = .zero
+    var pickerLabelRect: CGRect = .zero
     /// 标签实际绘制所依据的光标位置。绘制必须用它而不是 `hoverPoint`：
     /// 限流期间 `hoverPoint` 会继续前进，用它会画出没有被失效过的残影。
-    private var pickerLabelPoint: CGPoint = .zero
+    var pickerLabelPoint: CGPoint = .zero
     var dominantColorCount = 5
     var canvasTextEditor: CanvasTextEditor?
     var canvasTextEntryID: UUID?
@@ -239,135 +245,6 @@ final class EditableAnnotationCanvasNSView: NSView {
         }
     }
 
-    /// 悬停手柄只重绘两个小方块，不碰整张画布。
-    private func updateHoveredHandle(at point: CGPoint) {
-        let handle = selectedNode.flatMap { resizeHandle(at: point, for: $0) }
-        guard handle != hoveredHandle else { return }
-
-        var dirty = CGRect.null
-        if let old = hoveredHandle, let node = selectedNode {
-            dirty = dirty.union(handleInvalidationRect(old, for: node))
-        }
-        hoveredHandle = handle
-        if let handle, let node = selectedNode {
-            dirty = dirty.union(handleInvalidationRect(handle, for: node))
-        }
-        if !dirty.isNull {
-            setNeedsDisplay(dirty.insetBy(dx: -2, dy: -2))
-        }
-    }
-
-    private func handleInvalidationRect(
-        _ handle: ResizeHandle,
-        for node: AnnotationNode
-    ) -> CGRect {
-        let center = handlePoint(handle, for: node)
-        return CGRect(x: center.x - 8, y: center.y - 8, width: 16, height: 16)
-    }
-
-    /// 取色上限 30Hz：120Hz 触控板上的每一次 mouseMoved 都去裁 1×1 像素并把
-    /// 整张 5K 画布标脏，会把主线程喂满。这里按帧率限流，并用一个补发任务保证
-    /// 光标停下后色值仍然指向最终位置。
-    private static let pickerSampleInterval: CFTimeInterval = 1.0 / 30.0
-
-    private func schedulePickerSample(at point: CGPoint) {
-        let now = ProcessInfo.processInfo.systemUptime
-        let elapsed = now - pickerLastSampleTime
-        if elapsed >= Self.pickerSampleInterval {
-            pickerPendingWorkItem?.cancel()
-            pickerPendingWorkItem = nil
-            pickerPendingPoint = nil
-            applyPickerSample(at: point)
-            return
-        }
-
-        pickerPendingPoint = point
-        guard pickerPendingWorkItem == nil else { return }
-        let item = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.pickerPendingWorkItem = nil
-            guard let pending = self.pickerPendingPoint else { return }
-            self.pickerPendingPoint = nil
-            self.applyPickerSample(at: pending)
-        }
-        pickerPendingWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + (Self.pickerSampleInterval - elapsed), execute: item)
-    }
-
-    private func applyPickerSample(at point: CGPoint) {
-        pickerLastSampleTime = ProcessInfo.processInfo.systemUptime
-
-        let key = pickerSampleKey(at: point)
-        guard key != pickerSampleKey || pickerHoverColor == nil else { return }
-        pickerSampleKey = key
-
-        let previousRect = pickerHoverColor == nil ? .zero : pickerLabelRect
-        let color = sampledColor(at: point)
-        pickerHoverColor = color
-
-        let newRect = color.map { colorLabelRect(for: $0, near: point) } ?? .zero
-        pickerLabelRect = newRect
-        pickerLabelPoint = point
-
-        let dirty = previousRect.union(newRect).insetBy(dx: -2, dy: -2)
-        if dirty.isEmpty {
-            needsDisplay = true
-        } else {
-            setNeedsDisplay(dirty)
-        }
-    }
-
-    /// 光标所在的原图像素坐标；同一像素内不重复取色。
-    private func pickerSampleKey(at point: CGPoint) -> String {
-        guard let image,
-              imageDisplayRect.contains(point),
-              imageDisplayRect.width > 0,
-              imageDisplayRect.height > 0 else {
-            return ""
-        }
-        let normalized = normalizedPoint(point)
-        let pixelX = Int(normalized.x * CGFloat(image.width))
-        let pixelY = Int((1 - normalized.y) * CGFloat(image.height))
-        return "\(pixelX),\(pixelY)"
-    }
-
-    /// Samples the color under a view point in the base image.
-    func sampledColor(at point: CGPoint) -> SampledColor? {
-        guard let image, imageDisplayRect.contains(point) else { return nil }
-        let normalized = normalizedPoint(point)
-        let pixel = CGPoint(
-            x: normalized.x * CGFloat(image.width),
-            y: (1 - normalized.y) * CGFloat(image.height)
-        )
-        return ColorSampler.pixelColor(in: image, at: pixel)
-    }
-
-    /// Samples the dominant colors over a view-space region.
-    func sampledRegionColors(for viewRect: CGRect) -> [SampledColor] {
-        guard let image, !viewRect.isEmpty else { return [] }
-        let normalized = CGRect(
-            x: (viewRect.minX - imageDisplayRect.minX) / imageDisplayRect.width,
-            y: (viewRect.minY - imageDisplayRect.minY) / imageDisplayRect.height,
-            width: viewRect.width / imageDisplayRect.width,
-            height: viewRect.height / imageDisplayRect.height
-        )
-        let pixelRect = CGRect(
-            x: normalized.minX * CGFloat(image.width),
-            y: (1 - normalized.maxY) * CGFloat(image.height),
-            width: normalized.width * CGFloat(image.width),
-            height: normalized.height * CGFloat(image.height)
-        )
-        return ColorSampler.dominantColors(in: image, in: pixelRect, count: dominantColorCount)
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-    }
-
     override func resetCursorRects() {
         super.resetCursorRects()
         if currentTool == .ocr || currentTool == .select, showsOCROverlay {
@@ -405,14 +282,55 @@ final class EditableAnnotationCanvasNSView: NSView {
         if let image {
             let imageSize = CGSize(width: image.width, height: image.height)
             lastImageSize = imageSize
-            imageDisplayRect = imageRect(for: imageSize)
+            let layout = mockupLayout(for: imageSize)
+            let frame = canvasRect(for: imageSize)
+            let frameScale = frame.width / max(layout.canvasSize.width, 1)
+            imageDisplayRect = layout.contentRect(in: frame.origin, scale: frameScale)
+
             let backingScale = window?.backingScaleFactor ?? 2
-            let targetMaxDimension = CanvasRenderScale.quantize(
-                max(imageDisplayRect.width, imageDisplayRect.height) * backingScale
+            // The annotated preview only follows the document. Sizing it from
+            // the treatment frame, floored by the view, keeps it stable while
+            // padding/radius/shadow sliders move.
+            let reference = max(frame.width, frame.height, bounds.width, bounds.height)
+            let targetMaxDimension = min(
+                CanvasRenderScale.quantize(reference * backingScale),
+                CGFloat(max(image.width, image.height))
             )
             let baseImage = baseDisplayImage(for: image, targetMaxDimension: targetMaxDimension)
-            let displayImage = previewImage(for: image, baseImage: baseImage) ?? baseImage
-            context.draw(displayImage, in: imageDisplayRect)
+            let displayImage = previewImage(
+                for: image,
+                baseImage: baseImage,
+                maximumDimension: targetMaxDimension
+            ) ?? baseImage
+
+            if let style = shareStyle {
+                if style.background.isTransparent {
+                    drawCheckerboard(in: frame, context: context)
+                }
+                // The same layout and draw call the exporter uses, so the canvas
+                // is the export rather than an approximation of it. The backdrop
+                // returns to view space so its tiles keep the same 8 pt size and
+                // phase as the padding checkerboard.
+                let viewTransform = context.ctm
+                MockupRenderer.draw(
+                    displayImage,
+                    style: style,
+                    layout: layout,
+                    in: context,
+                    origin: frame.origin,
+                    scale: frameScale,
+                    backdrop: { [weak self] context, _ in
+                        guard let self else { return }
+                        context.saveGState()
+                        context.concatenate(context.ctm.inverted())
+                        context.concatenate(viewTransform)
+                        self.drawCheckerboard(in: frame, context: context)
+                        context.restoreGState()
+                    }
+                )
+            } else {
+                context.draw(displayImage, in: imageDisplayRect)
+            }
 
             // The node being dragged or resized is excluded from the cached
             // preview and drawn live, so a drag never re-renders the whole image.
@@ -443,6 +361,46 @@ final class EditableAnnotationCanvasNSView: NSView {
         if currentTool == .picker {
             drawPickerOverlay(in: context)
         }
+    }
+
+    /// Cached 16×16 checkerboard used behind transparent share backgrounds.
+    private static let checkerTile: CGImage? = {
+        let size = 16
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: size,
+                  height: size,
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: colorSpace,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return nil }
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let base = CGColor(colorSpace: space, components: [0.17, 0.17, 0.17, 1]) ?? CGColor(gray: 0.17, alpha: 1)
+        let alternate = CGColor(colorSpace: space, components: [0.23, 0.23, 0.23, 1])
+            ?? CGColor(gray: 0.23, alpha: 1)
+        context.setFillColor(base)
+        context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+        context.setFillColor(alternate)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.fill(CGRect(x: 8, y: 8, width: 8, height: 8))
+        return context.makeImage()
+    }()
+
+    /// Paints the transparency checkerboard inside `rect`.
+    func drawCheckerboard(in rect: CGRect, context: CGContext) {
+        guard !rect.isEmpty else { return }
+        guard let tile = Self.checkerTile else {
+            context.setFillColor(CGColor(gray: 0.2, alpha: 1))
+            context.fill(rect)
+            return
+        }
+        context.saveGState()
+        context.clip(to: rect)
+        context.draw(tile, in: rect, byTiling: true)
+        context.restoreGState()
     }
 
     private func drawPickerOverlay(in context: CGContext) {
@@ -483,7 +441,10 @@ final class EditableAnnotationCanvasNSView: NSView {
                 + Self.colorLabelTextPadding * 2,
             height: lineHeight * 2 + 8
         )
-        let visible = bounds.intersection(imageDisplayRect)
+        let placementRect = shareStyle == nil
+            ? imageDisplayRect
+            : canvasRect(for: lastImageSize)
+        let visible = bounds.intersection(placementRect)
         let placementBounds = visible.isNull || visible.isEmpty ? bounds : visible
         return LabelPlacement.rect(size: size, near: point, inside: placementBounds)
     }
@@ -526,5 +487,13 @@ final class EditableAnnotationCanvasNSView: NSView {
         let rgbBaseline = rect.minY + 4
         (hexLabel as NSString).draw(at: CGPoint(x: textX, y: hexBaseline), withAttributes: attributes)
         (rgbLabel as NSString).draw(at: CGPoint(x: textX, y: rgbBaseline), withAttributes: secondaryAttributes)
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
     }
 }

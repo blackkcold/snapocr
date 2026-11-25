@@ -1,17 +1,37 @@
 import AppKit
+import CaptureCore
 import Foundation
 
 // MARK: - EditableAnnotationCanvasNSView Zoom & Pan
 
 extension EditableAnnotationCanvasNSView {
-    /// Display rect for the image at the current zoom and pan.
+    /// Geometry for the current image and share style.
     ///
-    /// `aspectFitRect` stays the reference for "whole image visible"; zoom scales
-    /// it about its centre and the pan offset shifts it. Every hit test and
-    /// overlay derives from `imageDisplayRect`, so they follow automatically.
-    func imageRect(for imageSize: CGSize) -> CGRect {
-        let fit = aspectFitRect(imageSize: imageSize, in: bounds)
-        fitImageRect = fit
+    /// With share appearance off this is a zero-treatment layout, so hit
+    /// testing, zoom and drawing all follow one code path.
+    func mockupLayout(for imageSize: CGSize) -> MockupLayout {
+        if let shareStyle {
+            return MockupLayout.make(imageSize: imageSize, style: shareStyle)
+        }
+        return MockupLayout.raw(imageSize: imageSize)
+    }
+
+    /// The whole treatment frame, fit into the view before zoom and pan.
+    func fitCanvasRect(for imageSize: CGSize) -> CGRect {
+        let layout = mockupLayout(for: imageSize)
+        return aspectFitRect(imageSize: layout.canvasSize, in: bounds)
+    }
+
+    /// The treatment frame at the current zoom and pan.
+    func canvasRect(for imageSize: CGSize) -> CGRect {
+        let layout = mockupLayout(for: imageSize)
+        let fit = fitCanvasRect(for: imageSize)
+        fitCanvasRect = fit
+        fitImageRect = layout.contentRect(
+            in: fit.origin,
+            scale: fit.width / max(layout.canvasSize.width, 1)
+        )
+
         guard zoomScale != 1 || panOffset != .zero else { return fit }
 
         panOffset = clampedPan(panOffset, for: fit, zoom: zoomScale)
@@ -25,8 +45,77 @@ extension EditableAnnotationCanvasNSView {
         )
     }
 
-    /// Keeps the zoomed image from being panned off screen. Axes where the image
-    /// still fits stay centred.
+    /// Display rect for the image at the current zoom and pan.
+    ///
+    /// This stays the single anchor for every hit test and overlay: it is the
+    /// layout's content rect mapped into the view, whether or not share
+    /// appearance adds padding around it.
+    func imageRect(for imageSize: CGSize) -> CGRect {
+        let layout = mockupLayout(for: imageSize)
+        let frame = canvasRect(for: imageSize)
+        return layout.contentRect(
+            in: frame.origin,
+            scale: frame.width / max(layout.canvasSize.width, 1)
+        )
+    }
+
+    /// Adopts a share style without losing the user's place.
+    ///
+    /// At fit the whole card is shown, because that is what turning the
+    /// treatment on should look like. While zoomed in, the image keeps its
+    /// on-screen size and centre so detail work does not jump.
+    func applyShareStyle(_ style: MockupStyle?, preservingPresentation: Bool = true) {
+        guard style != shareStyle else { return }
+        let previousContent = imageDisplayRect
+        let previousSize = lastImageSize
+        let isToggle = (style == nil) != (shareStyle == nil)
+        shareStyle = style
+
+        if isToggle,
+           preservingPresentation,
+           zoomScale > 1.0001,
+           previousSize != .zero,
+           previousContent.width > 0,
+           previousContent.height > 0 {
+            let layout = mockupLayout(for: previousSize)
+            let fit = fitCanvasRect(for: previousSize)
+            let fitContent = layout.contentRect(
+                in: fit.origin,
+                scale: fit.width / max(layout.canvasSize.width, 1)
+            )
+            if fitContent.width > 0 {
+                zoomScale = min(
+                    max(previousContent.width / fitContent.width, 1),
+                    CanvasZoomController.maximumScale
+                )
+                panOffset = clampedPan(
+                    CGSize(
+                        width: previousContent.midX - fit.midX,
+                        height: previousContent.midY - fit.midY
+                    ),
+                    for: fit,
+                    zoom: zoomScale
+                )
+            } else {
+                zoomScale = 1
+                panOffset = .zero
+            }
+        } else if isToggle {
+            zoomScale = 1
+            panOffset = .zero
+        }
+
+        if previousSize != .zero {
+            imageDisplayRect = imageRect(for: previousSize)
+        }
+        notifyZoomChanged()
+        window?.invalidateCursorRects(for: self)
+        refreshTextEntryLayout()
+        needsDisplay = true
+    }
+
+    /// Keeps the zoomed frame from being panned off screen. Axes where the
+    /// frame still fits stay centred.
     func clampedPan(_ proposed: CGSize, for fit: CGRect, zoom: CGFloat) -> CGSize {
         guard zoom > 1.0001 else { return .zero }
         let width = fit.width * zoom
@@ -39,18 +128,24 @@ extension EditableAnnotationCanvasNSView {
         )
     }
 
-    /// Shows the whole image again.
+    /// Shows the whole treated canvas again.
     func resetZoom() {
         zoomScale = 1
         panOffset = .zero
+        if lastImageSize != .zero {
+            imageDisplayRect = imageRect(for: lastImageSize)
+        }
         notifyZoomChanged()
+        window?.invalidateCursorRects(for: self)
         refreshTextEntryLayout()
         needsDisplay = true
     }
 
     /// Scales the image so one image pixel covers one point.
     func actualSizeZoom() {
-        guard fitImageRect.width > 0, lastImageSize.width > 0 else { return }
+        guard lastImageSize.width > 0 else { return }
+        imageDisplayRect = imageRect(for: lastImageSize)
+        guard fitImageRect.width > 0 else { return }
         applyZoom(lastImageSize.width / fitImageRect.width, around: nil)
     }
 
@@ -65,15 +160,14 @@ extension EditableAnnotationCanvasNSView {
     /// Zooms to `newScale`, keeping the point under `point` in place.
     ///
     /// - Parameters:
-    ///   - newScale: Requested zoom relative to fit; clamped to 1…8.
+    ///   - newScale: Requested zoom relative to fit; clamped to 1…`maximumScale`.
     ///   - point: View point to hold still, or `nil` for the view centre.
     func applyZoom(_ newScale: CGFloat, around point: CGPoint?) {
-        let clamped = min(max(newScale, 1), 8)
+        let clamped = min(max(newScale, 1), CanvasZoomController.maximumScale)
         guard abs(clamped - zoomScale) > 0.0001 else { return }
+        guard lastImageSize != .zero else { return }
 
-        if zoomScale <= 1.0001, panOffset == .zero, lastImageSize != .zero {
-            imageDisplayRect = imageRect(for: lastImageSize)
-        }
+        imageDisplayRect = imageRect(for: lastImageSize)
         let current = imageDisplayRect
         let anchor = point ?? CGPoint(x: bounds.midX, y: bounds.midY)
         let relativeX = current.width > 0 ? (anchor.x - current.minX) / current.width : 0.5
@@ -86,8 +180,10 @@ extension EditableAnnotationCanvasNSView {
             width: anchor.x + (0.5 - relativeX) * width - fitImageRect.midX,
             height: anchor.y + (0.5 - relativeY) * height - fitImageRect.midY
         )
-        panOffset = clampedPan(proposed, for: fitImageRect, zoom: clamped)
+        panOffset = clampedPan(proposed, for: fitCanvasRect, zoom: clamped)
+        imageDisplayRect = imageRect(for: lastImageSize)
         notifyZoomChanged()
+        window?.invalidateCursorRects(for: self)
         refreshTextEntryLayout()
         needsDisplay = true
     }
@@ -157,15 +253,19 @@ extension EditableAnnotationCanvasNSView {
             super.scrollWheel(with: event)
             return
         }
-        // Panning is only meaningful once the image is larger than the view.
+        // Panning is only meaningful once the frame is larger than the view.
+        let fit = fitCanvasRect(for: lastImageSize)
         panOffset = clampedPan(
             CGSize(
                 width: panOffset.width + event.scrollingDeltaX,
                 height: panOffset.height + event.scrollingDeltaY
             ),
-            for: fitImageRect,
+            for: fit,
             zoom: zoomScale
         )
+        if lastImageSize != .zero {
+            imageDisplayRect = imageRect(for: lastImageSize)
+        }
         refreshTextEntryLayout()
         needsDisplay = true
     }

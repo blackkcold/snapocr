@@ -101,6 +101,7 @@ struct PreferencesView: View {
                 case .general: GeneralPreferencesView()
                 case .appearance: AppearancePreferencesView()
                 case .capture: CapturePreferencesView()
+                case .audioRecording: AudioRecordingPreferencesView()
                 case .recording: RecordingPreferencesView()
                 case .ocr: OCRPreferencesView()
                 case .shortcuts: ShortcutsPreferencesView()

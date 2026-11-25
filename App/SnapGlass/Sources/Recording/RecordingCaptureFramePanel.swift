@@ -55,18 +55,17 @@ final class RecordingCaptureFramePanel: NSPanel {
     override func orderFrontRegardless() {
         super.orderFrontRegardless()
         sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
+        RecordingWindowExclusionRegistry.shared.register(self)
     }
 
     func present() {
         orderFrontRegardless()
     }
 
-    func update(rect: CGRect) {
-        guard frame != rect else { return }
-        setFrame(rect, display: true)
-    }
-
     func dismiss() {
         orderOut(nil)
+        if windowNumber > 0 {
+            RecordingWindowExclusionRegistry.shared.unregister(CGWindowID(windowNumber))
+        }
     }
 }

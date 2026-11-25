@@ -1,0 +1,17 @@
+{
+  "name": "stall-main",
+  "audioSeconds": 5,
+  "screenSeconds": 0,
+  "firstSampleDeadlineSeconds": 6,
+  "simulateMainStallMs": 6000,
+  "simulateStallAfterStart": true,
+  "audioMode": "microphone",
+  "hudWarmup": false,
+  "expect": {
+    "artifactPlayable": true,
+    "hudFirstVisibleUnderMs": 300,
+    "sizeThatFitsBeforeFirstVisible": 0,
+    "becameRecording": true,
+    "mainThreadMaxStallAtLeastMs": 4800
+  }
+}

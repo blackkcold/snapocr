@@ -1,52 +1,51 @@
 import Foundation
-import SharedKit
 
-/// The complete, window-backed state of the user-triggered update flow.
+/// What the Updates settings panel and the menu-bar badge show.
 ///
-/// Every check and download result is stored here instead of being presented by
-/// an `NSAlert.runModal()` loop. A menu-bar app is frequently inactive by the
-/// time a 30-second network request returns; a modal would then block in the
-/// background and steal the key window from whatever the user moved on to.
-public enum UpdateCheckState: Equatable {
-    /// No check has run in this session.
+/// Sparkle owns checking, downloading, EdDSA verification, installation and
+/// relaunch. This type only mirrors the parts the app needs to draw: a check is
+/// running, the app is current, an update exists, or a user-initiated check
+/// failed. Scheduled failures stay silent on purpose — a menu-bar app should
+/// not grow a permanent red badge because a background request timed out.
+enum UpdateCheckState: Equatable {
     case idle
-
-    /// A release lookup is in flight.
     case checking
+    case upToDate(String)
+    case available(AvailableUpdate)
+    case failed(String)
 
-    /// GitHub reports no newer release.
-    case upToDate(SemanticVersion)
-
-    /// A newer release is available and can be downloaded.
-    case available(UpdateRelease)
-
-    /// The verified DMG is being downloaded.
-    case downloading(UpdateRelease)
-
-    /// The DMG is on disk and ready to hand to the installer.
-    case readyToInstall(UpdateRelease, URL)
-
-    /// The release lookup failed; the message is user-facing.
-    case checkFailed(String)
-
-    /// The DMG download or SHA-256 verification failed; retry only the download.
-    case downloadFailed(UpdateRelease, String)
-
-    /// Whether a release lookup is currently running.
-    public var isChecking: Bool {
+    var isChecking: Bool {
         if case .checking = self { return true }
         return false
     }
 
-    /// Whether a DMG download is currently running.
-    public var isDownloading: Bool {
-        if case .downloading = self { return true }
-        return false
-    }
-
-    /// The verified DMG location once the download has finished.
-    public var downloadedFileURL: URL? {
-        if case .readyToInstall(_, let url) = self { return url }
+    var availableUpdate: AvailableUpdate? {
+        if case .available(let update) = self { return update }
         return nil
+    }
+}
+
+/// The update Sparkle found, in the form the UI needs.
+struct AvailableUpdate: Equatable {
+    let displayVersion: String
+    let releaseNotesURL: URL?
+    /// True once Sparkle finished downloading and verifying the update.
+    var isDownloaded: Bool = false
+}
+
+/// What keeps the app from restarting into a freshly installed update.
+enum UpdateBlocker: Equatable {
+    /// Unsaved annotation tabs; installing would discard them.
+    case unsavedEdits
+    /// A screen recording is starting, running or being saved.
+    case recording
+
+    var message: String {
+        switch self {
+        case .unsavedEdits:
+            "Update ready. Save your edits; SnapGlass installs it automatically."
+        case .recording:
+            "Update ready. Stop the recording; SnapGlass installs it automatically."
+        }
     }
 }

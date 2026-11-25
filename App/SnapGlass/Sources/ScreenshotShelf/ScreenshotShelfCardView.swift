@@ -15,6 +15,7 @@ struct ScreenshotShelfCardView: View {
     let onOpen: () -> Void
     let onCopy: () -> Void
     let onPin: () -> Void
+    let onShareAppearance: () -> Void
     let onRemove: () -> Void
     let onMoveLeft: () -> Void
     let onMoveRight: () -> Void
@@ -45,6 +46,7 @@ struct ScreenshotShelfCardView: View {
             .accessibilityAction(named: Text("Open Screenshot")) { onOpen() }
             .accessibilityAction(named: Text("Copy Screenshot")) { onCopy() }
             .accessibilityAction(named: Text("Pin Screenshot")) { onPin() }
+            .accessibilityAction(named: Text("Beautify…")) { onShareAppearance() }
             .accessibilityAction(named: Text("Move Left")) {
                 if canMoveLeft { onMoveLeft() }
             }
@@ -205,6 +207,9 @@ struct ScreenshotShelfCardView: View {
         }
         Button(action: onPin) {
             Label("Pin Screenshot", systemImage: "pin")
+        }
+        Button(action: onShareAppearance) {
+            Label("Beautify…", systemImage: "sparkles")
         }
 
         Divider()

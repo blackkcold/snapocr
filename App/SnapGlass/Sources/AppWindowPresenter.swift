@@ -4,6 +4,8 @@ import SwiftUI
 
 @MainActor
 enum AppWindowPresenter {
+    static let recordingsWindowID = "recordings"
+
     private static let coordinator = WindowPresentationCoordinator.shared
 
     static func present(id: String, open: () -> Void) {
@@ -114,6 +116,9 @@ final class AppWindowRegistrationNSView: NSView {
 
     func registerWindow() {
         guard !registrationID.isEmpty else { return }
+        if let window {
+            RecordingWindowExclusionRegistry.shared.register(window)
+        }
         AppWindowPresenter.register(window, id: registrationID)
     }
 

@@ -1,18 +1,38 @@
 import AppKit
 import CaptureCore
 import Foundation
+import OSLog
 import SharedKit
 
 @preconcurrency import ScreenCaptureKit
 
-private struct RecordingPreferenceSnapshot: Sendable {
+typealias AudioPipelineFactory = @Sendable (
+    AudioRecordingConfiguration,
+    RecordingPipelineRoots,
+    String?
+) async throws -> RecordingSessionPipeline
+
+/// Replaces the screen audio engine factory in agent runs.
+///
+/// Production never sets it; the agent channel uses it to prove that a failed
+/// audio track leaves the video intact.
+typealias ScreenAudioEngineFactoryOverride = @Sendable (
+    AudioRecordingConfiguration,
+    any AudioCheckpointSink & Sendable,
+    AudioSampleClock
+) throws -> any AudioRecordingControlling & Sendable
+
+struct RecordingPreferenceSnapshot: Sendable {
     let codec: RecordingVideoCodec
     let resolutionProfile: String
     let frameRate: Int
     let averageVideoBitrate: Int
     let capturesSystemAudio: Bool
+    let screenAudioMode: AudioSourceMode
+    let screenAudioBitRate: Int
     let destinationDirectory: URL?
     let hasCustomDestination: Bool
+    let customVolumeUUID: String?
 
     init(defaults: UserDefaults) {
         let storedCodec = defaults.string(forKey: PreferenceKeys.recordingVideoCodec)
@@ -35,8 +55,14 @@ private struct RecordingPreferenceSnapshot: Sendable {
         capturesSystemAudio = defaults.object(forKey: PreferenceKeys.recordingSystemAudio) == nil
             ? PreferenceDefaults.recordingSystemAudio
             : defaults.bool(forKey: PreferenceKeys.recordingSystemAudio)
-        destinationDirectory = RecordingDestinationPreferences.directory(in: defaults)
-        hasCustomDestination = RecordingDestinationPreferences.customDirectory(in: defaults) != nil
+        screenAudioMode = RecordingAudioPreferenceStore.mode(for: .screen, in: defaults)
+        screenAudioBitRate = RecordingAudioPreferenceStore.bitRate(for: .screen, in: defaults)
+        destinationDirectory = RecordingDestinationPreferences.directory(for: .screen, in: defaults)
+        hasCustomDestination = RecordingDestinationPreferences.customDirectory(for: .screen, in: defaults) != nil
+        customVolumeUUID = RecordingDestinationPreferences.customDirectoryVolumeUUID(
+            for: .screen,
+            in: defaults
+        )
     }
 
     func configuration(for selection: RecordingSourceSelection) -> RecordingConfiguration {
@@ -79,599 +105,333 @@ private struct RecordingPreferenceSnapshot: Sendable {
     }
 }
 
-private struct RecordingSessionSnapshot: Sendable {
+struct RecordingSessionSnapshot: Sendable {
+    let request: RecordingRequestIdentity
     let selection: RecordingSourceSelection
     let configuration: RecordingConfiguration
+    let screenAudioMode: AudioSourceMode
+    let screenAudioBitRate: Int
     let destinationDirectory: URL
+    let hasCustomDestination: Bool
+    let customVolumeUUID: String?
 }
 
-enum RecordingStorage {
-    static let minimumStartFreeSpace: Int64 = 1_024 * 1_024 * 1_024
-    static let minimumContinueFreeSpace: Int64 = 512 * 1_024 * 1_024
+/// A first-frame gate failure that came from the writer itself.
+///
+/// Kept separate from ``RecordingReadinessError`` so the panel can show the
+/// writer's own reason instead of a generic timeout.
+enum ScreenStartFailureReason: LocalizedError, Equatable {
+    /// `startWriting()` failed, or the engine reported a writer failure.
+    case writerFailed(String)
+    /// The writer input stayed busy past its bounded sync-frame wait.
+    case writerNotReady(String)
 
-    static func availableBytes(at directory: URL) -> Int64? {
-        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
-        guard let attributes = try? FileManager.default.attributesOfFileSystem(forPath: directory.path),
-              let availableBytes = attributes[.systemFreeSize] as? NSNumber else {
-            return nil
+    var errorDescription: String? {
+        switch self {
+        case let .writerFailed(reason):
+            AppLocalization.string(
+                "The video writer failed before the recording started: %@",
+                reason
+            )
+        case let .writerNotReady(reason):
+            AppLocalization.string(
+                "The video writer was not ready to accept video frames: %@",
+                reason
+            )
         }
-        return availableBytes.int64Value
     }
+}
 
-    static func formattedBytes(_ byteCount: Int64) -> String {
-        let language = UserDefaults.standard.string(forKey: PreferenceKeys.appLanguage)
-            ?? PreferenceDefaults.appLanguage
-        return ByteCountFormatStyle(
-            style: .file,
-            locale: (AppLanguage(rawValue: language) ?? .system).locale
-        ).format(byteCount)
-    }
+/// Why new screen capture is blocked by an unconfirmed capture release.
+///
+/// This is the "stream release not confirmed" axis; "file not sealed yet" is the
+/// separate `.saving` state and must never be merged into it.
+enum ScreenReleasePhase: Equatable {
+    /// Capture start was requested and has not returned; it may or may not run.
+    case startUnconfirmed
+    /// A stop was requested; its confirmation has not returned.
+    case stopUnconfirmed
+    /// `stopCapture()` reported a failure; an explicit retry may try again.
+    case stopRejected
 }
 
 @MainActor
 final class RecordingSessionController {
-    private let captureOrchestrator: CaptureOrchestrator
+    let captureOrchestrator: CaptureOrchestrator
     let defaults: UserDefaults
-    private let fileManager: FileManager
-    private(set) var status: RecordingSessionStatus = .idle
-    private var outcomeState = RecordingSessionOutcomeState()
+    let audioPipelineFactory: AudioPipelineFactory
+    var status: RecordingSessionStatus = .idle
+    var outcomeState = RecordingSessionOutcomeState()
+    var audioStateMachine = RecordingAudioSessionStateMachine()
 
     var onStatusChange: ((RecordingSessionStatus) -> Void)?
     var onScreenshotShelfRecordingChange: ((Bool) -> Void)?
     var onMessage: ((String, ToastType) -> Void)?
     var onOpenPermissionGuide: (() -> Void)?
+    var onOpenRecordings: (() -> Void)?
     var onFailureChange: ((RecordingControlPanelFailure?) -> Void)?
+    /// Resolves microphone access for a screen source that includes the microphone.
+    var onRequestScreenMicrophoneAccess: (() async -> Bool)?
 
-    private var activeSession: RecordingSessionSnapshot?
+    /// Persisted diagnosis for a status that never reached the control panel.
+    ///
+    /// The panel's own log only records what it accepted. A status dropped before
+    /// the panel sees it is invisible there, so the controller records it here.
+    let logger = Logger(subsystem: "com.snapglass", category: "recording.hud")
+
+    var activeSession: RecordingSessionSnapshot?
     var sessionScreen: NSScreen?
     var engine: ScreenRecordingEngine?
+    var screenPipelineAdapter: ScreenRecordingPipelineAdapter?
     var controlPanel: RecordingControlPanel?
     var captureFramePanel: RecordingCaptureFramePanel?
     var recordingStartedAt: Date?
     var panelHiddenByUser = false
     var watchdogReported = false
     var retainedFailure: (engine: ScreenRecordingEngine, payload: RecordingControlPanelFailure)?
-    private var countdownTask: Task<Void, Never>?
-    private var monitoringTask: Task<Void, Never>?
-    private var notificationObservers: [NSObjectProtocol] = []
-    private var stopWhenStarted = false
-    private var pendingStopReason: String?
-    private var stopWaiters: [CheckedContinuation<Bool, Never>] = []
-    private var outcomeWaiters: [CheckedContinuation<RecordingSessionTerminalOutcome, Never>] = []
-    private var currentStartAttemptIdentifier: UUID?
+    var countdownTask: Task<Void, Never>?
+    var monitoringTask: Task<Void, Never>?
+    var notificationObservers: [NSObjectProtocol] = []
+    var stopWhenStarted = false
+    var pendingStopReason: String?
+    var stopWaiters: [CheckedContinuation<Bool, Never>] = []
+    var outcomeWaiters: [CheckedContinuation<RecordingSessionTerminalOutcome, Never>] = []
+    /// The request identity that owns the current preparation/start/session.
+    var currentRequest: RecordingRequestIdentity?
+    var sessionGeneration = UUID()
+    var activeRecordingKind: RecordingKind?
+    var announcedPhase: RecordingPhase?
+    var isResolvingQuit = false
+    var cancelRequested = false
+    var preparationPhase: RecordingPreparationPhase = .checkingPermission
+    /// The truthful sub-stage while `status == .starting`.
+    var startPhase: RecordingStartPhase = .startingScreenWriter
+    /// The single clock used for phase durations and privacy-safe signposts.
+    let clock: RecordingPhaseClock
+    /// Duration anchor for the current phase; used only for privacy-safe signposts.
+    var phaseStartedAt: ContinuousClock.Instant?
+    /// Who owns the current screen start and its one stop.
+    var screenStartOwnership = RecordingStartOwnership()
+    /// Screen-recording access decided immediately before the writer starts.
+    ///
+    /// Injectable so the agent channel and tests can prove the denied path without
+    /// changing the machine's TCC state. Production always uses the system gate.
+    var screenPermissionGate = ScreenCapturePermissionGate.system
+    /// Agent-only override for the screen session's audio mode.
+    ///
+    /// The production value still comes from the user's preferences; the agent
+    /// channel sets this to isolate the video path (`none`) or exercise audio.
+    var screenAudioModeOverride: AudioSourceMode?
+    /// Agent-only injection that makes the screen audio engine factory fail.
+    ///
+    /// Used to prove that a failed audio track never truncates the video and that
+    /// the user sees the "system audio was not recorded" copy. Production leaves
+    /// this `false`.
+    var screenAudioFailureInjection = false
+    /// Whether this session ever armed the first-frame wait.
+    ///
+    /// A permission denial must leave this false: the session fails before any
+    /// writer exists, instead of waiting five seconds for a frame that cannot come.
+    var didAwaitFirstVideoFrame = false
+    /// One in-flight screen stop, so a bounded UI wait never starts a second one.
+    var screenStopTask: Task<ScreenRecordingOutcome, Error>?
+    /// The permission/enumeration attempt; cancelled when the user cancels.
+    var screenPreparationTask: Task<Void, Never>?
+    /// A screen stream that could not be confirmed stopped; blocks new capture
+    /// until the retry action confirms it.
+    var unconfirmedScreenStop: (adapter: ScreenRecordingPipelineAdapter, materialRoot: URL?)?
+    /// Destination cached for the release capsule's Finder action after the
+    /// session snapshot has been cleared.
+    var screenReleaseDestination: URL?
+    /// Whether the visible panel is the capture-release capsule.
+    var isPresentingScreenRelease = false
+    /// Whether the release capsule has already been announced once.
+    var didAnnounceScreenRelease = false
+    var audioPipeline: RecordingSessionPipeline?
+    var audioConfiguration: AudioRecordingConfiguration?
+    var audioCurrentMode: AudioSourceMode?
+    var audioSessionID: UUID?
+    var audioStartTask: Task<Void, any Error>?
+    var audioStopJoinTask: Task<AudioRecordingResult, Never>?
+    var audioStopRequested = false
+    var audioPipelineStarted = false
+    var pendingRecoverySessionIDs: Set<UUID> = []
+    var recoveryMaterialURLs: [UUID: [URL]] = [:]
+    var audioStartWatchdogTask: Task<Void, Never>?
+    var audioStartReservation: UUID?
+    var audioResourceOwner: UUID?
+    var audioRetireTask: Task<Void, Never>?
+    var screenStartWatchdogTask: Task<Void, Never>?
+    var screenCleanupTask: Task<Void, Never>?
+    var lastAudioResult: AudioRecordingResult?
+    var audioProgressTask: Task<Void, Never>?
+    var previewReadinessTask: Task<Void, Never>?
+    var previewLoadTask: Task<Void, Never>?
+    var previewService: RecordingPreviewService?
+    var previewLease: PreviewLease?
+    var previewTarget: PreviewTarget?
+    var previewPlayer: RecordingAudioPreviewPlayer?
+    var previewReleaseTask: Task<Void, Never>?
+    var previewReleaseGeneration = 0
+    var previewLifecycleGeneration = 0
+    var audioProgress: RecordingProgress?
+    var latestAudioOutputURL: URL?
+    /// Test-channel override for the first-sample deadline; `nil` in normal launches.
+    ///
+    /// Only the agent harness sets this, so production timing stays exactly as shipped.
+    var firstSampleDeadlineOverride: Duration?
+    /// Test-channel injection: treat readiness as never observed (the harness uses
+    /// this to exercise the deadline without disabling capture). `false` in normal
+    /// launches, where readiness comes only from real samples.
+    var suppressFirstSampleReadiness = false
+    /// Owns every readiness deadline and every stop; never runs on the main actor.
+    let settlementSupervisor = RecordingSettlementSupervisor()
+    /// The supervisor ticket of the armed audio session, if any.
+    var audioSettlementTicket: RecordingSettlementSupervisor.Ticket?
+    /// The supervisor ticket of the armed screen session, if any.
+    var screenSettlementTicket: RecordingSettlementSupervisor.Ticket?
+    /// The screen generation whose stop is running; set before `settle`.
+    var screenSettlingGeneration: UUID?
+    /// What the running screen settlement should be applied as.
+    enum ScreenStopIntent {
+        /// The session was recording; a published segment is the saved outcome.
+        case recordingStop
+        /// The start never became a recording; any material is recoverable only.
+        case startCleanup
+    }
+    var screenStopIntent: ScreenStopIntent?
+    /// The user-facing reason of the running screen stop, for its saved message.
+    var screenStopReason: String?
+    /// Classifies a screen stop that started off the main actor.
+    var screenStopRelay: ScreenStopFailureRelay?
+    /// Last known writer counters, kept after the adapter is released for diagnostics.
+    var lastScreenWriterDiagnostics: ScreenWriterDiagnostics?
+    /// Generations whose settlement the main actor already applied.
+    ///
+    /// A stop is reported twice (to the awaiting caller and to the event
+    /// consumer); this makes the second report a no-op instead of a second
+    /// presentation or a second gate release.
+    private var appliedSettlementGenerations: [UUID] = []
+    private var settlementEventTask: Task<Void, Never>?
+    var audioHUDExpanded = false
+    var audioSilenceStartedAt: ContinuousClock.Instant?
+    var audioSilenceWarningShown = false
+    var audioSilenceWarningVisible = false
 
     var isBusy: Bool { status.isBusy }
     var needsQuitConfirmation: Bool { status.needsQuitConfirmation }
-    var isSaving: Bool { status == .saving }
+    var isSaving: Bool {
+        status == .saving || hasPendingBackgroundFinalization || screenCleanupTask != nil
+    }
     var terminalOutcome: RecordingSessionTerminalOutcome? { outcomeState.terminalOutcome }
+    var isAudioSessionActive: Bool {
+        switch audioStateMachine.state {
+        case .starting, .recording, .stopping, .finalizing: true
+        case .idle, .finished, .failedRecoverable: false
+        }
+    }
+    /// The kind of the session currently preparing, recording, saving, or resolving quit.
+    var currentRecordingKind: RecordingKind? {
+        activeRecordingKind
+            ?? (isAudioSessionActive || hasPendingBackgroundFinalization ? .audio : nil)
+            ?? (status.isBusy ? .screen : nil)
+    }
+    /// Active stop/finalization and retirement only; recoverable materials never count here.
+    var hasPendingBackgroundFinalization: Bool {
+        audioStopRequested || audioStopJoinTask != nil
+            || audioRetireTask != nil
+            || audioStateMachine.state == .finalizing
+    }
+    /// Live or retiring capture resources; a new capture waits for their release.
+    var hasLiveCaptureResources: Bool {
+        audioResourceOwner != nil || audioRetireTask != nil
+            || screenStartOwnership.blocksNewStart
+            || screenCleanupTask != nil
+            || screenSettlingGeneration != nil
+            || screenStopTask != nil || unconfirmedScreenStop != nil
+    }
+
+    /// Whether the platform screen start call is still outstanding.
+    var isScreenPlatformStartOutstanding: Bool {
+        screenStartOwnership.isPlatformStartOutstanding
+    }
+    /// Non-nil while new screen capture is blocked by an unconfirmed stream release.
+    ///
+    /// Only meaningful once the session UI has settled (`status == .idle`). While
+    /// `.starting` the truthful message is "starting"; while `.saving` the stream
+    /// already stopped and only the files are open, so that case keeps its own
+    /// "still saving" message instead of borrowing the release wording.
+    var screenReleasePhase: ScreenReleasePhase? {
+        guard status == .idle else { return nil }
+        if unconfirmedScreenStop != nil || screenStartOwnership.needsReleaseConfirmation {
+            return .stopRejected
+        }
+        switch screenStartOwnership.stage {
+        case .idle:
+            return isScreenStopInFlight ? .stopUnconfirmed : nil
+        case .platformStartOutstanding, .awaitingFirstFrame:
+            return .startUnconfirmed
+        case .stopping:
+            return .stopUnconfirmed
+        case .recording:
+            // A settled UI never coexists with recording; keep this defensive.
+            return nil
+        case .stopUnconfirmed:
+            return .stopRejected
+        }
+    }
+
+    /// Whether a real stop/cleanup operation is still running for the old stream.
+    var isScreenStopInFlight: Bool {
+        screenCleanupTask != nil || screenSettlingGeneration != nil || screenStopTask != nil
+    }
+    /// Recoverable session IDs whose materials are retained for an explicit recovery action.
+    var pendingRecoveryIDs: Set<UUID> { pendingRecoverySessionIDs }
+    /// URLs retained for a recoverable session; never deleted by this controller.
+    func recoveryMaterials(for sessionID: UUID) -> [URL] {
+        recoveryMaterialURLs[sessionID] ?? []
+    }
 
     init(
         captureOrchestrator: CaptureOrchestrator,
         defaults: UserDefaults = .standard,
-        fileManager: FileManager = .default
+        clock: RecordingPhaseClock = RecordingPhaseClock(),
+        audioPipelineFactory: @escaping AudioPipelineFactory
     ) {
         self.captureOrchestrator = captureOrchestrator
         self.defaults = defaults
-        self.fileManager = fileManager
+        self.clock = clock
+        self.audioPipelineFactory = audioPipelineFactory
         installLifecycleObservers()
+        startSettlementEventConsumer()
     }
 
-    func cancelPendingStart() {
-        switch status {
-        case .selectingSource:
-            finishSession(success: false)
-            RecordingSourcePickerPanel.cancelActivePanel()
-            AreaSelectionPanel.cancelRecordingRegionSelection()
-        case .countdown:
-            countdownTask?.cancel()
-            finishSession(success: false)
-        case .idle, .starting, .recording, .saving:
-            break
-        }
-    }
-
-    @discardableResult
-    func stopAndSave(reason: String? = nil) async -> Bool {
-        switch status {
-        case .idle:
-            return false
-        case .selectingSource, .countdown:
-            cancelPendingStart()
-            return false
-        case .starting:
-            stopWhenStarted = true
-            if let reason { pendingStopReason = reason }
-            return await waitForStopCompletion()
-        case .recording:
-            return await finalizeRecording(reason: reason)
-        case .saving:
-            return await waitForStopCompletion()
-        }
-    }
-
-    func stopAndResolveForQuit(reason: String) async -> RecordingSessionTerminalOutcome {
-        switch status {
-        case .idle:
-            return outcomeState.terminalOutcome ?? .noActiveSession
-        case .selectingSource, .countdown:
-            cancelPendingStart()
-            return outcomeState.terminalOutcome ?? .noActiveSession
-        case .starting:
-            stopWhenStarted = true
-            pendingStopReason = reason
-            return await waitForTerminalOutcome()
-        case .recording:
-            _ = await finalizeRecording(reason: reason)
-            return outcomeState.terminalOutcome ?? .failed
-        case .saving:
-            return await waitForTerminalOutcome()
-        }
-    }
-
-    private func sourcePickerCompleted(
-        _ selection: RecordingSourceSelection?,
-        preferences: RecordingPreferenceSnapshot,
-        attemptIdentifier: UUID
-    ) {
-        guard currentStartAttemptIdentifier == attemptIdentifier,
-              status == .selectingSource else { return }
-        guard let selection else {
-            finishSession(success: false)
-            return
-        }
-        guard let destination = preferences.destinationDirectory else {
-            onMessage?(
-                AppLocalization.string("The Movies recording folder is unavailable."),
-                .error
-            )
-            finishSession(success: false)
-            return
-        }
-
-        let configuration = preferences.configuration(for: selection)
-        do {
-            try configuration.validate()
-            try prepareDestination(destination, isCustom: preferences.hasCustomDestination)
-        } catch {
-            let message = AppLocalization.string(
-                "Unable to start recording: %@",
-                AppLocalization.recordingErrorDescription(error)
-            )
-            onMessage?(message, .error)
-            finishSession(success: false)
-            return
-        }
-
-        activeSession = RecordingSessionSnapshot(
-            selection: selection,
-            configuration: configuration,
-            destinationDirectory: destination
-        )
-        beginCountdown(for: selection)
-    }
-
-    private func prepareDestination(_ directory: URL, isCustom: Bool) throws {
-        var isDirectory = ObjCBool(false)
-        if isCustom {
-            guard fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue,
-                  fileManager.isWritableFile(atPath: directory.path) else {
-                throw RecordingDestinationError.customDirectoryUnavailable
-            }
-        } else {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-
-        guard let availableBytes = RecordingStorage.availableBytes(at: directory) else {
-            throw RecordingDestinationError.unavailableCapacity
-        }
-        guard availableBytes >= RecordingStorage.minimumStartFreeSpace else {
-            throw RecordingDestinationError.insufficientCapacity
-        }
-    }
-
-    private func beginCountdown(for selection: RecordingSourceSelection) {
-        let screen = screen(for: selection.displayID)
-        sessionScreen = screen
-        let panel = makeControlPanel(on: screen)
-        controlPanel = panel
-        if !RecordingHUDPreferences.isHidden(in: defaults) {
-            panel.present(state: .countdown(3))
-        }
-        showCaptureFrame(for: selection)
-        updateStatus(.countdown(3))
-
-        countdownTask = Task { @MainActor [weak self] in
-            for seconds in stride(from: 3, through: 1, by: -1) {
-                guard let self, !Task.isCancelled, self.isCountingDown else { return }
-                self.updateStatus(.countdown(seconds))
-                do {
-                    try await Task.sleep(for: .seconds(1))
-                } catch {
-                    return
-                }
-            }
-            guard let self, !Task.isCancelled, self.isCountingDown else { return }
-            self.countdownTask = nil
-            await self.startCapture()
-        }
-    }
-
-    private func startCapture() async {
-        guard status.isBusy, let activeSession else { return }
-        updateStatus(.starting)
-
-        let engine = ScreenRecordingEngine()
-        self.engine = engine
-        do {
-            try await engine.start(
-                source: activeSession.selection.source,
-                configuration: activeSession.configuration,
-                destinationDirectory: activeSession.destinationDirectory,
-                excludedWindowIDs: excludedWindowIDs,
-                onFailure: { [weak self] _ in
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        _ = await self.stopAndSave()
-                    }
-                }
-            )
-            outcomeState.markRecordingStarted()
-            updateStatus(.recording)
-            if stopWhenStarted {
-                _ = await finalizeRecording(reason: pendingStopReason)
-            } else {
-                startMonitoring()
-            }
-        } catch {
-            let message = AppLocalization.string(
-                "Unable to start recording: %@",
-                AppLocalization.recordingErrorDescription(error)
-            )
-            onMessage?(message, .error)
-            finishSession(success: false)
-        }
-    }
-
-    private func finalizeRecording(reason: String?) async -> Bool {
-        guard status == .recording, let engine else { return false }
-        monitoringTask?.cancel()
-        monitoringTask = nil
-        updateStatus(.saving)
-
-        do {
-            let finalURL = try await engine.stopAndSave()
-            let message: String
-            if let reason {
-                message = AppLocalization.string(
-                    "Recording stopped and saved (%@): %@",
-                    reason,
-                    finalURL.lastPathComponent
-                )
-            } else {
-                message = AppLocalization.string("Recording saved: %@", finalURL.lastPathComponent)
-            }
-            onMessage?(message, .success)
-            finishSession(success: true)
-            if RecordingHUDPreferences.revealsOnFinish(in: defaults) {
-                revealInFinder(finalURL)
-            }
-            return true
-        } catch {
-            await handleRecordingFailure(error, engine: engine)
-            return false
-        }
-    }
-
-    private func startMonitoring() {
-        monitoringTask?.cancel()
-        monitoringTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(2))
-                } catch {
-                    return
-                }
-                guard let self, self.status == .recording else { return }
-                await self.reportMissingFramesIfNeeded()
-                if let reason = await self.recordingInterruptionReason() {
-                    _ = await self.stopAndSave(reason: reason)
-                    return
-                }
+    /// Consumes supervisor events on the main actor.
+    ///
+    /// The stream is optional by design: stops and saves complete without it, so a
+    /// stalled main thread can never hold up persistence. This consumer only
+    /// presents what already happened.
+    private func startSettlementEventConsumer() {
+        settlementEventTask?.cancel()
+        let events = settlementSupervisor.events
+        settlementEventTask = Task { @MainActor [weak self] in
+            for await event in events {
+                guard let self, !Task.isCancelled else { return }
+                await self.handleSettlementEvent(event)
             }
         }
     }
 
-    private func recordingInterruptionReason() async -> String? {
-        guard let activeSession else { return nil }
-        guard let availableBytes = RecordingStorage.availableBytes(at: activeSession.destinationDirectory) else {
-            return AppLocalization.string("The recording destination is no longer available.")
+    /// Marks one generation's settlement as applied, exactly once.
+    ///
+    /// - Parameter generation: The generation whose settlement is being applied.
+    /// - Returns: `true` for the first call only.
+    func markSettlementApplied(_ generation: UUID) -> Bool {
+        guard !appliedSettlementGenerations.contains(generation) else { return false }
+        appliedSettlementGenerations.append(generation)
+        if appliedSettlementGenerations.count > 8 {
+            appliedSettlementGenerations.removeFirst(appliedSettlementGenerations.count - 8)
         }
-        guard availableBytes >= RecordingStorage.minimumContinueFreeSpace else {
-            return AppLocalization.string("Free space fell below 512 MB; the recording is being finalized.")
-        }
-        let content: SCShareableContent
-        do {
-            content = try await SCShareableContent.current
-        } catch {
-            // Rare failure path: this poll ends the recording anyway, so fall
-            // back to the existing check to keep both messages (permission lost
-            // vs. source unavailable) and the permission guide exactly as today.
-            guard await captureOrchestrator.checkPermissionStatus() else {
-                onOpenPermissionGuide?()
-                return AppLocalization.string(
-                    "Screen recording permission was lost; the recording is being finalized."
-                )
-            }
-            return AppLocalization.string(
-                "Recording sources are no longer available; the recording is being finalized."
-            )
-        }
-
-        // Steady state: one enumeration answers both permission and source changes.
-        guard await captureOrchestrator.checkPermissionStatus(displayCount: content.displays.count) else {
-            onOpenPermissionGuide?()
-            return AppLocalization.string(
-                "Screen recording permission was lost; the recording is being finalized."
-            )
-        }
-        return Self.sourceChangeReason(for: activeSession.selection, in: content)
-    }
-
-    private static func sourceChangeReason(
-        for selection: RecordingSourceSelection,
-        in content: SCShareableContent
-    ) -> String? {
-        guard let display = content.displays.first(where: { $0.displayID == selection.displayID }) else {
-            return AppLocalization.string("The selected display was disconnected; the recording is being finalized.")
-        }
-        guard display.width == Int(selection.displayPixelSize.width),
-              display.height == Int(selection.displayPixelSize.height),
-              display.frame.size == selection.displayFrame.size else {
-            return AppLocalization.string("The selected display changed size; the recording is being finalized.")
-        }
-
-        switch selection.source {
-        case .display, .region:
-            return nil
-        case .window(let windowID):
-            guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
-                return AppLocalization.string(
-                    "The selected window is no longer available; the recording is being finalized."
-                )
-            }
-            guard window.frame.size == selection.sourceFrame.size,
-                  display.frame.contains(window.frame) else {
-                return AppLocalization.string(
-                    "The selected window changed size or display; the recording is being finalized."
-                )
-            }
-            return nil
-        }
-    }
-
-    private func handleInterruption(_ reason: String) async {
-        switch status {
-        case .idle:
-            return
-        case .selectingSource, .countdown:
-            cancelPendingStart()
-            onMessage?(reason, .info)
-        case .starting, .recording, .saving:
-            _ = await stopAndSave(reason: reason)
-        }
-    }
-
-    private func installLifecycleObservers() {
-        let workspaceCenter = NSWorkspace.shared.notificationCenter
-        notificationObservers.append(workspaceCenter.addObserver(
-            forName: NSWorkspace.willSleepNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.handleInterruption(AppLocalization.string("The Mac is going to sleep."))
-            }
-        })
-
-        notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.status == .recording || self.status == .starting else { return }
-                await self.handleInterruptionIfSourceChanged()
-            }
-        })
-
-        let distributedCenter = DistributedNotificationCenter.default()
-        notificationObservers.append(distributedCenter.addObserver(
-            forName: Notification.Name("com.apple.screenIsLocked"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.handleInterruption(AppLocalization.string("The screen was locked."))
-            }
-        })
-    }
-
-    private func handleInterruptionIfSourceChanged() async {
-        guard let activeSession else { return }
-        do {
-            let content = try await SCShareableContent.current
-            if let reason = Self.sourceChangeReason(for: activeSession.selection, in: content) {
-                await handleInterruption(reason)
-            }
-        } catch {
-            await handleInterruption(
-                AppLocalization.string("Recording sources are no longer available; the recording is being finalized.")
-            )
-        }
-    }
-
-    func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
-        NSScreen.screens.first { screen in
-            (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID)
-                == displayID
-        }
-    }
-
-    private var isCountingDown: Bool {
-        if case .countdown = status { return true }
-        return false
-    }
-
-    private func updateStatus(_ status: RecordingSessionStatus) {
-        self.status = status
-        onStatusChange?(status)
-        guard !panelHiddenByUser else { return }
-        switch status {
-        case .countdown(let seconds):
-            controlPanel?.update(state: .countdown(seconds))
-        case .starting:
-            controlPanel?.update(state: .starting)
-        case .recording:
-            let startedAt = recordingStartedAt ?? Date()
-            recordingStartedAt = startedAt
-            controlPanel?.update(state: .recording(startedAt: startedAt))
-        case .saving:
-            controlPanel?.update(state: .saving(fileName: nil))
-        case .idle, .selectingSource:
-            break
-        }
-    }
-
-    func finishSession(success: Bool) {
-        outcomeState.finishSession(wasSaved: success)
-        countdownTask?.cancel()
-        countdownTask = nil
-        monitoringTask?.cancel()
-        monitoringTask = nil
-        controlPanel?.dismiss()
-        controlPanel = nil
-        captureFramePanel?.dismiss()
-        captureFramePanel = nil
-        recordingStartedAt = nil
-        panelHiddenByUser = false
-        watchdogReported = false
-        engine = nil
-        activeSession = nil
-        stopWhenStarted = false
-        pendingStopReason = nil
-        onScreenshotShelfRecordingChange?(false)
-        updateStatus(.idle)
-
-        let waiters = stopWaiters
-        stopWaiters.removeAll()
-        for waiter in waiters {
-            waiter.resume(returning: outcomeState.terminalOutcome == .saved)
-        }
-
-        let terminalOutcome = outcomeState.terminalOutcome ?? .failed
-        let outcomeWaiters = outcomeWaiters
-        self.outcomeWaiters.removeAll()
-        for waiter in outcomeWaiters {
-            waiter.resume(returning: terminalOutcome)
-        }
-    }
-
-    private func waitForStopCompletion() async -> Bool {
-        await withCheckedContinuation { continuation in
-            stopWaiters.append(continuation)
-        }
-    }
-
-    private func waitForTerminalOutcome() async -> RecordingSessionTerminalOutcome {
-        await withCheckedContinuation { continuation in
-            outcomeWaiters.append(continuation)
-        }
-    }
-}
-
-extension RecordingSessionController {
-    func startRecording() {
-        guard status == .idle else { return }
-        dismissFailurePanel()
-        outcomeState.beginSession()
-        let attemptIdentifier = UUID()
-        currentStartAttemptIdentifier = attemptIdentifier
-        let preferences = RecordingPreferenceSnapshot(defaults: defaults)
-        onScreenshotShelfRecordingChange?(true)
-        updateStatus(.selectingSource)
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let accessAvailable = await self.captureOrchestrator.checkPermissionStatus()
-            let decision = RecordingPermissionDecision.beforePicker(
-                accessAvailable: accessAvailable,
-                isCurrentAttempt: self.currentStartAttemptIdentifier == attemptIdentifier,
-                isSelectingSource: self.status == .selectingSource
-            )
-
-            switch decision {
-            case .showPicker:
-                self.showSourcePicker(for: attemptIdentifier, preferences: preferences)
-            case .openPermissionGuide:
-                self.finishSession(success: false)
-                self.onOpenPermissionGuide?()
-            case .showPickerFailure, .ignore:
-                return
-            }
-        }
-    }
-
-    private func showSourcePicker(
-        for attemptIdentifier: UUID,
-        preferences: RecordingPreferenceSnapshot
-    ) {
-        RecordingSourcePickerPanel.show(
-            onComplete: { [weak self] selection in
-                Task { @MainActor [weak self] in
-                    self?.sourcePickerCompleted(
-                        selection,
-                        preferences: preferences,
-                        attemptIdentifier: attemptIdentifier
-                    )
-                }
-            },
-            onFailure: { [weak self] message in
-                let failedAttemptIdentifier = attemptIdentifier
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    let accessAvailable = await self.captureOrchestrator.checkPermissionStatus()
-                    let decision = RecordingPermissionDecision.afterPickerFailure(
-                        accessAvailable: accessAvailable,
-                        isCurrentAttempt: self.currentStartAttemptIdentifier == failedAttemptIdentifier
-                    )
-                    switch decision {
-                    case .showPickerFailure:
-                        self.onMessage?(message, .error)
-                    case .openPermissionGuide:
-                        self.onOpenPermissionGuide?()
-                    case .showPicker, .ignore:
-                        break
-                    }
-                }
-            }
-        )
-    }
-}
-
-private enum RecordingDestinationError: LocalizedError {
-    case customDirectoryUnavailable
-    case unavailableCapacity
-    case insufficientCapacity
-
-    var errorDescription: String? {
-        switch self {
-        case .customDirectoryUnavailable:
-            AppLocalization.string("The selected recording folder is unavailable. Choose it again in Preferences.")
-        case .unavailableCapacity:
-            AppLocalization.string("Could not check free space in the recording folder.")
-        case .insufficientCapacity:
-            AppLocalization.string("At least 1 GB of free space is required to start recording.")
-        }
+        return true
     }
 }

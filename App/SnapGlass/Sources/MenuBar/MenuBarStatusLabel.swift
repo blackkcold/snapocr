@@ -3,13 +3,25 @@ import SwiftUI
 
 /// Menu-bar label for SnapGlass.
 ///
-/// The recording dot is deliberately drawn in SwiftUI rather than baked into a symbol so the
-/// label keeps system sizing and accessibility behaviour. A filled record glyph and a separate
-/// saving glyph still distinguish the states if the system flattens custom colours to a template.
+/// ControlCenter renders this label in a remote status-item scene, not in the
+/// app's own window. It must stay static: no `TimelineView`, no timers, and no
+/// width change when a recording starts. A live timeline here blocks the main
+/// thread on the remote scene's fence (observed as a hang immediately after the
+/// `.recording` transition). The elapsed time belongs in the popover instead.
+///
+/// The recording dot is deliberately drawn in SwiftUI rather than baked into a
+/// symbol so the label keeps system sizing and accessibility behaviour. A filled
+/// record glyph and a separate saving glyph still distinguish the states if the
+/// system flattens custom colours to a template.
 struct MenuBarStatusLabel: View {
     let status: RecordingSessionStatus
     let isCapturing: Bool
+    /// The active recording kind, when one is preparing, recording, or saving.
+    var recordingKind: RecordingKind?
     var hasFailure: Bool = false
+    /// A verified update is waiting; the dot is only shown when no recording
+    /// indicator occupies the slot.
+    var hasUpdate: Bool = false
 
     private var indicator: RecordingMenuBarIndicator {
         status.menuBarIndicator(isCapturing: isCapturing, hasFailure: hasFailure)
@@ -22,6 +34,8 @@ struct MenuBarStatusLabel: View {
 
             if indicator.showsRecordingDot {
                 recordingDot
+            } else if hasUpdate {
+                updateDot
             } else {
                 // Keep the slot reserved so the status item does not shift when a recording
                 // starts or stops.
@@ -29,27 +43,42 @@ struct MenuBarStatusLabel: View {
                     .frame(width: 5, height: 5)
             }
         }
-        .frame(width: 28, height: 18)
+        .frame(minWidth: 28)
+        .frame(height: 18)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("SnapGlass"))
         .accessibilityValue(accessibilityValue)
     }
 
     private var accessibilityValue: Text {
+        if hasUpdate && !indicator.showsRecordingDot {
+            return Text("Update available")
+        }
         switch indicator {
         case .camera:
-            Text("")
+            return Text("")
         case .capturing:
-            Text("Capturing")
+            return Text("Capturing")
         case .preparing:
-            Text("Preparing the recording stream.")
+            return recordingKind == .audio
+                ? Text("Preparing audio recording")
+                : Text("Preparing screen recording")
         case .recording:
-            Text("Recording")
+            return recordingKind == .audio ? Text("Recording audio") : Text("Recording screen")
         case .saving:
-            Text("Saving Recording…")
+            return recordingKind == .audio
+                ? Text("Saving audio recording")
+                : Text("Saving screen recording")
         case .failed:
-            Text("Recording failed")
+            return Text("Recording failed")
         }
+    }
+
+    private var updateDot: some View {
+        Circle()
+            .fill(Color.accentColor)
+            .frame(width: 5, height: 5)
+            .accessibilityHidden(true)
     }
 
     private var recordingDot: some View {

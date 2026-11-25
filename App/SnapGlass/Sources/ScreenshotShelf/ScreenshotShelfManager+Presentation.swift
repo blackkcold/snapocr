@@ -240,7 +240,7 @@ extension ScreenshotShelfManager {
     }
 
     func updateModeSuppression() {
-        let suppressed = captureSuppressionCount > 0 || isRecordingActive || isFullScreenSuppressed
+        let suppressed = captureSuppressionCount > 0 || isRecordingShelfHidden || isFullScreenSuppressed
         modeState.setSuppressed(suppressed, now: Date(), delay: Self.interactionResumeDelay)
         if suppressed {
             cancelCollapseTask()

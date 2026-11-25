@@ -1,0 +1,15 @@
+{
+  "name": "audio-25s",
+  "audioSeconds": 25,
+  "screenSeconds": 0,
+  "firstSampleDeadlineSeconds": 6,
+  "simulateMainStallMs": 0,
+  "simulateStallAfterStart": false,
+  "audioMode": "microphone",
+  "hudWarmup": false,
+  "expect": {
+    "artifactPlayable": true,
+    "becameRecording": true,
+    "minCheckpointCount": 1
+  }
+}

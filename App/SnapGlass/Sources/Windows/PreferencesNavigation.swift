@@ -4,6 +4,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case general
     case appearance
     case capture
+    case audioRecording
     case recording
     case ocr
     case shortcuts
@@ -19,6 +20,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: "General"
         case .appearance: "Appearance"
         case .capture: "Capture"
+        case .audioRecording: "Audio Recording"
         case .recording: "Screen Recording"
         case .ocr: "OCR"
         case .shortcuts: "Shortcuts"
@@ -34,13 +36,14 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: "Language, startup, and everyday behaviour."
         case .appearance: "Choose how SnapGlass looks across every window."
         case .capture: "Control capture behaviour and image output."
-        case .recording: "Choose video quality, audio, and save location."
+        case .audioRecording: "Choose audio sources, quality, and save location."
+        case .recording: "Choose video quality, screen audio, and save location."
         case .ocr: "Tune recognition accuracy and language priority."
         case .shortcuts: "Customize global keyboard shortcuts."
         case .history: "Manage encrypted history, retention, and storage."
         case .updates: "Check for new releases and download updates."
         case .about: "Version, credits, and project links."
-        case .developer: "Configure diagnostics and update testing."
+        case .developer: "Configure diagnostics."
         }
     }
 
@@ -49,6 +52,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .appearance: "circle.lefthalf.filled"
         case .capture: "camera.viewfinder"
+        case .audioRecording: "waveform"
         case .recording: "record.circle"
         case .ocr: "text.viewfinder"
         case .shortcuts: "keyboard"

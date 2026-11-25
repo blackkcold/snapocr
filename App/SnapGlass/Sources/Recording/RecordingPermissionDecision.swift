@@ -1,3 +1,5 @@
+import CaptureCore
+
 enum RecordingPermissionDecision: Equatable {
     case showPicker
     case openPermissionGuide
@@ -19,5 +21,13 @@ enum RecordingPermissionDecision: Equatable {
     ) -> Self {
         guard isCurrentAttempt else { return .ignore }
         return accessAvailable ? .showPickerFailure : .openPermissionGuide
+    }
+
+    static func beforeMicrophoneRequest(
+        authorization: MicrophoneAuthorizationState,
+        isCurrentAttempt: Bool
+    ) -> MicrophonePermissionGuidance {
+        guard isCurrentAttempt else { return .ignore }
+        return MicrophonePermission.guidance(for: authorization)
     }
 }

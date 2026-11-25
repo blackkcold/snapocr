@@ -280,6 +280,7 @@ final class AreaSelectionPanel: NSPanel {
     override func orderFrontRegardless() {
         super.orderFrontRegardless()
         sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
+        RecordingWindowExclusionRegistry.shared.register(self)
     }
 
     override func close() { finish(with: nil) }

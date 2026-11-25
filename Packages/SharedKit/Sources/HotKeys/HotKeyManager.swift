@@ -24,6 +24,9 @@ extension KeyboardShortcuts.Name {
 
     /// Shortcut for starting a screen recording (Default: ⌘⇧R).
     public static let screenRecording = Self("screenRecording", default: .init(.r, modifiers: [.command, .shift]))
+
+    /// Optional shortcut for starting an audio-only recording. No key is registered by default.
+    public static let audioRecording = Self("audioRecording")
 }
 
 // MARK: - HotKeyManager
@@ -53,6 +56,9 @@ public final class HotKeyManager: ObservableObject {
 
     /// Action triggered when the screen-recording shortcut is pressed.
     public var onScreenRecording: (() -> Void)?
+
+    /// Action triggered when the optional audio-recording shortcut is pressed.
+    public var onAudioRecording: (() -> Void)?
     
     // MARK: - Initialization
     
@@ -85,6 +91,10 @@ public final class HotKeyManager: ObservableObject {
 
         KeyboardShortcuts.onKeyUp(for: .screenRecording) { [weak self] in
             self?.onScreenRecording?()
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .audioRecording) { [weak self] in
+            self?.onAudioRecording?()
         }
     }
 }

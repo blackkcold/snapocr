@@ -13,6 +13,7 @@ struct RecordingConfigurationTests {
         #expect(configuration.resolutionLimit == CGSize(width: 1_920, height: 1_080))
         #expect(configuration.frameRateLimit == 30)
         #expect(configuration.averageVideoBitrate == 8_000_000)
+        #expect(configuration.maximumKeyFrameIntervalSeconds == 1)
         #expect(!configuration.capturesSystemAudio)
     }
 
@@ -41,6 +42,7 @@ struct RecordingConfigurationTests {
             resolutionLimit: CGSize(width: 1_920, height: 1_080),
             frameRateLimit: 30,
             averageVideoBitrate: 8_000_000,
+            maximumKeyFrameIntervalSeconds: 1,
             capturesSystemAudio: false
         ))
     }
@@ -154,6 +156,49 @@ struct RecordingConfigurationTests {
 
         #expect((settings[AVVideoWidthKey] as? NSNumber)?.intValue == 801)
         #expect((settings[AVVideoHeightKey] as? NSNumber)?.intValue == 600)
+    }
+
+    @Test func thirtyFPSUsesOneSecondGOPAndOnlyOneGOPKey() throws {
+        let configuration = RecordingConfiguration(frameRateLimit: 30)
+        try configuration.validate()
+
+        let settings = RecordingWriterSettings.videoOutputSettings(
+            configuration: configuration,
+            dimensions: CGSize(width: 1_920, height: 1_080)
+        )
+        let compression = try #require(settings[AVVideoCompressionPropertiesKey] as? [String: Any])
+
+        #expect((compression[AVVideoMaxKeyFrameIntervalDurationKey] as? NSNumber)?.doubleValue == 1)
+        #expect(compression[AVVideoMaxKeyFrameIntervalKey] == nil)
+    }
+
+    @Test func sixtyFPSUsesOneSecondGOPNotOneFrame() {
+        let configuration = RecordingConfiguration(frameRateLimit: 60)
+        let settings = RecordingWriterSettings.videoOutputSettings(
+            configuration: configuration,
+            dimensions: CGSize(width: 1_920, height: 1_080)
+        )
+        let compression = settings[AVVideoCompressionPropertiesKey] as? [String: Any]
+
+        #expect((compression?[AVVideoMaxKeyFrameIntervalDurationKey] as? NSNumber)?.doubleValue == 1)
+        #expect(compression?[AVVideoMaxKeyFrameIntervalKey] == nil)
+    }
+
+    @Test func invalidFrameRateOrKeyFrameIntervalFailsClosed() {
+        let invalidConfigurations = [
+            RecordingConfiguration(frameRateLimit: 0),
+            RecordingConfiguration(frameRateLimit: Int(Int32.max) + 1),
+            RecordingConfiguration(maximumKeyFrameIntervalSeconds: 0),
+            RecordingConfiguration(maximumKeyFrameIntervalSeconds: -1),
+            RecordingConfiguration(maximumKeyFrameIntervalSeconds: .infinity),
+            RecordingConfiguration(maximumKeyFrameIntervalSeconds: .nan),
+        ]
+
+        for configuration in invalidConfigurations {
+            #expect(throws: RecordingConfigurationError.self) {
+                try configuration.validate()
+            }
+        }
     }
 
     @Test func systemAudioWriterSettingsUseAacAtTheSpecifiedDefaultFormat() {

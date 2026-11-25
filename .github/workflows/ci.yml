@@ -41,7 +41,7 @@ jobs:
 
   unit-test:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - run: |
@@ -53,16 +53,20 @@ jobs:
               swift test --package-path "Packages/$pkg" \
                 --skip VisionIntegrationTests \
                 --skip pipelineFallsBackToVisionWhenTesseractDataIsMissing || exit 1
+            elif [ "$pkg" = "CaptureCore" ]; then
+              # CaptureCore 的音频/环形缓冲测试使用私有 dispatch queue；
+              # 在 3-core runner 上与 687 个测试并行时可能死锁。串行运行保持确定性。
+              swift test --package-path "Packages/$pkg" --no-parallel || exit 1
             else
               swift test --package-path "Packages/$pkg" || exit 1
             fi
           done
-        timeout-minutes: 10
+        timeout-minutes: 25
       - run: brew install xcodegen && xcodegen generate
       # 本地全绿（32 tests / 7.7s），但无头 runner 上偶发在 EditorHistoryTests 挂起。
       # 包测试仍是硬闸门；App scheme 测试先作为非阻断信号，待定位 CI 环境问题。
       - name: App scheme tests
-        timeout-minutes: 8
+        timeout-minutes: 15
         continue-on-error: true
         run: |
           xcodebuild test -project SnapGlass.xcodeproj -scheme EditorInteractionTests \

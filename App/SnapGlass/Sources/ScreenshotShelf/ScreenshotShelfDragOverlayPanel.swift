@@ -44,6 +44,7 @@ struct ScreenshotShelfDragOverlayView: View {
                     onOpen: {},
                     onCopy: {},
                     onPin: {},
+                    onShareAppearance: {},
                     onRemove: {},
                     onMoveLeft: {},
                     onMoveRight: {},
@@ -251,6 +252,7 @@ final class ScreenshotShelfDragOverlayPanel: NSPanel {
     override func orderFrontRegardless() {
         super.orderFrontRegardless()
         assertSharingType()
+        RecordingWindowExclusionRegistry.shared.register(self)
     }
 
     func assertSharingType() {

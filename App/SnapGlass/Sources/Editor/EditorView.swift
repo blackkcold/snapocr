@@ -10,6 +10,8 @@ struct EditorView: View {
     /// 检查器常驻开关（⌥⌘I）。默认常驻，避免选中标注时画布宽度跳动。
     @AppStorage(PreferenceKeys.editorInspectorVisible)
     private var showsInspector = PreferenceDefaults.editorInspectorVisible
+    @AppStorage(PreferenceKeys.editorShareCanvasPreview)
+    private var shareCanvasPreviewEnabled = PreferenceDefaults.editorShareCanvasPreview
 
     init(viewModel: EditorViewModel, context: EditorCaptureContext = .standard) {
         self.editorVM = viewModel
@@ -60,6 +62,7 @@ struct EditorView: View {
                     EditableAnnotationCanvasView(
                         image: doc.baseImage,
                         nodes: doc.nodes,
+                        shareStyle: shareCanvasPreviewEnabled ? editorVM.mockupStyle : nil,
                         tool: editorVM.selectedTool,
                         color: editorVM.cgColor,
                         lineWidth: editorVM.strokeWidth,
@@ -184,6 +187,14 @@ struct EditorView: View {
             .help("Show or hide recognized text regions")
             .accessibilityLabel("Show or hide recognized text regions")
 
+            Toggle(isOn: shareAppearanceBinding) {
+                Label("Share-ready look", systemImage: "sparkles")
+            }
+            .toggleStyle(.button)
+            .keyboardShortcut("b", modifiers: .command)
+            .help("Share appearance (⌘B)")
+            .accessibilityLabel("Share-ready look")
+
             Menu {
                 Button("Save as New Record") {
                     Task { await editorVM.saveToHistory(mode: .newRecord) }
@@ -200,13 +211,41 @@ struct EditorView: View {
             .help("Save the annotated image into history (⌥⌘S)")
             .disabled(editorVM.isEnteringText || editorVM.isApplyingCrop || editorVM.isWritingImage)
 
-            Button("Copy") {
-                editorVM.copyContextually()
+            HStack(spacing: 0) {
+                Button {
+                    editorVM.copyContextually()
+                } label: {
+                    Text(copyButtonTitle)
+                }
+                .keyboardShortcut("c", modifiers: .command)
+                .help(editorVM.isApplyingCrop
+                      ? Text("Processing crop…")
+                      : (editorVM.isShareAppearanceEnabled
+                          ? Text("Copy Share Image")
+                          : Text("Copy the annotated image to the clipboard (⌘C)")))
+
+                Menu {
+                    Button("Copy Share Image") {
+                        editorVM.copyToClipboard()
+                    }
+                    .disabled(!editorVM.isShareAppearanceEnabled)
+
+                    Button("Copy Original") {
+                        editorVM.copyOriginalToClipboard()
+                    }
+                    .keyboardShortcut("c", modifiers: [.command, .option])
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 14, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More copy options")
+                .accessibilityLabel("More copy options")
             }
-            .keyboardShortcut("c", modifiers: .command)
-            .help(editorVM.isApplyingCrop
-                  ? Text("Processing crop…")
-                  : Text("Copy the annotated image to the clipboard (⌘C)"))
             .disabled(editorVM.isApplyingCrop || editorVM.isWritingImage)
 
             Button("Save") {
@@ -223,5 +262,22 @@ struct EditorView: View {
         .padding(.vertical, DS.Space.s9)
         .glassSurface(Rectangle(), elevation: .raised, castsShadow: false, showsStroke: false)
         .overlay(alignment: .top) { Divider() }
+    }
+
+    private var copyButtonTitle: LocalizedStringKey {
+        editorVM.isShareAppearanceEnabled ? "Copy Share Image" : "Copy"
+    }
+
+    private var shareAppearanceBinding: Binding<Bool> {
+        Binding(
+            get: { editorVM.isShareAppearanceEnabled },
+            set: { enabled in
+                if enabled {
+                    showsInspector = true
+                    editorVM.inspectorTab = .share
+                }
+                editorVM.setShareAppearanceEnabled(enabled)
+            }
+        )
     }
 }

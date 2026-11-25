@@ -22,7 +22,18 @@ extension EditableAnnotationCanvasNSView {
             NSCursor.closedHand.set()
             return
         }
-        guard imageDisplayRect.contains(point) else { return }
+        guard imageDisplayRect.contains(point) else {
+            // The padding belongs to the card now: clicking it deselects, but
+            // it must not create an annotation or start a crop.
+            if currentTool == .select {
+                if ocrTextSelection != nil {
+                    ocrTextSelection = nil
+                    needsDisplay = true
+                }
+                onSelectionChanged?(nil)
+            }
+            return
+        }
         dragStartPoint = point
 
         switch currentTool {
@@ -68,7 +79,7 @@ extension EditableAnnotationCanvasNSView {
                     width: panOffset.width + (raw.x - dragStartPoint.x),
                     height: panOffset.height + (raw.y - dragStartPoint.y)
                 ),
-                for: fitImageRect,
+                for: fitCanvasRect,
                 zoom: zoomScale
             )
             dragStartPoint = raw

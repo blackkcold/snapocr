@@ -29,7 +29,8 @@ cyclomatic_complexity:
   warning: 12
 identifier_name:
   min_length: 3
-  excluded: [id, URL, key, tag, qr]
+  # `ok` 是 RecordingSpaceState 的 public 领域值，保留短名避免 API 破坏。
+  excluded: [id, URL, key, tag, qr, ok]
 
 # 与 swift-format 的 multiElementCollectionTrailingCommas 对齐：
 # 多行集合字面量必须保留尾逗号（SE-0084 / SE-0439 官方规范）。
