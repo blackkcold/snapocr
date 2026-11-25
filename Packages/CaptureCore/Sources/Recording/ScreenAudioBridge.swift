@@ -248,6 +248,10 @@ public final class ScreenAudioOutputReuse: NSObject, SCStreamOutput, @unchecked 
         attachedStream = nil
     }
 
+    /// Receives ScreenCaptureKit output and copies system audio into the source ring.
+    ///
+    /// Non-audio output types are ignored, and the borrowed sample storage is only
+    /// read for the duration of the call.
     public func stream(
         _ stream: SCStream,
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,

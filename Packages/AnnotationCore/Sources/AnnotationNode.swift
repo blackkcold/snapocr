@@ -1,24 +1,31 @@
 import CoreGraphics
 import Foundation
 
+/// Stroke pattern applied to line-based annotations.
 public enum AnnotationStrokeStyle: String, Sendable, CaseIterable, Hashable {
     case solid
     case dashed
     case dotted
 }
 
+/// Arrowhead shape drawn at the tip of an arrow annotation.
+///
+/// `filled` closes and fills the triangle, `open` strokes its two edges as separate
+/// segments, and `line` strokes them as one connected polyline.
 public enum AnnotationArrowStyle: String, Sendable, CaseIterable, Hashable {
     case filled
     case open
     case line
 }
 
+/// Horizontal alignment of text inside its annotation rectangle.
 public enum AnnotationTextAlignment: String, Sendable, CaseIterable, Hashable {
     case leading
     case center
     case trailing
 }
 
+/// Effect used to obscure a region: Gaussian blur, pixelation, or mosaic.
 public enum AnnotationBlurMode: String, Sendable, CaseIterable, Hashable {
     case gaussian
     case pixelate
@@ -68,7 +75,10 @@ public struct AnnotationNode: Sendable, Identifiable, Equatable {
 
     /// Text font family name and size in image pixels.
     public var fontName: String
+    /// Text size in image pixels before preview downscaling; the initializer keeps
+    /// it at least 1.
     public var fontSize: CGFloat
+    /// Horizontal glyph stretch, clamped to 0.1 through 10; 1 uses natural width.
     public var textHorizontalScale: CGFloat
 
     /// Text alignment inside `normalizedRect`.
@@ -76,6 +86,8 @@ public struct AnnotationNode: Sendable, Identifiable, Equatable {
 
     /// Blur algorithm and normalized strength (0.0 - 1.0).
     public var blurMode: AnnotationBlurMode
+    /// Effect strength from 0 to 1, clamped by the initializer and mapped to a blur
+    /// radius or cell size for the selected ``AnnotationBlurMode``.
     public var blurIntensity: CGFloat
 
     /// 标注区域，使用归一化坐标

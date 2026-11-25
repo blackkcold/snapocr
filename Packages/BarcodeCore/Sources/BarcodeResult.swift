@@ -42,10 +42,10 @@ public struct BarcodeResult: Sendable, Codable {
     /// Creates a new barcode result.
     ///
     /// - Parameters:
-    ///   - payload: The decoded payload string.
-    ///   - type: The symbology type.
-    ///   - boundingBox: The bounding box in normalized coordinates.
-    ///   - confidence: The confidence score from `0.0` to `1.0`.
+    ///   - payload: The decoded content exactly as the engine reported it.
+    ///   - type: The symbology that produced the payload.
+    ///   - boundingBox: Normalized box measured from the image's bottom-left corner.
+    ///   - confidence: Recognition confidence from `0.0` to `1.0`.
     public init(
         payload: String,
         type: BarcodeType,
@@ -70,6 +70,12 @@ public struct BarcodeResult: Sendable, Codable {
         case boxHeight
     }
 
+    /// Encodes the result with flat keys for the payload, type, confidence, and the
+    /// four bounding-box components.
+    ///
+    /// The type is written as its raw string value and the box becomes `boxX`,
+    /// `boxY`, `boxWidth`, and `boxHeight`, so the output does not depend on how an
+    /// encoder treats `CGRect`.
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(payload, forKey: .payload)
@@ -81,6 +87,14 @@ public struct BarcodeResult: Sendable, Codable {
         try container.encode(Double(boundingBox.size.height), forKey: .boxHeight)
     }
 
+    /// Decodes a result written by ``encode(to:)``.
+    ///
+    /// The box is rebuilt from the four flat components, and an unknown type string
+    /// raises a `DecodingError.dataCorruptedError` naming the bad raw value.
+    ///
+    /// - Parameter decoder: The decoder holding a previously encoded result.
+    /// - Throws: `DecodingError` when a key is missing, has the wrong type, or the
+    ///   symbology string is not a known ``BarcodeType``.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         payload = try container.decode(String.self, forKey: .payload)

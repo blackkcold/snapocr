@@ -9,6 +9,7 @@ import SharedKit
 public struct PenTool: Sendable {
     private let logger = Logger(category: "annotation.pen")
 
+    /// Creates a pen tool; each render rebuilds the path from the node's points.
     public init() {}
 
     /// 在图形上下文中渲染画笔标注。

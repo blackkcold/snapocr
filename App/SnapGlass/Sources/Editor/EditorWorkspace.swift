@@ -9,10 +9,15 @@ import SwiftUI
 /// - 关窗/关标签统一经过这里，禁止单个 ViewModel 自行关窗。
 @MainActor
 public final class EditorWorkspace: ObservableObject {
+    /// One open image and the editor state that owns it.
     public struct Tab: Identifiable {
+        /// Stable identity used for selection and close tracking.
         public let id: UUID
+        /// The document, tools, and saved state for this tab.
         public let viewModel: EditorViewModel
+        /// Capture identity; kept current when the history write finishes or the style changes.
         public var context: EditorCaptureContext
+        /// Tab-strip label assigned when the tab opens.
         public let title: String
     }
 
@@ -20,19 +25,27 @@ public final class EditorWorkspace: ObservableObject {
     /// 避免用户一次拖入十几张截图后常驻内存失控。
     public static let maxTabs = 4
 
+    /// Open tabs in the order they were added.
     @Published public private(set) var tabs: [Tab] = []
+    /// Identifier of the tab shown in the editor, or `nil` when no tab is open.
     @Published public private(set) var activeTabID: UUID?
+    /// Tabs waiting for the user to confirm discarding unsaved changes.
     @Published public private(set) var pendingCloseIDs: Set<UUID> = []
 
+    /// The tab currently shown, if any.
     public var activeTab: Tab? { tabs.first { $0.id == activeTabID } }
+    /// Tabs whose edits have not been saved to history.
     public var dirtyTabs: [Tab] { tabs.filter { isDirty($0) } }
 
     /// 标签的脏状态；放在 workspace 上以避免嵌套类型跨 actor 访问。
     public func isDirty(_ tab: Tab) -> Bool {
         tab.viewModel.hasUnsavedChanges && !tab.viewModel.hasAcceptedClose
     }
+    /// Whether closing the window now would discard edits from any tab.
     public var hasAnyUnsavedChanges: Bool { !dirtyTabs.isEmpty }
+    /// Whether the close confirmation sheet should be presented.
     public var showsCloseConfirmation: Bool { !pendingCloseIDs.isEmpty }
+    /// Tabs awaiting close confirmation, in tab order.
     public var pendingTabs: [Tab] { tabs.filter { pendingCloseIDs.contains($0.id) } }
 
     /// 由窗口宿主注入，避免工作区直接依赖 App 层窗口定位。
@@ -49,6 +62,7 @@ public final class EditorWorkspace: ObservableObject {
 
     private var nextTitleIndex = 1
 
+    /// Creates an empty workspace with no tabs.
     public init() {}
 
     /// 打开一张新截图。返回 `nil` 表示已达标签上限。
@@ -77,11 +91,13 @@ public final class EditorWorkspace: ObservableObject {
         return tab
     }
 
+    /// Makes an open tab active; unknown identifiers are ignored.
     public func activate(_ id: UUID) {
         guard tabs.contains(where: { $0.id == id }) else { return }
         activeTabID = id
     }
 
+    /// Closes a clean tab, or asks for confirmation when it has unsaved changes.
     public func requestClose(_ id: UUID) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
         if isDirty(tab) {
@@ -91,6 +107,7 @@ public final class EditorWorkspace: ObservableObject {
         }
     }
 
+    /// Requests close for the active tab, if there is one.
     public func requestCloseActiveTab() {
         guard let activeTabID else { return }
         requestClose(activeTabID)
@@ -106,6 +123,11 @@ public final class EditorWorkspace: ObservableObject {
         }
     }
 
+    /// Removes a tab and closes the window when it was the last one.
+    ///
+    /// Pending style metadata is flushed first. The neighbouring tab on the
+    /// right, or the last remaining tab, becomes active when the closed tab was
+    /// the active one.
     public func close(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].viewModel.flushShareStyleCommit()
@@ -145,6 +167,7 @@ public final class EditorWorkspace: ObservableObject {
         pendingCloseIDs.removeAll()
     }
 
+    /// Closes every tab awaiting confirmation without saving its changes.
     public func discardPendingAndClose() {
         let ids = pendingCloseIDs
         pendingCloseIDs.removeAll()
@@ -153,6 +176,7 @@ public final class EditorWorkspace: ObservableObject {
         }
     }
 
+    /// Dismisses the close confirmation and keeps all pending tabs open.
     public func cancelPendingClose() {
         pendingCloseIDs.removeAll()
     }

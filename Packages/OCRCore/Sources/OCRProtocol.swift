@@ -95,6 +95,8 @@ public enum OCRError: Error, Sendable {
 // MARK: - OCRError 便利实现
 
 extension OCRError: LocalizedError {
+    /// A user-facing description of the failure, including the engine, size, or
+    /// threshold involved when the case carries one.
     public var errorDescription: String? {
         switch self {
         case .engineUnavailable(let engine):

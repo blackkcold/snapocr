@@ -23,6 +23,10 @@ public struct ScreenshotShelfFollowConditions: Sendable {
     /// The pointer is inside the shelf.
     public var isPointerOnShelf = false
 
+    /// Creates a condition set with every flag cleared.
+    ///
+    /// The shelf starts invisible, so following stays off until the caller
+    /// publishes visibility.
     public init() {}
 }
 

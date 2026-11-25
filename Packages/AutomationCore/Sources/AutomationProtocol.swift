@@ -98,18 +98,37 @@ public enum AutomationCommand: Sendable {
 
 // MARK: - 自动化协议
 
+/// An executor that turns a parsed ``AutomationCommand`` into an ``AutomationResult``.
+///
+/// The CLI, the `snapglass://` URL scheme, and Shortcuts all parse their input into the
+/// same command model, so a conforming type gives every entry point one dispatch path.
+/// Expected failures that still belong to a command, such as a failing OCR engine, are
+/// reported in the result; argument and file problems that stop a command before it can
+/// run are thrown as ``AutomationError``.
 public protocol AutomationProtocol: Sendable {
     func execute(_ command: AutomationCommand) async throws -> AutomationResult
 }
 
 // MARK: - 自动化结果
 
+/// The outcome of one automation command, shaped for the CLI to print and exit on.
 public struct AutomationResult: Sendable {
+    /// Whether the command completed its work; `false` for failures it handled itself.
     public let success: Bool
+    /// Text for stdout, such as recognized text, a JSON document, or a status message.
     public let output: String
+    /// Raw payload when the command produced JSON that callers may want unparsed.
     public let data: Data?
+    /// Process status the caller should exit with, taken from ``ExitCode``.
     public let exitCode: Int32
 
+    /// Creates a result from a status, its printable text, and an exit status.
+    ///
+    /// - Parameters:
+    ///   - success: Whether the command succeeded.
+    ///   - output: Text to print, or a message describing why the command failed.
+    ///   - data: Optional payload, usually the JSON also present in `output`.
+    ///   - exitCode: Exit status to report; defaults to ``ExitCode/success``.
     public init(success: Bool, output: String, data: Data? = nil, exitCode: ExitCode = .success) {
         self.success = success
         self.output = output
@@ -120,6 +139,11 @@ public struct AutomationResult: Sendable {
 
 // MARK: - 自动化错误
 
+/// A failure that stops a command before it can produce a result.
+///
+/// Each case carries the offending value so the message built by `errorDescription`
+/// can name the command, path, or argument to fix. The CLI maps cases to matching
+/// ``ExitCode`` values: argument problems exit with 2, files with 5, and so on.
 public enum AutomationError: Error, Sendable {
     case invalidCommand(String)
     case fileNotFound(String)
@@ -130,6 +154,7 @@ public enum AutomationError: Error, Sendable {
 }
 
 extension AutomationError: LocalizedError {
+    /// A user-facing explanation naming the command, path, or argument to fix.
     public var errorDescription: String? {
         switch self {
         case .invalidCommand(let cmd):

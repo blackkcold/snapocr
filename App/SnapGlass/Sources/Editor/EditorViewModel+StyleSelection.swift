@@ -15,6 +15,9 @@ extension EditorViewModel {
         }
     }
 
+    /// Selects a node and mirrors its style into the inspector controls.
+    ///
+    /// - Parameter id: The node to select, or `nil` to clear the selection.
     public func selectNode(_ id: UUID?) {
         selectedNodeID = id
         guard let node = selectedNode else { return }

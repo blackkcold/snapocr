@@ -16,6 +16,7 @@ import os
 /// 整张标脏。真正需要草稿的只有提交路径（`commitTextEntry`）和内联编辑器。
 @MainActor
 public final class TextEntryState: ObservableObject {
+    /// The string typed so far, before the text annotation is committed.
     @Published public var draft = ""
 }
 
@@ -73,16 +74,27 @@ public final class EditorViewModel: ObservableObject {
     /// The stroke width for line-based tools.
     @Published public var strokeWidth: CGFloat = 3.0
 
+    /// Opacity applied to new annotations and pushed onto the selected node.
     @Published public var annotationOpacity: CGFloat = 1.0
+    /// Whether new shapes are drawn with a fill.
     @Published public var fillEnabled = false
+    /// Fill color used when `fillEnabled` is on.
     @Published public var fillColor: Color = .clear
+    /// Stroke pattern for line-based tools.
     @Published public var strokeStyle: AnnotationStrokeStyle = .solid
+    /// Corner radius in image points for rectangle annotations.
     @Published public var cornerRadius: CGFloat = 0
+    /// Head style for arrow annotations.
     @Published public var arrowStyle: AnnotationArrowStyle = .filled
+    /// PostScript name of the font used by text annotations.
     @Published public var fontName = "Helvetica"
+    /// Font size in image points for text annotations.
     @Published public var fontSize: CGFloat = 24
+    /// Horizontal alignment for multi-line text annotations.
     @Published public var textAlignment: AnnotationTextAlignment = .leading
+    /// Algorithm used by the blur tool.
     @Published public var blurMode: AnnotationBlurMode = .gaussian
+    /// Blur strength, normalized to `0...1`.
     @Published public var blurIntensity: CGFloat = 0.5
 
     /// Currently selected annotation node.
@@ -90,7 +102,9 @@ public final class EditorViewModel: ObservableObject {
 
     /// OCR overlay state and recognized lines.
     @Published public internal(set) var ocrLines: [OCRLine] = []
+    /// Whether a text-recognition pass is in flight.
     @Published public internal(set) var isOCRRunning = false
+    /// Whether recognized-line highlights are drawn over the canvas.
     @Published public var showsOCROverlay = true
 
     /// Live color under the picker cursor while hovering.
@@ -227,6 +241,7 @@ public final class EditorViewModel: ObservableObject {
     @Published public var mockupStyle: MockupStyle?
     /// Downscaled preview of the current document + style, for the inspector.
     @Published public internal(set) var sharePreview: CGImage?
+    /// Progress of the downscaled share-appearance preview shown in the inspector.
     @Published public internal(set) var sharePreviewState: SharePreviewState = .idle
     /// Preset shown as selected in the share page; nil means custom.
     @Published public internal(set) var selectedMockupPreset: MockupPreset?
@@ -457,6 +472,7 @@ public final class EditorViewModel: ObservableObject {
         selectNode(node.id)
     }
 
+    /// Deletes the selected node as one undoable change and clears the selection.
     public func removeSelectedNode() {
         guard let selectedNodeID, var doc = document else { return }
         doc.removeNode(by: selectedNodeID)
@@ -465,6 +481,7 @@ public final class EditorViewModel: ObservableObject {
         self.selectedNodeID = nil
     }
 
+    /// The node matching `selectedNodeID`, if it still exists.
     public var selectedNode: AnnotationNode? {
         guard let selectedNodeID else { return nil }
         return document?.nodes.first { $0.id == selectedNodeID }
@@ -496,6 +513,10 @@ public final class EditorViewModel: ObservableObject {
         isAdjustingStyle = false
     }
 
+    /// Applies the current inspector style to the selected node.
+    ///
+    /// Dragging a continuous control records one undo step for the whole
+    /// gesture; a single change goes through `updateNode(_:)` and records its own.
     public func updateSelectedStyle() {
         guard !isEnteringText else { return }
         guard var node = selectedNode, var doc = document else { return }
@@ -566,6 +587,10 @@ public final class EditorViewModel: ObservableObject {
         isEnteringText = true
     }
 
+    /// Reopens an existing text node for in-place editing at its own position.
+    ///
+    /// Non-text nodes are ignored. The draft starts from the node's current
+    /// text, so the user edits the existing content rather than a blank line.
     public func beginTextEditing(_ node: AnnotationNode) {
         guard node.tool == .text else { return }
         textEntryID = UUID()

@@ -5,18 +5,26 @@ import Foundation
 
 /// Value snapshot rendered by the audio recording HUD.
 public struct RecordingHUDPresentation: Sendable, Equatable {
+    /// Audio sources currently feeding the recording.
     public let mode: AudioSourceMode
+    /// Elapsed recording time in seconds.
     public let duration: TimeInterval
+    /// System-audio RMS level clamped to `0...1`.
     public let systemLevel: Float
+    /// Microphone RMS level clamped to `0...1`.
     public let micLevel: Float
     /// Zero-based index of the segment currently receiving samples.
     public let segmentIndex: Int
     /// Count of segments that P3 has fully published.
     public let savedCount: Int
+    /// Lifecycle phase the HUD is rendering.
     public let state: RecordingLifecycle
+    /// Whether reduce-motion is on; suppresses level and pulse animations.
     public let reduceMotion: Bool
+    /// Whether reduce-transparency is on; swaps the glass backdrop for an opaque one.
     public let reduceTransparency: Bool
 
+    /// Creates a presentation snapshot, sanitizing the duration and levels.
     public init(
         mode: AudioSourceMode,
         duration: TimeInterval,

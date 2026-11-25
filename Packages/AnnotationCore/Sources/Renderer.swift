@@ -9,6 +9,8 @@ import SharedKit
 public struct Renderer: Sendable {
     private let logger = Logger(category: "annotation.renderer")
 
+    /// Creates a renderer with no cached state; each render allocates its own bitmap
+    /// context.
     public init() {}
 
     /// 渲染标注文档。

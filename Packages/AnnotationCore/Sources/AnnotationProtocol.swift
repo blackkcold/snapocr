@@ -87,11 +87,27 @@ public struct AnnotationInteractor: AnnotationProtocol {
 
     // MARK: - AnnotationProtocol
 
+    /// Creates a document with a 100-step undo history.
+    ///
+    /// - Parameter image: The screenshot that annotations are drawn on.
+    /// - Returns: A new document with no nodes.
     public func createDocument(from image: CGImage) -> AnnotationDocument {
         logger.info("创建标注文档: \(image.width)x\(image.height)")
         return AnnotationDocument(baseImage: image, maxUndoDepth: 100)
     }
 
+    /// Validates a node and records it as one undoable change.
+    ///
+    /// Validation requires the node's tool to match `tool` and its geometry to be
+    /// usable by that tool. A crop renders the current document, crops the result,
+    /// and replaces the base image and node list in one undoable step.
+    ///
+    /// - Parameters:
+    ///   - tool: The tool that owns the node.
+    ///   - document: The document to modify.
+    ///   - node: The annotation to apply.
+    /// - Throws: ``AnnotationError/invalidNode`` when the node does not match the
+    ///   tool or lacks required geometry, and rendering errors from a crop.
     public func apply(_ tool: AnnotationToolType, to document: inout AnnotationDocument, node: AnnotationNode) throws {
         // 验证节点类型与工具匹配
         guard node.tool == tool else {
@@ -137,16 +153,29 @@ public struct AnnotationInteractor: AnnotationProtocol {
         }
     }
 
+    /// Renders the document at full resolution through the stored renderer.
+    ///
+    /// - Parameter document: The document to render.
+    /// - Returns: A composite image at the base image's pixel size.
+    /// - Throws: ``AnnotationError/renderFailed(reason:)`` when rendering fails.
     public func render(_ document: AnnotationDocument) throws -> CGImage {
         logger.info("开始渲染: \(document.nodes.count) 个标注节点")
         return try renderer.render(document)
     }
 
+    /// Reverts the last change through the document's undo stack.
+    ///
+    /// - Parameter document: The document to modify.
+    /// - Throws: ``AnnotationError/undoStackEmpty`` when there is nothing to undo.
     public func undo(_ document: inout AnnotationDocument) throws {
         logger.debug("执行撤销")
         try document.undo()
     }
 
+    /// Reapplies the last undone change through the document's redo stack.
+    ///
+    /// - Parameter document: The document to modify.
+    /// - Throws: ``AnnotationError/redoStackEmpty`` when there is nothing to redo.
     public func redo(_ document: inout AnnotationDocument) throws {
         logger.debug("执行重做")
         try document.redo()
@@ -156,6 +185,8 @@ public struct AnnotationInteractor: AnnotationProtocol {
 // MARK: - AnnotationError 扩展
 
 extension AnnotationError: LocalizedError {
+    /// A user-facing message describing the failure, including the render reason
+    /// when one was recorded.
     public var errorDescription: String? {
         switch self {
         case .undoStackEmpty:

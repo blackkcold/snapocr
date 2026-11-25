@@ -8,10 +8,14 @@ import CoreGraphics
 /// `pixelSize` is the display's native pixel size. `pixelScale` is therefore the
 /// only value that may be used to convert window point sizes into capture pixels.
 public struct WindowCaptureDisplay: Equatable, Sendable {
+    /// The Core Graphics identifier of the display.
     public let displayID: CGDirectDisplayID
+    /// The display frame in Quartz global points.
     public let frame: CGRect
+    /// The display's native pixel size.
     public let pixelSize: CGSize
 
+    /// Creates a display description from its identifier and geometry.
     public init(displayID: CGDirectDisplayID, frame: CGRect, pixelSize: CGSize) {
         self.displayID = displayID
         self.frame = frame
@@ -48,6 +52,7 @@ public struct WindowCaptureSegment: Equatable, Sendable {
     /// The slice origin inside the composite canvas, in pixels (top-left origin).
     public let outputOrigin: CGPoint
 
+    /// Creates one display-local window slice.
     public init(
         displayID: CGDirectDisplayID,
         displayFrame: CGRect,
@@ -96,8 +101,11 @@ public enum WindowCaptureStrategy: Equatable, Sendable {
 /// buffer. `WindowCapturePlan.make` is deliberately free of ScreenCaptureKit
 /// types so it can be unit tested without constructing `SCWindow`/`SCDisplay`.
 public struct WindowCapturePlan: Equatable, Sendable {
+    /// The strategy this plan selected.
     public let strategy: WindowCaptureStrategy
+    /// The captured window's identifier.
     public let windowID: CGWindowID
+    /// The window frame in Quartz global points.
     public let windowFrame: CGRect
     /// The content rect in global points. For a 13 slice this is the visible union.
     public let contentRect: CGRect
@@ -107,12 +115,14 @@ public struct WindowCapturePlan: Equatable, Sendable {
     public let pointPixelScale: CGFloat
     /// The display that owns the largest visible slice, used for metadata.
     public let displayID: CGDirectDisplayID?
+    /// The frame of the owning display in Quartz global points.
     public let displayFrame: CGRect?
     /// macOS 13 slices. Empty for the desktop-independent window strategy.
     public let segments: [WindowCaptureSegment]
     /// Whether the window intersects more than one display.
     public let isCrossDisplay: Bool
 
+    /// Creates a plan from already-computed window and display geometry.
     public init(
         strategy: WindowCaptureStrategy,
         windowID: CGWindowID,

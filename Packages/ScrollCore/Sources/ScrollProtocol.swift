@@ -196,6 +196,8 @@ public enum ScrollError: Error, Sendable, LocalizedError {
     /// - Parameter details: 不一致的具体描述。
     case frameMismatch(details: String)
 
+    /// A user-facing description of the failure, naming the frame count, window, or
+    /// reason where the case carries one.
     public var errorDescription: String? {
         switch self {
         case .windowNotFound:
@@ -237,11 +239,17 @@ public struct StitchBudget: Sendable, Equatable {
     /// 输出图像的最大高度（默认 32 768）。
     public let maxHeight: Int
 
+    /// Creates a budget, raising both limits to at least one.
+    ///
+    /// - Parameters:
+    ///   - maxPixels: Maximum pixel count for the output image.
+    ///   - maxHeight: Maximum output height in rows.
     public init(maxPixels: Int = 64_000_000, maxHeight: Int = 32_768) {
         self.maxPixels = max(1, maxPixels)
         self.maxHeight = max(1, maxHeight)
     }
 
+    /// The default budget: 64 million pixels and 32 768 rows.
     public static let `default` = StitchBudget()
 
     /// 指定宽度下允许的最大输出高度。
@@ -279,6 +287,12 @@ public struct StitchResult: Sendable {
     /// 因超出预算而未绘入（或只绘入一部分）的帧数。
     public let droppedFrameCount: Int
 
+    /// Creates a stitch result from the output image and frame counts.
+    ///
+    /// - Parameters:
+    ///   - image: The stitched image, possibly truncated by the budget.
+    ///   - stitchedFrameCount: Number of frames actually drawn into the output.
+    ///   - droppedFrameCount: Number of frames left out or only partly drawn.
     public init(image: CGImage, stitchedFrameCount: Int, droppedFrameCount: Int) {
         self.image = image
         self.stitchedFrameCount = stitchedFrameCount
@@ -357,6 +371,7 @@ public enum MemoryPressureLevel: Int, Sendable, Comparable {
     /// 临界压力（> 300MB）：强制释放缓存
     case critical = 3
 
+    /// Orders levels from normal through critical, so higher pressure compares greater.
     public static func < (lhs: MemoryPressureLevel, rhs: MemoryPressureLevel) -> Bool {
         lhs.rawValue < rhs.rawValue
     }

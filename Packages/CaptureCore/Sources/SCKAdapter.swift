@@ -124,6 +124,12 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         return false
     }
 
+    /// Checks the current screen-recording permission without prompting.
+    ///
+    /// The check shares the pipeline's short-lived success cache instead of
+    /// enumerating `SCShareableContent` again.
+    ///
+    /// - Returns: `true` when screen capture is authorized.
     public func checkPermissionStatus() async -> Bool {
         // Share the short-lived success cache with the rest of the capture
         // pipeline instead of enumerating SCShareableContent a second time.

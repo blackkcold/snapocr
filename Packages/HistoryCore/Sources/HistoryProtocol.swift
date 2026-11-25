@@ -112,6 +112,14 @@ public struct HistoryStats: Sendable, Equatable {
     /// 平均 OCR 置信度（0–1），无条目时为 0
     public let averageConfidence: Float
 
+    /// Creates a statistics snapshot from values computed by the store.
+    ///
+    /// - Parameters:
+    ///   - totalCount: Number of entries.
+    ///   - favouriteCount: Number of favourited entries.
+    ///   - captureModeDistribution: Entry count keyed by capture mode.
+    ///   - totalSizeBytes: Disk usage across entries, images, and thumbnails.
+    ///   - averageConfidence: Mean OCR confidence from 0 to 1, or 0 when empty.
     public init(
         totalCount: Int,
         favouriteCount: Int,

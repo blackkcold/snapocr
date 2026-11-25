@@ -13,10 +13,23 @@ public actor RecordingCompositionExporter {
     private let fileManager: ExportFileManagerBox
     private var exportInProgress = false
 
+    /// Creates an exporter that publishes through the supplied file manager.
     public init(fileManager: FileManager = .default) {
         self.fileManager = ExportFileManagerBox(value: fileManager)
     }
 
+    /// Runs one export plan to a published file.
+    ///
+    /// Only one export may run at a time. The work runs on a detached,
+    /// user-initiated task so synchronous reader calls never block the caller's
+    /// executor; cancelling the calling task cancels that worker.
+    ///
+    /// - Parameters:
+    ///   - plan: The validated plan describing sources, tracks, and output.
+    ///   - progress: Receives throttled progress updates from the worker.
+    /// - Returns: The published product and the operations performed.
+    /// - Throws: `ExportError.exportInProgress` while another export runs, plus
+    ///   the planning, writing, cancellation, or publication error.
     public func export(
         _ plan: ExportPlan,
         progress: @escaping @Sendable (ExportProgress) -> Void

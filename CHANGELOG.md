@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - 新增 `scripts/check-swift-format.sh`：以 `--strict` + 诊断预算把 `swift-format` 变成真正的闸门，`.swift-format-budget` 随文档清理逐批下调至 0；CI 与 `scripts/test.sh` 均接入。
 - SwiftLint 固定到 `.swiftlint-version`（0.65.1），CI 改用对应 release 的 portable 构建并由 `scripts/check-swiftlint-version.sh` 校验，避免 `brew install swiftlint` 随 runner 漂移。
+- 公开 API DocC 清零：`swift-format` 诊断 698 → 0（626 条 `AllPublicDeclarationsHaveDocumentation` + 72 条 `ValidateDocumentationComments`），`.swift-format-budget` 锁定 0，CI 与 `scripts/test.sh` 成为零容忍硬闸门。
 - README 重构为用户导向：首屏工作流、1.7 更新、功能、下载校验与常见问题；开发构建细节收进折叠区。
 - README 与官网站点换用真实功能截图（截图架、分享外观、录制 HUD、窗口美化）。
 - `.swift-format` 统一为 4-space 并全量格式化 Swift 源码；SwiftLint 的 brace/comma 规则交由 swift-format，长度阈值随格式化结果小幅上调。

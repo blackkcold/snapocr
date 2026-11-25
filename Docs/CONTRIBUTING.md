@@ -18,7 +18,7 @@
 #### 运行命令
 
 ```bash
-# 格式闸门：版本校验 + 全仓诊断预算（Phase 2 期间预算逐步降到 0）
+# 格式闸门：版本校验 + 全仓零诊断（budget 必须保持 0）
 bash scripts/check-swift-format.sh
 
 # 只看指定目录/包：零容忍，用于验收单批改动
@@ -41,12 +41,12 @@ CI 与本地必须使用同一版本的 `swift-format`，否则同一份代码�
 - 规范版本取自 Xcode 工具链（`xcrun swift-format --version`），不再通过 Homebrew 安装，避免 brew 升级造成漂移。
 - 升级格式器 = 有意为之的一次全量格式化：改 `.swift-format-version` → `xcrun swift-format format -i -r .` → 单独提交并加入 `.git-blame-ignore-revs`。
 
-#### 诊断预算（棘轮）
+#### 零诊断硬闸门
 
 - `scripts/check-swift-format.sh` 使用 `swift-format lint --strict`（普通 lint 有诊断也返回 0，不能当闸门），并核对诊断数。
-- `.swift-format-budget` 是当前唯一允许的全仓诊断上限，只能下调；Phase 2 从 698 按批降到 0，之后即为零容忍硬闸门。
-- 传入路径时为零容忍模式，用于确认单批目录已经干净，再下调预算。
-- 新增代码不得引入任何新诊断：即使总数仍在预算内，`--strict` 的输出也会在 CI 日志中列出，review 时应确认没有新增文件/声明。
+- `.swift-format-budget` 必须保持 0：Phase 2 已把 698 条 DocC 诊断清零，任何新增诊断都会失败；不要为通过分支而调高预算。
+- 传入路径时同样零容忍，用于本地迭代。
+- 新增或修改代码不得引入任何诊断；提交前先跑 `bash scripts/check-swift-format.sh`。
 
 #### SwiftLint 版本固定
 
@@ -73,7 +73,7 @@ bash scripts/check-swiftlint-version.sh
 - 分工：`swift-format` 管排版与安全规则（`NeverForceUnwrap`、`NeverUseForceTry`、`NeverUseImplicitlyUnwrappedOptionals` 等）；`SwiftLint` 管质量（`force_unwrapping`、`implicitly_unwrapped_optional`、`unused_import`、`private_outlet` 等）。
 - 排版规则在 SwiftLint 侧关闭（`trailing_whitespace`、`vertical_whitespace`、`colon`、`comma`、`opening_brace`、`trailing_comma`），由 `swift-format` 负责。
 - 结构阈值按现状设定：`file_length` 780/1200、`type_body_length` 470、`function_body_length` 75、`cyclomatic_complexity` 12。
-- 全量 lint 仍有 698 条 DocC 诊断（`AllPublicDeclarationsHaveDocumentation` 626 + `ValidateDocumentationComments` 72），由 `.swift-format-budget` 在 Phase 2 逐批下调清理；存量期间预算只降不升。
+- 全量 lint 已达到 0 条诊断（Phase 2 清掉 698 条 DocC：`AllPublicDeclarationsHaveDocumentation` 626 + `ValidateDocumentationComments` 72）；`.swift-format-budget` 锁定 0。
 
 ---
 

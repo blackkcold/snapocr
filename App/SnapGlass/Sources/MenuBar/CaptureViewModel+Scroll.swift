@@ -7,6 +7,7 @@ import SwiftUI
 // MARK: - CaptureViewModel Scroll Capture
 
 extension CaptureViewModel {
+    /// Starts window selection; picking the scrolling action begins a scrolling capture.
     public func startScrollCapture() {
         captureWindow()
     }

@@ -5,6 +5,20 @@ import SharedKit
 // MARK: - HistoryProtocol Implementation
 
 extension HistoryActor {
+    /// Persists an entry and its media, evicting older entries when the store is full.
+    ///
+    /// The metadata is encrypted into the entries directory, the source image is
+    /// copied into encrypted image storage, and the thumbnail is copied unencrypted.
+    /// Saving an existing identifier replaces that entry. Files created by a failed
+    /// call are removed before the error is thrown, and the in-memory index keeps its
+    /// previous state. A successful save posts ``HistoryActor/imagesDidChange`` and
+    /// then runs the configured cleanup.
+    ///
+    /// - Parameter entry: The entry to persist.
+    /// - Throws: ``HistoryError/encryptionFailed(reason:)`` when the entry or image
+    ///   cannot be encrypted, ``HistoryError/fileIOError(path:)`` when a media file
+    ///   cannot be written, and ``HistoryError/storageFull(current:max:)`` when the
+    ///   entry limit is reached and no unprotected entry can be evicted.
     public func save(_ entry: HistoryEntry) async throws {
         // One snapshot per save: the capacity pre-check and the eviction share it.
         // Nothing mutates `entries` between the check and `evictOldest`.
@@ -206,6 +220,16 @@ extension HistoryActor {
         return sized.id
     }
 
+    /// Returns the entry with `id`, decrypting it from disk on a cache miss.
+    ///
+    /// A loaded entry joins the in-memory cache only when the current memory
+    /// pressure allows it. Entries that cannot be read or decrypted are treated as
+    /// absent, so the caller receives `nil` rather than an error.
+    ///
+    /// - Parameter id: Identifier of the entry to load.
+    /// - Returns: The entry, or `nil` when it does not exist or is unreadable.
+    /// - Throws: This implementation does not throw; the signature allows storage
+    ///   backends whose cache policy can fail.
     public func load(id: UUID) async throws -> HistoryEntry? {
         // 先从内存缓存查找
         if let cached = entries[id] {
@@ -225,6 +249,15 @@ extension HistoryActor {
         return entry
     }
 
+    /// Returns entries whose text, tags, source app, or window title contains `query`.
+    ///
+    /// Matching ignores case and diacritics and covers both cached and on-disk
+    /// entries. An empty query matches every entry. Results are sorted newest first.
+    ///
+    /// - Parameter query: The text to look for.
+    /// - Returns: Matching entries in descending timestamp order.
+    /// - Throws: This implementation does not throw; the signature allows storage
+    ///   backends that enumerate lazily.
     public func search(query: String) async throws -> [HistoryEntry] {
         // 合并内存缓存与磁盘快照，确保搜索覆盖所有已持久化的数据
         let merged = allPersistedEntries()
@@ -238,6 +271,16 @@ extension HistoryActor {
         return results.sorted { $0.timestamp > $1.timestamp }
     }
 
+    /// Deletes an entry and its media from memory and disk.
+    ///
+    /// Metadata, encrypted images, and thumbnails are first staged into a temporary
+    /// directory so a partial failure can move them back before throwing. Deleting an
+    /// unknown identifier is a no-op. Posts ``HistoryActor/imagesDidChange`` once the
+    /// entry is gone.
+    ///
+    /// - Parameter id: Identifier of the entry to delete.
+    /// - Throws: ``HistoryError/fileIOError(path:)`` when a file cannot be staged; the
+    ///   staged files are restored before the error surfaces.
     public func delete(id: UUID) async throws {
         let transactionDir = tempDir.appendingPathComponent("delete-\(UUID().uuidString)")
         try transactionDir.ensureDirectoryExists()
@@ -274,6 +317,15 @@ extension HistoryActor {
         NotificationCenter.default.post(name: Self.imagesDidChange, object: self)
     }
 
+    /// Removes every entry and all stored media.
+    ///
+    /// The three storage directories are moved into a transaction directory, recreated
+    /// empty, then discarded. If staging fails, the original directories are restored
+    /// and the call throws without touching the cache. On success the cache is emptied
+    /// and ``HistoryActor/imagesDidChange`` is posted.
+    ///
+    /// - Throws: ``HistoryError/fileIOError(path:)`` when a storage directory cannot be
+    ///   staged or recreated.
     public func clear() async throws {
         let transactionDir = tempDir.appendingPathComponent("clear-\(UUID().uuidString)")
         try transactionDir.ensureDirectoryExists()
@@ -311,6 +363,15 @@ extension HistoryActor {
         NotificationCenter.default.post(name: Self.imagesDidChange, object: self)
     }
 
+    /// Returns up to `limit` entries, newest first.
+    ///
+    /// A non-positive limit returns an empty array. Cached and on-disk entries are
+    /// merged before sorting, so the result covers everything persisted.
+    ///
+    /// - Parameter limit: Maximum number of entries to return.
+    /// - Returns: The newest entries in descending timestamp order.
+    /// - Throws: This implementation does not throw; the signature allows storage
+    ///   backends that read each entry on demand.
     public func recent(limit: Int) async throws -> [HistoryEntry] {
         guard limit > 0 else { return [] }
         return allPersistedEntries().values
@@ -319,6 +380,19 @@ extension HistoryActor {
             .map { $0 }
     }
 
+    /// Encodes the requested entries for export in the given format.
+    ///
+    /// With an empty `ids` list every persisted entry is exported newest first.
+    /// Otherwise only identifiers that still exist are included, in the order given.
+    /// Entries are partially anonymized before encoding. JSON keeps full metadata,
+    /// CSV keeps the key columns, and plain text keeps timestamped recognized text.
+    ///
+    /// - Parameters:
+    ///   - ids: Entry identifiers to export, or an empty array for everything.
+    ///   - format: Output format.
+    /// - Returns: Encoded export data.
+    /// - Throws: ``HistoryError/entryNotFound(id:)`` when no requested identifier
+    ///   exists, and encoding errors from the JSON encoder.
     public func export(ids: [UUID], format: HistoryExportFormat) async throws -> Data {
         let exportEntries: [HistoryEntry]
         let persistedEntries = allPersistedEntries()

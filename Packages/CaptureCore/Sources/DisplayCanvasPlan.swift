@@ -4,16 +4,21 @@ import CoreGraphics
 
 /// A platform-neutral display description used by all-display canvas planning.
 public struct DisplayCanvasDisplay: Equatable, Sendable {
+    /// The Core Graphics identifier of the display.
     public let displayID: CGDirectDisplayID
+    /// The display frame in global points, as reported by the system.
     public let frame: CGRect
+    /// The display's native pixel size.
     public let pixelSize: CGSize
 
+    /// Creates a display description from its identifier and geometry.
     public init(displayID: CGDirectDisplayID, frame: CGRect, pixelSize: CGSize) {
         self.displayID = displayID
         self.frame = frame
         self.pixelSize = pixelSize
     }
 
+    /// Native pixels per point, derived from the frame and pixel size.
     public var pixelScale: CGFloat {
         guard frame.width > 0, frame.height > 0,
             pixelSize.width > 0, pixelSize.height > 0
@@ -45,12 +50,18 @@ public enum DisplayCanvasAlignment: String, CaseIterable, Sendable {
 
 /// One display's placement on the composed canvas.
 public struct DisplayCanvasPlacement: Equatable, Sendable {
+    /// The display this placement positions on the canvas.
     public let displayID: CGDirectDisplayID
+    /// The display's frame in global points.
     public let sourceFrame: CGRect
+    /// The top-left origin of the display in canvas points.
     public let canvasOrigin: CGPoint
+    /// The display's size on the rendered canvas, in pixels.
     public let outputPixelSize: CGSize
+    /// Pixels per point used for this placement, shared by the whole plan.
     public let pixelScale: CGFloat
 
+    /// Creates a placement from already-computed canvas geometry.
     public init(
         displayID: CGDirectDisplayID,
         sourceFrame: CGRect,
@@ -74,15 +85,31 @@ public struct DisplayCanvasPlacement: Equatable, Sendable {
 /// display edges directly. Physical mode preserves each display's relative
 /// position; empty areas are part of the canvas silhouette.
 public struct DisplayCanvasPlan: Equatable, Sendable {
+    /// The layout mode that produced this canvas.
     public let mode: DisplayCanvasMode
+    /// Spacing between adjacent displays in compact modes, in points.
+    ///
+    /// Always zero in physical mode, which uses the system's own positions.
     public let gap: CGFloat
+    /// Cross-axis alignment for compact modes; ignored in physical mode.
     public let alignment: DisplayCanvasAlignment
+    /// The canvas size in points, before pixel scaling.
     public let canvasSize: CGSize
+    /// The rendered canvas size in pixels.
     public let outputPixelSize: CGSize
+    /// Pixels per point applied to every display.
+    ///
+    /// This is the largest native display scale for a high-resolution plan, or
+    /// `1` when high resolution is off.
     public let commonScale: CGFloat
+    /// One placement per usable display, in layout order.
     public let placements: [DisplayCanvasPlacement]
+    /// Whether the canvas has uncovered area, as an L-shaped physical layout does.
+    ///
+    /// Always `false` for compact strips, which tile the canvas completely.
     public let isIrregular: Bool
 
+    /// Creates a plan from already-computed canvas geometry.
     public init(
         mode: DisplayCanvasMode,
         gap: CGFloat,
@@ -103,6 +130,22 @@ public struct DisplayCanvasPlan: Equatable, Sendable {
         self.isIrregular = isIrregular
     }
 
+    /// Builds a canvas plan for the given displays.
+    ///
+    /// Displays with a non-positive frame or pixel size are ignored, and mirrored
+    /// duplicates are removed by frame. Compact modes order displays by the
+    /// system's left-to-right or top-to-bottom layout; physical mode keeps their
+    /// relative positions inside the union of their frames.
+    ///
+    /// - Parameters:
+    ///   - displays: Candidate displays, in any order.
+    ///   - mode: Compact strip or physical arrangement.
+    ///   - gap: Spacing between adjacent displays in points; negative values are
+    ///     clamped to zero and physical mode ignores it.
+    ///   - alignment: Cross-axis alignment for compact modes.
+    ///   - highResolution: Uses native display scale for every placement when
+    ///     `true`; forces `1x` output when `false`.
+    /// - Returns: A plan, or `nil` when no display has usable geometry.
     public static func make(
         displays: [DisplayCanvasDisplay],
         mode: DisplayCanvasMode,

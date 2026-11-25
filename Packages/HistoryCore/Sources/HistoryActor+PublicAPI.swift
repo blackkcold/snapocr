@@ -171,6 +171,13 @@ extension HistoryActor {
         )
     }
 
+    /// Reloads the cleanup policy from user defaults and applies it immediately.
+    ///
+    /// The entry limit and retention window take effect at once: the last disk-quota
+    /// scan is invalidated so the next check scans fully, and cleanup runs before this
+    /// method returns. Call it after the user changes history storage settings.
+    ///
+    /// - Throws: Errors raised by cleanup when expired entries cannot be removed.
     public func reloadConfiguredPolicyAndCleanup() async throws {
         let policy = Self.configuredCleanupPolicy()
         cleanupPolicy = policy

@@ -5,16 +5,27 @@ import ImageIO
 import OCRCore
 import SharedKit
 
+/// Executes parsed automation commands and shapes what the CLI prints.
+///
+/// Each handler returns an ``AutomationResult`` whose `output` is ready for stdout and
+/// whose `exitCode` describes any handled failure, so the CLI prints the text and exits
+/// with that status. Handlers throw ``AutomationError`` for problems found before or
+/// while reading the input file, such as a missing image.
 public struct CLIHandlers: Sendable {
 
     private let logger: Logger
 
+    /// Creates a handler set that logs under the `cli-handlers` category.
     public init() {
         self.logger = Logger(category: "cli-handlers")
     }
 
     // MARK: - 截图
 
+    /// Handles `capture --mode <area|window|fullscreen> [--output <path>]`.
+    ///
+    /// CLI capture is not implemented yet: the handler always reports a general error and
+    /// echoes the requested mode, defaulting to `area` when no mode was given.
     public func handleCapture(mode: String?, output: String?) async throws -> AutomationResult {
         let modeLabel = mode ?? "area"
         logger.info("截图请求 | 模式: \(modeLabel)")
@@ -27,6 +38,22 @@ public struct CLIHandlers: Sendable {
 
     // MARK: - OCR
 
+    /// Runs OCR on an image file: `ocr file <path> [--engine <vision|tesseract>]`.
+    ///
+    /// Missing languages default to `zh-Hans` and `en`, and any engine name other than
+    /// `tesseract` selects Vision. With `devCompare` the request goes to the Vision and
+    /// Tesseract comparison instead and ignores `outputFormat`. `outputFormat` of `json`
+    /// returns the recognition as pretty-printed JSON; otherwise `output` holds the text
+    /// followed by engine, confidence, timing, line count, and layout details.
+    ///
+    /// - Parameters:
+    ///   - file: Path to the image to recognize.
+    ///   - engine: Requested engine name, or `nil` for Vision.
+    ///   - languages: Recognition languages, or `nil` for the `zh-Hans`, `en` default.
+    ///   - devCompare: Whether to compare both engines rather than return one result.
+    ///   - outputFormat: `json` for a JSON document, or `nil` for the text report.
+    /// - Returns: The recognized text or JSON, or an engine-error result when recognition fails.
+    /// - Throws: ``AutomationError`` when the file is missing, unreadable, or not a decodable image.
     public func handleOCR(
         file: String,
         engine: String?,
@@ -74,6 +101,19 @@ public struct CLIHandlers: Sendable {
 
     // MARK: - 条码
 
+    /// Detects barcodes in an image: `barcode file <path> [--types <qr,code128,...>]`.
+    ///
+    /// Type names are lowercased and matched against ``BarcodeType``; unrecognized names
+    /// are dropped, and an empty list scans every type Vision supports. `outputFormat` of
+    /// `json` returns payload, type, confidence, and bounding box for each code, otherwise
+    /// `output` is a readable list. Finding no code is a general error, not an empty success.
+    ///
+    /// - Parameters:
+    ///   - file: Path to the image to scan.
+    ///   - types: Barcode type names to look for, or `nil` for all types.
+    ///   - outputFormat: `json` for a JSON document, or `nil` for the text report.
+    /// - Returns: The decoded codes, or an engine or no-code result describing the failure.
+    /// - Throws: ``AutomationError`` when the file is missing, unreadable, or not a decodable image.
     public func handleBarcode(
         file: String,
         types: [String]?,
@@ -119,6 +159,10 @@ public struct CLIHandlers: Sendable {
 
     // MARK: - 历史
 
+    /// Handles `history <list|search|delete|export|clear>`.
+    ///
+    /// History management is not implemented in this build; the handler always reports a
+    /// general error naming the requested subcommand.
     public func handleHistory(subcommand: AutomationCommand.HistorySubcommand) async throws -> AutomationResult {
         logger.info("历史管理 | 子命令: \(subcommand.rawValue)")
         return AutomationResult(
@@ -130,6 +174,11 @@ public struct CLIHandlers: Sendable {
 
     // MARK: - 开发者模式
 
+    /// Handles `dev logs [--format json] [--output <path>]` and `dev compare <path> [--lang <code>]`.
+    ///
+    /// `logs` exports the developer engine-comparison log and writes it to `output` when a
+    /// path is given, otherwise returns it as text. `compare` runs Vision and Tesseract over
+    /// one image and reports both outputs with their confidence, timing, and the better engine.
     public func handleDev(subcommand: AutomationCommand.DevSubcommand) async throws -> AutomationResult {
         switch subcommand {
         case .logs(let format, let output):

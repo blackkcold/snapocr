@@ -4,6 +4,11 @@ import ImageIO
 import UniformTypeIdentifiers
 
 extension HistoryActor {
+    /// Posted after history media changes so open history windows can reload.
+    ///
+    /// Saves, deletes, clears, image replacements, style updates, and restores all
+    /// post this name. The object varies by call site, so observers should match
+    /// on the name alone.
     public static let imagesDidChange = Notification.Name("SnapGlass.historyImagesDidChange")
 
     /// Write new immutable media first, then atomically switch the encrypted
@@ -63,6 +68,16 @@ extension HistoryActor {
         NotificationCenter.default.post(name: Self.imagesDidChange, object: nil)
     }
 
+    /// Restores an entry's original image and discards its edit revision.
+    ///
+    /// The encrypted original stays on disk. A fresh thumbnail is generated from it,
+    /// the revision pointer is cleared, the stored pixel size is refreshed from the
+    /// original, and the OCR text, confidence, and mockup style are reset because
+    /// they described the edited image. Does nothing when the entry has no revision.
+    ///
+    /// - Parameter id: Identifier of the entry to restore.
+    /// - Throws: ``HistoryError/entryNotFound(id:)`` when the entry is unknown, and
+    ///   errors from reading, decrypting, or writing the original and thumbnail.
     public func restoreOriginal(id: UUID) throws {
         guard var entry = entries[id] ?? diskCache[id] ?? loadEntryFromDiskSync(id: id) else {
             throw HistoryError.entryNotFound(id: id)

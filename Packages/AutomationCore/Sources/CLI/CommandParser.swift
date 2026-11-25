@@ -1,9 +1,24 @@
 import Foundation
 
+/// Turns command-line arguments into an ``AutomationCommand``.
+///
+/// The parser understands the documented subcommand form (`ocr file <path>`) and the
+/// older flag form (`ocr --file <path>`), reads `--flag value` pairs, and treats a
+/// `history` command without a subcommand as `list`. An unknown command or a missing
+/// required argument throws ``AutomationError``; later failures are reported in the
+/// result returned by the handler.
 public struct CommandParser: Sendable {
 
+    /// Creates a parser; it keeps no state, so one instance can parse any argument list.
     public init() {}
 
+    /// Parses arguments whose first element names the command.
+    ///
+    /// - Parameter arguments: Arguments without the executable path, for example
+    ///   `["ocr", "file", "shot.png", "--format", "json"]`.
+    /// - Returns: The command to run.
+    /// - Throws: ``AutomationError`` of kind `invalidCommand` for a missing or unknown
+    ///   command, or `missingArgument` when a required value such as the OCR file is absent.
     public func parse(_ arguments: [String]) throws -> AutomationCommand {
         guard let command = arguments.first else {
             throw AutomationError.invalidCommand("未指定命令。使用 --help 查看可用命令。")

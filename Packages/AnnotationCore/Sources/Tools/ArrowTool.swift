@@ -9,6 +9,7 @@ import SharedKit
 public struct ArrowTool: Sendable {
     private let logger = Logger(category: "annotation.arrow")
 
+    /// Creates an arrow tool; each render reads its geometry and style from the node.
     public init() {}
 
     /// 在图形上下文中渲染箭头标注。

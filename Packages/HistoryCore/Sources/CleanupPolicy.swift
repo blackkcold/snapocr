@@ -21,6 +21,7 @@ public enum MemoryPressureLevel: Sendable, Comparable {
     /// 临界，释放所有非活跃资源
     case critical
 
+    /// Orders levels from normal through critical, so higher pressure compares greater.
     public static func < (lhs: MemoryPressureLevel, rhs: MemoryPressureLevel) -> Bool {
         let order: [MemoryPressureLevel: Int] = [.normal: 0, .medium: 1, .high: 2, .critical: 3]
         return order[lhs, default: 0] < order[rhs, default: 0]

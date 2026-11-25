@@ -76,18 +76,26 @@ struct AppIntentsError: Error, LocalizedError {
 ///   → 输出: 截图文件路径 (String)
 /// ```
 public struct CaptureAreaIntent: AppIntent {
+    /// The action name Shortcuts lists: "Capture Area".
     public static let title: LocalizedStringResource = "Capture Area"
 
+    /// The description Shortcuts shows in its gallery, including the category and keywords.
     public static let description = IntentDescription(
         "捕获屏幕选定区域的截图并保存为图片文件。",
         categoryName: "工具",
         searchKeywords: ["screenshot", "capture", "area", "region", "截图", "区域"]
     )
 
+    /// Opens SnapGlass first so capture runs with the app's screen-recording permission.
     public static let openAppWhenRun: Bool = true
 
+    /// Creates the intent; the action takes no parameters.
     public init() {}
 
+    /// Captures the main display as an area screenshot and returns the temp PNG path.
+    ///
+    /// Throws when screen recording is not authorized or the PNG cannot be written, so
+    /// the Shortcuts run stops instead of returning a path to a missing file.
     @MainActor
     public func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let orchestrator = CaptureOrchestrator()
@@ -115,18 +123,26 @@ public struct CaptureAreaIntent: AppIntent {
 /// 触发后打开 SnapGlass 应用，捕获主显示器完整画面，
 /// 并将结果保存为临时 PNG 文件返回路径。
 public struct CaptureFullscreenIntent: AppIntent {
+    /// The action name Shortcuts lists: "Capture Fullscreen".
     public static let title: LocalizedStringResource = "Capture Fullscreen"
 
+    /// The description Shortcuts shows in its gallery, including the category and keywords.
     public static let description = IntentDescription(
         "捕获整个屏幕的截图并保存为图片文件。",
         categoryName: "工具",
         searchKeywords: ["screenshot", "capture", "fullscreen", "full", "截图", "全屏"]
     )
 
+    /// Opens SnapGlass first so capture runs with the app's screen-recording permission.
     public static let openAppWhenRun: Bool = true
 
+    /// Creates the intent; the action takes no parameters.
     public init() {}
 
+    /// Captures the whole main display and returns the path of the saved temporary PNG.
+    ///
+    /// Throws when screen recording is not authorized or the PNG cannot be written, so
+    /// the Shortcuts run stops instead of returning a path to a missing file.
     @MainActor
     public func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let orchestrator = CaptureOrchestrator()
@@ -153,22 +169,27 @@ public struct CaptureFullscreenIntent: AppIntent {
 /// 接收一个图片文件路径作为输入，使用 Apple Vision 引擎识别图片中的文字，
 /// 返回识别出的文本内容。
 public struct RecognizeTextIntent: AppIntent {
+    /// The action name Shortcuts lists: "OCR Image".
     public static let title: LocalizedStringResource = "OCR Image"
 
+    /// The description Shortcuts shows in its gallery, including the category and keywords.
     public static let description = IntentDescription(
         "识别图片中的文字内容，支持中英文等多语言。",
         categoryName: "工具",
         searchKeywords: ["ocr", "text", "recognize", "文字", "识别"]
     )
 
+    /// Opens SnapGlass first so image loading and recognition run inside the app.
     public static let openAppWhenRun: Bool = true
 
+    /// The image to read, supplied by Shortcuts as a file URL.
     @Parameter(
         title: "图片文件路径",
         description: "要识别的图片文件路径（支持 PNG、JPEG、HEIC 等格式）"
     )
     public var imagePath: URL
 
+    /// Languages to recognize first; an empty list uses `zh-Hans` and `en`.
     @Parameter(
         title: "识别语言",
         description: "优先识别的语言列表，如 zh-Hans（简体中文）、en（英语），留空自动检测",
@@ -176,11 +197,16 @@ public struct RecognizeTextIntent: AppIntent {
     )
     public var languages: [String]
 
+    /// Creates the intent with no image selected and the default language pair.
     public init() {
         self.imagePath = URL(fileURLWithPath: "")
         self.languages = []
     }
 
+    /// Recognizes the text in `imagePath` with Vision and returns it as one string.
+    ///
+    /// Each recognized line becomes one line of the returned text. Throws when the file
+    /// cannot be opened or decoded, or when recognition itself fails.
     @MainActor
     public func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let cgImage = try loadCGImage(from: imagePath.path)
@@ -202,26 +228,35 @@ public struct RecognizeTextIntent: AppIntent {
 /// 接收一个图片文件路径作为输入，使用 Apple Vision 引擎检测并解码图片中的条码/二维码，
 /// 返回解码后的内容（如 URL、文本等）。
 public struct ScanBarcodeIntent: AppIntent {
+    /// The action name Shortcuts lists: "Scan Barcode".
     public static let title: LocalizedStringResource = "Scan Barcode"
 
+    /// The description Shortcuts shows in its gallery, including the category and keywords.
     public static let description = IntentDescription(
         "扫描图片中的二维码或条形码并解码其内容。",
         categoryName: "工具",
         searchKeywords: ["barcode", "qr", "scan", "条码", "二维码", "扫描"]
     )
 
+    /// Opens SnapGlass first so image loading and scanning run inside the app.
     public static let openAppWhenRun: Bool = true
 
+    /// The image to scan, supplied by Shortcuts as a file URL.
     @Parameter(
         title: "图片文件路径",
         description: "包含条码或二维码的图片文件路径"
     )
     public var imagePath: URL
 
+    /// Creates the intent with no image selected.
     public init() {
         self.imagePath = URL(fileURLWithPath: "")
     }
 
+    /// Decodes barcodes in `imagePath` and returns their contents.
+    ///
+    /// A single code returns `payload (type)`; several codes return one `[type] payload`
+    /// line each. Throws when the image cannot be read, no code is found, or detection fails.
     @MainActor
     public func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let cgImage = try loadCGImage(from: imagePath.path)
@@ -251,26 +286,35 @@ public struct ScanBarcodeIntent: AppIntent {
 ///
 /// 在本地截图历史缓存中搜索匹配关键词的条目。
 public struct SearchHistoryIntent: AppIntent {
+    /// The action name Shortcuts lists: "Search History".
     public static let title: LocalizedStringResource = "Search History"
 
+    /// The description Shortcuts shows in its gallery, including the category and keywords.
     public static let description = IntentDescription(
         "在截图历史记录中搜索包含指定关键词的条目。",
         categoryName: "工具",
         searchKeywords: ["history", "search", "history", "搜索", "历史"]
     )
 
+    /// Opens SnapGlass first so the shared history store is loaded before the search.
     public static let openAppWhenRun: Bool = true
 
+    /// Text to look for in the recognized text of stored captures.
     @Parameter(
         title: "搜索关键词",
         description: "用于搜索截图历史的文本关键词"
     )
     public var query: String
 
+    /// Creates the intent with an empty query.
     public init() {
         self.query = ""
     }
 
+    /// Searches the local capture history and returns one `timestamp: text` line per match.
+    ///
+    /// Returns "未找到匹配的历史记录" when nothing matches, and a "历史记录暂不可用"
+    /// message instead of throwing when the shared history store is not ready.
     @MainActor
     public func perform() async throws -> some IntentResult & ReturnsValue<String> {
         guard let history = HistoryActor.shared else {
@@ -301,6 +345,11 @@ public struct SearchHistoryIntent: AppIntent {
 /// 注册后，用户可在 Shortcuts.app 中搜索 "Capture Area" "OCR Image" 等
 /// 关键词来创建自动化 workflow。
 public struct SnapGlassShortcuts: AppShortcutsProvider {
+    /// The capture, OCR, and barcode actions SnapGlass offers to Shortcuts and Siri.
+    ///
+    /// Each entry pairs an intent with its trigger phrases, a short title and an SF Symbol.
+    /// `SearchHistoryIntent` is not registered here, so it has no trigger phrase but can
+    /// still be added to a shortcut from the action list.
     public static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: CaptureAreaIntent(),

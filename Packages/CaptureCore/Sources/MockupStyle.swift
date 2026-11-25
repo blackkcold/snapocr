@@ -6,12 +6,21 @@ import Foundation
 /// a 6K fullscreen capture and a small region capture keep the same visual
 /// weight.
 public struct MockupStyle: Codable, Equatable, Sendable {
+    /// One stop in a linear-gradient background.
+    ///
+    /// Components are sRGB values in `0...1` and `location` positions the stop
+    /// along the gradient from start (`0`) to end (`1`).
     public struct ColorStop: Codable, Equatable, Sendable {
+        /// Red component in the `0...1` sRGB range.
         public let red: CGFloat
+        /// Green component in the `0...1` sRGB range.
         public let green: CGFloat
+        /// Blue component in the `0...1` sRGB range.
         public let blue: CGFloat
+        /// Position of the stop along the gradient, from `0` to `1`.
         public let location: CGFloat
 
+        /// Creates a color stop from sRGB components and a gradient position.
         public init(red: CGFloat, green: CGFloat, blue: CGFloat, location: CGFloat) {
             self.red = red
             self.green = green
@@ -20,6 +29,7 @@ public struct MockupStyle: Codable, Equatable, Sendable {
         }
     }
 
+    /// The canvas fill behind the screenshot: transparent, solid, or a linear gradient.
     public enum Background: Codable, Equatable, Sendable {
         case transparent
         case solid(red: CGFloat, green: CGFloat, blue: CGFloat)
@@ -43,16 +53,29 @@ public struct MockupStyle: Codable, Equatable, Sendable {
 
     /// Schema version for forward-compatible decoding.
     public var version: Int = 2
+    /// The canvas fill behind the screenshot.
     public var background: Background
+    /// Padding on each side as a fraction of the reference edge.
     public var paddingRatio: CGFloat
+    /// Content corner radius as a fraction of the reference edge.
+    ///
+    /// The rendered radius is capped at half the image's shorter side.
     public var cornerRadiusRatio: CGFloat
+    /// Shadow blur radius as a fraction of the reference edge.
     public var shadowBlurRatio: CGFloat
+    /// Shadow opacity in `0...1`.
     public var shadowOpacity: CGFloat
+    /// Vertical shadow offset as a fraction of the reference edge.
     public var shadowOffsetRatio: CGFloat
     /// Border stroke width as a ratio of the reference edge. Zero disables it.
     public var borderWidthRatio: CGFloat
+    /// How the border color is chosen for the image edge.
     public var borderColor: BorderColor
 
+    /// Creates a style from a background and treatment ratios.
+    ///
+    /// Ratios are multiplied by `MockupLayout.referenceSide(for:)`, so captures
+    /// of different sizes keep the same visual weight.
     public init(
         background: Background,
         paddingRatio: CGFloat = 0.08,
@@ -123,6 +146,7 @@ public enum MockupPreset: String, CaseIterable, Sendable {
     case midnight
     case transparent
 
+    /// Human-readable preset name for menus and settings.
     public var title: String {
         switch self {
         case .float: return "Float"
@@ -150,6 +174,7 @@ public enum MockupPreset: String, CaseIterable, Sendable {
         }
     }
 
+    /// The share treatment this preset applies.
     public var style: MockupStyle {
         switch self {
         case .float:
