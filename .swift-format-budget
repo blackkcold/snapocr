@@ -6,4 +6,4 @@
 #
 # A focused run (paths passed on the command line) is already zero-tolerance,
 # so a batch must be clean before this budget is lowered.
-555
+331

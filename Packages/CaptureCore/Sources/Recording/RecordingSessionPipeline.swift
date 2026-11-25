@@ -1,11 +1,17 @@
 import AudioToolbox
 import Foundation
 
+/// Bridges the seal service's pre-publish hook to the session ledger.
 public struct LedgerPublicationHook: SegmentPublicationHooking {
     private let ledger: RecordingSessionLedger
 
+    /// Creates a hook that journals intents for `ledger`.
     public init(ledger: RecordingSessionLedger) { self.ledger = ledger }
 
+    /// Records the publish intent before any product file is moved.
+    ///
+    /// - Parameter candidate: The staged product and the coverage it promises.
+    /// - Throws: A ledger error when the intent cannot be journaled.
     public func beforePublish(_ candidate: SegmentPublicationCandidate) async throws {
         let intent = RecordingPublishIntent(
             segmentID: candidate.segmentID,
@@ -28,6 +34,7 @@ enum SealSignal: Sendable {
 
 /// The production session composition root: real T5/T6 engine, T7 CAF writer, T8 seal, T9 journal.
 public actor RecordingSessionPipeline: AudioRecordingControlling {
+    /// The session's durable journal, shared with preview and recovery callers.
     public nonisolated let ledger: RecordingSessionLedger
 
     let roots: RecordingPipelineRoots
@@ -69,6 +76,17 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
     private var stopTask: Task<AudioRecordingResult, Never>?
     private var lastResult: AudioRecordingResult?
 
+    /// Creates a pipeline bound to one session's roots, journal, and seal service.
+    ///
+    /// - Parameters:
+    ///   - roots: Session, index, and output roots.
+    ///   - ledger: The journal that owns durable session state.
+    ///   - coordinator: Segmented writer that produces checkpoints and segment bundles.
+    ///   - sealService: Service that seals and publishes staged products.
+    ///   - spaceGate: Optional start-time and ongoing space policy.
+    ///   - engineFactory: Builds the audio engine that feeds the checkpoint sink.
+    /// - Throws: `RecordingPipelineError.invalidConfiguration` when a root is not
+    ///   a file URL.
     public init(
         roots: RecordingPipelineRoots,
         ledger: RecordingSessionLedger,
@@ -123,6 +141,20 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         self.fileManager = fileManager
     }
 
+    /// Starts a 48 kHz audio session and wires its journal and seal workers.
+    ///
+    /// The pipeline validates the configuration, runs the space preflight, creates
+    /// the session root, registers the session record, then starts the engine. The
+    /// checkpoint sink batches audio into ticks and journals durable checkpoints on
+    /// the checkpoint cadence, while the seal worker publishes closed segments in
+    /// the background.
+    ///
+    /// - Parameter configuration: The requested audio configuration.
+    /// - Throws: `RecordingPipelineError.alreadyStarted` when a session is active
+    ///   or stopping, `RecordingPipelineError.invalidConfiguration` when the
+    ///   configuration is not a 48 kHz audio session, and
+    ///   `RecordingPipelineError.spacePreflightDenied` when the space gate refuses
+    ///   the start. File-system and engine errors propagate unchanged.
     public func start(_ configuration: AudioRecordingConfiguration) async throws {
         guard !started, stopTask == nil else { throw RecordingPipelineError.alreadyStarted }
         guard configuration.kind == .audio, configuration.sampleRate == 48_000,
@@ -227,6 +259,13 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         }
     }
 
+    /// Stops capture, drains the final checkpoints, and returns the session result.
+    ///
+    /// Repeated calls return the same result instead of stopping twice. The final
+    /// segment is closed and journaled before the result is built, so the reported
+    /// segment count and checkpoint age reflect durable state.
+    ///
+    /// - Returns: The final outcome, including any pipeline failure summary.
     public func stop() async -> AudioRecordingResult {
         if let result = lastResult { return result }
         if let stopTask { return await stopTask.value }
@@ -244,25 +283,53 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         return await task.value
     }
 
+    /// Applies a source-route change at its sample position.
+    ///
+    /// - Parameter event: The route change to apply.
+    /// - Returns: The engine's commit result, or `.unchanged` when no engine is active.
     public func applyRoute(_ event: RouteEvent) async -> RouteCommitResult {
         guard let engine else { return .unchanged(reason: "recording pipeline is not active") }
         return await engine.applyRoute(event)
     }
 
+    /// Creates a progress stream that replays the latest snapshot to a new subscriber.
+    ///
+    /// Updates are throttled to roughly ten per second while capture runs.
+    ///
+    /// - Returns: A stream of progress snapshots.
     public nonisolated func makeProgressStream() -> AsyncStream<RecordingProgress> {
         progressBroadcaster.makeStream()
     }
 
+    /// Creates a stream of media that became safe to preview.
+    ///
+    /// Every closed checkpoint is announced as a `PreviewTarget.checkpoint` value;
+    /// the stream finishes when the session stops.
+    ///
+    /// - Returns: A stream of preview targets.
     public nonisolated func makePreviewReadyStream() -> AsyncStream<PreviewTarget> {
         previewReadyBroadcaster.makeStream()
     }
 
+    /// Creates a stream of lifecycle diagnostics for this session.
+    ///
+    /// Subscribers see only events emitted after they subscribe; the stream carries
+    /// no media paths or samples.
+    ///
+    /// - Returns: A stream of diagnostic events.
     public func makeDiagnosticsStream() -> AsyncStream<RecordingPipelineDiagnosticEvent> {
         diagnosticBroadcaster.makeStream()
     }
 
+    /// Returns the session state currently journaled by the ledger.
+    ///
+    /// - Returns: The projected session record.
+    /// - Throws: A ledger error when the journal cannot be projected.
     public func snapshot() async throws -> RecordingSessionRecord { try await ledger.snapshot() }
 
+    /// Creates a preview service bound to this session's ledger.
+    ///
+    /// - Returns: A service that issues read-only preview leases.
     public func makePreviewService() -> RecordingPreviewService {
         RecordingPreviewService(ledger: ledger, fileManager: fileManager)
     }
@@ -278,6 +345,16 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         return try? RecordingLedgerFileSystem.resolve(relativePath, under: roots.outputDirectory)
     }
 
+    /// Publishes a segment from its durable intent after an interrupted seal.
+    ///
+    /// The product is resolved from the recorded intent, verified as a publication
+    /// candidate, published, and journaled as a published segment. A recovered
+    /// diagnostic is emitted so observers can refresh their session list.
+    ///
+    /// - Parameter segmentID: Identity of the segment to publish.
+    /// - Returns: The sealed segment that was published.
+    /// - Throws: A ledger error when the intent or candidate is missing or invalid,
+    ///   and a seal-service error when publication fails.
     public func resumePublish(segmentID: UUID) async throws -> SealedSegment {
         let intent = try await ledger.publishIntent(segmentID: segmentID)
         let candidate = try await ledger.segmentPublicationCandidate(segmentID: segmentID)

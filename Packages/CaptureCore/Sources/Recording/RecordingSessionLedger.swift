@@ -1,5 +1,9 @@
 import Foundation
 
+/// Failures the ledger reports while opening, replaying, or writing a session.
+///
+/// Path errors are mapped onto these cases so callers see one vocabulary across
+/// journal replay, index persistence, publication, and recovery.
 public enum RecordingSessionLedgerError: Error, Equatable, Sendable {
     case invalidPath
     case pathEscapesRoot
@@ -27,7 +31,9 @@ public enum RecordingSessionLedgerError: Error, Equatable, Sendable {
 /// `RecordingSessionLedger+Validation.swift`. Stored properties stay here so the
 /// actor keeps a single source of truth.
 public actor RecordingSessionLedger {
+    /// Identity of the session this ledger owns.
     public nonisolated let sessionID: UUID
+    /// Canonical session directory that holds the journal and checkpoint media.
     public nonisolated let sessionRoot: URL
 
     let indexURL: URL
@@ -37,6 +43,19 @@ public actor RecordingSessionLedger {
     var state = LedgerState()
     var leases: [UUID: PreviewLease] = [:]
 
+    /// Opens a ledger, replaying the session journal when one exists.
+    ///
+    /// - Parameters:
+    ///   - sessionRoot: Session directory; may be missing when the ledger only registers.
+    ///   - indexURL: Rebuildable index shared by all sessions.
+    ///   - sessionID: Identity the journal must match.
+    ///   - fileManager: File manager used for every path operation.
+    ///   - now: Clock used for journal and index timestamps.
+    ///   - readOnly: Whether the ledger must refuse every write.
+    /// - Throws: `RecordingSessionLedgerError.invalidPath` for unusable roots,
+    ///   `.missingSession` when read-only and no journal exists, `.journalCorrupt`
+    ///   when replay fails verification, and `.unsupportedSchema` when the journal
+    ///   was written by a newer schema.
     public init(
         sessionRoot: URL,
         indexURL: URL,
@@ -181,6 +200,16 @@ public actor RecordingSessionLedger {
         return (root, index)
     }
 
+    /// Journals the session record and mirrors it into the index.
+    ///
+    /// Registering the same session again is idempotent when its identity, kind,
+    /// and layout match; a different record for the same session is rejected.
+    ///
+    /// - Parameter record: The session record to register.
+    /// - Throws: `RecordingSessionLedgerError.sessionMismatch` when the record
+    ///   belongs to another session, `.idempotencyConflict` when a different
+    ///   record is already registered, `.readOnly` when the ledger cannot write,
+    ///   and index or I/O errors when persistence fails.
     public func register(_ record: RecordingSessionRecord) async throws {
         try ensureWritable()
         guard record.id == sessionID else { throw RecordingSessionLedgerError.sessionMismatch }
@@ -195,6 +224,18 @@ public actor RecordingSessionLedger {
         try persistIndex()
     }
 
+    /// Journals one durable checkpoint and mirrors it into the index.
+    ///
+    /// Each track file is hashed and stored relative to the session root, and the
+    /// checkpoint's segment identity is fixed the first time its index is seen.
+    /// Re-committing the same checkpoint is idempotent; a different checkpoint with
+    /// the same identity or a competing segment identity is rejected.
+    ///
+    /// - Parameter checkpoint: The committed checkpoint to journal.
+    /// - Throws: `RecordingSessionLedgerError.invalidCheckpoint` for an empty range
+    ///   or missing tracks, `.missingSession` when no session is registered,
+    ///   `.idempotencyConflict` for conflicting identity, `.readOnly` when the
+    ///   ledger cannot write, and path or I/O errors for unusable media.
     public func commit(_ checkpoint: CheckpointCommit) async throws {
         try ensureWritable()
         guard checkpoint.segmentIndex >= 0, checkpoint.range.startSample >= 0,
@@ -273,10 +314,19 @@ public actor RecordingSessionLedger {
         }
     }
 
+    /// Projects the current session record from journaled state.
+    ///
+    /// - Returns: The session record with every discovered segment.
+    /// - Throws: `RecordingSessionLedgerError.missingSession` when no record is
+    ///   journaled, and `.unsupportedSchema` when a newer journal has no cached
+    ///   record to fall back to.
     public func snapshot() async throws -> RecordingSessionRecord {
         try currentRecord()
     }
 
+    /// Creates a preview service bound to this ledger.
+    ///
+    /// - Returns: A service that issues preview leases over this ledger's media.
     public func makePreviewService() -> RecordingPreviewService {
         RecordingPreviewService(ledger: self, fileManager: fileManager, now: now)
     }

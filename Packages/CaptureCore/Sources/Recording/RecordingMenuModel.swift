@@ -2,8 +2,11 @@ import Foundation
 
 /// One source option in the recording menu, with next-session and active-session state kept apart.
 public struct RecordingMenuModeItem: Sendable, Equatable {
+    /// The source option this row represents.
     public let mode: AudioSourceMode
+    /// Whether this source is selected as the next session's default.
     public let isDefault: Bool
+    /// Whether this source is active in the current recording.
     public let isCurrent: Bool
 
     /// Creates a menu option with independent default and current-session markers.

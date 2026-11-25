@@ -32,6 +32,12 @@ public actor LedgerCheckpointSink: AudioCheckpointSink {
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var sealBacklogBytesBySegment: [Int: Int64] = [:]
 
+    /// Creates a sink without progress or space-status observers.
+    ///
+    /// - Parameters:
+    ///   - coordinator: Segmented writer that receives contiguous tick groups.
+    ///   - ledger: Journal that receives durable checkpoints.
+    ///   - spaceGate: Optional space policy consulted after each commit.
     public init(
         coordinator: SegmentedWriterCoordinator,
         ledger: RecordingSessionLedger,
@@ -58,6 +64,20 @@ public actor LedgerCheckpointSink: AudioCheckpointSink {
         self.onSpaceStatus = onSpaceStatus
     }
 
+    /// Appends one role's audio block for the next tick.
+    ///
+    /// Blocks that share a range are grouped as one tick; a later range flushes the
+    /// group to the coordinator and closes any segment that reached its boundary.
+    /// Every block must be 48 kHz, carry exactly the channels it declares, and be
+    /// contiguous with the previous tick so the journal never records a hole it did
+    /// not observe.
+    ///
+    /// - Parameter block: PCM audio for one role and one tick.
+    /// - Throws: `RecordingCheckpointError.incompatibleFormat` when the block's
+    ///   role, rate, channels, or frame count is unusable,
+    ///   `.rangeOverlap` when the role already delivered this range, and
+    ///   `.nonContiguousRange` when the range starts before or after the next
+    ///   expected sample.
     public func append(_ block: AudioPCMBlock) async throws {
         await acquire()
         defer { release() }

@@ -91,6 +91,13 @@ extension RecordingSessionLedger {
         }
     }
 
+    /// Rebuilds the whole index from the session journals on disk.
+    ///
+    /// Every session directory under the recording root is opened read-only and
+    /// projected from its journal; a corrupt or missing cache is simply replaced.
+    ///
+    /// - Throws: `RecordingSessionLedgerError.readOnly` when this ledger cannot
+    ///   write, and a path or I/O error when a session directory is unsafe.
     public func rebuildIndex() async throws {
         try ensureWritable()
         let entries = try await Self.allEntries(
@@ -187,6 +194,19 @@ extension RecordingSessionLedger {
 
     // MARK: Session discovery
 
+    /// Opens an existing session read-only from its recording root.
+    ///
+    /// The session is found under `.SnapGlassSessions/<session-id>`; when the
+    /// journal needs a newer schema, the cached index record stands in so older
+    /// builds can still list the session.
+    ///
+    /// - Parameters:
+    ///   - sessionID: Identity of the session to open.
+    ///   - recordingRoot: Root that contains the sessions directory.
+    ///   - indexURL: Rebuildable session index.
+    ///   - fileManager: File manager used for path checks and reads.
+    /// - Returns: A read-only ledger for the session.
+    /// - Throws: A path, I/O, or journal error when the session cannot be opened.
     public static func openExisting(
         sessionID: UUID,
         recordingRoot: URL,
@@ -220,6 +240,17 @@ extension RecordingSessionLedger {
         } catch { throw error }
     }
 
+    /// Lists sessions that have at least one published or missing segment.
+    ///
+    /// A `missing` segment is included so a user can still open the session and see
+    /// which product failed verification.
+    ///
+    /// - Parameters:
+    ///   - recordingRoot: Root that contains the sessions directory.
+    ///   - indexURL: Rebuildable session index.
+    ///   - fileManager: File manager used for path checks and reads.
+    /// - Returns: Session records that contain at least one published or missing segment.
+    /// - Throws: A path or I/O error when a session directory is unsafe.
     public static func publishedSessions(
         in recordingRoot: URL,
         indexURL: URL,
@@ -233,6 +264,18 @@ extension RecordingSessionLedger {
         }
     }
 
+    /// Lists unfinished segments that can still be recovered.
+    ///
+    /// Every session is opened read-only and asked for its recovery details. The
+    /// result is sorted by session identity and then by segment index, which gives
+    /// the recovery UI a stable order.
+    ///
+    /// - Parameters:
+    ///   - recordingRoot: Root that contains the sessions directory.
+    ///   - indexURL: Rebuildable session index.
+    ///   - fileManager: File manager used for path checks and reads.
+    /// - Returns: Recoverable segments across all sessions, in stable order.
+    /// - Throws: A path or I/O error when a session directory is unsafe.
     public static func recoverableSessions(
         in recordingRoot: URL,
         indexURL: URL,
