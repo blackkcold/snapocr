@@ -55,11 +55,11 @@ placeholders() {
         printf '%s\t%s\n' "$key" "$specs"
     done | sort
 }
-placeholders "$RESOURCES/$REFERENCE.lproj/Localizable.strings" > /tmp/checkloc_ref.txt
 for lang in "${LANGS[@]}"; do
     [ "$lang" == "$REFERENCE" ] && continue
-    placeholders "$RESOURCES/$lang.lproj/Localizable.strings" > /tmp/checkloc_lang.txt
-    diff_out=$(diff /tmp/checkloc_ref.txt /tmp/checkloc_lang.txt || true)
+    diff_out=$(diff \
+        <(placeholders "$RESOURCES/$REFERENCE.lproj/Localizable.strings") \
+        <(placeholders "$RESOURCES/$lang.lproj/Localizable.strings") || true)
     if [ -n "$diff_out" ]; then
         echo "  ❌ $lang placeholder mismatch:"; echo "$diff_out" | sed 's/^/     /'
         FAILED=1
