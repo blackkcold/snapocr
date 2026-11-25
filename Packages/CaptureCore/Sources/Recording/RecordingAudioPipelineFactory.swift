@@ -1,6 +1,21 @@
 import Foundation
 
+/// Builds the audio-only recording pipeline used by system and microphone capture.
 public enum RecordingAudioPipelineFactory {
+    /// Creates a recording session with its ledger, checkpoint writer, seal service, and engine.
+    ///
+    /// The configuration must be audio-only at 48 kHz with at least one active
+    /// role. Session and output directories are created when missing, and the
+    /// resulting pipeline owns the native audio sources for the configured layout.
+    ///
+    /// - Parameters:
+    ///   - configuration: Audio-only recording settings.
+    ///   - roots: Session, index, and output locations.
+    ///   - spaceGate: Optional free-space policy checked before and during capture.
+    ///   - fileManager: File manager for session directories and ledger files.
+    /// - Returns: A pipeline ready to start.
+    /// - Throws: `RecordingPipelineError.invalidConfiguration` when the
+    ///   configuration is unsupported or its directories cannot be prepared.
     public static func make(
         configuration: AudioRecordingConfiguration,
         roots: RecordingPipelineRoots,

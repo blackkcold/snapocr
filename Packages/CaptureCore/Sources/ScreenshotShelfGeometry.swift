@@ -50,12 +50,16 @@ public struct ScreenshotShelfMetrics: Equatable, Sendable {
 
     /// Card hover presentation shared by the card view and the panel geometry.
     public static let hoverTiltDegrees: Double = 2
+    /// Additional tilt of the image inside a lifted card, in degrees.
     public static let hoverContentTiltDegrees: Double = 0.5
+    /// Blur radius of a lifted card's shadow, in points.
     public static let hoverShadowRadius: CGFloat = 12
+    /// Downward offset of a lifted card's shadow, in points.
     public static let hoverShadowYOffset: CGFloat = 5
     /// Room the strongest hover shadow needs below the card, before the safety margin.
     public static let hoverShadowBottomExtent: CGFloat = 22
 
+    /// Creates layout metrics in points; the defaults match the shipping shelf.
     public init(
         topInset: CGFloat = 8,
         railZone: CGFloat = 16,

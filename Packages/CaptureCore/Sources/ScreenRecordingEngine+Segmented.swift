@@ -7,6 +7,10 @@ import Foundation
 import SharedKit
 
 extension ScreenRecordingEngine {
+    /// Installs the handler that republishes a failed segmented session, or clears it with `nil`.
+    ///
+    /// While a handler is installed, ``canRetryPublish`` reports `true` once the
+    /// session has accepted a video frame.
     public func installSegmentedRetryHandler(
         _ handler: (@Sendable () async throws -> URL)?
     ) {

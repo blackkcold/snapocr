@@ -5,12 +5,18 @@ import CoreGraphics
 public enum WindowScreenshotStyling {
     /// Pixel metrics for the composite. All values are in image pixels.
     public struct Style: Equatable, Sendable {
+        /// Corner radius in image pixels.
         public var cornerRadius: CGFloat
+        /// Transparent padding on each side, in image pixels.
         public var padding: CGFloat
+        /// Shadow blur radius in image pixels.
         public var shadowRadius: CGFloat
+        /// Shadow opacity in `0...1`.
         public var shadowOpacity: CGFloat
+        /// Vertical shadow offset in image pixels; positive moves the shadow down.
         public var shadowOffsetY: CGFloat
 
+        /// Creates pixel metrics for the float treatment.
         public init(
             cornerRadius: CGFloat,
             padding: CGFloat,

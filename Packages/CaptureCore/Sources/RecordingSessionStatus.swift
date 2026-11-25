@@ -12,8 +12,11 @@ public enum RecordingSessionStatus: Equatable, Sendable {
     case recording
     case saving
 
+    /// Whether the session has left idle, including source selection and countdown.
     public var isBusy: Bool { self != .idle }
 
+    /// Whether quitting now would interrupt an active or starting recording,
+    /// or a save in progress.
     public var needsQuitConfirmation: Bool {
         switch self {
         case .starting, .recording, .saving: true

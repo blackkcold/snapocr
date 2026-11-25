@@ -4,14 +4,20 @@ import Foundation
 
 /// Codable summary of the audio checkpoint paired with one screen chunk.
 public struct ScreenAudioCheckpointDTO: Codable, Sendable, Hashable {
+    /// Stable identity of the audio checkpoint commit.
     public let checkpointID: UUID
+    /// Zero-based index of the visible segment this checkpoint belongs to.
     public let segmentIndex: Int
+    /// First sample of the checkpoint on the 48 kHz session grid.
     public let startSample: Int64
+    /// Number of samples the checkpoint covers.
     public let sampleCount: Int64
     /// Relative paths keyed by stable track role (`system` or `microphone`).
     public let trackFiles: [String: String]
+    /// Wall-clock time at which the checkpoint became durable.
     public let committedAt: Date
 
+    /// Creates a checkpoint summary from a durable audio commit.
     public init(
         checkpointID: UUID,
         segmentIndex: Int,
@@ -31,15 +37,22 @@ public struct ScreenAudioCheckpointDTO: Codable, Sendable, Hashable {
 
 /// Durable journal record for one closed screen-video recovery chunk.
 public struct ScreenCheckpointRecord: Codable, Sendable, Hashable {
+    /// Zero-based index of the visible segment that owns this chunk.
     public let segmentIndex: Int
+    /// Zero-based recovery chunk index within the visible segment.
     public let chunkIndex: Int
+    /// File URL of the finished chunk video under the session root.
     public let videoURL: URL
+    /// Half-open sample range covered by the chunk on the 48 kHz session grid.
     public let videoRange: RecordingSampleRange
+    /// Audio committed alongside the chunk, or `nil` when audio was not active.
     public let audioCheckpoint: ScreenAudioCheckpointDTO?
+    /// Per-track committed coverage for the owning segment.
     public let coverage: RecordingSegmentCoverage
     /// SHA-256 values keyed by session-root-relative media paths.
     public let contentHashes: [String: String]
 
+    /// Creates a durable journal record for one closed chunk.
     public init(
         segmentIndex: Int,
         chunkIndex: Int,
@@ -61,13 +74,20 @@ public struct ScreenCheckpointRecord: Codable, Sendable, Hashable {
 
 /// Result of durably closing one screen recovery chunk.
 public struct ScreenCheckpointCommit: Sendable, Hashable {
+    /// Zero-based index of the visible segment that owns this chunk.
     public let segmentIndex: Int
+    /// Zero-based recovery chunk index within the visible segment.
     public let chunkIndex: Int
+    /// File URL of the finished chunk video.
     public let videoURL: URL
+    /// Half-open sample range covered by the chunk on the 48 kHz session grid.
     public let videoRange: SampleRange
+    /// Audio commit returned while closing the chunk, or `nil` when audio was inactive.
     public let audio: CheckpointCommit?
+    /// SHA-256 values keyed by session-root-relative media paths.
     public let contentHashes: [String: String]
 
+    /// Creates the result of durably closing one recovery chunk.
     public init(
         segmentIndex: Int,
         chunkIndex: Int,

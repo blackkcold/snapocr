@@ -13,10 +13,17 @@ public enum ScreenshotShelfMode: String, CaseIterable, Sendable {
 /// testable without a panel. Locking is intentionally not represented here: a lock is a hard
 /// reset handled by `ScreenshotShelfPresentationState`.
 public struct ScreenshotShelfModeState: Equatable, Sendable {
+    /// Whether the shelf currently shows cards or the collapsed rail tab.
     public private(set) var mode: ScreenshotShelfMode
+    /// Whether a drag or menu tracking holds the shelf open.
     public private(set) var isInteractionHeld: Bool
+    /// Whether capture, recording, full-screen, or editing suppression holds the shelf open.
     public private(set) var isSuppressed: Bool
+    /// Whether pointer dwell may expand the collapsed shelf.
+    ///
+    /// Cleared by `collapse()` and restored by `armExpansion()`.
     public private(set) var isExpansionArmed: Bool
+    /// Absolute time at which an expanded shelf collapses unless interaction resumes.
     public private(set) var idleDeadline: Date?
     /// Deadline at which a pointer resting on the collapsed handle may expand the shelf.
     public private(set) var dwellDeadline: Date?
@@ -26,6 +33,7 @@ public struct ScreenshotShelfModeState: Equatable, Sendable {
     /// Pointer travel beyond this distance cancels a pending dwell expansion.
     public static let dwellMovementTolerance: CGFloat = 5
 
+    /// Creates the state in the given mode with no deadlines or holds.
     public init(mode: ScreenshotShelfMode = .expanded) {
         self.mode = mode
         isInteractionHeld = false
@@ -129,6 +137,14 @@ public struct ScreenshotShelfModeState: Equatable, Sendable {
         cancelDwell()
     }
 
+    /// Releases a drag or menu hold and restarts the idle countdown.
+    ///
+    /// The deadline is only set when the shelf is expanded, unsuppressed, and
+    /// `delay` is positive.
+    ///
+    /// - Parameters:
+    ///   - now: Current time, injectable for tests.
+    ///   - delay: Seconds of inactivity before the shelf may collapse.
     public mutating func endInteraction(now: Date = Date(), delay: TimeInterval) {
         isInteractionHeld = false
         guard mode == .expanded, !isSuppressed, delay > 0 else { return }
@@ -142,6 +158,13 @@ public struct ScreenshotShelfModeState: Equatable, Sendable {
         cancelDwell()
     }
 
+    /// Clears suppression and restarts the idle countdown when the shelf is expanded.
+    ///
+    /// A held interaction still blocks the countdown; `delay` must be positive.
+    ///
+    /// - Parameters:
+    ///   - now: Current time, injectable for tests.
+    ///   - delay: Seconds of inactivity before the shelf may collapse.
     public mutating func endSuppression(now: Date = Date(), delay: TimeInterval) {
         isSuppressed = false
         guard mode == .expanded, !isInteractionHeld, delay > 0 else { return }
@@ -193,6 +216,7 @@ public struct ScreenshotShelfModeState: Equatable, Sendable {
         }
     }
 
+    /// Expands the shelf and re-arms dwell expansion, cancelling pending deadlines.
     public mutating func expand() {
         mode = .expanded
         isExpansionArmed = true

@@ -34,6 +34,12 @@ private actor CaptureModeState {
     }
 }
 
+/// Captures screenshots with ScreenCaptureKit and falls back to Core Graphics when needed.
+///
+/// The orchestrator owns both adapters and one permission service. Each capture
+/// tries `SCKAdapter` first; permission, missing-window, and invalid-region
+/// failures propagate unchanged, while other ScreenCaptureKit failures fall back
+/// to `CGCompatAdapter` on macOS 13 and 14.
 public final class CaptureOrchestrator: Sendable {
     private let sckAdapter: SCKAdapter
     private let cgAdapter: CGCompatAdapter

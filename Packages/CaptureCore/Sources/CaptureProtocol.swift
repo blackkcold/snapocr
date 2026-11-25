@@ -37,6 +37,7 @@ public enum CaptureError: Error, Sendable, LocalizedError {
     /// 指定的截图区域无效（如尺寸为零或超出屏幕范围）
     case invalidRegion
 
+    /// A localized, user-facing description of the capture failure.
     public var errorDescription: String? {
         switch self {
         case .permissionDenied:

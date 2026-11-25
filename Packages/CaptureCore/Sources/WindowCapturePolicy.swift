@@ -3,12 +3,18 @@ import Foundation
 
 /// Platform-neutral metadata used to decide whether a window belongs in the capture picker.
 public struct WindowCaptureCandidate: Sendable {
+    /// Bundle identifier of the window's owning app, when known.
     public let bundleIdentifier: String?
+    /// Core Graphics window level; system surfaces sit above ordinary windows.
     public let layer: Int
+    /// Window frame in Quartz global points.
     public let frame: CGRect
+    /// Whether the system currently considers the window on screen.
     public let isOnScreen: Bool
+    /// The window title, when the system exposes one.
     public let windowTitle: String?
 
+    /// Creates a candidate from the metadata the picker receives.
     public init(
         bundleIdentifier: String?,
         layer: Int,

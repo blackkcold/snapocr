@@ -10,10 +10,14 @@ import CoreGraphics
 public struct MockupLayout: Equatable, Sendable {
     /// Shadow metrics in image pixels.
     public struct ShadowMetrics: Equatable, Sendable {
+        /// Shadow blur radius in image pixels.
         public let blur: CGFloat
+        /// Vertical shadow offset in image pixels; positive moves the shadow down.
         public let offsetY: CGFloat
+        /// Shadow opacity in `0...1`.
         public let opacity: CGFloat
 
+        /// Creates shadow metrics in image pixels.
         public init(blur: CGFloat, offsetY: CGFloat, opacity: CGFloat) {
             self.blur = blur
             self.offsetY = offsetY
@@ -21,15 +25,22 @@ public struct MockupLayout: Equatable, Sendable {
         }
     }
 
+    /// Source image size in pixels.
     public let imageSize: CGSize
+    /// Padded output size in image pixels.
     public let canvasSize: CGSize
     /// Content rectangle in canvas coordinates. Origin is bottom-left, matching
     /// Core Graphics and AppKit's default (non-flipped) view coordinates.
     public let contentRect: CGRect
+    /// Transparent padding on each side, in image pixels.
     public let padding: CGFloat
+    /// Content corner radius in image pixels, capped at half the shorter side.
     public let cornerRadius: CGFloat
+    /// Border stroke width in image pixels; zero when the style disables it.
     public let borderWidth: CGFloat
+    /// Shadow blur, offset, and opacity in image pixels.
     public let shadow: ShadowMetrics
+    /// Reference edge in image pixels used to normalize the style ratios.
     public let referenceSide: CGFloat
 
     /// Reference edge used to normalize padding/radius/border/shadow.
