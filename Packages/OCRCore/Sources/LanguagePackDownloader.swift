@@ -76,6 +76,12 @@ public actor LanguagePackDownloader {
 
     // MARK: - 初始化
 
+    /// Creates a downloader and indexes the language packs already on disk.
+    ///
+    /// The initializer scans the tessdata directory for `*.traineddata` files and
+    /// records only codes listed in ``supportedLanguages``. A missing directory or
+    /// a failed scan leaves the in-memory index empty; downloading still works and
+    /// re-checks the file system before starting a transfer.
     public init() {
         // 初始化时扫描本地已下载的语言包
         let tessdataDir = Self.tessdataDirectory()
@@ -418,6 +424,10 @@ public enum LanguagePackError: LocalizedError, Sendable {
     /// tessdata 目标路径被普通文件占用。
     case invalidStorageLocation(String)
 
+    /// A user-facing message naming the language code and what failed.
+    ///
+    /// Supported languages are listed when the code is unknown, and the occupied
+    /// path is shown when the tessdata location is a regular file.
     public var errorDescription: String? {
         switch self {
         case .downloadFailed(let lang):

@@ -101,6 +101,10 @@ public enum BarcodeError: Error, Sendable, LocalizedError {
     /// - Parameter reason: A description of the failure.
     case detectionFailed(reason: String)
 
+    /// A user-facing message describing why detection produced no result.
+    ///
+    /// The message includes the unsupported symbology or the underlying reason when
+    /// the case carries one.
     public var errorDescription: String? {
         switch self {
         case .noBarcodeFound:

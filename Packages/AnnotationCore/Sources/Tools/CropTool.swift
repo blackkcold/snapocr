@@ -9,6 +9,8 @@ import SharedKit
 public struct CropTool: Sendable {
     private let logger = Logger(category: "annotation.crop")
 
+    /// Creates a crop tool. Cropping replaces the document base image through the
+    /// annotation interactor rather than during rendering.
     public init() {}
 
     /// 对图片执行裁剪操作。

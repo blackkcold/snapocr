@@ -14,11 +14,22 @@ public struct ColorHistoryEntry: Identifiable, Equatable, Sendable, Codable {
         case editor
     }
 
+    /// Stable identifier used for list identity and removal.
     public let id: UUID
+    /// The sampled sRGB color as 8-bit components.
     public let color: SampledColor
+    /// When the color was sampled; sorting and retention use this value.
     public let timestamp: Date
+    /// The picker that produced the sample.
     public let source: Source
 
+    /// Creates a color history entry.
+    ///
+    /// - Parameters:
+    ///   - id: Stable identifier; defaults to a new UUID.
+    ///   - color: The sampled sRGB color.
+    ///   - timestamp: Sampling time; defaults to now.
+    ///   - source: The picker that produced the sample.
     public init(
         id: UUID = UUID(),
         color: SampledColor,
@@ -31,6 +42,8 @@ public struct ColorHistoryEntry: Identifiable, Equatable, Sendable, Codable {
         self.source = source
     }
 
+    /// The `#RRGGBB` representation of the sample, ignoring alpha.
     public var hexString: String { color.hexString }
+    /// The `rgb(r, g, b)` representation of the sample, ignoring alpha.
     public var rgbString: String { color.rgbString }
 }

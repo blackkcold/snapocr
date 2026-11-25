@@ -84,12 +84,15 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     /// Optional so existing v2 records remain readable. The canonical image is
     /// never overwritten; this points to an immutable edited image/thumbnail pair.
     public var imageRevision: UUID?
+    /// Whether the entry points at an edited revision that can be rolled back to
+    /// the stored original image.
     public var canRestoreOriginal: Bool { imageRevision != nil && imagePath != nil }
 
     /// Pixel size of the stored image, recorded at save time so history can lay
     /// out its grid without reading every thumbnail first. `nil` for records
     /// written before this field existed.
     public var pixelWidth: Int?
+    /// Stored image height in pixels, or `nil` when dimensions were not recorded.
     public var pixelHeight: Int?
 
     /// JSON-encoded presentation style. The canonical image stays untouched;

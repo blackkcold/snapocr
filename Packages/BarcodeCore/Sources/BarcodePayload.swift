@@ -20,6 +20,12 @@ public struct BarcodePayload: Sendable, Equatable {
     /// 解出这条内容的符号学类型，用于面板徽标。
     public let type: BarcodeType
 
+    /// Creates a payload from content that has already been classified.
+    ///
+    /// - Parameters:
+    ///   - text: The trimmed decoded content.
+    ///   - kind: Whether the content is a web link or plain text.
+    ///   - type: The symbology that produced the value.
     public init(text: String, kind: Kind, type: BarcodeType) {
         self.text = text
         self.kind = kind

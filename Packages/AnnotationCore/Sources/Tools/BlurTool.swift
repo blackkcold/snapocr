@@ -16,6 +16,8 @@ public struct BlurTool: Sendable {
     /// 而模糊标注在编辑拖动时会反复重绘，复用可显著降低 CPU 开销。
     private static let sharedCIContext = CIContext(options: [.useSoftwareRenderer: false])
 
+    /// Creates a blur tool. Core Image work is shared through a process-wide
+    /// `CIContext` so repeated drags do not rebuild it.
     public init() {}
 
     /// 在图形上下文中渲染模糊标注。

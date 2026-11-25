@@ -41,6 +41,21 @@ public final class VisionBarcodeEngine: BarcodeProtocol, Sendable {
 
     // MARK: - BarcodeProtocol
 
+    /// Detects and decodes barcodes in `image`.
+    ///
+    /// Every observation whose confidence passes the engine's threshold is returned,
+    /// strongest first. An empty `types` array asks Vision for all mapped symbologies;
+    /// otherwise only the requested types are scanned. Observations without a payload
+    /// or with a symbology outside ``BarcodeType`` are skipped, and when every
+    /// observation falls below the threshold the result is an empty array rather than
+    /// an error.
+    ///
+    /// - Parameters:
+    ///   - image: The image to scan.
+    ///   - types: Symbologies to detect, or an empty array for all supported types.
+    /// - Returns: Decoded barcodes sorted by descending confidence.
+    /// - Throws: ``BarcodeError/detectionFailed(reason:)`` when Vision cannot perform
+    ///   the request.
     public func detect(in image: CGImage, types: [BarcodeType]) async throws -> [BarcodeResult] {
         let symbologies = resolveSymbologies(from: types)
 
@@ -95,11 +110,26 @@ public final class VisionBarcodeEngine: BarcodeProtocol, Sendable {
         return results
     }
 
+    /// Returns the highest-confidence barcode, or `nil` when none passes the threshold.
+    ///
+    /// This is a convenience wrapper around ``detect(in:types:)``; detection errors
+    /// still propagate.
+    ///
+    /// - Parameters:
+    ///   - image: The image to scan.
+    ///   - types: Symbologies to detect, or an empty array for all supported types.
+    /// - Returns: The strongest result, if any.
+    /// - Throws: ``BarcodeError/detectionFailed(reason:)`` when Vision cannot perform
+    ///   the request.
     public func detectSingle(in image: CGImage, types: [BarcodeType]) async throws -> BarcodeResult? {
         let results = try await detect(in: image, types: types)
         return results.first
     }
 
+    /// Every ``BarcodeType`` case, in declaration order.
+    ///
+    /// The engine maps each case to its Vision symbology, so this list matches what
+    /// ``detect(in:types:)`` can return.
     public func supportedSymbologies() -> [BarcodeType] {
         BarcodeType.allCases
     }

@@ -141,6 +141,16 @@ public actor ScrollStitchActor: ScrollProtocol {
 
 extension ScrollStitchActor {
 
+    /// Starts a session for `windowID` after checking the allowlist.
+    ///
+    /// Any previous session state is discarded, including captured frames and an
+    /// in-progress incremental stitch. The returned session starts in `.ready` with
+    /// zero captured frames.
+    ///
+    /// - Parameter windowID: The window to capture.
+    /// - Returns: A fresh session for that window.
+    /// - Throws: ``ScrollError/applicationNotSupported(_:)`` when the window's bundle
+    ///   identifier is outside ``ScrollAllowlist``.
     public func startCapture(windowID: CGWindowID) async throws -> ScrollSession {
         guard ScrollAllowlist.isSupported(windowID.bundleIdentifier ?? "") else {
             throw ScrollError.applicationNotSupported(windowID.bundleIdentifier ?? "unknown")
@@ -156,6 +166,20 @@ extension ScrollStitchActor {
         return session
     }
 
+    /// Captures the next frame of the window and appends it to the session.
+    ///
+    /// A frame identical to the previous one is rejected rather than appended. The
+    /// predicted offset is the overlap detector's estimate against the previous frame,
+    /// or zero for the first frame. Captured frames stay in memory until stitching
+    /// completes or the session is cancelled.
+    ///
+    /// - Parameter session: The active session returned by ``startCapture(windowID:)``.
+    /// - Returns: The captured frame with its index, timestamp, and predicted offset.
+    /// - Throws: ``ScrollError/invalidSession`` when the session is stale or cancelled,
+    ///   ``ScrollError/memoryPressureHigh`` at critical memory pressure,
+    ///   ``ScrollError/stitchFailed(reason:)`` when no capture adapter is installed,
+    ///   ``ScrollError/duplicateFrameDetected(index:)`` when the screen did not change,
+    ///   and capture errors raised by the adapter.
     public func captureNextFrame(session: ScrollSession) async throws -> ScrollFrame {
         guard !isCancelled else {
             throw ScrollError.invalidSession
@@ -251,6 +275,12 @@ extension ScrollStitchActor {
         return result
     }
 
+    /// Cancels a session and releases the frames it was holding.
+    ///
+    /// The session is marked `.cancelled`; an already stitched image is unaffected.
+    /// The next ``startCapture(windowID:)`` or stitch call starts from clean state.
+    ///
+    /// - Parameter session: The session to cancel.
     public func cancelCapture(session: ScrollSession) async {
         isCancelled = true
 

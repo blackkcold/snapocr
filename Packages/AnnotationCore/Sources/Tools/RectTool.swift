@@ -9,6 +9,7 @@ import SharedKit
 public struct RectTool: Sendable {
     private let logger = Logger(category: "annotation.rect")
 
+    /// Creates a rectangle tool; stroke, fill, and corner radius come from each node.
     public init() {}
 
     /// 在图形上下文中渲染矩形标注。

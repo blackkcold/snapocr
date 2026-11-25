@@ -9,6 +9,7 @@ import SharedKit
 public struct HighlightTool: Sendable {
     private let logger = Logger(category: "annotation.highlight")
 
+    /// Creates a highlight tool; color and opacity come from each node.
     public init() {}
 
     /// 在图形上下文中渲染高亮标注。
