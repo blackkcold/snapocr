@@ -9,6 +9,7 @@
 | Package 测试 | 图像、OCR、标注、历史、录制管线等纯逻辑 | `swift test --package-path Packages/<Name>` | 不需要 App |
 | App Scheme 测试 | 编辑器状态、画布几何、离屏渲染、窗口生命周期、条码面板 | `xcodebuild test -project SnapGlass.xcodeproj -scheme <Scheme> -destination 'platform=macOS'` | 测试进程内，不触碰运行中的 App |
 | 离屏画布渲染 | 真实 `EditableAnnotationCanvasNSView` 绘制、画布与导出对齐、透明棋盘格、描边 | `EditorInteractionTests/CanvasShareRenderTests` | 不启动 App、不需要屏幕/麦克风权限 |
+| Showcase 图片导出 | 真实 SwiftUI/AppKit 视图离屏托管：截图架、编辑器分享外观、录制 HUD、窗口美化 | `scripts/export-showcase.sh` | DEBUG 独立进程，不截图屏幕 |
 | Agent 场景 | 真实录制/录屏/恢复/卡死路径，独立进程与独立数据根 | `scripts/agent-test.sh <scenario>` | `open -n` 第二实例，不触碰用户库 |
 
 ## 全量自动化
@@ -29,6 +30,17 @@
 - 画布与导出的 padding 颜色、内容位置一致。
 
 这些测试不需要启动 App，也不会干扰用户正在运行的实例。
+
+## Showcase 图片导出
+
+`ShowcaseImageExporter` 是 DEBUG-only 的离屏导出器：真实托管 `ScreenshotShelfView`、`EditorView`、`RecordingControlPanelView` 与窗口美化管线，写出 README/官网用的 PNG。它不截图屏幕，不触碰运行中的 App，也不需要屏幕/麦克风权限。
+
+```bash
+# 构建 Debug 并导出到指定目录
+./scripts/export-showcase.sh --build Docs/images/readme/exported
+```
+
+`SNAPGLASS_SHOWCASE=1` 放宽浮窗的 `sharingType`；`SNAPGLASS_SHOWCASE_OUT` 指定输出目录。Release 构建不包含这些代码。
 
 ## Agent 后台临时测试
 
