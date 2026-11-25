@@ -113,6 +113,7 @@ public struct MockupLayout: Equatable, Sendable {
     /// - Parameters:
     ///   - origin: Top-left/bottom-left origin of the canvas in the target space.
     ///   - scale: Points (or pixels) per image pixel.
+    /// - Returns: The content rectangle in the target coordinate space.
     public func contentRect(in origin: CGPoint, scale: CGFloat) -> CGRect {
         CGRect(
             x: origin.x + contentRect.minX * scale,

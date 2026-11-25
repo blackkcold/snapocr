@@ -19,7 +19,7 @@ public struct Renderer: Sendable {
     /// - Parameters:
     ///   - document: 标注文档
     ///   - maximumDimension: 预览最大边长；为 `nil` 时保持原始分辨率
-    ///   - baseImage: 调用方已缓存的预览基底位图。仅当它与 `downsample` 会生成的
+    ///   - suppliedBase: 调用方已缓存的预览基底位图。仅当它与 `downsample` 会生成的
     ///     尺寸完全一致时才会被采用，否则回退到内部降采样（输出保持逐像素一致）。
     /// - Returns: 带有标注的合成图片
     /// - Throws: `AnnotationError.renderFailed` 当渲染失败时

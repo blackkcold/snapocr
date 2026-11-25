@@ -218,6 +218,8 @@ struct AgentReport: Codable, Equatable, Sendable {
     /// Writes `report.json` atomically so a partial read is never mistaken for a result.
     ///
     /// - Parameter directory: Output directory created by the launcher.
+    /// - Throws: The underlying file-system or encoding error when the directory
+    ///   cannot be created, the report cannot be encoded, or the atomic write fails.
     func write(to directory: URL) throws {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)

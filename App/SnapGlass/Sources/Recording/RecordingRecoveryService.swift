@@ -72,6 +72,10 @@ actor RecordingRecoveryService {
     ///
     /// - Parameter recording: Session chosen by the user.
     /// - Returns: The session record the list will now show.
+    /// - Throws: ``ServiceError/sessionUnavailable`` when the session folder is
+    ///   gone, and the mapped adoption failure (``ServiceError/journalUnreadable``,
+    ///   ``ServiceError/noUsableMedia``, or ``ServiceError/segmentConflict``) when
+    ///   the journal cannot be replayed or its media cannot be referenced.
     func recover(_ recording: RecoverableRecording) async throws -> RecordingSessionRecord {
         let root = try resolveRoot(for: recording)
         do {
@@ -96,6 +100,9 @@ actor RecordingRecoveryService {
     /// Nothing is deleted permanently and no other session is touched.
     ///
     /// - Parameter recording: Session chosen by the user.
+    /// - Throws: ``ServiceError/sessionUnavailable`` when the session folder is
+    ///   gone, and ``ServiceError/discardFailed`` when the folder cannot be moved
+    ///   to the Trash.
     func discard(_ recording: RecoverableRecording) async throws {
         let root = try resolveRoot(for: recording)
         let directory = Self.sessionDirectory(recording: recording, root: root)

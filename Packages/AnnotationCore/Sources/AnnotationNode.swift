@@ -92,8 +92,18 @@ public struct AnnotationNode: Sendable, Identifiable, Equatable {
     ///   - color: 标注颜色
     ///   - lineWidth: 线条宽度
     ///   - opacity: 不透明度 (0.0 - 1.0)
+    ///   - fillColor: 填充颜色，仅对支持的工具有效
+    ///   - strokeStyle: 线条样式，默认实线
+    ///   - cornerRadius: 圆角半径
+    ///   - arrowStyle: 箭头样式，仅对箭头工具有效
     ///   - points: 归一化坐标点数组
     ///   - text: 文本内容
+    ///   - fontName: 文本字体名称
+    ///   - fontSize: 文本字号
+    ///   - textHorizontalScale: 文本横向拉伸比例
+    ///   - textAlignment: 文本对齐方式
+    ///   - blurMode: 模糊模式
+    ///   - blurIntensity: 模糊强度 (0.0 - 1.0)
     ///   - normalizedRect: 归一化矩形区域
     public init(
         id: UUID = UUID(),

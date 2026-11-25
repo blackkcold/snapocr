@@ -470,6 +470,10 @@ extension ScrollStitchActor {
     ///   需要与批式逐像素一致时，请走 `stitchFramesDetailed(_:)`。
     ///
     /// - Parameter image: 新捕获的帧。
+    /// - Returns: 追加结果：`.duplicate`、`.sizeChanged`、`.limitReached`，或带帧数的
+    ///   `.appended`。
+    /// - Throws: ``ScrollError/invalidSession`` 当没有正在进行的增量拼接或会话已取消；
+    ///   ``ScrollError/stitchFailed(reason:)`` 当帧尺寸无效。
     @discardableResult
     public func appendIncrementalFrame(_ image: CGImage) throws -> IncrementalAppendResult {
         guard var live = liveStitch else {

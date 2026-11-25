@@ -52,6 +52,7 @@ public final class MicrophoneSource: AudioFrameSource, AudioSourceReconfiguratio
     ///   - hostTicksPerSecond: Host clock ticks per second.
     ///   - machTicksPerSecond: Native AVAudioTime host frequency.
     ///   - capacitySeconds: Ring capacity used by later generations.
+    ///   - joinTimeout: How long a stop or restart waits for the retired tap to go idle.
     ///   - diagnostics: Optional callback diagnostics.
     ///   - hostClock: Host-clock fallback; must return the configured tick domain.
     public init(

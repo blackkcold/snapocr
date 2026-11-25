@@ -90,6 +90,8 @@ extension RecordingSessionController {
     ///   - reason: Why the recording stopped, when the user gave one.
     ///   - generation: The session generation this result belongs to.
     ///   - audioFailure: Why the audio track is missing, when it could not start.
+    ///   - messageOverride: Replaces the default saved message when the caller has
+    ///     something more specific to say.
     /// - Returns: `true` after the saved outcome is presented.
     private func finishScreenRecording(
         finalURL: URL,

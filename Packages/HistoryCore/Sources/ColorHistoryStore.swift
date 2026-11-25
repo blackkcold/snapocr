@@ -37,6 +37,8 @@ public actor ColorHistoryStore {
     /// 初始化取色历史存储
     ///
     /// - Parameter baseURL: 存储根目录，默认应用支持目录；测试注入临时目录隔离。
+    /// - Throws: 目录无法创建时抛出文件系统错误；密钥文件不可读写或长度无效时
+    ///   抛出 ``AppError/decryptionFailed``。
     public init(baseURL: URL = .appSupportDirectory) throws {
         let colorsDir =
             baseURL

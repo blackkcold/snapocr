@@ -26,6 +26,7 @@ public struct BlurTool: Sendable {
     ///   - node: 标注节点
     ///   - context: 目标绘图上下文（应包含已绘制的底图）
     ///   - imageSize: 背景图片的像素尺寸
+    ///   - renderScale: 渲染缩放比例；模糊半径按此比例换算到目标上下文。
     public func render(node: AnnotationNode, in context: CGContext, imageSize: CGSize, renderScale: CGFloat = 1) {
         let rect: CGRect
         if node.normalizedRect != .zero {

@@ -72,8 +72,11 @@ enum AgentMode {
 
     /// Parses agent arguments from a full argument vector.
     ///
-    /// - Parameter arguments: Usually `CommandLine.arguments`; index 0 is ignored.
-    /// - Parameter fileManager: File manager used for default temporary paths.
+    /// - Parameters:
+    ///   - arguments: Usually `CommandLine.arguments`; index 0 is ignored.
+    ///   - fileManager: File manager used for default temporary paths.
+    ///   - homeDirectory: Overrides the home directory that root and output paths
+    ///     must stay inside; `nil` uses the file manager's home directory.
     /// - Returns: `nil` when no agent flag is present.
     /// - Throws: A ``ParseFailure`` when a flag is present but unusable.
     static func parse(  // swiftlint:disable:this cyclomatic_complexity

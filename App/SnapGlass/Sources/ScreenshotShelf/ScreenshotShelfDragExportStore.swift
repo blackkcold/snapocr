@@ -67,6 +67,8 @@ final class ScreenshotShelfDragExportStore {
     ///     session store encoded, so no second image encode happens here.
     ///   - sourceTypeIdentifier: A uniform type identifier for `data`, used only
     ///     to pick a truthful file extension. Unknown values fall back to PNG.
+    ///   - revision: Revision key the caller wants this write recorded under;
+    ///     `nil` keeps the artifact unversioned.
     /// - Returns: The written artifact, or `nil` when the cache directory is
     ///   unavailable or the write failed.
     @discardableResult

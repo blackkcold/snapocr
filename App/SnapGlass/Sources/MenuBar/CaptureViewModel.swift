@@ -106,6 +106,7 @@ public final class CaptureViewModel: ObservableObject {
     ///   - captureOrchestrator: The orchestrator for handling screen captures.
     ///   - ocrPipeline: The pipeline for performing OCR.
     ///   - barcodeEngine: The engine for detecting barcodes.
+    ///   - scrollEngine: The engine used by scrolling capture sessions.
     public init(
         captureOrchestrator: CaptureOrchestrator = CaptureOrchestrator(),
         ocrPipeline: OCRPipeline = OCRPipeline(),

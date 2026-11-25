@@ -143,6 +143,12 @@ extension HistoryActor {
     ///   - sourceAppName: Optional source application name.
     ///   - sourceWindowTitle: Optional source window title.
     ///   - isProtected: Marks the entry as protected from automatic cleanup.
+    ///   - mockupStyleJSON: Encoded share appearance carried from the editor, when one applies.
+    /// - Returns: The history entry ID created for the capture.
+    /// - Throws: ``HistoryError/fileIOError`` when a temporary image or thumbnail
+    ///   cannot be written, ``HistoryError/encryptionFailed`` when the entry or its
+    ///   image cannot be encrypted, and ``HistoryError/storageFull(current:max:)``
+    ///   when the entry limit is reached and no unprotected entry can be evicted.
     @discardableResult
     public func saveCapture(
         image: CGImage,

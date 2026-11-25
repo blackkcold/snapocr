@@ -504,6 +504,12 @@ public final class AudioAACStreamSink: @unchecked Sendable {
     ///   - block: Owned Float32 PCM for this track role.
     ///   - segmentStartSample: Session sample corresponding to `mediaOrigin`.
     ///   - mediaOrigin: Output time of the segment's first media sample.
+    /// - Throws: ``AudioAACStreamSinkError/finished`` when the track input was
+    ///   already closed, ``AudioAACStreamSinkError/invalidFormat`` when the block
+    ///   does not match the encoder's format or sample range, and
+    ///   ``AudioAACStreamSinkError/writerFailed`` when the writer is no longer
+    ///   writing or rejects the buffer. Cancellation while waiting for the writer
+    ///   surfaces as `CancellationError`.
     public func append(
         _ block: AudioPCMBlock,
         segmentStartSample: Int64,

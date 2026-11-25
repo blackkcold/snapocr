@@ -406,7 +406,23 @@ extension CaptureViewModel {
 
     /// Performs a capture with the specified mode.
     ///
-    /// - Parameter mode: The capture mode to use.
+    /// - Parameters:
+    ///   - mode: The capture mode to use.
+    ///   - imageSource: Live capture, or a snapshot supplied by the caller.
+    ///   - sourceAppName: Display name of the app whose content was captured.
+    ///   - sourceWindowTitle: Title of the captured window, when it has one.
+    ///   - normalizedMaskPath: Selection outline applied to a live capture, in
+    ///     normalized image coordinates.
+    ///   - historyModeOverride: Capture mode string stored in history instead of
+    ///     the mode's description.
+    ///   - destination: Where the capture goes once it is processed.
+    ///   - pinRect: The pinned region in screen points, used to place the pinned
+    ///     window and derive the display scale.
+    ///   - sourceDisplayID: Display the capture came from when the source is a
+    ///     snapshot.
+    ///   - forceMockup: Applies the share treatment even when the preference is off.
+    ///   - forceOriginal: Skips the share treatment even when the preference is on.
+    ///   - managesCaptureState: Takes the `isCapturing` guard and clears it on exit.
     private func performCapture(
         mode: CaptureCore.CaptureMode,
         imageSource: CaptureImageSource = .live,

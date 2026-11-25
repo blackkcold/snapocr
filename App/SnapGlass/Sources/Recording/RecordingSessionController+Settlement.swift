@@ -94,7 +94,8 @@ extension RecordingSessionController {
     ///   - generation: The session generation the settlement belongs to.
     ///   - reason: Whether a request or the deadline produced it.
     ///   - owner: The resource owner to release once the pipeline has drained.
-    ///   - pipeline: The pipeline the settlement came from, for the output URL.
+    ///   - explicitPipeline: The pipeline the settlement came from, for the output
+    ///     URL; `nil` uses the current audio pipeline.
     func applyAudioSettlement(
         _ settlement: RecordingSettlement,
         generation: UUID,

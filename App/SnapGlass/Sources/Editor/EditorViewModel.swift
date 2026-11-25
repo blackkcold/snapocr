@@ -251,7 +251,17 @@ public final class EditorViewModel: ObservableObject {
 
     /// Creates a new editor view model.
     ///
-    /// - Parameter interactor: The annotation interactor to use.
+    /// - Parameters:
+    ///   - image: The base image to annotate; `nil` starts an empty document.
+    ///   - context: Presentation context carried from capture, including the
+    ///     history entry and mockup style the editor opened with.
+    ///   - interactor: The annotation interactor to use.
+    ///   - ocrPipeline: The pipeline used by text recognition actions.
+    ///   - barcodeEngine: The engine used by barcode detection actions.
+    ///   - historySaver: Persists an edited image into history; `nil` uses the
+    ///     app's default history saver.
+    ///   - historyStyleUpdater: Writes only presentation metadata for an existing
+    ///     history entry; `nil` uses the app's default updater.
     public init(
         image: CGImage? = nil,
         context: EditorCaptureContext = .standard,

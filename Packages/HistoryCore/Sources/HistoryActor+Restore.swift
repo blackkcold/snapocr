@@ -15,6 +15,9 @@ extension HistoryActor {
     ///   - thumbnailData: 删除前的缩略图数据；缺失时条目仍可恢复，只是没有预览图。
     ///   - originalImageData: 「覆盖原记录」之前保留的原图；撤销删除时必须一并
     ///     写回，否则条目仍声称可还原原图，但底层文件已在删除事务中被移走。
+    /// - Throws: ``AppError/encryptionFailed`` 当图片或条目无法加密；编码或原子写入
+    ///   失败时抛出底层的编码或文件系统错误。已创建的文件会在抛出前删除，条目不会
+    ///   留在缓存里。
     public func restore(
         _ entry: HistoryEntry,
         imageData: Data?,

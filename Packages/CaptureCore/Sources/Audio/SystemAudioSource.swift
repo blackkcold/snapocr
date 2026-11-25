@@ -53,6 +53,9 @@ public final class SystemAudioSource: AudioFrameSource, AudioSourceReconfigurati
     ///   - hostTicksPerSecond: Host clock ticks per second.
     ///   - stream: Existing screen-session stream.
     ///   - diagnostics: Optional callback diagnostics.
+    ///   - deviceMonitor: Optional platform device-change monitor.
+    ///   - timestampMapper: Optional mapper for the shared stream's timestamps.
+    ///   - hostClock: Host-clock fallback; must return the configured tick domain.
     public init(
         ringBuffer: AudioSourceRingBuffer,
         format: AudioSourceFormat,
@@ -82,8 +85,12 @@ public final class SystemAudioSource: AudioFrameSource, AudioSourceReconfigurati
     ///   - format: Ring format.
     ///   - hostTicksPerSecond: Host clock ticks per second.
     ///   - capacitySeconds: Ring capacity used for later generations.
+    ///   - joinTimeout: How long a stop or restart waits for the retired stream to go idle.
     ///   - factory: Creates one stream per start or format change.
     ///   - diagnostics: Optional callback diagnostics.
+    ///   - deviceMonitor: Optional platform device-change monitor.
+    ///   - timestampMapper: Optional mapper for the owned stream's timestamps.
+    ///   - hostClock: Host-clock fallback; must return the configured tick domain.
     public init(
         ringBuffer: AudioSourceRingBuffer,
         format: AudioSourceFormat,
@@ -114,8 +121,12 @@ public final class SystemAudioSource: AudioFrameSource, AudioSourceReconfigurati
     ///   - format: Ring format.
     ///   - hostTicksPerSecond: Host clock ticks per second.
     ///   - capacitySeconds: Ring capacity in seconds.
+    ///   - joinTimeout: How long a stop or restart waits for the retired stream to go idle.
     ///   - factory: Creates one stream per start or format change.
     ///   - diagnostics: Optional callback diagnostics.
+    ///   - deviceMonitor: Optional platform device-change monitor.
+    ///   - timestampMapper: Optional mapper for the owned stream's timestamps.
+    ///   - hostClock: Host-clock fallback; must return the configured tick domain.
     /// - Throws: ``AudioRingConfigurationError`` for an invalid format or capacity.
     public convenience init(
         format: AudioSourceFormat,

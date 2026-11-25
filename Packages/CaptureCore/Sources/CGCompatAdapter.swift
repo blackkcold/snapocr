@@ -77,7 +77,9 @@ final class CGCompatAdapter: @unchecked Sendable {
     /// 使用 `CGWindowListCreateImage` 捕获目标窗口的可见内容。
     /// 支持高分辨率模式，通过 `.optionHighResolution` 标志启用。
     ///
-    /// - Parameter windowID: 目标窗口的 `CGWindowID`。
+    /// - Parameters:
+    ///   - windowID: 目标窗口的 `CGWindowID`。
+    ///   - highResolution: 是否请求高分辨率位图；`false` 使用标称分辨率。
     /// - Returns: 窗口截图 `CGImage`，失败时返回 `nil`。
     func captureWindow(_ windowID: CGWindowID, highResolution: Bool = true) -> CGImage? {
         logger.debug("Capturing window \(windowID) via CGWindowListCreateImage")
@@ -122,6 +124,7 @@ final class CGCompatAdapter: @unchecked Sendable {
     /// - Parameters:
     ///   - rect: 截图区域（屏幕坐标）。
     ///   - displayID: 区域所在显示器的标识符。
+    ///   - highResolution: 是否请求高分辨率位图；`false` 使用标称分辨率。
     /// - Returns: 区域截图 `CGImage`，失败时返回 `nil`。
     func captureRect(
         _ rect: CGRect,

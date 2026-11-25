@@ -46,6 +46,7 @@ extension HistoryActor {
     ///
     /// - Parameter id: 条目标识符
     /// - Returns: 解密的图片数据，若无则返回 `nil`
+    /// - Throws: ``HistoryError/decryptionFailed(reason:)`` 当加密图片无法读取或解密失败。
     public func imageData(for id: UUID) async throws -> Data? {
         let imageURL = imageFileURL(for: id)
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
@@ -64,6 +65,7 @@ extension HistoryActor {
     ///
     /// - Parameter id: 条目标识符
     /// - Returns: 缩略图数据（未加密），若无则返回 `nil`
+    /// - Throws: ``HistoryError/fileIOError(path:)`` 当缩略图文件存在但无法读取。
     public func thumbnailData(for id: UUID) async throws -> Data? {
         let thumbURL = thumbnailFileURL(for: id)
         guard FileManager.default.fileExists(atPath: thumbURL.path) else {
