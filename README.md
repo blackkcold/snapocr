@@ -43,10 +43,10 @@
 ---
 
 <p align="center">
-  <img src="Docs/images/readme/shelf.png" alt="SnapGlass 截图架：最近截图挂在屏幕边缘，拖出即成为文件" width="860">
+  <img src="Docs/images/readme/shelf.png" alt="SnapGlass 截图架与选区动作栏：最近截图挂在屏幕边缘，拖出即成为文件" width="860">
 </p>
 
-<p align="center"><sub>截图完成 → 自动挂上<strong>截图架</strong> → 拖进聊天窗口或 Finder，整个过程不用打开文件夹。</sub></p>
+<p align="center"><sub>截图完成 → 挂上<strong>截图架</strong>，选区旁出现动作栏 → 拖进聊天窗口或 Finder，整个过程不用打开文件夹。</sub></p>
 
 ---
 
@@ -134,7 +134,11 @@
 - **分享外观**：背景模板、留白、圆角、投影、描边宽度与颜色；画布实时绘制，支持导出预览与大图预览；复制菜单区分「分享图」与「原图」。
 - <kbd>⌘</kbd>+<kbd>1</kbd> 回到图片像素 1:1，缩放时保持光标下的图片点。
 
-<!-- TODO(assets): 分享外观截图 share-appearance.png -->
+<p align="center">
+  <img src="Docs/images/readme/share-appearance.png" alt="编辑器分享外观：背景、留白、圆角、投影与描边实时预览" width="860">
+</p>
+
+<p align="center"><sub>分享外观在画布上实时预览；背景、留白、圆角、投影与描边都能调。</sub></p>
 
 ### 窗口截图美化
 
@@ -188,7 +192,11 @@
 - **不会无限录**：首帧 / 首样本 / 音频存活租约与主线程看门狗，界面停止响应时会自行停止并保存。
 - 录制中菜单栏显示静态状态；退出前会确认未保存的录制。
 
-<!-- TODO(assets): 录制 HUD 截图 recording-hud.png -->
+<p align="center">
+  <img src="Docs/images/readme/recording-hud.png" alt="录屏 HUD：录制范围红框与胶囊控制条" width="860">
+</p>
+
+<p align="center"><sub>录制范围红框不进画面；胶囊 HUD 显示计时与停止。</sub></p>
 
 > [!NOTE]
 > 录制成品与恢复媒体**未加密**，请按内容敏感程度选择输出目录，并自行管理同步或备份。

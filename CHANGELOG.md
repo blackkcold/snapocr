@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - 新增中英双语 GitHub Pages 官网（功能、下载、FAQ 与 SEO）与英文 README。
 - App 的「关于」页新增官网入口，并更新四语言简介文案。
+- 新增 DEBUG-only Showcase 离屏导出器与 `scripts/export-showcase.sh`，生成截图架、分享外观、录制 HUD 与窗口美化的文档图。
 
 ### Changed
 - README 重构为用户导向：首屏工作流、1.7 更新、功能、下载校验与常见问题；开发构建细节收进折叠区。
+- README 与官网站点换用真实功能截图（截图架、分享外观、录制 HUD、窗口美化）。
 
 ## [1.7.2] - 2026-11-24
 

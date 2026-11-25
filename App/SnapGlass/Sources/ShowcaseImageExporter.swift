@@ -31,20 +31,27 @@ enum ShowcaseImageExporter {
     private static func export(to directory: URL) {
         let cards = demoCards()
         let layout = shelfLayout(cards: cards)
+        let shelfSize = layout.panelSize
 
         write(
-            render(shelfView(cards: cards, layout: layout, configure: { model in
-                model.setPointerForShowcase(inside: true, location: CGPoint(x: 240, y: 70))
-            })),
+            hostedImage(
+                shelfView(cards: cards, layout: layout, configure: { model in
+                    model.setPointerForShowcase(inside: true, location: CGPoint(x: 8, y: 6))
+                }),
+                size: shelfSize
+            ),
             name: "shelf-default.png",
             to: directory
         )
 
         write(
-            render(shelfView(cards: cards, layout: layout, configure: { model in
-                model.setFocusedCapture(cards[1].captureID)
-                model.setPointerForShowcase(inside: true, location: CGPoint(x: 240, y: 70))
-            })),
+            hostedImage(
+                shelfView(cards: cards, layout: layout, configure: { model in
+                    model.setFocusedCapture(cards[1].captureID)
+                    model.setPointerForShowcase(inside: true, location: CGPoint(x: 8, y: 6))
+                }),
+                size: shelfSize
+            ),
             name: "shelf-keyboard.png",
             to: directory
         )
@@ -52,8 +59,10 @@ enum ShowcaseImageExporter {
         write(dragComposite(cards: cards, layout: layout), name: "shelf-drag.png", to: directory)
         write(render(ocrToastView()), name: "ocr-actions.png", to: directory)
         write(render(actionBarView()), name: "action-bar.png", to: directory)
+        write(shareAppearanceImage(), name: "share-appearance.png", to: directory)
+        write(recordingStageImage(), name: "recording-hud.png", to: directory)
 
-        let window = mockWindowImage()
+        let window = demoEditorImage()
         if let window {
             write(window, name: "window-before.png", to: directory)
             if let styled = WindowScreenshotStyling.apply(window, style: .standard(scale: 2)) {
@@ -94,7 +103,10 @@ enum ShowcaseImageExporter {
         let shelfModel = ScreenshotShelfViewModel(layout: layout)
         shelfModel.setDragPreviewForShowcase(preview)
         shelfModel.setPointerForShowcase(inside: true, location: CGPoint(x: 240, y: 70))
-        guard let shelf = render(ScreenshotShelfView(model: shelfModel)) else { return nil }
+        guard let shelf = hostedImage(
+            ScreenshotShelfView(model: shelfModel),
+            size: layout.panelSize
+        ) else { return nil }
 
         let overlayModel = ScreenshotShelfDragOverlayModel()
         overlayModel.content = ScreenshotShelfDragOverlayContent(
@@ -266,58 +278,86 @@ enum ShowcaseImageExporter {
         .padding(36)
     }
 
+    // MARK: - Share appearance
+
+    private static func shareAppearanceImage() -> NSImage? {
+        guard let image = demoEditorImage() else { return nil }
+        let context = EditorCaptureContext.capture(
+            image: image,
+            captureMode: "window",
+            mockupStyle: MockupPreset.ocean.style
+        )
+        let viewModel = EditorViewModel(image: image, context: context)
+        viewModel.inspectorTab = .share
+        viewModel.setShareAppearanceEnabled(true)
+        if let style = viewModel.mockupStyle,
+            let preview = MockupRenderer.render(image, style: style) {
+            viewModel.sharePreview = preview
+            viewModel.sharePreviewState = .ready
+        }
+
+        let defaults = UserDefaults.standard
+        let oldInspector = defaults.object(forKey: PreferenceKeys.editorInspectorVisible)
+        let oldPreview = defaults.object(forKey: PreferenceKeys.editorShareCanvasPreview)
+        defaults.set(true, forKey: PreferenceKeys.editorInspectorVisible)
+        defaults.set(true, forKey: PreferenceKeys.editorShareCanvasPreview)
+        defer {
+            restore(oldInspector, forKey: PreferenceKeys.editorInspectorVisible)
+            restore(oldPreview, forKey: PreferenceKeys.editorShareCanvasPreview)
+        }
+
+        let view = EditorView(viewModel: viewModel, context: context)
+            .environment(\.locale, Locale(identifier: "zh-Hans"))
+        return hostedImage(
+            view,
+            size: CGSize(width: 1280, height: 800),
+            background: .windowBackgroundColor,
+            settle: 0.8
+        )
+    }
+
+    // MARK: - Recording HUD
+
+    private static func recordingStageImage() -> NSImage? {
+        guard let image = demoEditorImage() else { return nil }
+        let model = RecordingControlPanelModel(
+            state: .recording(startedAt: Date().addingTimeInterval(-12)),
+            surfaceOpacity: 1,
+            hoverRestore: false
+        )
+        let actions = RecordingControlPanelActions(
+            onCancel: {},
+            onStop: {},
+            onRetry: {},
+            onReveal: { _ in },
+            onDismiss: {},
+            onHideWhileSaving: {},
+            onCornerChange: { _ in },
+            onToggleAudioDetails: {},
+            onPreview: {},
+            onStopPreview: {},
+            onOpenLatest: { _ in },
+            onOpenRecordings: {},
+            onJoinExport: {}
+        )
+        let view = RecordingStageView(
+            windowImage: nsImage(from: image),
+            model: model,
+            actions: actions
+        )
+        return hostedImage(
+            view,
+            size: CGSize(width: 1200, height: 760),
+            background: .black,
+            settle: 0.2
+        )
+    }
+
     // MARK: - Artwork
 
     private static func demoThumbnail(index: Int) -> CGImage? {
-        let width = 960
-        let height = 600
-        guard
-            let context = CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )
-        else { return nil }
-
-        let palettes: [(start: CGColor, end: CGColor)] = [
-            (
-                CGColor(red: 0.16, green: 0.35, blue: 0.76, alpha: 1),
-                CGColor(red: 0.36, green: 0.22, blue: 0.78, alpha: 1)
-            ),
-            (
-                CGColor(red: 0.55, green: 0.25, blue: 0.72, alpha: 1),
-                CGColor(red: 0.24, green: 0.47, blue: 0.62, alpha: 1)
-            ),
-            (
-                CGColor(red: 0.84, green: 0.42, blue: 0.22, alpha: 1),
-                CGColor(red: 0.72, green: 0.25, blue: 0.35, alpha: 1)
-            ),
-        ]
-        let palette = palettes[index % palettes.count]
-        if let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: [palette.start, palette.end] as CFArray,
-            locations: [0, 1]
-        ) {
-            context.drawLinearGradient(
-                gradient,
-                start: CGPoint(x: 0, y: height),
-                end: CGPoint(x: width, y: 0),
-                options: []
-            )
-        }
-
-        context.setFillColor(CGColor(gray: 1, alpha: 0.16))
-        context.fill(CGRect(x: 0, y: height - 44, width: width, height: 44))
-        context.fill(CGRect(x: 56, y: 120, width: 380, height: 26))
-        context.fill(CGRect(x: 56, y: 176, width: 620, height: 18))
-        context.fill(CGRect(x: 56, y: 216, width: 520, height: 18))
-
-        return context.makeImage()
+        guard let image = render(DemoThumbnailView(index: index), scale: 1) else { return nil }
+        return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
 
     private static func mockWindowImage() -> CGImage? {
@@ -364,6 +404,42 @@ enum ShowcaseImageExporter {
 
     // MARK: - Output
 
+    private static func hostedImage<V: View>(
+        _ view: V,
+        size: CGSize,
+        background: NSColor = .clear,
+        settle: TimeInterval = 0
+    ) -> NSImage? {
+        let host = NSHostingView(rootView: view)
+        host.frame = CGRect(origin: .zero, size: size)
+        host.wantsLayer = true
+        host.layer?.backgroundColor = background.cgColor
+
+        let window = NSWindow(
+            contentRect: CGRect(origin: CGPoint(x: -20_000, y: -20_000), size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = background.alphaComponent >= 1
+        window.backgroundColor = background
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        if settle > 0 {
+            RunLoop.current.run(until: Date().addingTimeInterval(settle))
+        }
+        host.displayIfNeeded()
+
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+            return nil
+        }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let image = NSImage(size: size)
+        image.addRepresentation(rep)
+        window.orderOut(nil)
+        return image
+    }
+
     private static func render<V: View>(_ view: V, scale: CGFloat = 2) -> NSImage? {
         let renderer = ImageRenderer(content: view)
         renderer.scale = scale
@@ -390,6 +466,23 @@ enum ShowcaseImageExporter {
 
     private static func pngData(from image: CGImage) -> Data? {
         NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+    }
+
+    private static func demoEditorImage() -> CGImage? {
+        guard let image = render(DemoEditorView(), scale: 1) else { return nil }
+        return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    private static func nsImage(from image: CGImage) -> NSImage {
+        NSImage(cgImage: image, size: CGSize(width: image.width, height: image.height))
+    }
+
+    private static func restore(_ value: Any?, forKey key: String) {
+        if let value {
+            UserDefaults.standard.set(value, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 }
 #endif

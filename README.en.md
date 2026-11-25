@@ -46,7 +46,7 @@
   <img src="Docs/images/readme/shelf.png" alt="SnapGlass shelf: recent screenshots wait at the screen edge, ready to drag out as files" width="860">
 </p>
 
-<p align="center"><sub>Capture → the shot lands on the <strong>shelf</strong> → drag it into a chat or Finder. No folder hunting.</sub></p>
+<p align="center"><sub>Capture → the shot lands on the <strong>shelf</strong>, the action bar appears beside the selection → drag it into a chat or Finder. No folder hunting.</sub></p>
 
 ---
 
@@ -133,6 +133,12 @@ Recent screenshots wait at the screen edge in completion order:
 - **Share appearance**: background templates, padding, corner radius, shadow, stroke width and color; the canvas draws it live; export preview and large preview; the copy menu separates "share image" from "original".
 - <kbd>⌘</kbd>+<kbd>1</kbd> returns to 1:1 image pixels; zoom keeps the point under the cursor.
 
+<p align="center">
+  <img src="Docs/images/readme/share-appearance.png" alt="Editor share appearance: background, padding, radius, shadow, and stroke preview live on the canvas" width="860">
+</p>
+
+<p align="center"><sub>Share appearance previews live on the canvas; adjust the background, padding, radius, shadow, and stroke.</sub></p>
+
 ### Window capture styling
 
 Window captures get **rounded corners and a soft shadow** by default, so pasting into a document or chat looks finished without opening an editor.
@@ -184,6 +190,12 @@ Window captures get **rounded corners and a soft shadow** by default, so pasting
 - **Recoverable**: a checkpoint every 10 seconds, so a crash loses at most about 10 seconds; each segment tops out at 59 minutes; failed or cancelled material can be registered for recovery.
 - **No infinite recording**: first-frame, first-sample, and audio-liveness leases plus a main-thread watchdog stop and save when the UI stops responding.
 - The menu bar shows a static recording indicator; quitting asks about unsaved recordings.
+
+<p align="center">
+  <img src="Docs/images/readme/recording-hud.png" alt="Recording HUD: red recording frame and capsule controls" width="860">
+</p>
+
+<p align="center"><sub>The recording frame stays out of the capture; the capsule shows elapsed time and stop.</sub></p>
 
 > [!NOTE]
 > Recording output and recovery media are **not encrypted**. Choose the output folder with that in mind and manage sync or backup yourself.
