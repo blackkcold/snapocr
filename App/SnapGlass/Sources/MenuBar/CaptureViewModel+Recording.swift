@@ -297,7 +297,9 @@ extension CaptureViewModel {
     }
 
     public func openRecordingsWindow() {
-        openWindow?(AppWindowPresenter.recordingsWindowID)
+        // The unified library owns both screenshots and recordings now.
+        // Keep the method name for the HUD call sites, but route to History.
+        openWindow?("history")
     }
 
     /// Stops audio capture and waits for its final tail and publication work.

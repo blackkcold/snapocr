@@ -257,6 +257,11 @@ final class RecordingSessionController {
     var audioConfiguration: AudioRecordingConfiguration?
     var audioCurrentMode: AudioSourceMode?
     var audioSessionID: UUID?
+    /// Session identity for the most recently saved screen recording.
+    ///
+    /// Screen outcomes carry the session ID only at settlement time, so the HUD
+    /// keeps it here for the "Open Recordings"/"Combine & Export" deep link.
+    var screenSessionID: UUID?
     private var audioStartTask: Task<Void, any Error>?
     private var audioStopJoinTask: Task<AudioRecordingResult, Never>?
     var audioStopRequested = false
@@ -2321,6 +2326,9 @@ final class RecordingSessionController {
 
         switch settlement {
         case let .screen(outcome):
+            if outcome.isSaved {
+                screenSessionID = outcome.sessionID
+            }
             guard outcome.isSaved, let url = outcome.latestPublishedURL else {
                 // A post-promotion stall with no published segment is still a real
                 // recording that could not be finished; say why instead of

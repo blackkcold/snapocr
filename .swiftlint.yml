@@ -48,3 +48,4 @@ excluded:
   - Packages/OCRCore/.build
   - Packages/AnnotationCore/.build
   - Packages/HistoryCore/.build
+  - Packages/LibraryCore/.build

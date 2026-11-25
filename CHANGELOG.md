@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- 统一历史资料库：截图、音频、视频、颜色与未完成录制共用侧边栏、时间线、网格/列表、搜索、筛选、排序和检查器。
+- `LibraryCore`：录制元数据、扫描快照、缩略图、删除、批量导出、保留策略、手动归组投影、跨会话合并和统一媒体解析。
+- Headless `snapglass-library` CLI：`scan/export/merge/delete/selftest`，支持 `--json` 与隔离 `--root`；`selftest --media` 跑真实 CAF 合并。
+- 截图持久化 Recently Deleted：移到废纸篓、恢复、永久删除、清空与 30 天清理。
+- 录制标签/备注、Live 录制条、保留策略/存储面板、Space Quick Look、拖拽导出、同类型跨会话合并、手动 Group/Ungroup。
+- 截图分页与 Load More、缩略图 30 天/500MB 清理、录制目录 FSEvents 监听。
+
+### Changed
+- History 窗口默认使用统一资料库；`SNAPGLASS_LEGACY_HISTORY=1` 可回退旧 History，`library_unified_enabled` 默认开启。
+- 录制导出优先经 `RecordingSessionLedger` + `RecordingPreviewService` 解析媒体；旧路径仅作兼容回退并给出 warning。
+- 屏幕录制 HUD 也携带 sessionID 深链；导出回退 warning、重复根/离线根在资料库中可见。
+
+### Fixed
+- 修复批量导出/合并的媒体路径依赖文件名猜测的问题。
+- 修复截图批量撤销只在内存、退出即丢的问题。
+- 修复缩略图缓存无限增长与 720px 窄窗检查器挤压问题。
+
+### Testing
+- 新增 `LibraryCore` 元数据/过滤/保留/缩略图缓存/手动归组/跨会话合并测试。
+- 新增真实 CAF 单 session 与双 session 合并测试、History 分页/回收站测试、CLI 合同测试。
+- 明确测试自动化边界：只允许 CLI/脚本/隔离根测试，不自动化接管 GUI；见 `Docs/AUTOMATION_POLICY.md`。
+- 新增 `snapglass-library bench`：1000 截图 / 200 录制会话 / 真实媒体合并的无头基准，输出 JSON 并用 `--assert` 卡预算；CI 每晚运行。
+- 新增 `snapglass-library l10n-check`：四语言键、占位符、术语表与短标签宽度校验，纳入 CLI 合同测试。
+- 新增资料库键盘命令表（Space/Return/⌘E/⌘⌫/⌘⇧F/⌘A/Esc），由 `LibraryCommandRouter` 单元测试覆盖；快捷键只在网格获得焦点时生效，避免抢走搜索与备注输入。
+- 资料库侧边栏与检查器补齐键盘可达性与本地化文案，`Favourites`/`Audio` 术语与四语言表对齐。
+
 ## [1.7.2] - 2026-11-24
 
 > 录制稳定性收尾：卡死、音频落盘、HUD 与录屏音频。

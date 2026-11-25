@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-PACKAGES=(SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore AutomationCore)
+PACKAGES=(SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore LibraryCore AutomationCore)
 ERRORS=0
 
 for pkg in "${PACKAGES[@]}"; do
@@ -57,6 +57,15 @@ if command -v xcodebuild >/dev/null 2>&1; then
             ERRORS=$((ERRORS + 1))
         fi
     done
+fi
+
+echo ""
+echo "=== Library CLI contract tests ==="
+if bash scripts/test-library-cli.sh; then
+    echo "  ✅ SnapGlassLibraryCLI"
+else
+    echo "  ❌ SnapGlassLibraryCLI"
+    ERRORS=$((ERRORS + 1))
 fi
 
 if [ "$ERRORS" -gt 0 ]; then

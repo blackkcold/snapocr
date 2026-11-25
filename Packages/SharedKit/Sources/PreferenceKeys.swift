@@ -119,6 +119,7 @@ public enum PreferenceKeys {
     public static let historySaveFullText = "history_saveFullText"
     public static let colorHistoryEnabled = "history_colorHistoryEnabled"
     public static let colorHistoryMaxItems = "history_colorHistoryMaxItems"
+    public static let libraryUnifiedEnabled = "library_unified_enabled"
 
     public static let developerMode = "dev_devMode"
     public static let engineComparison = "dev_engineComparison"
@@ -216,6 +217,7 @@ public enum PreferenceDefaults {
     public static let historySaveFullText = false
     public static let colorHistoryEnabled = true
     public static let colorHistoryMaxItems = 100
+    public static let libraryUnifiedEnabled = true
 
     public static let developerMode = false
     public static let engineComparison = false

@@ -42,6 +42,8 @@ packages:
     path: Packages/ScrollCore
   HistoryCore:
     path: Packages/HistoryCore
+  LibraryCore:
+    path: Packages/LibraryCore
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
     from: 2.0.0
@@ -56,6 +58,7 @@ targets:
       - path: App/SnapGlass/Sources
         excludes:
           - Routing
+          - CLI
       - path: App/SnapGlass/Resources/AppIcon.icns
         buildPhase: resources
       - path: App/SnapGlass/Resources/en.lproj
@@ -87,6 +90,7 @@ targets:
       - package: AnnotationCore
       - package: ScrollCore
       - package: HistoryCore
+      - package: LibraryCore
       - package: KeyboardShortcuts
       - package: Sparkle
         product: Sparkle
@@ -228,7 +232,25 @@ targets:
         PRODUCT_NAME: BarcodePanelTests
         PRODUCT_MODULE_NAME: BarcodePanelTests
         GENERATE_INFOPLIST_FILE: YES
+  SnapGlassLibraryCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - path: App/SnapGlass/Sources/CLI
+    dependencies:
+      - package: SharedKit
+      - package: CaptureCore
+      - package: HistoryCore
+      - package: LibraryCore
+    settings:
+      base:
+        PRODUCT_NAME: SnapGlassLibraryCLI
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
+  SnapGlassLibraryCLI:
+    build:
+      targets:
+        SnapGlassLibraryCLI: build
   EditorInteractionTests:
     build:
       targets:
