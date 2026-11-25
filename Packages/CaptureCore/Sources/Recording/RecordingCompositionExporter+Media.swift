@@ -435,10 +435,14 @@ extension RecordingExportWorker {
         guard let rawFormat = track.formatDescriptions.first else {
             throw ExportError.passthroughUnsupported
         }
-        // `formatDescriptions` is documented as [CMFormatDescription]; the
-        // Objective-C bridge exposes it as [Any].
-        // swiftlint:disable:next force_cast
-        let format = rawFormat as! CMFormatDescription
+        // `formatDescriptions` is documented as [CMFormatDescription], but the
+        // deprecated Objective-C bridge exposes it as [Any]. Checking the CF type
+        // keeps an unexpected element on the normal "unsupported passthrough" path
+        // instead of trapping inside the export.
+        guard CFGetTypeID(rawFormat as CFTypeRef) == CMFormatDescriptionGetTypeID() else {
+            throw ExportError.passthroughUnsupported
+        }
+        let format = unsafeDowncast(rawFormat as AnyObject, to: CMFormatDescription.self)
         let subtype = CMFormatDescriptionGetMediaSubType(format)
         let codec: String
         switch subtype {

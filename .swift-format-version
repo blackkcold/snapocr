@@ -1,0 +1,10 @@
+# swift-format version used to format this repository.
+#
+# The first entry is canonical: it is the swift-format shipped with the Xcode
+# toolchain at /Applications/Xcode.app (checked with `xcrun swift-format --version`).
+# The remaining entries are builds verified to produce byte-identical output and
+# an identical lint warning set on this tree; CI may substitute one when the
+# runner image does not ship the canonical toolchain. Never add an entry without
+# running `scripts/check-swift-format-version.sh` plus a full-tree format diff.
+6.3.0
+604.0.0

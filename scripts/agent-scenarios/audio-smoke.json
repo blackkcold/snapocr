@@ -6,7 +6,7 @@
   "simulateMainStallMs": 0,
   "simulateStallAfterStart": false,
   "audioMode": "microphone",
-  "hudWarmup": false,
+  "hudWarmup": true,
   "expect": {
     "artifactPlayable": true,
     "hudFirstVisibleUnderMs": 300,

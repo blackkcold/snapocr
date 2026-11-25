@@ -67,8 +67,13 @@ scripts/agent-test.sh scripts/agent-scenarios/audio-smoke.json --timeout 120
 | `audio-smoke.json` | 3 秒录音冒烟，HUD 首现、发布、产物可播 |
 | `audio-10s.json` | 10 秒录音稳定性 |
 | `screen-10s.json` | 真实屏幕录制 |
-| `stall-main.json` | 注入主线程阻塞，验证仍能落盘 |
+| `stall-main.json` | 注入 6s 主线程阻塞，验证仍能落盘；HUD 首现断言在 warmup 之后测量（<300ms） |
 | `recover-orphan.json` | 收编中断录制并导出 |
+
+`report.json` 的 `mainThread.maxStallMs` 由独立探针测量：探针在自带队列上用 `DispatchSourceTimer`
+持续向主队列投递带时间戳的空操作，主线程被阻塞时该操作无法执行，其排队时长即为卡顿；
+探针不读 UI 状态、不在主线程做计算，也不依赖主线程推进来投递下一次。`probeSamples` 是成功回收的
+采样数，健康时约每 50ms 一个。
 
 Agent 场景依赖真实屏幕/音频权限与已安装 App 的签名身份，因此**不放进** `scripts/test.sh`，在录制相关改动或发版前按需运行。失败时保留 `.build/agent-runs/<timestamp>/`，其中包含 `report.json`、`sample`、`spindump`、signpost 与用户目录差异。
 

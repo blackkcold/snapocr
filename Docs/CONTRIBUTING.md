@@ -18,87 +18,34 @@
 #### 运行命令
 
 ```bash
-# 格式化检查
-swift-format lint --recursive . --configuration .swift-format
+# 格式化检查（CI 与本地使用同一工具链二进制）
+xcrun swift-format lint --recursive . --configuration .swift-format
 
 # Lint 检查
-swiftlint lint --strict
+swiftlint lint --strict --config .swiftlint.yml
 
 # 自动格式化
-swift-format format --recursive . --configuration .swift-format -i
+xcrun swift-format format --recursive . --configuration .swift-format -i
 ```
 
-#### .swift-format 配置要点
+#### 格式器版本固定
 
-```json
-{
-  "version": 1,
-  "lineLength": 120,
-  "indentation": { "spaces": 2 },
-  "maximumBlankLines": 1,
-  "respectsExistingLineBreaks": true,
-  "indentConditionalCompilationBlocks": true,
-  "rules": {
-    "AlwaysUseLowerCamelCase": true,
-    "DoNotUseSemicolons": true,
-    "NeverForceUnwrap": true,
-    "NeverForceTry": true,
-    "NeverUseImplicitlyUnwrappedOptionals": true,
-    "OrderedImports": true,
-    "UseTripleSlashForDocumentationComments": true,
-    "ValidateDocumentationComments": true,
-    "AllPublicDeclarationsHaveDocumentation": true
-  }
-}
-```
+CI 与本地必须使用同一版本的 `swift-format`，否则同一份代码会被两种排版互相改写。
 
-#### .swiftlint.yml 配置要点
+- 版本契约写在仓库根 `.swift-format-version`：首行为规范版本，其余为**已验证输出一致**的等价构建。
+- `bash scripts/check-swift-format-version.sh` 校验当前工具链；CI 在 lint 前执行同一脚本，版本不符直接失败，而不是用新版本静默重排整个仓库。
+- 规范版本取自 Xcode 工具链（`xcrun swift-format --version`），不再通过 Homebrew 安装，避免 brew 升级造成漂移。
+- 升级格式器 = 有意为之的一次全量格式化：改 `.swift-format-version` → `xcrun swift-format format -i -r .` → 单独提交并加入 `.git-blame-ignore-revs`。
 
-```yaml
-opt_in_rules:
-  - empty_count
-  - force_unwrapping
-  - implicitly_unwrapped_optional
-  - unused_import
-  - duplicate_imports
-  - toggle_bool
-  - private_action
-  - private_outlet
+#### 配置以文件为准
 
-disabled_rules:
-  - trailing_whitespace  # 由 swift-format 处理
-  - vertical_whitespace  # 由 swift-format 处理
-  - colon                # 由 swift-format 处理
-  - comma                # 由 swift-format 处理
+`.swift-format` 与 `.swiftlint.yml` 是唯一事实来源；本文不再复制完整内容，避免文档与配置版本漂移。要点：
 
-line_length: 120
-file_length:
-  warning: 500
-  error: 1200
-type_body_length:
-  warning: 400
-identifier_name:
-  min_length: 3
-  excluded: [id, URL, key, tag, qr]
-
-# 与 swift-format 的 multiElementCollectionTrailingCommas 对齐：
-# 多行集合字面量必须保留尾逗号（SE-0084 / SE-0439 官方规范）。
-trailing_comma:
-  mandatory_comma: true
-
-# 排除所有 .build 目录（第三方依赖与派生测试 runner）。
-# 注意：SwiftLint 的 excluded 不支持 glob 通配，必须显式列出每个嵌套 .build。
-excluded:
-  - .build
-  - Packages/SharedKit/.build
-  - Packages/ScrollCore/.build
-  - Packages/BarcodeCore/.build
-  - Packages/AutomationCore/.build
-  - Packages/CaptureCore/.build
-  - Packages/OCRCore/.build
-  - Packages/AnnotationCore/.build
-  - Packages/HistoryCore/.build
-```
+- 缩进 4 空格，`lineLength: 120`，尊重既有换行。
+- 分工：`swift-format` 管排版与安全规则（`NeverForceUnwrap`、`NeverUseForceTry`、`NeverUseImplicitlyUnwrappedOptionals` 等）；`SwiftLint` 管质量（`force_unwrapping`、`implicitly_unwrapped_optional`、`unused_import`、`private_outlet` 等）。
+- 排版规则在 SwiftLint 侧关闭（`trailing_whitespace`、`vertical_whitespace`、`colon`、`comma`、`opening_brace`、`trailing_comma`），由 `swift-format` 负责。
+- 结构阈值按现状设定：`file_length` 780/1200、`type_body_length` 470、`function_body_length` 75、`cyclomatic_complexity` 12。
+- 全量 lint 仍有 698 条 DocC 警告（`AllPublicDeclarationsHaveDocumentation` 626 + `ValidateDocumentationComments` 72），属单独的重构任务；新增代码不应再引入非 DocC 警告。
 
 ---
 
