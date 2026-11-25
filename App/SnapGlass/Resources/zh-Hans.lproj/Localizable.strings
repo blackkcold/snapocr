@@ -209,7 +209,8 @@
 "Check for new releases and download updates." = "检查新版本并下载更新。";
 "Version, credits, and project links." = "版本信息、致谢与项目链接。";
 "About SnapGlass" = "关于 SnapGlass";
-"Offline-first, privacy-first macOS screenshot and OCR tool." = "离线优先、隐私优先的 macOS 截图与 OCR 工具。";
+"Offline-first macOS screenshot, scrolling capture, OCR, and screen recording. No telemetry; Apple Vision runs on-device." = "离线优先的 macOS 截图、滚动截图、OCR 与录屏工具。无遥测；Apple Vision 在本机识别。";
+"Website" = "官网";
 "App version" = "应用版本";
 "Build" = "构建号";
 "Copyright © SnapGlass Contributors. Released under the MIT License." = "版权所有 © SnapGlass 贡献者。基于 MIT 许可证发布。";
