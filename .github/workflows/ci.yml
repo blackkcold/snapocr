@@ -11,15 +11,25 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: brew install swiftlint
-      # swift-format ships inside Xcode; CI runs the same binary as local
-      # development. The pin lives in .swift-format-version, so a runner image
-      # update fails this job instead of silently reformatting the repository.
-      - name: Verify swift-format version
+      # The pin lives in .swiftlint-version: SwiftLint changes rules between
+      # minor releases, so `brew install swiftlint` would make this job depend
+      # on whatever the runner image happens to resolve that day.
+      - name: Install pinned SwiftLint
         run: |
-          xcrun swift-format --version
-          bash scripts/check-swift-format-version.sh
-      - run: xcrun swift-format lint --recursive . --configuration .swift-format
+          VERSION="$(grep -vE '^[[:space:]]*(#|$)' .swiftlint-version | head -1)"
+          curl -fsSL -o "$RUNNER_TEMP/swiftlint.zip" \
+            "https://github.com/realm/SwiftLint/releases/download/${VERSION}/portable_swiftlint.zip"
+          mkdir -p "$RUNNER_TEMP/swiftlint"
+          unzip -q "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/swiftlint"
+          chmod +x "$RUNNER_TEMP/swiftlint/swiftlint"
+          echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
+      - name: Verify SwiftLint version
+        run: bash scripts/check-swiftlint-version.sh
+      # swift-format ships inside Xcode. The wrapper verifies the toolchain pin
+      # and enforces the ratcheting diagnostic budget; raw `lint` would always
+      # exit 0 and could never be a gate.
+      - name: swift-format gate
+        run: bash scripts/check-swift-format.sh
       - run: swiftlint lint --strict --config .swiftlint.yml
       - run: bash scripts/check-localization.sh
 

@@ -1,0 +1,13 @@
+# SwiftLint version used by this repository.
+#
+# The first entry is canonical: CI downloads that release's
+# `portable_swiftlint.zip`, and local development must match it. SwiftLint
+# changes rules and thresholds between minor releases, so an unpinned
+# `brew install swiftlint` can turn a green branch red (or hide a new
+# violation) without any code change.
+#
+# The remaining entries are builds verified to produce an identical violation
+# set on this tree. Never add an entry without running
+# `scripts/check-swiftlint-version.sh` plus `swiftlint lint --strict` on the
+# whole repository.
+0.65.1

@@ -377,8 +377,8 @@ SnapGlass 使用 Sparkle 2 读取 `appcast.xml`，更新包与 feed 都经过 Ed
 <summary>展开：本地构建、测试与项目结构</summary>
 
 ```bash
-# 安装构建工具
-brew install xcodegen swiftlint
+# 安装构建工具（SwiftLint 按 .swiftlint-version 固定，安装方式见 Docs/CONTRIBUTING.md）
+brew install xcodegen
 
 # 生成 Xcode 工程
 xcodegen generate

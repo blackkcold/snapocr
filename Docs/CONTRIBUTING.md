@@ -18,10 +18,14 @@
 #### 运行命令
 
 ```bash
-# 格式化检查（CI 与本地使用同一工具链二进制）
-xcrun swift-format lint --recursive . --configuration .swift-format
+# 格式闸门：版本校验 + 全仓诊断预算（Phase 2 期间预算逐步降到 0）
+bash scripts/check-swift-format.sh
 
-# Lint 检查
+# 只看指定目录/包：零容忍，用于验收单批改动
+bash scripts/check-swift-format.sh App Packages/CaptureCore
+
+# Lint 检查（先确认 SwiftLint 版本命中 .swiftlint-version）
+bash scripts/check-swiftlint-version.sh
 swiftlint lint --strict --config .swiftlint.yml
 
 # 自动格式化
@@ -37,6 +41,30 @@ CI 与本地必须使用同一版本的 `swift-format`，否则同一份代码�
 - 规范版本取自 Xcode 工具链（`xcrun swift-format --version`），不再通过 Homebrew 安装，避免 brew 升级造成漂移。
 - 升级格式器 = 有意为之的一次全量格式化：改 `.swift-format-version` → `xcrun swift-format format -i -r .` → 单独提交并加入 `.git-blame-ignore-revs`。
 
+#### 诊断预算（棘轮）
+
+- `scripts/check-swift-format.sh` 使用 `swift-format lint --strict`（普通 lint 有诊断也返回 0，不能当闸门），并核对诊断数。
+- `.swift-format-budget` 是当前唯一允许的全仓诊断上限，只能下调；Phase 2 从 698 按批降到 0，之后即为零容忍硬闸门。
+- 传入路径时为零容忍模式，用于确认单批目录已经干净，再下调预算。
+- 新增代码不得引入任何新诊断：即使总数仍在预算内，`--strict` 的输出也会在 CI 日志中列出，review 时应确认没有新增文件/声明。
+
+#### SwiftLint 版本固定
+
+- 版本契约写在仓库根 `.swiftlint-version`：首行为规范版本（CI 下载对应 release 的 `portable_swiftlint.zip`），其余为**已验证等价**的构建。
+- `bash scripts/check-swiftlint-version.sh` 校验当前二进制；CI 在 lint 前执行，版本不符直接失败。
+- 本地安装固定版本：
+
+```bash
+VERSION="$(grep -vE '^[[:space:]]*(#|$)' .swiftlint-version | head -1)"
+mkdir -p "$HOME/.local/bin"
+curl -fsSL -o /tmp/swiftlint.zip \
+  "https://github.com/realm/SwiftLint/releases/download/${VERSION}/portable_swiftlint.zip"
+unzip -oq /tmp/swiftlint.zip -d "$HOME/.local/bin"
+bash scripts/check-swiftlint-version.sh
+```
+
+- 升级 SwiftLint = 有意为之：先跑全仓 `swiftlint lint --strict` 对比违规集，再更新 `.swiftlint-version`。
+
 #### 配置以文件为准
 
 `.swift-format` 与 `.swiftlint.yml` 是唯一事实来源；本文不再复制完整内容，避免文档与配置版本漂移。要点：
@@ -45,7 +73,7 @@ CI 与本地必须使用同一版本的 `swift-format`，否则同一份代码�
 - 分工：`swift-format` 管排版与安全规则（`NeverForceUnwrap`、`NeverUseForceTry`、`NeverUseImplicitlyUnwrappedOptionals` 等）；`SwiftLint` 管质量（`force_unwrapping`、`implicitly_unwrapped_optional`、`unused_import`、`private_outlet` 等）。
 - 排版规则在 SwiftLint 侧关闭（`trailing_whitespace`、`vertical_whitespace`、`colon`、`comma`、`opening_brace`、`trailing_comma`），由 `swift-format` 负责。
 - 结构阈值按现状设定：`file_length` 780/1200、`type_body_length` 470、`function_body_length` 75、`cyclomatic_complexity` 12。
-- 全量 lint 仍有 698 条 DocC 警告（`AllPublicDeclarationsHaveDocumentation` 626 + `ValidateDocumentationComments` 72），属单独的重构任务；新增代码不应再引入非 DocC 警告。
+- 全量 lint 仍有 698 条 DocC 诊断（`AllPublicDeclarationsHaveDocumentation` 626 + `ValidateDocumentationComments` 72），由 `.swift-format-budget` 在 Phase 2 逐批下调清理；存量期间预算只降不升。
 
 ---
 
