@@ -42,11 +42,12 @@ extension RecordingSessionController {
                 updateAudioHUD()
                 return
             }
-            controlPanel?.update(state: .saving(
-                kind: currentRecordingKind ?? .screen,
-                fileName: nil,
-                isBeforeQuit: isResolvingQuit
-            ))
+            controlPanel?.update(
+                state: .saving(
+                    kind: currentRecordingKind ?? .screen,
+                    fileName: nil,
+                    isBeforeQuit: isResolvingQuit
+                ))
         case .idle, .selectingSource:
             if status == .selectingSource {
                 if controlPanel == nil { controlPanel = makeControlPanel(on: NSScreen.main) }

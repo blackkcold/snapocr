@@ -17,10 +17,11 @@ struct RecordingOutputTransactionTests {
         #expect(transaction.partialURL.lastPathComponent.hasPrefix("."))
         #expect(FileManager.default.fileExists(atPath: transaction.partialURL.path))
         #expect(!FileManager.default.fileExists(atPath: transaction.finalURL.path))
-        #expect(transaction.finalURL.lastPathComponent.range(
-            of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.mp4$"#,
-            options: .regularExpression
-        ) != nil)
+        #expect(
+            transaction.finalURL.lastPathComponent.range(
+                of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.mp4$"#,
+                options: .regularExpression
+            ) != nil)
     }
 
     @Test func discardRemovesAReservedPartialAfterStartFailure() throws {
@@ -61,10 +62,11 @@ struct RecordingOutputTransactionTests {
         let second = try makeTransaction(in: directory)
 
         #expect(second.finalURL != first.finalURL)
-        #expect(second.finalURL.lastPathComponent.range(
-            of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_2\.mp4$"#,
-            options: .regularExpression
-        ) != nil)
+        #expect(
+            second.finalURL.lastPathComponent.range(
+                of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_2\.mp4$"#,
+                options: .regularExpression
+            ) != nil)
         #expect(try Data(contentsOf: first.finalURL) == preservedData)
     }
 
@@ -286,9 +288,11 @@ struct RecordingOutputTransactionTests {
         let existingData = Data("another transaction".utf8)
         try existingData.write(to: existingPartial)
         var identifiers = [collidedID, nextID]
-        let transaction = try makeTransaction(in: directory, identifierProvider: {
-            identifiers.removeFirst()
-        })
+        let transaction = try makeTransaction(
+            in: directory,
+            identifierProvider: {
+                identifiers.removeFirst()
+            })
 
         #expect(transaction.partialURL.lastPathComponent == ".SnapGlass-\(nextID.uuidString).mp4.partial")
         #expect(try Data(contentsOf: existingPartial) == existingData)
@@ -329,8 +333,9 @@ extension RecordingOutputTransactionTests {
         #expect(hundredth.finalURL.lastPathComponent == "\(stem)-100.m4a")
         #expect(first.partialURL.lastPathComponent.hasPrefix(".SnapGlass-"))
         #expect(first.partialURL.lastPathComponent.hasSuffix(".m4a.partial"))
-        #expect(first.partialURL.deletingLastPathComponent().standardizedFileURL.path
-            == directory.standardizedFileURL.path)
+        #expect(
+            first.partialURL.deletingLastPathComponent().standardizedFileURL.path
+                == directory.standardizedFileURL.path)
         #expect(!first.isDirectoryOutput)
     }
 
@@ -440,14 +445,16 @@ extension RecordingOutputTransactionTests {
         var stagingIsDirectory: ObjCBool = false
 
         #expect(transaction.isDirectoryOutput)
-        #expect(transaction.partialURL.deletingLastPathComponent().standardizedFileURL.path
-            == directory.standardizedFileURL.path)
+        #expect(
+            transaction.partialURL.deletingLastPathComponent().standardizedFileURL.path
+                == directory.standardizedFileURL.path)
         #expect(transaction.partialURL.lastPathComponent.hasPrefix("."))
         #expect(transaction.partialURL.lastPathComponent.hasSuffix(".staging"))
-        #expect(FileManager.default.fileExists(
-            atPath: transaction.partialURL.path,
-            isDirectory: &stagingIsDirectory
-        ))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: transaction.partialURL.path,
+                isDirectory: &stagingIsDirectory
+            ))
         #expect(stagingIsDirectory.boolValue)
         #expect(transaction.finalURL.lastPathComponent == "\(stem)-00")
         #expect(transaction.finalURL.pathExtension.isEmpty)
@@ -488,12 +495,15 @@ extension RecordingOutputTransactionTests {
         let error = captureTransactionError { _ = try transaction.publish() }
 
         #expect(error == .destinationAlreadyExists)
-        #expect(try Data(contentsOf: existingFinal.appendingPathComponent("manifest.json"))
-            == existingData)
-        #expect(try Data(contentsOf: transaction.finalURL.appendingPathComponent("manifest.json"))
-            == raceData)
-        #expect(try Data(contentsOf: transaction.partialURL.appendingPathComponent("manifest.json"))
-            == stagedData)
+        #expect(
+            try Data(contentsOf: existingFinal.appendingPathComponent("manifest.json"))
+                == existingData)
+        #expect(
+            try Data(contentsOf: transaction.finalURL.appendingPathComponent("manifest.json"))
+                == raceData)
+        #expect(
+            try Data(contentsOf: transaction.partialURL.appendingPathComponent("manifest.json"))
+                == stagedData)
         #expect(FileManager.default.fileExists(atPath: transaction.partialURL.path))
     }
 
@@ -517,8 +527,9 @@ extension RecordingOutputTransactionTests {
 
         #expect(error == .publicationFailed)
         #expect(FileManager.default.fileExists(atPath: transaction.partialURL.path))
-        #expect(try Data(contentsOf: transaction.partialURL.appendingPathComponent("manifest.json"))
-            == stagedData)
+        #expect(
+            try Data(contentsOf: transaction.partialURL.appendingPathComponent("manifest.json"))
+                == stagedData)
         #expect(!FileManager.default.fileExists(atPath: transaction.finalURL.path))
     }
 
@@ -547,8 +558,9 @@ extension RecordingOutputTransactionTests {
         #expect(error == .unsupportedDestination)
         #expect(!renameAttempted)
         #expect(FileManager.default.fileExists(atPath: transaction.partialURL.path))
-        #expect(try Data(contentsOf: transaction.partialURL.appendingPathComponent("manifest.json"))
-            == stagedData)
+        #expect(
+            try Data(contentsOf: transaction.partialURL.appendingPathComponent("manifest.json"))
+                == stagedData)
         #expect(!FileManager.default.fileExists(atPath: transaction.finalURL.path))
     }
 
@@ -609,13 +621,15 @@ extension RecordingOutputTransactionTests {
 
         var finalIsDirectory: ObjCBool = false
         #expect(publishedURL == transaction.finalURL)
-        #expect(FileManager.default.fileExists(
-            atPath: publishedURL.path,
-            isDirectory: &finalIsDirectory
-        ))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: publishedURL.path,
+                isDirectory: &finalIsDirectory
+            ))
         #expect(finalIsDirectory.boolValue)
-        #expect(try Data(contentsOf: publishedURL.appendingPathComponent("manifest.json"))
-            == manifestData)
+        #expect(
+            try Data(contentsOf: publishedURL.appendingPathComponent("manifest.json"))
+                == manifestData)
         #expect(!FileManager.default.fileExists(atPath: transaction.partialURL.path))
     }
 
@@ -647,10 +661,11 @@ extension RecordingOutputTransactionTests {
             timeZone: timeZone
         )
         #expect(!first.isDirectoryOutput)
-        #expect(first.finalURL.lastPathComponent.range(
-            of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.mp4$"#,
-            options: .regularExpression
-        ) != nil)
+        #expect(
+            first.finalURL.lastPathComponent.range(
+                of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.mp4$"#,
+                options: .regularExpression
+            ) != nil)
 
         let preservedData = Data("existing legacy mp4".utf8)
         try preservedData.write(to: first.finalURL)
@@ -659,10 +674,11 @@ extension RecordingOutputTransactionTests {
             now: now,
             timeZone: timeZone
         )
-        #expect(second.finalURL.lastPathComponent.range(
-            of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_2\.mp4$"#,
-            options: .regularExpression
-        ) != nil)
+        #expect(
+            second.finalURL.lastPathComponent.range(
+                of: #"^SnapGlass_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_2\.mp4$"#,
+                options: .regularExpression
+            ) != nil)
         #expect(try Data(contentsOf: first.finalURL) == preservedData)
     }
 

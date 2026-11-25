@@ -150,7 +150,8 @@ struct AudioRecordingPreferencesView: View {
                 PreferencesCardCaption(
                     // This is one localized key; splitting it would change the lookup key.
                     // swiftlint:disable:next line_length
-                    text: "No audio-recording shortcut is assigned by default. Record one here if you want a global shortcut."
+                    text:
+                        "No audio-recording shortcut is assigned by default. Record one here if you want a global shortcut."
                 )
             }
         }
@@ -254,7 +255,8 @@ struct AudioRecordingPreferencesView: View {
 
     private var directoryIsAvailable: Bool {
         guard let destinationDirectory,
-              let capacity = destinationCapacity else { return false }
+            let capacity = destinationCapacity
+        else { return false }
         guard case let .available(_, probedDirectory, _) = capacity else { return false }
         return probedDirectory.standardizedFileURL == destinationDirectory.standardizedFileURL
     }
@@ -286,9 +288,10 @@ struct AudioRecordingPreferencesView: View {
     }
 
     private var estimatedAudioSize: String {
-        let mode = RecordingAudioPreferenceMigration.mode(
-            fromPreferenceValue: audioModeBinding.wrappedValue
-        ) ?? .systemAndMicrophone
+        let mode =
+            RecordingAudioPreferenceMigration.mode(
+                fromPreferenceValue: audioModeBinding.wrappedValue
+            ) ?? .systemAndMicrophone
         let trackCount: Int
         switch mode {
         case .none:
@@ -345,7 +348,8 @@ struct AudioRecordingPreferencesView: View {
             return
         }
         let isCustom = hasCustomDestination
-        let expectedVolumeUUID = isCustom
+        let expectedVolumeUUID =
+            isCustom
             ? RecordingDestinationPreferences.customDirectoryVolumeUUID(for: .audio)
             : nil
         capacityTask = Task { @MainActor in

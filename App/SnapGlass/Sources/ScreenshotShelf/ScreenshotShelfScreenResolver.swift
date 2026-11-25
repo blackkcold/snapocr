@@ -18,10 +18,12 @@ enum ScreenshotShelfScreenResolver {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return NSScreen.main }
         let frames = screens.map(\.frame)
-        guard let index = ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
-            for: point,
-            displayFrames: frames
-        ) else { return NSScreen.main }
+        guard
+            let index = ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+                for: point,
+                displayFrames: frames
+            )
+        else { return NSScreen.main }
         return screens[index]
     }
 
@@ -35,11 +37,12 @@ enum ScreenshotShelfScreenResolver {
 
     static func frontmostAppCoversDisplay(targetDisplayID: CGDirectDisplayID?) -> Bool {
         guard let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
-              frontmostPID != ProcessInfo.processInfo.processIdentifier,
-              let windows = CGWindowListCopyWindowInfo(
+            frontmostPID != ProcessInfo.processInfo.processIdentifier,
+            let windows = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements],
                 kCGNullWindowID
-              ) as? [[String: Any]] else { return false }
+            ) as? [[String: Any]]
+        else { return false }
 
         let displayFrames: [CGRect]
         if let targetDisplayID {
@@ -52,7 +55,8 @@ enum ScreenshotShelfScreenResolver {
         }
         return windows.contains { window in
             guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == frontmostPID,
-                  let windowFrame = windowFrame(from: window[kCGWindowBounds as String]) else { return false }
+                let windowFrame = windowFrame(from: window[kCGWindowBounds as String])
+            else { return false }
             return displayFrames.contains { windowFrame.insetBy(dx: -2, dy: -2).contains($0) }
         }
     }

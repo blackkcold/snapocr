@@ -25,16 +25,17 @@ extension RecordingSettlementSupervisorTests {
         )
 
         for _ in 0..<20 {
-            continuation.yield(RecordingProgress(
-                sessionID: sessionID,
-                elapsedSeconds: 5,
-                savedSegments: 1,
-                checkpointAgeSeconds: 3,
-                droppedSamples: 0,
-                systemLevel: 0.9,
-                micLevel: 0.9,
-                capturedSamples: 0
-            ))
+            continuation.yield(
+                RecordingProgress(
+                    sessionID: sessionID,
+                    elapsedSeconds: 5,
+                    savedSegments: 1,
+                    checkpointAgeSeconds: 3,
+                    droppedSamples: 0,
+                    systemLevel: 0.9,
+                    micLevel: 0.9,
+                    capturedSamples: 0
+                ))
             try? await Task.sleep(for: .milliseconds(5))
         }
 
@@ -258,12 +259,13 @@ extension RecordingSettlementSupervisorTests {
             readiness: .poll { .failed("The writer was not ready.") },
             stop: {
                 await counter.record()
-                return .screen(ScreenRecordingOutcome(
-                    sessionID: sessionID,
-                    segmentURLs: [],
-                    droppedFrameCount: 0,
-                    failure: nil
-                ))
+                return .screen(
+                    ScreenRecordingOutcome(
+                        sessionID: sessionID,
+                        segmentURLs: [],
+                        droppedFrameCount: 0,
+                        failure: nil
+                    ))
             }
         )
 

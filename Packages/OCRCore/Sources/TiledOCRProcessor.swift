@@ -13,7 +13,8 @@ enum TiledOCRProcessor {
         overlap: Int = MemoryGuard.tileOverlap
     ) -> [OCRTile] {
         guard imageWidth > 0, imageHeight > 0, tileDimension > 0,
-              overlap >= 0, overlap < tileDimension else {
+            overlap >= 0, overlap < tileDimension
+        else {
             return []
         }
 
@@ -21,12 +22,13 @@ enum TiledOCRProcessor {
         let yOrigins = axisOrigins(length: imageHeight, tileLength: tileDimension, overlap: overlap)
         return yOrigins.flatMap { yOrigin in
             xOrigins.map { xOrigin in
-                OCRTile(pixelRect: CGRect(
-                    x: xOrigin,
-                    y: yOrigin,
-                    width: min(tileDimension, imageWidth - xOrigin),
-                    height: min(tileDimension, imageHeight - yOrigin)
-                ))
+                OCRTile(
+                    pixelRect: CGRect(
+                        x: xOrigin,
+                        y: yOrigin,
+                        width: min(tileDimension, imageWidth - xOrigin),
+                        height: min(tileDimension, imageHeight - yOrigin)
+                    ))
             }
         }
     }
@@ -59,7 +61,8 @@ enum TiledOCRProcessor {
             let normalizedText = normalized(line.text)
             let duplicateIndex = kept.firstIndex { candidate in
                 guard !line.boundingBox.isEmpty, !candidate.boundingBox.isEmpty,
-                      normalized(candidate.text) == normalizedText else {
+                    normalized(candidate.text) == normalizedText
+                else {
                     return false
                 }
                 return intersectionOverUnion(line.boundingBox, candidate.boundingBox) >= iouThreshold

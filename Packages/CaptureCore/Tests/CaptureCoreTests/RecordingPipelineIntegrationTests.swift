@@ -38,23 +38,24 @@ struct RecordingPipelineIntegrationTests {
         }
         let sealService = RecordingSealService(publicationHooks: [LedgerPublicationHook(ledger: ledger)])
         let authorizer = IntegrationAuthorizer()
-        let engineFactory: @Sendable (
-            AudioRecordingConfiguration,
-            any AudioCheckpointSink & Sendable,
-            AudioSampleClock
-        ) throws -> any AudioRecordingControlling & Sendable = { config, sink, clock in
-            let source = try IntegrationPCMSource()
-            let routeController = AudioRouteController(authorizer: authorizer, sources: [.system: source])
-            let pump = AudioMixPump(
-                clock: clock, policy: AudioMixPolicy(sampleRate: config.sampleRate),
-                layout: config.layout, blockFrames: 480, channelCountByRole: config.channelCountByRole
-            )
-            return AudioRecordingEngine(
-                sink: sink, clock: clock, sources: [.system: source],
-                routeController: routeController, pump: pump,
-                scheduler: IntegrationScheduler()
-            )
-        }
+        let engineFactory:
+            @Sendable (
+                AudioRecordingConfiguration,
+                any AudioCheckpointSink & Sendable,
+                AudioSampleClock
+            ) throws -> any AudioRecordingControlling & Sendable = { config, sink, clock in
+                let source = try IntegrationPCMSource()
+                let routeController = AudioRouteController(authorizer: authorizer, sources: [.system: source])
+                let pump = AudioMixPump(
+                    clock: clock, policy: AudioMixPolicy(sampleRate: config.sampleRate),
+                    layout: config.layout, blockFrames: 480, channelCountByRole: config.channelCountByRole
+                )
+                return AudioRecordingEngine(
+                    sink: sink, clock: clock, sources: [.system: source],
+                    routeController: routeController, pump: pump,
+                    scheduler: IntegrationScheduler()
+                )
+            }
         let pipeline = try RecordingSessionPipeline(
             roots: RecordingPipelineRoots(
                 sessionRoot: root, indexURL: indexURL, outputDirectory: outputRoot
@@ -79,7 +80,8 @@ private final class IntegrationAuthorizer: MicrophoneAuthorizing, @unchecked Sen
 }
 
 private final class IntegrationPCMSource: AudioFrameSource, AudioSourceReconfigurationCancelling,
-    @unchecked Sendable {
+    @unchecked Sendable
+{
     let role: RecordingTrackRole = .system
     private let hostTicksPerSecond = AudioSourceTimestampMapper.nativeHostTicksPerSecond()
     private let lock = NSLock()

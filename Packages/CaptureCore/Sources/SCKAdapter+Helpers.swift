@@ -9,14 +9,17 @@ extension SCKAdapter {
     static func outputScale(for display: SCDisplay, options: CaptureOptions) -> CGFloat {
         guard options.highResolution else { return 1 }
         let nativeScale = pixelScale(imageWidth: display.width, displayFrame: display.frame)
-        let backingScale = NSScreen.screens.first { screen in
-            guard let screenNumber = screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")
-            ] as? UInt32 else {
-                return false
-            }
-            return screenNumber == display.displayID
-        }?.backingScaleFactor ?? 1
+        let backingScale =
+            NSScreen.screens.first { screen in
+                guard
+                    let screenNumber = screen.deviceDescription[
+                        NSDeviceDescriptionKey("NSScreenNumber")
+                    ] as? UInt32
+                else {
+                    return false
+                }
+                return screenNumber == display.displayID
+            }?.backingScaleFactor ?? 1
         return max(1, nativeScale, backingScale)
     }
 
@@ -47,7 +50,8 @@ extension SCKAdapter {
             let screens = NSScreen.screens
             for screen in screens {
                 if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32,
-                   screenNumber == display.displayID {
+                    screenNumber == display.displayID
+                {
                     return screen.backingScaleFactor
                 }
             }

@@ -44,9 +44,9 @@ public struct BarcodePayload: Sendable, Equatable {
     /// 就把用户交给外部应用。
     public static func kind(of text: String) -> Kind {
         guard let url = URL(string: text),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              let host = url.host, !host.isEmpty
+            let scheme = url.scheme?.lowercased(),
+            scheme == "http" || scheme == "https",
+            let host = url.host, !host.isEmpty
         else { return .text }
         return .webLink(url)
     }

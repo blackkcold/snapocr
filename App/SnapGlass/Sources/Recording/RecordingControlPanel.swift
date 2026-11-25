@@ -427,7 +427,6 @@ struct RecordingControlPanelView: View {
         .accessibilityLabel(Text("Close"))
     }
 
-
     var closeWhileSavingButton: some View {
         Button(action: actions.onHideWhileSaving) {
             Image(systemName: "xmark")
@@ -508,7 +507,9 @@ struct RecordingControlPanelView: View {
                 .fixedSize()
         }
 
-        Button { actions.onReveal(failure.partialURL) } label: {
+        Button {
+            actions.onReveal(failure.partialURL)
+        } label: {
             Image(systemName: "folder")
                 .font(.system(size: 11, weight: .semibold))
                 .frame(width: 20, height: 20)
@@ -519,7 +520,9 @@ struct RecordingControlPanelView: View {
         .help("Show in Finder")
         .accessibilityLabel(Text("Show in Finder"))
 
-        Button { model.toggleFailureExpansion() } label: {
+        Button {
+            model.toggleFailureExpansion()
+        } label: {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.system(size: 9, weight: .bold))
                 .frame(width: 20, height: 20)

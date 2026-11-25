@@ -37,14 +37,16 @@ struct ScreenshotShelfDisplayFollowPolicyTests {
             CGRect(x: 1_920, y: 124, width: 1_470, height: 956),
         ]
 
-        #expect(ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
-            for: CGPoint(x: 800, y: 500),
-            displayFrames: frames
-        ) == 0)
-        #expect(ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
-            for: CGPoint(x: 2_500, y: 500),
-            displayFrames: frames
-        ) == 1)
+        #expect(
+            ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+                for: CGPoint(x: 800, y: 500),
+                displayFrames: frames
+            ) == 0)
+        #expect(
+            ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+                for: CGPoint(x: 2_500, y: 500),
+                displayFrames: frames
+            ) == 1)
     }
 
     @Test func nearestDisplayIndexResolvesTheGapBetweenScreens() {
@@ -53,14 +55,16 @@ struct ScreenshotShelfDisplayFollowPolicyTests {
             CGRect(x: 1_920, y: 124, width: 1_470, height: 956),
         ]
 
-        #expect(ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
-            for: CGPoint(x: 2_000, y: 100),
-            displayFrames: frames
-        ) == 1)
-        #expect(ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
-            for: CGPoint(x: 1_960, y: 40),
-            displayFrames: frames
-        ) == 0)
+        #expect(
+            ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+                for: CGPoint(x: 2_000, y: 100),
+                displayFrames: frames
+            ) == 1)
+        #expect(
+            ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+                for: CGPoint(x: 1_960, y: 40),
+                displayFrames: frames
+            ) == 0)
     }
 
     @Test func nearestDisplayIndexIgnoresAnEmptyList() {

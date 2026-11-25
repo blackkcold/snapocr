@@ -44,15 +44,17 @@ struct RecordingCaptureFrameGeometryTests {
     }
 
     @Test func invalidGeometryReturnsNil() {
-        #expect(RecordingCaptureFrameGeometry.appKitRect(
-            localRect: CGRect(x: 0, y: 0, width: 100, height: 100),
-            displayFrame: .zero,
-            appKitScreenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
-        ) == nil)
-        #expect(RecordingCaptureFrameGeometry.appKitRect(
-            localRect: CGRect(x: 0, y: 0, width: 0, height: 100),
-            displayFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
-            appKitScreenFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
-        ) == nil)
+        #expect(
+            RecordingCaptureFrameGeometry.appKitRect(
+                localRect: CGRect(x: 0, y: 0, width: 100, height: 100),
+                displayFrame: .zero,
+                appKitScreenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
+            ) == nil)
+        #expect(
+            RecordingCaptureFrameGeometry.appKitRect(
+                localRect: CGRect(x: 0, y: 0, width: 0, height: 100),
+                displayFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
+                appKitScreenFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
+            ) == nil)
     }
 }

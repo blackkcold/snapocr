@@ -12,10 +12,12 @@ enum OCRSettings {
     static func current() -> OCROptions {
         let defaults = UserDefaults.standard
 
-        let languagePreference = defaults.string(forKey: PreferenceKeys.ocrLanguagePriority)
+        let languagePreference =
+            defaults.string(forKey: PreferenceKeys.ocrLanguagePriority)
             ?? PreferenceDefaults.ocrLanguagePriority
 
-        let enabledLanguages = defaults.stringArray(forKey: PreferenceKeys.ocrEnabledLanguages)
+        let enabledLanguages =
+            defaults.stringArray(forKey: PreferenceKeys.ocrEnabledLanguages)
             ?? PreferenceDefaults.ocrEnabledLanguages
 
         // The priority language is hoisted to the front; remaining enabled
@@ -37,9 +39,11 @@ enum OCRSettings {
             ordered.append(code)
         }
 
-        let enginePreference = defaults.string(forKey: PreferenceKeys.ocrEngine)
+        let enginePreference =
+            defaults.string(forKey: PreferenceKeys.ocrEngine)
             ?? PreferenceDefaults.ocrEngine
-        let engine: OCREngineType = enginePreference == "tesseract"
+        let engine: OCREngineType =
+            enginePreference == "tesseract"
             ? .tesseract(languageDataPath: nil)
             : .vision
 

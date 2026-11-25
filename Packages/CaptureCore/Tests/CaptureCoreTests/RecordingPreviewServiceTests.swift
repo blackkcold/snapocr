@@ -12,9 +12,10 @@ struct RecordingPreviewServiceTests {
             indexURL: paths.indexURL,
             sessionID: paths.sessionID
         )
-        try await ledger.register(RecordingSessionRecord(
-            id: paths.sessionID, kind: .audio, layout: .mixed, startedAt: Date(), segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: paths.sessionID, kind: .audio, layout: .mixed, startedAt: Date(), segments: []
+            ))
 
         let segmentRoot = paths.sessionRoot.appendingPathComponent("segment-000000")
         try FileManager.default.createDirectory(at: segmentRoot, withIntermediateDirectories: true)
@@ -28,10 +29,11 @@ struct RecordingPreviewServiceTests {
         )
         try await ledger.commit(commit)
         let coverage = makeCoverage()
-        try await ledger.recordClosedSegment(RecordingSegmentCheckpointBundle(
-            checkpoints: SegmentCheckpointSet(segmentIndex: 0, checkpoints: [commit]),
-            coverage: coverage
-        ))
+        try await ledger.recordClosedSegment(
+            RecordingSegmentCheckpointBundle(
+                checkpoints: SegmentCheckpointSet(segmentIndex: 0, checkpoints: [commit]),
+                coverage: coverage
+            ))
 
         let segmentID = await ledger.segmentID(for: 0)
         let outputRoot = paths.root.appendingPathComponent("output", isDirectory: true)
@@ -50,12 +52,13 @@ struct RecordingPreviewServiceTests {
         )
         try await ledger.recordPublishIntent(intent)
         try FileManager.default.moveItem(at: staging, to: final)
-        try await ledger.markPublished(PublishedSegment(
-            id: segmentID, index: 0,
-            files: ["mixed": final.lastPathComponent],
-            startSample: 0, sampleCount: 2,
-            trackMap: ["mixed": 0], missingRanges: [], state: .published
-        ))
+        try await ledger.markPublished(
+            PublishedSegment(
+                id: segmentID, index: 0,
+                files: ["mixed": final.lastPathComponent],
+                startSample: 0, sampleCount: 2,
+                trackMap: ["mixed": 0], missingRanges: [], state: .published
+            ))
 
         let preview = await ledger.makePreviewService()
         let lease = try await preview.leasePreview(for: .checkpoint(checkpointID))
@@ -77,19 +80,21 @@ struct RecordingPreviewServiceTests {
             indexURL: paths.indexURL,
             sessionID: paths.sessionID
         )
-        try await ledger.register(RecordingSessionRecord(
-            id: paths.sessionID, kind: .audio, layout: .mixed, startedAt: Date(), segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: paths.sessionID, kind: .audio, layout: .mixed, startedAt: Date(), segments: []
+            ))
         let segmentRoot = paths.sessionRoot.appendingPathComponent("segment-000000")
         try FileManager.default.createDirectory(at: segmentRoot, withIntermediateDirectories: true)
         let caf = segmentRoot.appendingPathComponent("checkpoint.caf")
         try Data([0x43]).write(to: caf)
         let checkpointID = UUID()
-        try await ledger.commit(CheckpointCommit(
-            checkpointID: checkpointID, segmentIndex: 0,
-            range: SampleRange(startSample: 0, sampleCount: 1),
-            trackURLs: [.mixed: caf], committedAt: Date()
-        ))
+        try await ledger.commit(
+            CheckpointCommit(
+                checkpointID: checkpointID, segmentIndex: 0,
+                range: SampleRange(startSample: 0, sampleCount: 1),
+                trackURLs: [.mixed: caf], committedAt: Date()
+            ))
         let preview = await ledger.makePreviewService()
 
         await #expect(throws: RecordingPreviewError.self) {
@@ -102,10 +107,12 @@ struct RecordingPreviewServiceTests {
             segmentIndex: 0,
             segmentStartSample: 0,
             segmentEndSample: 2,
-            tracks: [RecordingTrackCoverage(
-                role: "mixed", sampleRate: 48_000, channelCount: 1, wasActive: true,
-                firstSample: 0, lastSample: 2, missingRanges: [], writerSynthesizedSilenceFrames: 0
-            ),]
+            tracks: [
+                RecordingTrackCoverage(
+                    role: "mixed", sampleRate: 48_000, channelCount: 1, wasActive: true,
+                    firstSample: 0, lastSample: 2, missingRanges: [], writerSynthesizedSilenceFrames: 0
+                )
+            ]
         )
     }
 

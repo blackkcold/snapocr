@@ -360,9 +360,9 @@ struct RecordingStartOwnership: Equatable, Sendable {
     /// - Returns: `true` only for the first accepted frame of a still-current, uncancelled start.
     mutating func firstFrameAccepted(generation: UUID) -> Bool {
         guard ownerGeneration == generation,
-              stage == .awaitingFirstFrame,
-              !cancelRequested,
-              !didRequestInitialStop
+            stage == .awaitingFirstFrame,
+            !cancelRequested,
+            !didRequestInitialStop
         else { return false }
         stage = .recording
         return true

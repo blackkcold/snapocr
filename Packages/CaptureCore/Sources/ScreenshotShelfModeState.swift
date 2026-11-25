@@ -93,11 +93,12 @@ public struct ScreenshotShelfModeState: Equatable, Sendable {
     @discardableResult
     public mutating func expandIfDwellElapsed(now: Date = Date()) -> Bool {
         guard mode == .collapsed,
-              isExpansionArmed,
-              !isSuppressed,
-              !isInteractionHeld,
-              let deadline = dwellDeadline,
-              now >= deadline else { return false }
+            isExpansionArmed,
+            !isSuppressed,
+            !isInteractionHeld,
+            let deadline = dwellDeadline,
+            now >= deadline
+        else { return false }
 
         mode = .expanded
         idleDeadline = nil
@@ -151,7 +152,8 @@ public struct ScreenshotShelfModeState: Equatable, Sendable {
     @discardableResult
     public mutating func collapseIfIdle(now: Date = Date()) -> Bool {
         guard mode == .expanded, !isInteractionHeld, !isSuppressed,
-              let deadline = idleDeadline, now >= deadline else {
+            let deadline = idleDeadline, now >= deadline
+        else {
             return false
         }
         collapse()

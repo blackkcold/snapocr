@@ -33,8 +33,8 @@ extension AreaTrackingView {
     ///   最新帧）；`false` 时用遮罩弹出前的预截原图，无时差、无闪烁。
     func scanSelectedRegion(liveCapture: Bool = false) {
         guard phase == .selected,
-              selectionRect.width > 5, selectionRect.height > 5,
-              !scanState.isScanning
+            selectionRect.width > 5, selectionRect.height > 5,
+            !scanState.isScanning
         else { return }
 
         scanTask?.cancel()
@@ -98,7 +98,7 @@ extension AreaTrackingView {
     @discardableResult
     func copyFirstScanPayload() -> Bool {
         guard case .results(let results) = scanState,
-              let payload = BarcodePayloadFormatter.payloads(from: results).first
+            let payload = BarcodePayloadFormatter.payloads(from: results).first
         else { return false }
         copyScanPayload(payload.text)
         return true
@@ -128,8 +128,8 @@ extension AreaTrackingView {
     @discardableResult
     func openFirstScanLink() -> Bool {
         guard case .results(let results) = scanState,
-              let payload = BarcodePayloadFormatter.payloads(from: results).first,
-              let url = payload.webLink
+            let payload = BarcodePayloadFormatter.payloads(from: results).first,
+            let url = payload.webLink
         else { return false }
         openScanLink(url)
         return true
@@ -212,8 +212,8 @@ extension AreaTrackingView {
     /// 带 ⌘/⌃/⌥ 的组合键交给既有快捷键逻辑，这里只处理裸按键。
     func handleScanShortcut(_ event: NSEvent) -> Bool {
         guard phase == .selected,
-              event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
-              let characters = event.charactersIgnoringModifiers?.lowercased()
+            event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
+            let characters = event.charactersIgnoringModifiers?.lowercased()
         else { return false }
 
         switch characters {
@@ -233,8 +233,8 @@ extension AreaTrackingView {
     /// `⌘C` 在正文有选中文本时不消费，交给字段编辑器复制选中的片段。
     func handleScanCommand(_ event: NSEvent) -> Bool {
         guard phase == .selected,
-              scanState.isVisible,
-              event.modifierFlags.contains(.command)
+            scanState.isVisible,
+            event.modifierFlags.contains(.command)
         else { return false }
 
         if event.keyCode == 36 || event.keyCode == 76 {
@@ -264,11 +264,13 @@ extension AreaTrackingView {
         else { return nil }
 
         let displayFrame = CGDisplayBounds(displayID)
-        guard let cropRect = RegionPixelMapping.pixelCropRect(
-            areaRect: quartzRect,
-            displayFrame: displayFrame,
-            imageSize: CGSize(width: frame.width, height: frame.height)
-        ) else { return nil }
+        guard
+            let cropRect = RegionPixelMapping.pixelCropRect(
+                areaRect: quartzRect,
+                displayFrame: displayFrame,
+                imageSize: CGSize(width: frame.width, height: frame.height)
+            )
+        else { return nil }
         return frame.cropping(to: cropRect)
     }
 
@@ -293,7 +295,7 @@ extension AreaTrackingView {
 
     private func copyAllScanPayloads() {
         guard case .results(let results) = scanState,
-              let text = BarcodePayloadFormatter.joinedText(from: results)
+            let text = BarcodePayloadFormatter.joinedText(from: results)
         else { return }
         copyScanPayload(text)
     }

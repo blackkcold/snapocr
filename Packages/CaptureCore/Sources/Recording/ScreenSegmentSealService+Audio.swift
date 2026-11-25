@@ -88,7 +88,7 @@ extension ScreenSegmentSealService {
         }.sorted { $0.1.range.startSample < $1.1.range.startSample }
         for (url, commit) in ordered {
             guard commit.range.startSample >= cursor,
-                  commit.range.startSample + commit.range.sampleCount <= context.segmentEndSample
+                commit.range.startSample + commit.range.sampleCount <= context.segmentEndSample
             else { throw ScreenSegmentSealError.rangeMismatch }
             if commit.range.startSample > cursor {
                 try await appendSilence(
@@ -130,10 +130,10 @@ extension ScreenSegmentSealService {
         do { file = try AVAudioFile(forReading: url) } catch { throw ScreenSegmentSealError.audioReadFailed }
         let format = file.processingFormat
         guard Int(format.sampleRate.rounded()) == 48_000,
-              format.commonFormat == .pcmFormatFloat32,
-              !format.isInterleaved,
-              Int(format.channelCount) > 0,
-              file.length >= expectedFrames
+            format.commonFormat == .pcmFormatFloat32,
+            !format.isInterleaved,
+            Int(format.channelCount) > 0,
+            file.length >= expectedFrames
         else { throw ScreenSegmentSealError.audioFormatMismatch }
 
         var remaining = expectedFrames
@@ -210,9 +210,9 @@ extension ScreenSegmentSealService {
         do { file = try AVAudioFile(forReading: url) } catch { throw ScreenSegmentSealError.audioReadFailed }
         let format = file.processingFormat
         guard Int(format.sampleRate.rounded()) == 48_000,
-              format.commonFormat == .pcmFormatFloat32,
-              !format.isInterleaved,
-              (1...2).contains(Int(format.channelCount))
+            format.commonFormat == .pcmFormatFloat32,
+            !format.isInterleaved,
+            (1...2).contains(Int(format.channelCount))
         else { throw ScreenSegmentSealError.audioFormatMismatch }
         return (48_000, Int(format.channelCount))
     }
@@ -223,8 +223,8 @@ extension ScreenSegmentSealService {
         let sidecars = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         for candidate in sidecars where candidate.lastPathComponent.hasPrefix("checkpoint-") {
             guard let data = try? Data(contentsOf: candidate),
-                  let record = try? RecordingCheckpointSidecar.decode(data, path: candidate.path),
-                  record.tracks.contains(where: { $0.fileName == url.lastPathComponent })
+                let record = try? RecordingCheckpointSidecar.decode(data, path: candidate.path),
+                record.tracks.contains(where: { $0.fileName == url.lastPathComponent })
             else { continue }
             let roleURLs = Dictionary(
                 uniqueKeysWithValues: record.tracks.compactMap { track -> (RecordingTrackRole, URL)? in

@@ -1,67 +1,70 @@
 import AppKit
 import CaptureCore
 import Foundation
-import SharedKit
-
 @preconcurrency import ScreenCaptureKit
+import SharedKit
 
 /// Sleep, wake, lock, display-change, and capacity interruptions for a live session.
 extension RecordingSessionController {
     func installLifecycleObservers() {
         let workspaceCenter = NSWorkspace.shared.notificationCenter
-        notificationObservers.append(workspaceCenter.addObserver(
-            forName: NSWorkspace.willSleepNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.handleInterruption(AppLocalization.string("The Mac is going to sleep."))
-            }
-        })
-
-        notificationObservers.append(workspaceCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.hasPendingBackgroundFinalization {
-                    _ = await self.waitForBackgroundFinalization()
-                } else if self.isAudioSessionActive {
-                    // If sleep suspended the notification task before it requested a stop, resume
-                    // through the same pipeline/ledger finalizer instead of claiming the session saved.
-                    _ = await self.stopAudio()
+        notificationObservers.append(
+            workspaceCenter.addObserver(
+                forName: NSWorkspace.willSleepNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.handleInterruption(AppLocalization.string("The Mac is going to sleep."))
                 }
-            }
-        })
+            })
 
-        notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.status == .recording || self.status == .starting else { return }
-                await self.handleInterruptionIfSourceChanged()
-            }
-        })
+        notificationObservers.append(
+            workspaceCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if self.hasPendingBackgroundFinalization {
+                        _ = await self.waitForBackgroundFinalization()
+                    } else if self.isAudioSessionActive {
+                        // If sleep suspended the notification task before it requested a stop, resume
+                        // through the same pipeline/ledger finalizer instead of claiming the session saved.
+                        _ = await self.stopAudio()
+                    }
+                }
+            })
+
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.status == .recording || self.status == .starting else { return }
+                    await self.handleInterruptionIfSourceChanged()
+                }
+            })
 
         let distributedCenter = DistributedNotificationCenter.default()
-        notificationObservers.append(distributedCenter.addObserver(
-            forName: Notification.Name("com.apple.screenIsLocked"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                // Audio capture is allowed to continue through a lock; sleep still requests a
-                // durable stop above. Preserve the existing screen-recording interruption path.
-                guard let self, !self.isAudioSessionActive, !self.hasPendingBackgroundFinalization else {
-                    return
+        notificationObservers.append(
+            distributedCenter.addObserver(
+                forName: Notification.Name("com.apple.screenIsLocked"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    // Audio capture is allowed to continue through a lock; sleep still requests a
+                    // durable stop above. Preserve the existing screen-recording interruption path.
+                    guard let self, !self.isAudioSessionActive, !self.hasPendingBackgroundFinalization else {
+                        return
+                    }
+                    await self.handleInterruption(AppLocalization.string("The screen was locked."))
                 }
-                await self.handleInterruption(AppLocalization.string("The screen was locked."))
-            }
-        })
+            })
     }
 
     func handleInterruption(_ reason: String) async {
@@ -108,8 +111,8 @@ extension RecordingSessionController {
                     return
                 }
                 guard let self,
-                      generation == self.sessionGeneration,
-                      self.status == .recording
+                    generation == self.sessionGeneration,
+                    self.status == .recording
                 else { return }
                 // Renew the liveness lease before doing any work this turn. If the
                 // main actor stops here, the supervisor stops and saves the session
@@ -178,8 +181,9 @@ extension RecordingSessionController {
             return AppLocalization.string("The selected display was disconnected; the recording is being finalized.")
         }
         guard display.width == Int(selection.displayPixelSize.width),
-              display.height == Int(selection.displayPixelSize.height),
-              display.frame.size == selection.displayFrame.size else {
+            display.height == Int(selection.displayPixelSize.height),
+            display.frame.size == selection.displayFrame.size
+        else {
             return AppLocalization.string("The selected display changed size; the recording is being finalized.")
         }
 
@@ -193,7 +197,8 @@ extension RecordingSessionController {
                 )
             }
             guard window.frame.size == selection.sourceFrame.size,
-                  display.frame.contains(window.frame) else {
+                display.frame.contains(window.frame)
+            else {
                 return AppLocalization.string(
                     "The selected window changed size or display; the recording is being finalized."
                 )

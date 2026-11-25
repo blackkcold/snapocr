@@ -511,7 +511,7 @@ internal enum RecordingCheckpointSidecar {
             let candidate = tracksDirectory.appendingPathComponent(track.fileName).standardizedFileURL
             let resolved = candidate.resolvingSymlinksInPath()
             guard candidate.deletingLastPathComponent().path == root.path,
-                  resolved.path == candidate.path
+                resolved.path == candidate.path
             else {
                 throw RecordingCheckpointError.verificationFailed(path: candidate.path)
             }
@@ -565,20 +565,20 @@ internal enum RecordingCheckpointPath {
         let resolvedRoot = sessionRoot.resolvingSymlinksInPath().standardizedFileURL
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: resolvedRoot.path, isDirectory: &isDirectory),
-              isDirectory.boolValue
+            isDirectory.boolValue
         else {
             throw RecordingCheckpointError.pathEscapesSessionRoot
         }
         let resolvedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
         guard FileManager.default.fileExists(atPath: resolvedDirectory.path, isDirectory: &isDirectory),
-              isDirectory.boolValue
+            isDirectory.boolValue
         else {
             throw RecordingCheckpointError.pathEscapesSessionRoot
         }
         let rootComponents = resolvedRoot.pathComponents
         let directoryComponents = resolvedDirectory.pathComponents
         guard directoryComponents.count > rootComponents.count,
-              Array(directoryComponents.prefix(rootComponents.count)) == rootComponents
+            Array(directoryComponents.prefix(rootComponents.count)) == rootComponents
         else {
             throw RecordingCheckpointError.pathEscapesSessionRoot
         }
@@ -658,11 +658,11 @@ private final class CheckpointTrackFile {
             throw RecordingCheckpointError.writeFailed(role: role, reason: "CAF is closed")
         }
         guard file.processingFormat.channelCount == channelCount,
-              let buffer = AVAudioPCMBuffer(
-                  pcmFormat: file.processingFormat,
-                  frameCapacity: AVAudioFrameCount(frameCount)
-              ),
-              let storage = buffer.int16ChannelData?[0]
+            let buffer = AVAudioPCMBuffer(
+                pcmFormat: file.processingFormat,
+                frameCapacity: AVAudioFrameCount(frameCount)
+            ),
+            let storage = buffer.int16ChannelData?[0]
         else {
             throw RecordingCheckpointError.writeFailed(role: role, reason: "Unable to allocate PCM buffer")
         }
@@ -784,7 +784,7 @@ public actor RecordingCheckpointWriter: SegmentCheckpointSink {
         faults: any RecordingCheckpointFaultInjecting
     ) throws {
         guard sampleRate > 0, !roles.isEmpty,
-              segment.index >= 0, segment.endSample > segment.startSample
+            segment.index >= 0, segment.endSample > segment.startSample
         else {
             throw RecordingCheckpointError.invalidConfiguration
         }
@@ -909,8 +909,8 @@ public actor RecordingCheckpointWriter: SegmentCheckpointSink {
         }
         let ends = chunk.participants.compactMap { roleStates[$0]?.lastSample }
         guard ends.count == chunk.participants.count,
-              Set(ends).count == 1,
-              let endSample = ends.first
+            Set(ends).count == 1,
+            let endSample = ends.first
         else {
             throw RecordingCheckpointError.trackRangesDoNotMatch
         }
@@ -1034,8 +1034,8 @@ public actor RecordingCheckpointWriter: SegmentCheckpointSink {
         sampleCount: Int64
     ) throws -> (track: RecordingCheckpointRecord.Track, url: URL) {
         guard let file = chunk.files[role],
-              let frames = chunk.framesByRole[role],
-              frames == sampleCount
+            let frames = chunk.framesByRole[role],
+            frames == sampleCount
         else {
             throw RecordingCheckpointError.trackRangesDoNotMatch
         }
@@ -1147,11 +1147,11 @@ extension RecordingCheckpointWriter {
             throw RecordingCheckpointError.incompatibleFormat(role: block.role)
         }
         guard block.frameCount > 0,
-              Int64(block.frameCount) == block.range.sampleCount,
-              block.sampleRate == sampleRate,
-              block.channelCount > 0,
-              block.channelCount == block.channels.count,
-              block.channels.allSatisfy({ $0.count == block.frameCount })
+            Int64(block.frameCount) == block.range.sampleCount,
+            block.sampleRate == sampleRate,
+            block.channelCount > 0,
+            block.channelCount == block.channels.count,
+            block.channels.allSatisfy({ $0.count == block.frameCount })
         else {
             throw RecordingCheckpointError.incompatibleFormat(role: block.role)
         }

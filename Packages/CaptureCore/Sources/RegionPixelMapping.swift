@@ -27,7 +27,7 @@ public enum RegionPixelMapping {
         imageSize: CGSize
     ) -> CGRect? {
         guard imageSize.width > 0, imageSize.height > 0,
-              displayFrame.width > 0, displayFrame.height > 0
+            displayFrame.width > 0, displayFrame.height > 0
         else { return nil }
 
         let area = areaRect.standardized

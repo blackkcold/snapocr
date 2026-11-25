@@ -1,8 +1,8 @@
-import Foundation
 import AutomationCore
-import CaptureCore
-import OCRCore
 import BarcodeCore
+import CaptureCore
+import Foundation
+import OCRCore
 import SharedKit
 
 let arguments = CommandLine.arguments

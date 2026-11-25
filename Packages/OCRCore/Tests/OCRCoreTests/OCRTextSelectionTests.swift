@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import OCRCore
 
 struct OCRTextSelectionTests {
@@ -31,11 +32,12 @@ struct OCRTextSelectionTests {
         )
 
         #expect(selection.selectedText(in: lines) == "pha\nbeta\ngam")
-        #expect(selection.slices(in: lines).map(\.range) == [
-            NSRange(location: 2, length: 3),
-            NSRange(location: 0, length: 4),
-            NSRange(location: 0, length: 3),
-        ])
+        #expect(
+            selection.slices(in: lines).map(\.range) == [
+                NSRange(location: 2, length: 3),
+                NSRange(location: 0, length: 4),
+                NSRange(location: 0, length: 3),
+            ])
     }
 
     @Test func wordSelectionUsesNaturalWordBoundaries() {

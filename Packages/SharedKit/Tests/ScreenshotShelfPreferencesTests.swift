@@ -88,7 +88,8 @@ struct ScreenshotShelfPreferencesTests {
         let moviesDirectory = fileManager.temporaryDirectory
             .appendingPathComponent("RecordingDestinationPreferencesTests-\(UUID().uuidString)", isDirectory: true)
             .appendingPathComponent("Movies", isDirectory: true)
-        let expected = moviesDirectory
+        let expected =
+            moviesDirectory
             .appendingPathComponent("SnapGlass", isDirectory: true)
             .appendingPathComponent("Recordings", isDirectory: true)
 
@@ -111,9 +112,10 @@ struct ScreenshotShelfPreferencesTests {
         try Data("keep this recording".utf8).write(to: existingFile)
 
         RecordingDestinationPreferences.setCustomDirectory(customDirectory, in: defaults)
-        let expectedVolumeUUID = (try? customDirectory.resourceValues(
-            forKeys: [.volumeUUIDStringKey]
-        ))?.volumeUUIDString
+        let expectedVolumeUUID =
+            (try? customDirectory.resourceValues(
+                forKeys: [.volumeUUIDStringKey]
+            ))?.volumeUUIDString
         #expect(
             RecordingDestinationPreferences.customDirectoryVolumeUUID(in: defaults)
                 == expectedVolumeUUID
@@ -129,8 +131,8 @@ struct ScreenshotShelfPreferencesTests {
         #expect(
             RecordingDestinationPreferences.directory(in: defaults, moviesDirectory: moviesDirectory)
                 == moviesDirectory
-                    .appendingPathComponent("SnapGlass", isDirectory: true)
-                    .appendingPathComponent("Recordings", isDirectory: true)
+                .appendingPathComponent("SnapGlass", isDirectory: true)
+                .appendingPathComponent("Recordings", isDirectory: true)
         )
         #expect(try Data(contentsOf: existingFile) == Data("keep this recording".utf8))
     }

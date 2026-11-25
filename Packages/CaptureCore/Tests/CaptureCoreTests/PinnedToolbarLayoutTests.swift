@@ -56,14 +56,16 @@ struct PinnedToolbarLayoutTests {
         // View width is an optimistic proxy, not the real NSSlider thumb travel;
         // these values document geometry and do not certify hand feel.
         let scaleSpan = Double(PinnedImageGeometry.maximumScale / PinnedImageGeometry.minimumScale)
-        let regularStep = pow(
-            scaleSpan,
-            1.0 / Double(PinnedToolbarLayout.regular.sliderRange.upperBound)
-        ) - 1
-        let compactBestCaseStep = pow(
-            scaleSpan,
-            1.0 / Double(PinnedToolbarLayout.compact.sliderRange.upperBound)
-        ) - 1
+        let regularStep =
+            pow(
+                scaleSpan,
+                1.0 / Double(PinnedToolbarLayout.regular.sliderRange.upperBound)
+            ) - 1
+        let compactBestCaseStep =
+            pow(
+                scaleSpan,
+                1.0 / Double(PinnedToolbarLayout.compact.sliderRange.upperBound)
+            ) - 1
         let compact250SliderWidth = PinnedImageGeometry.toolbarSliderWidth(layout: .compact, availableWidth: 250)
         let compact250Step = pow(scaleSpan, 1.0 / Double(compact250SliderWidth)) - 1
 

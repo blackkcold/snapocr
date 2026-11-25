@@ -19,8 +19,9 @@ extension ScreenRecordingSessionCoordinator {
             return
         }
         guard audioEngine == nil, audioFailureReason == nil,
-              configuration.audio.mode != .none,
-              let epoch = await composition.coordinator.recordingEpochHostTime() else { return }
+            configuration.audio.mode != .none,
+            let epoch = await composition.coordinator.recordingEpochHostTime()
+        else { return }
         do {
             let clock = AudioSampleClock(
                 epochHostTime: epoch,

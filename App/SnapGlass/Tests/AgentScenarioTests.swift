@@ -117,14 +117,16 @@ struct AgentScenarioTests {
         let caches = try #require(
             FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
         )
-        let root = caches
+        let root =
+            caches
             .appendingPathComponent("com.snapglass.agent.tests", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let roots = RecordingPipelineRoots(
             sessionRoot: root,
-            indexURL: root
+            indexURL:
+                root
                 .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
                 .appendingPathComponent("recording-index.json"),
             outputDirectory: root

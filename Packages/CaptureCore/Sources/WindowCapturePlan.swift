@@ -21,7 +21,8 @@ public struct WindowCaptureDisplay: Equatable, Sendable {
     /// Native pixels per point for this display.
     public var pixelScale: CGFloat {
         guard frame.width > 0, frame.height > 0,
-              pixelSize.width > 0, pixelSize.height > 0 else { return 1 }
+            pixelSize.width > 0, pixelSize.height > 0
+        else { return 1 }
         return max(pixelSize.width / frame.width, pixelSize.height / frame.height)
     }
 }
@@ -190,7 +191,8 @@ public struct WindowCapturePlan: Equatable, Sendable {
         }
 
         guard let largest = intersections.first else { return nil }
-        let commonScale = highResolution
+        let commonScale =
+            highResolution
             ? max(intersections.map { max($0.display.pixelScale, 1) }.max() ?? 1, 1)
             : 1
         let union = intersections.reduce(CGRect.null) { $0.union($1.rect) }
@@ -244,7 +246,8 @@ public struct WindowCapturePlan: Equatable, Sendable {
     /// window region and no content is cropped.
     public func scaledForThumbnail(maxPixelSize: CGSize) -> WindowCapturePlan {
         guard maxPixelSize.width > 0, maxPixelSize.height > 0,
-              outputPixelSize.width > 0, outputPixelSize.height > 0 else {
+            outputPixelSize.width > 0, outputPixelSize.height > 0
+        else {
             return self
         }
         let factor = min(
@@ -309,7 +312,8 @@ public struct WindowCapturePlan: Equatable, Sendable {
         return displays.filter { display in
             // Frame-only: mirrored displays can report different backing pixel
             // sizes while representing the same screen.
-            let key = "\(display.frame.origin.x),\(display.frame.origin.y),"
+            let key =
+                "\(display.frame.origin.x),\(display.frame.origin.y),"
                 + "\(display.frame.width),\(display.frame.height)"
             return seen.insert(key).inserted
         }

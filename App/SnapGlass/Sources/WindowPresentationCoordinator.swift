@@ -36,9 +36,9 @@ final class WindowPresentationCoordinator {
     private let focuser: WindowFocusing
     private let notificationCenter: NotificationCenter
     #if DEBUG
-    private let logger = Logger(category: "window-lifecycle", logLevel: .debug)
+        private let logger = Logger(category: "window-lifecycle", logLevel: .debug)
     #else
-    private let logger = Logger(category: "window-lifecycle", logLevel: .info)
+        private let logger = Logger(category: "window-lifecycle", logLevel: .info)
     #endif
     private var lifecycleState = WindowLifecycleState()
     private var windows: [String: WindowReference] = [:]
@@ -76,9 +76,10 @@ final class WindowPresentationCoordinator {
         )
 
         if let window = registeredWindow(id: id),
-           window.isVisible,
-           window.isKeyWindow,
-           activationController.isActive {
+            window.isVisible,
+            window.isKeyWindow,
+            activationController.isActive
+        {
             logger.info("present.noop id=\(id) reason=already-key")
             return
         }
@@ -310,7 +311,8 @@ final class WindowPresentationCoordinator {
             await Task.yield()
             var waited: Duration = .zero
             while self.activationController.hasVisibleUserFacingWindow,
-                waited < self.reevaluateRetryBudget {
+                waited < self.reevaluateRetryBudget
+            {
                 try? await Task.sleep(for: self.reevaluateRetryInterval)
                 if Task.isCancelled {
                     self.reevaluateTask = nil
@@ -352,7 +354,8 @@ final class WindowPresentationCoordinator {
         if activationController.isActive,
             let window = registeredWindow(id: id),
             window.isVisible,
-            !window.isKeyWindow {
+            !window.isKeyWindow
+        {
             logger.info("present.timeout.focus id=\(id) generation=\(generation)")
             focuser.focus(window)
         }
@@ -426,20 +429,20 @@ final class WindowPresentationCoordinator {
     }
 
     #if DEBUG
-    struct TrackedWindowCounts: Equatable {
-        let mapped: Int
-        let known: Int
-        let observed: Int
-    }
+        struct TrackedWindowCounts: Equatable {
+            let mapped: Int
+            let known: Int
+            let observed: Int
+        }
 
-    /// 测试用：确认关闭/释放后当前映射、身份记录与逐窗口观察都不会无限累积。
-    var trackedWindowCounts: TrackedWindowCounts {
-        TrackedWindowCounts(
-            mapped: windows.count,
-            known: knownWindowsByToken.count,
-            observed: observedWindows.count
-        )
-    }
+        /// 测试用：确认关闭/释放后当前映射、身份记录与逐窗口观察都不会无限累积。
+        var trackedWindowCounts: TrackedWindowCounts {
+            TrackedWindowCounts(
+                mapped: windows.count,
+                known: knownWindowsByToken.count,
+                observed: observedWindows.count
+            )
+        }
     #endif
 
     private var lifecycleSummary: String {

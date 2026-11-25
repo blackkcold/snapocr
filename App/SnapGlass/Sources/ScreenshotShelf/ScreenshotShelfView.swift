@@ -44,8 +44,9 @@ struct ScreenshotShelfView: View {
     @ViewBuilder
     private var sourceGhost: some View {
         if let ghostCardID,
-           let index = layout.cards.firstIndex(where: { $0.captureID == ghostCardID }),
-           index < layout.cardWidths.count {
+            let index = layout.cards.firstIndex(where: { $0.captureID == ghostCardID }),
+            index < layout.cardWidths.count
+        {
             ScreenshotShelfSourceGhostView(
                 card: layout.cards[index],
                 cardWidth: layout.cardWidths[index],
@@ -145,7 +146,8 @@ struct ScreenshotShelfView: View {
         HStack(alignment: .top, spacing: metrics.cardSpacing) {
             ForEach(layout.cards) { card in
                 if let index = layout.cards.firstIndex(where: { $0.id == card.id }),
-                   index < layout.cardWidths.count {
+                    index < layout.cardWidths.count
+                {
                     cardView(
                         card,
                         index: index,

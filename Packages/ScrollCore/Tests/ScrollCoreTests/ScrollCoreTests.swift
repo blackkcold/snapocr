@@ -237,15 +237,16 @@ struct ScrollCoreTests {
             let offset = detected > 0 && detected < heightA ? detected : heightA * 0.85
             let totalHeight = offset + heightB
 
-            let context = try #require(CGContext(
-                data: nil,
-                width: Int(width),
-                height: Int(totalHeight),
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ))
+            let context = try #require(
+                CGContext(
+                    data: nil,
+                    width: Int(width),
+                    height: Int(totalHeight),
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                ))
             let croppedA = try #require(
                 imageA.cropping(
                     to: CGRect(x: 0, y: 0, width: min(width, CGFloat(imageA.width)), height: offset)))
@@ -272,15 +273,16 @@ struct ScrollCoreTests {
         let width = image.width
         let height = image.height
         var data = [UInt8](repeating: 0, count: width * height * 4)
-        let context = try #require(CGContext(
-            data: &data,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: &data,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return data
     }
@@ -300,18 +302,19 @@ struct ScrollCoreTests {
 
         let data = Data(pixels) as CFData
         let provider = try #require(CGDataProvider(data: data))
-        return try #require(CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 8,
-            bytesPerRow: width,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: false,
-            intent: .defaultIntent
-        ))
+        return try #require(
+            CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 8,
+                bytesPerRow: width,
+                space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+            ))
     }
 }

@@ -130,12 +130,14 @@ final class CGCompatAdapter: @unchecked Sendable {
     ) -> CGImage? {
         logger.debug("Capturing rect \(rect) on display \(displayID)")
 
-        guard let image = CGWindowListCreateImage(
-            rect,
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            highResolution ? [.bestResolution] : [.nominalResolution]
-        ) else {
+        guard
+            let image = CGWindowListCreateImage(
+                rect,
+                .optionOnScreenOnly,
+                kCGNullWindowID,
+                highResolution ? [.bestResolution] : [.nominalResolution]
+            )
+        else {
             logger.error("CGWindowListCreateImage (rect) returned nil")
             return nil
         }
@@ -144,15 +146,17 @@ final class CGCompatAdapter: @unchecked Sendable {
     }
 
     private static func resize(_ image: CGImage, width: Int, height: Int) -> CGImage? {
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+            )
+        else {
             return nil
         }
 
@@ -167,10 +171,12 @@ final class CGCompatAdapter: @unchecked Sendable {
     ///
     /// - Returns: 窗口信息字典数组，每个字典包含 `kCGWindowNumber`、`kCGWindowBounds` 等键。
     func enumerateWindows() -> [[String: Any]] {
-        guard let windowList = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements],
-            kCGNullWindowID
-        ) as? [[String: Any]] else {
+        guard
+            let windowList = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements],
+                kCGNullWindowID
+            ) as? [[String: Any]]
+        else {
             logger.warning("CGWindowListCopyWindowInfo returned nil")
             return []
         }
@@ -192,7 +198,8 @@ final class CGCompatAdapter: @unchecked Sendable {
         let screens = NSScreen.screens
         for screen in screens {
             if let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32,
-               screenNumber == displayID {
+                screenNumber == displayID
+            {
                 return screen.backingScaleFactor
             }
         }
@@ -212,7 +219,7 @@ final class CGCompatAdapter: @unchecked Sendable {
             return CGMainDisplayID()
         }
 
-        for index in 0 ..< Int(displayCount) {
+        for index in 0..<Int(displayCount) {
             let bounds = CGDisplayBounds(displayIDs[index])
             if bounds.contains(point) {
                 return displayIDs[index]
@@ -251,16 +258,19 @@ private struct WindowInfo {
 /// 从窗口信息字典中提取窗口信息
 private extension CGCompatAdapter {
     func windowInfo(for windowID: CGWindowID) -> WindowInfo? {
-        guard let windowList = CGWindowListCopyWindowInfo(
-            .optionOnScreenOnly,
-            kCGNullWindowID
-        ) as? [[String: Any]] else {
+        guard
+            let windowList = CGWindowListCopyWindowInfo(
+                .optionOnScreenOnly,
+                kCGNullWindowID
+            ) as? [[String: Any]]
+        else {
             return nil
         }
 
         for entry in windowList {
             guard let entryID = entry[kCGWindowNumber as String] as? UInt32,
-                  entryID == windowID else {
+                entryID == windowID
+            else {
                 continue
             }
 

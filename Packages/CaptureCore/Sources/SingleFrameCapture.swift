@@ -99,18 +99,20 @@ enum SingleFrameCapture {
                     stream.startCapture { [session, logger] error in
                         if let error {
                             logger.error("SCStream startCapture failed", error: error)
-                            session.finish(throwing: CaptureError.captureFailed(
-                                reason: "SCStream startCapture: \(error.localizedDescription)"
-                            ))
+                            session.finish(
+                                throwing: CaptureError.captureFailed(
+                                    reason: "SCStream startCapture: \(error.localizedDescription)"
+                                ))
                         } else {
                             logger.debug("SCStream started successfully")
                         }
                     }
                 } catch {
                     logger.error("SCStream setup failed", error: error)
-                    session.finish(throwing: CaptureError.captureFailed(
-                        reason: "SCStream setup: \(error.localizedDescription)"
-                    ))
+                    session.finish(
+                        throwing: CaptureError.captureFailed(
+                            reason: "SCStream setup: \(error.localizedDescription)"
+                        ))
                 }
             }
         } onCancel: {

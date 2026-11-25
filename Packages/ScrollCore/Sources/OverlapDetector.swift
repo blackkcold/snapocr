@@ -266,9 +266,10 @@ extension OverlapDetector {
         let windowSize = width * height
         let base1 = offset * stride
         guard offset >= 0,
-              windowSize > 0,
-              base1 + windowSize <= pixels1.count,
-              windowSize <= pixels2.count else {
+            windowSize > 0,
+            base1 + windowSize <= pixels1.count,
+            windowSize <= pixels2.count
+        else {
             return 0
         }
 
@@ -327,15 +328,17 @@ extension OverlapDetector {
         let bytesPerRow = width * bytesPerPixel
         var pixelData = [UInt8](repeating: 0, count: width * height)
 
-        guard let context = CGContext(
-            data: &pixelData,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: &pixelData,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGImageAlphaInfo.none.rawValue
+            )
+        else {
             return nil
         }
 

@@ -42,8 +42,9 @@ struct RecordingRecoveryAdoptionTests {
         let index = try JSONDecoder().decode(
             RecordingIndexRecord.self, from: Data(contentsOf: indexURL)
         )
-        #expect(index.entries.first(where: { $0.sessionID == sessionID })?
-            .record.segments.first?.materialURL == caf)
+        #expect(
+            index.entries.first(where: { $0.sessionID == sessionID })?
+                .record.segments.first?.materialURL == caf)
     }
 
     @Test func adoptIsIdempotentAndKeepsOneIndexEntry() async throws {

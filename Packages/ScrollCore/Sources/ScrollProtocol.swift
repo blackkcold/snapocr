@@ -372,8 +372,8 @@ public enum MemoryPressureLevel: Int, Sendable, Comparable {
 public struct ScrollAllowlist: Sendable {
     /// 支持滚动截图的应用 bundle identifier 集合
     public static let supportedBundleIDs: Set<String> = [
-        "com.apple.Safari",        // Safari
-        "com.google.Chrome",       // Google Chrome
+        "com.apple.Safari",  // Safari
+        "com.google.Chrome",  // Google Chrome
     ]
 
     /// 检查指定 bundle identifier 是否在白名单中。

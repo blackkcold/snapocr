@@ -152,13 +152,14 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
 
     /// Registers the screen session before capture starts.
     public func registerSession(kind: RecordingKind, layout: AudioOutputLayout) async throws {
-        try await ledger.register(RecordingSessionRecord(
-            id: sessionID,
-            kind: kind,
-            layout: layout,
-            startedAt: Date(),
-            segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: sessionID,
+                kind: kind,
+                layout: layout,
+                startedAt: Date(),
+                segments: []
+            ))
     }
 
     /// The host-time origin established by the first accepted sync video frame.
@@ -185,10 +186,10 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
     /// Appends a 48 kHz audio block to the current underlying T7 sink.
     public func append(_ block: AudioPCMBlock) async throws {
         guard block.frameCount > 0,
-              block.sampleRate == 48_000,
-              block.range.sampleCount == Int64(block.frameCount),
-              block.channelCount == block.channels.count,
-              block.channels.allSatisfy({ $0.count == block.frameCount })
+            block.sampleRate == 48_000,
+            block.range.sampleCount == Int64(block.frameCount),
+            block.channelCount == block.channels.count,
+            block.channels.allSatisfy({ $0.count == block.frameCount })
         else { throw ScreenSegmentCoordinatorError.invalidAudio }
 
         guard let epochHostTime else {
@@ -318,11 +319,11 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
     /// - Parameter hostTime: The current monotonic host time.
     private func appendFreezeFrameIfNeeded(hostTime: UInt64) async throws {
         guard currentVideoWriter != nil,
-              let sample = lastSampleBuffer,
-              let epochHostTime,
-              let epochPresentationTime,
-              hostTime > epochHostTime,
-              let lastFrame
+            let sample = lastSampleBuffer,
+            let epochHostTime,
+            let epochPresentationTime,
+            hostTime > epochHostTime,
+            let lastFrame
         else { return }
         let elapsed = Double(hostTime - epochHostTime) / Double(hostTicksPerSecond)
         let target = CMTimeAdd(
@@ -359,7 +360,8 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
         switch decision {
         case .keepCurrent:
             if let epochHostTime,
-               let sample = sampleIndex(forHostTime: hostTime, epochHostTime: epochHostTime) {
+                let sample = sampleIndex(forHostTime: hostTime, epochHostTime: epochHostTime)
+            {
                 try await flushAudio(through: sample)
             }
             return nil
@@ -416,8 +418,8 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
     @discardableResult
     private func closeCurrentChunk(at boundary: ScreenBoundary) async throws -> ScreenCheckpointCommit {
         guard let writer = currentVideoWriter,
-              let start = currentChunkStart,
-              let segmentIndex = currentSegmentIndex
+            let start = currentChunkStart,
+            let segmentIndex = currentSegmentIndex
         else { throw ScreenSegmentCoordinatorError.noOpenVideoChunk }
         let sessionRoot = ledger.sessionRoot
 
@@ -479,10 +481,10 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
 
     private func sealCurrentSegment() async throws -> SealedSegment? {
         guard let segmentIndex = currentSegmentIndex,
-              let segmentID = currentSegmentID,
-              let context = sealContext,
-              let checkpoints = screenRecords[segmentIndex],
-              !checkpoints.isEmpty
+            let segmentID = currentSegmentID,
+            let context = sealContext,
+            let checkpoints = screenRecords[segmentIndex],
+            !checkpoints.isEmpty
         else { return nil }
         let completedAudioBundle = try await currentAudioSink?.finishSegmentBundle()
         let audioBundle = completedAudioBundle.flatMap {
@@ -511,22 +513,22 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
             }
             trackMap[name] = index
         }
-        try await ledger.markPublished(PublishedSegment(
-            id: sealed.segmentID,
-            index: sealed.index,
-            files: files,
-            startSample: sealed.effectiveRange.startSample,
-            sampleCount: sealed.effectiveRange.sampleCount,
-            trackMap: trackMap,
-            missingRanges: (audioBundle?.coverage.tracks ?? []).filter(\.wasActive).flatMap(\.missingRanges),
-            state: .published,
-            videoURL: videoURL,
-            videoTrackIndex: sealed.videoTrackIndex
-        ))
+        try await ledger.markPublished(
+            PublishedSegment(
+                id: sealed.segmentID,
+                index: sealed.index,
+                files: files,
+                startSample: sealed.effectiveRange.startSample,
+                sampleCount: sealed.effectiveRange.sampleCount,
+                trackMap: trackMap,
+                missingRanges: (audioBundle?.coverage.tracks ?? []).filter(\.wasActive).flatMap(\.missingRanges),
+                state: .published,
+                videoURL: videoURL,
+                videoTrackIndex: sealed.videoTrackIndex
+            ))
         screenRecords[segmentIndex] = nil
         return sealed
     }
-
 
     private func makeCoverage(_ commit: CheckpointCommit?, videoRange: SampleRange) throws -> RecordingSegmentCoverage {
         guard let commit, let firstURL = commit.trackURLs.values.first else {
@@ -577,18 +579,20 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
 
     private static func frameSample(_ sampleBuffer: CMSampleBuffer, index: Int64) throws -> VideoFrameSample {
         guard CMSampleBufferIsValid(sampleBuffer), CMSampleBufferDataIsReady(sampleBuffer),
-              CMSampleBufferGetImageBuffer(sampleBuffer) != nil
+            CMSampleBufferGetImageBuffer(sampleBuffer) != nil
         else { throw ScreenSegmentCoordinatorError.invalidFrame }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         guard pts.isValid, pts.isNumeric else { throw ScreenSegmentCoordinatorError.invalidFrame }
         let sourceDuration = CMSampleBufferGetDuration(sampleBuffer)
-        let duration = sourceDuration.isValid && sourceDuration.isNumeric && CMTimeCompare(sourceDuration, .zero) > 0
+        let duration =
+            sourceDuration.isValid && sourceDuration.isNumeric && CMTimeCompare(sourceDuration, .zero) > 0
             ? sourceDuration
             : CMTime(value: 1, timescale: 30)
-        let attachments = CMSampleBufferGetSampleAttachmentsArray(
-            sampleBuffer,
-            createIfNecessary: false
-        ) as? [[CFString: Any]]
+        let attachments =
+            CMSampleBufferGetSampleAttachmentsArray(
+                sampleBuffer,
+                createIfNecessary: false
+            ) as? [[CFString: Any]]
         let notSync = attachments?.first?[kCMSampleAttachmentKey_NotSync] as? NSNumber
         return VideoFrameSample(
             index: index,

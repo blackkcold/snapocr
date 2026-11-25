@@ -6,7 +6,7 @@ import SwiftUI
 public struct ToastView: View {
     /// The message to display.
     let message: ToastMessage
-    
+
     public var body: some View {
         HStack(spacing: DS.Space.s12) {
             Image(systemName: iconName)
@@ -32,7 +32,7 @@ public struct ToastView: View {
             elevation: .overlay
         )
     }
-    
+
     /// The SF Symbol name for the toast type.
     private var iconName: String {
         switch message.type {
@@ -41,7 +41,7 @@ public struct ToastView: View {
         case .info: return "info.circle.fill"
         }
     }
-    
+
     /// The color for the toast icon.
     private var iconColor: Color {
         switch message.type {

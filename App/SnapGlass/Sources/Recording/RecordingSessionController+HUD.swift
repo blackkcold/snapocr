@@ -15,8 +15,9 @@ extension RecordingSessionController {
             var lastHeartbeat: ContinuousClock.Instant?
             for await progress in stream {
                 guard !Task.isCancelled, let self,
-                      generation == self.sessionGeneration,
-                      self.audioSessionID == progress.sessionID else { break }
+                    generation == self.sessionGeneration,
+                    self.audioSessionID == progress.sessionID
+                else { break }
                 // Renew the liveness lease before any UI work. The progress stream
                 // fires at most every 100 ms; the lease is 10 s, so one beat every
                 // two seconds is enough and keeps the actor hop off the common path.
@@ -42,8 +43,8 @@ extension RecordingSessionController {
     /// from a progress value of its own.
     func handleAudioReadiness(generation: UUID) {
         guard generation == sessionGeneration,
-              audioStateMachine.state == .starting,
-              !audioStopRequested
+            audioStateMachine.state == .starting,
+            !audioStopRequested
         else { return }
         audioStateMachine.apply(.started)
         outcomeState.markRecordingStarted()
@@ -120,7 +121,8 @@ extension RecordingSessionController {
         let generation = previewLifecycleGeneration
         let service = await pipeline.makePreviewService()
         guard previewReadinessTask == nil,
-              previewLifecycleGeneration == generation else { return }
+            previewLifecycleGeneration == generation
+        else { return }
         previewService = service
         let stream = pipeline.makePreviewReadyStream()
         previewReadinessTask = Task { @MainActor [weak self] in
@@ -175,8 +177,8 @@ extension RecordingSessionController {
             defer { self.previewLoadTask = nil }
             await self.loadAudioPreview(for: target, service: service)
             guard !Task.isCancelled,
-                  self.previewTarget == target,
-                  let lease = self.previewLease
+                self.previewTarget == target,
+                let lease = self.previewLease
             else { return }
             self.startAudioPreview(lease)
         }
@@ -190,8 +192,9 @@ extension RecordingSessionController {
             try player.play(urls: lease.mediaURLs) { [weak self, weak player] in
                 Task { @MainActor [weak self, weak player] in
                     guard let self, let player,
-                          self.previewPlayer === player,
-                          self.previewLease?.id == lease.id else { return }
+                        self.previewPlayer === player,
+                        self.previewLease?.id == lease.id
+                    else { return }
                     await self.releaseAudioPreviewLease()
                 }
             }
@@ -200,8 +203,9 @@ extension RecordingSessionController {
             onMessage?(AppLocalization.string("Audio preview could not be started."), .error)
             Task { @MainActor [weak self, weak player] in
                 guard let self, let player,
-                      self.previewPlayer === player,
-                      self.previewLease?.id == lease.id else { return }
+                    self.previewPlayer === player,
+                    self.previewLease?.id == lease.id
+                else { return }
                 await self.releaseAudioPreviewLease()
             }
         }
@@ -610,7 +614,8 @@ extension RecordingSessionController {
 
     func showCaptureFrame(for selection: RecordingSourceSelection) {
         guard RecordingHUDPreferences.showsCaptureFrame(in: defaults),
-              let rect = captureFrameRect(for: selection) else { return }
+            let rect = captureFrameRect(for: selection)
+        else { return }
         let panel = RecordingCaptureFramePanel(rect: rect)
         // A frame that survives its replacement has no owner left to order it out:
         // the panel is borderless, floating, and never released when closed, so it

@@ -18,9 +18,9 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
             AgentRuntime.start()
             return
         }
-#if DEBUG
-        ShowcaseImageExporter.runIfConfigured()
-#endif
+        #if DEBUG
+            ShowcaseImageExporter.runIfConfigured()
+        #endif
     }
 
     /// Re-opens the recording controls when the app is launched again from Finder or Spotlight.

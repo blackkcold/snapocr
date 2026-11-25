@@ -1,4 +1,5 @@
 import Foundation
+
 /// The reason a producer write was partially or completely rejected.
 public enum RingDropReason: Sendable, Equatable {
     /// The ring and staging area could not hold the next frames.

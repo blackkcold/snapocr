@@ -62,9 +62,9 @@ public actor LedgerCheckpointSink: AudioCheckpointSink {
         await acquire()
         defer { release() }
         guard block.frameCount > 0, block.range.sampleCount == Int64(block.frameCount),
-              block.sampleRate == 48_000, block.channelCount == block.channels.count,
-              block.channels.allSatisfy({ $0.count == block.frameCount }),
-              block.role == .mixed || block.role == .system || block.role == .microphone
+            block.sampleRate == 48_000, block.channelCount == block.channels.count,
+            block.channels.allSatisfy({ $0.count == block.frameCount }),
+            block.role == .mixed || block.role == .system || block.role == .microphone
         else { throw RecordingCheckpointError.incompatibleFormat(role: block.role) }
         if var current = pendingTick {
             if current.range == block.range {
@@ -156,7 +156,10 @@ public actor LedgerCheckpointSink: AudioCheckpointSink {
     }
 
     private func acquire() async {
-        if !busy { busy = true; return }
+        if !busy {
+            busy = true
+            return
+        }
         await withCheckedContinuation { continuation in waiters.append(continuation) }
     }
 

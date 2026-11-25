@@ -5,226 +5,226 @@ import SharedKit
 /// A native multiline field whose bounds use image pixels, not screen points.
 /// This preserves type size and horizontal scaling while the canvas resizes.
 final class CanvasTextEditor: NSTextView {
-  var sourceNode: AnnotationNode?
-  var onCommit: ((String) -> Void)?
-  var onCancel: (() -> Void)?
-  var onTextChanged: ((String) -> Void)?
-  var onLayoutRequested: (() -> Void)?
-  var isFinishing = false
-  var enterInsertsNewline: () -> Bool = {
-    UserDefaults.standard.object(forKey: PreferenceKeys.editorEnterInsertsNewline) as? Bool
-      ?? PreferenceDefaults.editorEnterInsertsNewline
-  }
+    var sourceNode: AnnotationNode?
+    var onCommit: ((String) -> Void)?
+    var onCancel: (() -> Void)?
+    var onTextChanged: ((String) -> Void)?
+    var onLayoutRequested: (() -> Void)?
+    var isFinishing = false
+    var enterInsertsNewline: () -> Bool = {
+        UserDefaults.standard.object(forKey: PreferenceKeys.editorEnterInsertsNewline) as? Bool
+            ?? PreferenceDefaults.editorEnterInsertsNewline
+    }
 
-  override func viewDidMoveToWindow() {
-    super.viewDidMoveToWindow()
-    NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
-    if let window {
-      NotificationCenter.default.addObserver(
-        self, selector: #selector(cancelOnWindowDeactivation),
-        name: NSWindow.didResignKeyNotification, object: window)
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
+        if let window {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(cancelOnWindowDeactivation),
+                name: NSWindow.didResignKeyNotification, object: window)
+        }
     }
-  }
 
-  @objc private func cancelOnWindowDeactivation(_ notification: Notification) {
-    // Losing key status used to throw the draft away. Commit it instead so
-    // switching apps or opening a panel never silently loses typed text.
-    if !isFinishing { onCommit?(string) }
-  }
+    @objc private func cancelOnWindowDeactivation(_ notification: Notification) {
+        // Losing key status used to throw the draft away. Commit it instead so
+        // switching apps or opening a panel never silently loses typed text.
+        if !isFinishing { onCommit?(string) }
+    }
 
-  override func keyDown(with event: NSEvent) {
-    // Let the input method confirm/cancel its candidate before handling shortcuts.
-    if hasMarkedText() {
-      super.keyDown(with: event)
-      return
+    override func keyDown(with event: NSEvent) {
+        // Let the input method confirm/cancel its candidate before handling shortcuts.
+        if hasMarkedText() {
+            super.keyDown(with: event)
+            return
+        }
+        if event.keyCode == 53 {
+            onCancel?()
+            return
+        }
+        if event.keyCode == 36 || event.keyCode == 76 {
+            if TextEntryKeyBehavior.shouldSubmit(
+                enterInsertsNewline: enterInsertsNewline(),
+                shift: event.modifierFlags.contains(.shift), hasMarkedText: false
+            ) {
+                onCommit?(string)
+            } else {
+                insertNewlineIgnoringFieldEditor(self)
+            }
+            return
+        }
+        super.keyDown(with: event)
     }
-    if event.keyCode == 53 {
-      onCancel?()
-      return
-    }
-    if event.keyCode == 36 || event.keyCode == 76 {
-      if TextEntryKeyBehavior.shouldSubmit(
-        enterInsertsNewline: enterInsertsNewline(),
-        shift: event.modifierFlags.contains(.shift), hasMarkedText: false
-      ) {
-        onCommit?(string)
-      } else {
-        insertNewlineIgnoringFieldEditor(self)
-      }
-      return
-    }
-    super.keyDown(with: event)
-  }
 
-  override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    if event.keyCode == 53 || event.keyCode == 36 || event.keyCode == 76 {
-      keyDown(with: event)
-      return true
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 || event.keyCode == 36 || event.keyCode == 76 {
+            keyDown(with: event)
+            return true
+        }
+        if event.modifierFlags.contains(.command) {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "z":
+                if event.modifierFlags.contains(.shift) { undoManager?.redo() } else { undoManager?.undo() }
+            case "a": selectAll(self)
+            case "c": copy(self)
+            case "v": pasteAsPlainText(self)
+            case "x": cut(self)
+            default: return super.performKeyEquivalent(with: event)
+            }
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
-    if event.modifierFlags.contains(.command) {
-      switch event.charactersIgnoringModifiers?.lowercased() {
-      case "z":
-        if event.modifierFlags.contains(.shift) { undoManager?.redo() } else { undoManager?.undo() }
-      case "a": selectAll(self)
-      case "c": copy(self)
-      case "v": pasteAsPlainText(self)
-      case "x": cut(self)
-      default: return super.performKeyEquivalent(with: event)
-      }
-      return true
-    }
-    return super.performKeyEquivalent(with: event)
-  }
 
-  override func didChangeText() {
-    super.didChangeText()
-    onTextChanged?(string)
-    onLayoutRequested?()
-  }
-
-  override func resignFirstResponder() -> Bool {
-    let resigned = super.resignFirstResponder()
-    if resigned, !isFinishing {
-      // Commit on focus loss instead of discarding the draft: clicking the
-      // toolbar or another control must not silently throw away typed text.
-      let text = string
-      Task { @MainActor [weak self] in
-        guard let self, !self.isFinishing else { return }
-        self.onCommit?(text)
-      }
+    override func didChangeText() {
+        super.didChangeText()
+        onTextChanged?(string)
+        onLayoutRequested?()
     }
-    return resigned
-  }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned, !isFinishing {
+            // Commit on focus loss instead of discarding the draft: clicking the
+            // toolbar or another control must not silently throw away typed text.
+            let text = string
+            Task { @MainActor [weak self] in
+                guard let self, !self.isFinishing else { return }
+                self.onCommit?(text)
+            }
+        }
+        return resigned
+    }
 }
 
 extension EditableAnnotationCanvasNSView {
-  func updateTextEntry(
-    id: UUID, node: AnnotationNode?, onCommit: @escaping (String) -> Void, onCancel: @escaping () -> Void
-  ) {
-    guard let node else {
-      endTextEntry()
-      return
+    func updateTextEntry(
+        id: UUID, node: AnnotationNode?, onCommit: @escaping (String) -> Void, onCancel: @escaping () -> Void
+    ) {
+        guard let node else {
+            endTextEntry()
+            return
+        }
+        if canvasTextEntryID == id, let editor = canvasTextEditor {
+            applyTextStyle(node, to: editor)
+            layoutTextEntry()
+            return
+        }
+        endTextEntry()
+        canvasTextEntryID = id
+        let editor = makeTextEditor(for: node)
+        editor.onLayoutRequested = { [weak self] in self?.layoutTextEntry() }
+        editor.onCommit = { [weak self] text in
+            guard let self, self.canvasTextEntryID == id else { return }
+            self.endTextEntry()
+            onCommit(text)
+        }
+        editor.onCancel = { [weak self] in
+            guard let self, self.canvasTextEntryID == id else { return }
+            self.endTextEntry()
+            onCancel()
+        }
+        canvasTextEditor = editor
+        addSubview(editor)
+        layoutTextEntry()
+        Task { @MainActor [weak self, weak editor] in
+            guard let self, let editor, self.canvasTextEntryID == id else { return }
+            self.window?.makeFirstResponder(editor)
+            editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        }
     }
-    if canvasTextEntryID == id, let editor = canvasTextEditor {
-      applyTextStyle(node, to: editor)
-      layoutTextEntry()
-      return
-    }
-    endTextEntry()
-    canvasTextEntryID = id
-    let editor = makeTextEditor(for: node)
-    editor.onLayoutRequested = { [weak self] in self?.layoutTextEntry() }
-    editor.onCommit = { [weak self] text in
-      guard let self, self.canvasTextEntryID == id else { return }
-      self.endTextEntry()
-      onCommit(text)
-    }
-    editor.onCancel = { [weak self] in
-      guard let self, self.canvasTextEntryID == id else { return }
-      self.endTextEntry()
-      onCancel()
-    }
-    canvasTextEditor = editor
-    addSubview(editor)
-    layoutTextEntry()
-    Task { @MainActor [weak self, weak editor] in
-      guard let self, let editor, self.canvasTextEntryID == id else { return }
-      self.window?.makeFirstResponder(editor)
-      editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
-    }
-  }
 
-  private func makeTextEditor(for node: AnnotationNode) -> CanvasTextEditor {
-    let editor = CanvasTextEditor(frame: .zero)
-    editor.isRichText = false
-    editor.importsGraphics = false
-    editor.allowsUndo = true
-    editor.isVerticallyResizable = false
-    editor.isHorizontallyResizable = false
-    editor.textContainer?.widthTracksTextView = false
-    editor.textContainer?.heightTracksTextView = false
-    editor.textContainer?.lineFragmentPadding = 0
-    editor.insertionPointColor = .controlAccentColor
-    editor.string = node.text ?? ""
-    editor.onTextChanged = { [weak self] text in
-      self?.onTextDraftChanged?(text)
+    private func makeTextEditor(for node: AnnotationNode) -> CanvasTextEditor {
+        let editor = CanvasTextEditor(frame: .zero)
+        editor.isRichText = false
+        editor.importsGraphics = false
+        editor.allowsUndo = true
+        editor.isVerticallyResizable = false
+        editor.isHorizontallyResizable = false
+        editor.textContainer?.widthTracksTextView = false
+        editor.textContainer?.heightTracksTextView = false
+        editor.textContainer?.lineFragmentPadding = 0
+        editor.insertionPointColor = .controlAccentColor
+        editor.string = node.text ?? ""
+        editor.onTextChanged = { [weak self] text in
+            self?.onTextDraftChanged?(text)
+        }
+        applyTextStyle(node, to: editor)
+        editor.setAccessibilityLabel(AppLocalization.string("Edit Text"))
+        editor.wantsLayer = true
+        editor.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.65).cgColor
+        editor.layer?.borderWidth = 1
+        return editor
     }
-    applyTextStyle(node, to: editor)
-    editor.setAccessibilityLabel(AppLocalization.string("Edit Text"))
-    editor.wantsLayer = true
-    editor.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.65).cgColor
-    editor.layer?.borderWidth = 1
-    return editor
-  }
 
-  private func applyTextStyle(_ node: AnnotationNode, to editor: CanvasTextEditor) {
-    let selection = editor.selectedRange()
-    let horizontalScale = max(node.textHorizontalScale, 0.1)
-    editor.sourceNode = node
-    editor.textContainerInset = CGSize(width: 4 / horizontalScale, height: 4)
-    editor.font =
-      NSFont(name: node.fontName, size: node.fontSize) ?? NSFont.systemFont(ofSize: node.fontSize)
-    editor.textColor = NSColor(cgColor: node.color ?? NSColor.red.cgColor)?.withAlphaComponent(node.opacity)
-    editor.drawsBackground = node.fillColor != nil
-    editor.backgroundColor = NSColor(cgColor: node.fillColor ?? NSColor.clear.cgColor) ?? .clear
-    editor.alignment =
-      switch node.textAlignment {
-      case .leading: .left
-      case .center: .center
-      case .trailing: .right
-      }
-    let textLength = editor.string.utf16.count
-    let location = min(selection.location, textLength)
-    editor.setSelectedRange(
-      NSRange(location: location, length: min(selection.length, textLength - location)))
-  }
-
-  func endTextEntry() {
-    guard let editor = canvasTextEditor else { return }
-    editor.isFinishing = true
-    if window?.firstResponder === editor { window?.makeFirstResponder(self) }
-    editor.removeFromSuperview()
-    canvasTextEditor = nil
-    canvasTextEntryID = nil
-  }
-
-  func layoutTextEntry() {
-    guard let editor = canvasTextEditor, var node = editor.sourceNode, let image else { return }
-    // Follow the current zoom/pan; `aspectFitRect` is only the fit reference
-    // and would leave the inline field behind once the canvas is zoomed.
-    let display =
-      imageDisplayRect.width > 0 && imageDisplayRect.height > 0
-      ? imageDisplayRect
-      : aspectFitRect(imageSize: CGSize(width: image.width, height: image.height), in: bounds)
-    node.text = editor.string.isEmpty ? " " : editor.string
-    let origin = node.normalizedRect == .zero ? (node.points.first ?? .zero) : node.normalizedRect.origin
-    let imageWidth = CGFloat(image.width)
-    let imageHeight = CGFloat(image.height)
-    let maximumWidth = max(imageWidth * (1 - min(max(origin.x, 0), 1)), 1)
-    let measured = TextTool().suggestedSize(for: node, maximumWidth: maximumWidth)
-    let width = min(max(measured.width, imageWidth * 0.01), imageWidth)
-    let horizontalScale = max(node.textHorizontalScale, 0.1)
-    let contentWidth = max((width - 8) / horizontalScale, 1)
-    let textKitHeight: CGFloat
-    if let textContainer = editor.textContainer, let layoutManager = editor.layoutManager {
-      textContainer.containerSize = CGSize(width: contentWidth, height: max(imageHeight - 8, 1))
-      layoutManager.ensureLayout(for: textContainer)
-      textKitHeight =
-        ceil(layoutManager.usedRect(for: textContainer).height)
-        + editor.textContainerInset.height * 2 + 1
-    } else {
-      textKitHeight = 0
+    private func applyTextStyle(_ node: AnnotationNode, to editor: CanvasTextEditor) {
+        let selection = editor.selectedRange()
+        let horizontalScale = max(node.textHorizontalScale, 0.1)
+        editor.sourceNode = node
+        editor.textContainerInset = CGSize(width: 4 / horizontalScale, height: 4)
+        editor.font =
+            NSFont(name: node.fontName, size: node.fontSize) ?? NSFont.systemFont(ofSize: node.fontSize)
+        editor.textColor = NSColor(cgColor: node.color ?? NSColor.red.cgColor)?.withAlphaComponent(node.opacity)
+        editor.drawsBackground = node.fillColor != nil
+        editor.backgroundColor = NSColor(cgColor: node.fillColor ?? NSColor.clear.cgColor) ?? .clear
+        editor.alignment =
+            switch node.textAlignment {
+            case .leading: .left
+            case .center: .center
+            case .trailing: .right
+            }
+        let textLength = editor.string.utf16.count
+        let location = min(selection.location, textLength)
+        editor.setSelectedRange(
+            NSRange(location: location, length: min(selection.length, textLength - location)))
     }
-    let height = min(max(measured.height, textKitHeight, imageHeight * 0.01), imageHeight)
-    let originX = min(max(origin.x, 0), 1 - width / CGFloat(image.width))
-    let originY = min(max(origin.y, 0), 1 - height / CGFloat(image.height))
-    editor.frame = CGRect(
-      x: display.minX + originX * display.width, y: display.minY + originY * display.height,
-      width: width / CGFloat(image.width) * display.width,
-      height: height / CGFloat(image.height) * display.height)
-    editor.bounds = CGRect(x: 0, y: 0, width: width / horizontalScale, height: height)
-    editor.textContainer?.containerSize = CGSize(
-      width: contentWidth, height: max(height - editor.textContainerInset.height * 2, 1)
-    )
-  }
+
+    func endTextEntry() {
+        guard let editor = canvasTextEditor else { return }
+        editor.isFinishing = true
+        if window?.firstResponder === editor { window?.makeFirstResponder(self) }
+        editor.removeFromSuperview()
+        canvasTextEditor = nil
+        canvasTextEntryID = nil
+    }
+
+    func layoutTextEntry() {
+        guard let editor = canvasTextEditor, var node = editor.sourceNode, let image else { return }
+        // Follow the current zoom/pan; `aspectFitRect` is only the fit reference
+        // and would leave the inline field behind once the canvas is zoomed.
+        let display =
+            imageDisplayRect.width > 0 && imageDisplayRect.height > 0
+            ? imageDisplayRect
+            : aspectFitRect(imageSize: CGSize(width: image.width, height: image.height), in: bounds)
+        node.text = editor.string.isEmpty ? " " : editor.string
+        let origin = node.normalizedRect == .zero ? (node.points.first ?? .zero) : node.normalizedRect.origin
+        let imageWidth = CGFloat(image.width)
+        let imageHeight = CGFloat(image.height)
+        let maximumWidth = max(imageWidth * (1 - min(max(origin.x, 0), 1)), 1)
+        let measured = TextTool().suggestedSize(for: node, maximumWidth: maximumWidth)
+        let width = min(max(measured.width, imageWidth * 0.01), imageWidth)
+        let horizontalScale = max(node.textHorizontalScale, 0.1)
+        let contentWidth = max((width - 8) / horizontalScale, 1)
+        let textKitHeight: CGFloat
+        if let textContainer = editor.textContainer, let layoutManager = editor.layoutManager {
+            textContainer.containerSize = CGSize(width: contentWidth, height: max(imageHeight - 8, 1))
+            layoutManager.ensureLayout(for: textContainer)
+            textKitHeight =
+                ceil(layoutManager.usedRect(for: textContainer).height)
+                + editor.textContainerInset.height * 2 + 1
+        } else {
+            textKitHeight = 0
+        }
+        let height = min(max(measured.height, textKitHeight, imageHeight * 0.01), imageHeight)
+        let originX = min(max(origin.x, 0), 1 - width / CGFloat(image.width))
+        let originY = min(max(origin.y, 0), 1 - height / CGFloat(image.height))
+        editor.frame = CGRect(
+            x: display.minX + originX * display.width, y: display.minY + originY * display.height,
+            width: width / CGFloat(image.width) * display.width,
+            height: height / CGFloat(image.height) * display.height)
+        editor.bounds = CGRect(x: 0, y: 0, width: width / horizontalScale, height: height)
+        editor.textContainer?.containerSize = CGSize(
+            width: contentWidth, height: max(height - editor.textContainerInset.height * 2, 1)
+        )
+    }
 }

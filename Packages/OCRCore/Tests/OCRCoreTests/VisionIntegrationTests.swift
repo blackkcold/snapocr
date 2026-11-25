@@ -78,15 +78,17 @@ struct VisionIntegrationTests {
         entries: [(String, CGPoint)],
         fontSize: CGFloat = 72
     ) throws -> CGImage {
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else {
             throw OCRError.recognitionFailed(reason: "Unable to create test context")
         }
         context.setFillColor(CGColor(gray: 1, alpha: 1))

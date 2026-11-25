@@ -6,7 +6,7 @@ public enum RecordingPortableMetadata {
     /// Embeds the record by remuxing to a sibling file and atomically replacing `url`.
     public static func embed(into url: URL, record: SegmentPortableRecord) async throws {
         guard url.pathExtension.lowercased() == "m4a",
-              RecordingLedgerFileSystem.isRegularFile(url)
+            RecordingLedgerFileSystem.isRegularFile(url)
         else { throw RecordingSealError.metadataInvalid }
         do { try RecordingLedgerFileSystem.validateNoSymlink(url) } catch { throw RecordingSealError.metadataInvalid }
 

@@ -122,12 +122,13 @@ struct RecordingSpaceBudgetTests {
             provider: provider
         )
         #expect(storageBudget.requiredBytes(seconds: 3_600) == .max)
-        #expect(storageBudget.shouldStop(
-            availableBytes: 20_000_000_000,
-            nextCheckpointSeconds: 300,
-            sealHeadroomSeconds: 60,
-            tailReserveSeconds: 30
-        ))
+        #expect(
+            storageBudget.shouldStop(
+                availableBytes: 20_000_000_000,
+                nextCheckpointSeconds: 300,
+                sealHeadroomSeconds: 60,
+                tailReserveSeconds: 30
+            ))
         do {
             _ = try storageBudget.preflight()
             Issue.record("Expected invalid storage configuration to be rejected")
@@ -151,18 +152,20 @@ struct RecordingSpaceBudgetTests {
         let tail = storageBudget.requiredBytes(seconds: 20)
         let required = checkpoint + seal + tail
 
-        #expect(!storageBudget.shouldStop(
-            availableBytes: required,
-            nextCheckpointSeconds: 300,
-            sealHeadroomSeconds: 60,
-            tailReserveSeconds: 20
-        ))
-        #expect(storageBudget.shouldStop(
-            availableBytes: required - 1,
-            nextCheckpointSeconds: 300,
-            sealHeadroomSeconds: 60,
-            tailReserveSeconds: 20
-        ))
+        #expect(
+            !storageBudget.shouldStop(
+                availableBytes: required,
+                nextCheckpointSeconds: 300,
+                sealHeadroomSeconds: 60,
+                tailReserveSeconds: 20
+            ))
+        #expect(
+            storageBudget.shouldStop(
+                availableBytes: required - 1,
+                nextCheckpointSeconds: 300,
+                sealHeadroomSeconds: 60,
+                tailReserveSeconds: 20
+            ))
     }
 
     @Test func videoEstimateUsesBitsPerSecondAndIsNotAnAbsoluteVBRCap() {
@@ -179,18 +182,20 @@ struct RecordingSpaceBudgetTests {
         )
         // 8,000 bits/s is estimated as 1,000 bytes/s; VBR may exceed this nominal estimate.
         #expect(videoBudget.requiredBytes(seconds: 10) == 10_000)
-        #expect(videoBudget.shouldStop(
-            availableBytes: 29_999,
-            nextCheckpointSeconds: 10,
-            sealHeadroomSeconds: 5,
-            tailReserveSeconds: 15
-        ))
-        #expect(!videoBudget.shouldStop(
-            availableBytes: 30_000,
-            nextCheckpointSeconds: 10,
-            sealHeadroomSeconds: 5,
-            tailReserveSeconds: 15
-        ))
+        #expect(
+            videoBudget.shouldStop(
+                availableBytes: 29_999,
+                nextCheckpointSeconds: 10,
+                sealHeadroomSeconds: 5,
+                tailReserveSeconds: 15
+            ))
+        #expect(
+            !videoBudget.shouldStop(
+                availableBytes: 30_000,
+                nextCheckpointSeconds: 10,
+                sealHeadroomSeconds: 5,
+                tailReserveSeconds: 15
+            ))
     }
 
     private var audioConfiguration: RecordingStorageConfiguration {

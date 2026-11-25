@@ -205,7 +205,7 @@ public struct RecordingSpaceBudget: Sendable {
             RecordingWriteRoot(
                 url: recordingRoot,
                 requiredBytes: Self.minimumStartRequirement(for: configuration)
-            ),
+            )
         ]
         self.expectedVolumeUUID = expectedVolumeUUID
     }
@@ -269,7 +269,8 @@ public struct RecordingSpaceBudget: Sendable {
     /// requirements are summed without re-reading capacity for deduplication.
     public func preflight() throws -> SpaceBudgetDecision {
         guard Self.isValid(configuration), !writeRoots.isEmpty,
-              writeRoots.allSatisfy({ $0.url.isFileURL }) else {
+            writeRoots.allSatisfy({ $0.url.isFileURL })
+        else {
             throw RecordingSpaceBudgetError.invalidConfiguration
         }
 
@@ -331,10 +332,11 @@ public struct RecordingSpaceBudget: Sendable {
         tailReserveSeconds: TimeInterval
     ) -> Bool {
         guard Self.isValid(configuration),
-              availableBytes >= 0,
-              nextCheckpointSeconds.isFinite, nextCheckpointSeconds >= 0,
-              sealHeadroomSeconds.isFinite, sealHeadroomSeconds >= 0,
-              tailReserveSeconds.isFinite, tailReserveSeconds >= 0 else { return true }
+            availableBytes >= 0,
+            nextCheckpointSeconds.isFinite, nextCheckpointSeconds >= 0,
+            sealHeadroomSeconds.isFinite, sealHeadroomSeconds >= 0,
+            tailReserveSeconds.isFinite, tailReserveSeconds >= 0
+        else { return true }
         let sealBytes = requiredBytes(seconds: sealHeadroomSeconds)
         let required = requiredHeadroomBytes(
             nextCheckpointSeconds: nextCheckpointSeconds,
@@ -359,9 +361,10 @@ public struct RecordingSpaceBudget: Sendable {
         tailReserveSeconds: TimeInterval
     ) -> Int64 {
         guard Self.isValid(configuration),
-              nextCheckpointSeconds.isFinite, nextCheckpointSeconds >= 0,
-              tailReserveSeconds.isFinite, tailReserveSeconds >= 0,
-              sealHeadroomBytes >= 0 else { return .max }
+            nextCheckpointSeconds.isFinite, nextCheckpointSeconds >= 0,
+            tailReserveSeconds.isFinite, tailReserveSeconds >= 0,
+            sealHeadroomBytes >= 0
+        else { return .max }
         return Self.saturatedAdd(
             Self.saturatedAdd(
                 requiredBytes(seconds: nextCheckpointSeconds),
@@ -386,7 +389,8 @@ public struct RecordingSpaceBudget: Sendable {
             }
             if let expectedVolumeUUID {
                 guard let current = RecordingVolumeIdentityPolicy.volumeUUIDString(for: writeRoot.url),
-                      current == expectedVolumeUUID else {
+                    current == expectedVolumeUUID
+                else {
                     if failureReason == nil {
                         failureReason = "recording volume identity changed"
                     }
@@ -400,7 +404,8 @@ public struct RecordingSpaceBudget: Sendable {
             }
             do {
                 guard let snapshot = try capacityProvider.volumeSnapshot(at: writeRoot.url),
-                      snapshot.availableBytes >= 0 else {
+                    snapshot.availableBytes >= 0
+                else {
                     if failureReason == nil {
                         failureReason = "recording volume capacity is unavailable"
                     }
@@ -466,8 +471,9 @@ public struct RecordingSpaceBudget: Sendable {
 
     private static func isValid(_ configuration: RecordingStorageConfiguration) -> Bool {
         guard configuration.bitRate >= 0,
-              configuration.videoBitsPerSecond.map({ $0 > 0 }) ?? true,
-              configuration.channelCountByRole.values.allSatisfy({ $0 > 0 }) else { return false }
+            configuration.videoBitsPerSecond.map({ $0 > 0 }) ?? true,
+            configuration.channelCountByRole.values.allSatisfy({ $0 > 0 })
+        else { return false }
 
         let roles = Set(configuration.channelCountByRole.keys)
         switch configuration.layout {

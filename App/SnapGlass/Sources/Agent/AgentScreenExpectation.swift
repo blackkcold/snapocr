@@ -36,7 +36,8 @@ enum AgentScreenExpectation {
             failures.append("expectation: screen.published \(screen.published) != \(expected)")
         }
         if let expected = expect.becameWaitingForFrame,
-           screen.becameWaitingForFrame != expected {
+            screen.becameWaitingForFrame != expected
+        {
             failures.append(
                 "expectation: screen.becameWaitingForFrame \(screen.becameWaitingForFrame) != \(expected)"
             )
@@ -71,7 +72,8 @@ enum AgentScreenExpectation {
     ) -> [String] {
         var failures: [String] = []
         if expect.failureMentionsSystemSettings == true,
-           screen.failureMessage != AppLocalization.string(ScreenCapturePermissionCopy.deniedKey) {
+            screen.failureMessage != AppLocalization.string(ScreenCapturePermissionCopy.deniedKey)
+        {
             failures.append(
                 "expectation: failure does not name the screen-recording setting: "
                     + "\(screen.failureMessage ?? "none")"

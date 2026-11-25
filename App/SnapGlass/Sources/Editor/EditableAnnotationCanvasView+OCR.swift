@@ -50,7 +50,8 @@ extension EditableAnnotationCanvasNSView {
         let line = orderedOCRLines[position.lineIndex]
         let layout = ocrLineLayout(for: line, index: position.lineIndex)
         let offset = min(position.offset, (line.text as NSString).length)
-        let insertionX = layout.rect.minX
+        let insertionX =
+            layout.rect.minX
             + CTLineGetOffsetForStringIndex(layout.line, offset, nil) * layout.horizontalScale
         context.setStrokeColor(NSColor.controlAccentColor.cgColor)
         context.setLineWidth(1.5)
@@ -91,7 +92,8 @@ extension EditableAnnotationCanvasNSView {
 
     var orderedOCRLines: [OCRLine] {
         if let cached = ocrOrderedLinesCache { return cached }
-        let ordered = ocrLines
+        let ordered =
+            ocrLines
             .filter { !$0.text.isEmpty && !$0.editorBoundingBox.isEmpty }
             .sorted { lhs, rhs in
                 let lhsRect = lhs.editorBoundingBox

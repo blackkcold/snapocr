@@ -147,7 +147,7 @@ public actor RecordingSessionLedger {
         fileManager: FileManager
     ) throws -> (root: URL, index: URL) {
         guard sessionRoot.isFileURL, indexURL.isFileURL,
-              !sessionRoot.path.contains("\0"), !indexURL.path.contains("\0")
+            !sessionRoot.path.contains("\0"), !indexURL.path.contains("\0")
         else { throw RecordingSessionLedgerError.invalidPath }
         let root: URL
         if fileManager.fileExists(atPath: sessionRoot.path) {
@@ -198,7 +198,7 @@ public actor RecordingSessionLedger {
     public func commit(_ checkpoint: CheckpointCommit) async throws {
         try ensureWritable()
         guard checkpoint.segmentIndex >= 0, checkpoint.range.startSample >= 0,
-              checkpoint.range.sampleCount > 0, !checkpoint.trackURLs.isEmpty
+            checkpoint.range.sampleCount > 0, !checkpoint.trackURLs.isEmpty
         else { throw RecordingSessionLedgerError.invalidCheckpoint }
         guard state.record != nil else { throw RecordingSessionLedgerError.missingSession }
 
@@ -245,13 +245,13 @@ public actor RecordingSessionLedger {
     public func commitScreenCheckpoint(_ checkpoint: ScreenCheckpointRecord) async throws {
         try ensureWritable()
         guard state.record != nil,
-              checkpoint.segmentIndex >= 0,
-              checkpoint.chunkIndex >= 0,
-              checkpoint.videoRange.startSample >= 0,
-              checkpoint.videoRange.sampleCount > 0,
-              checkpoint.coverage.segmentIndex == checkpoint.segmentIndex,
-              checkpoint.coverage.segmentEndSample > checkpoint.coverage.segmentStartSample,
-              !checkpoint.contentHashes.isEmpty
+            checkpoint.segmentIndex >= 0,
+            checkpoint.chunkIndex >= 0,
+            checkpoint.videoRange.startSample >= 0,
+            checkpoint.videoRange.sampleCount > 0,
+            checkpoint.coverage.segmentIndex == checkpoint.segmentIndex,
+            checkpoint.coverage.segmentEndSample > checkpoint.coverage.segmentStartSample,
+            !checkpoint.contentHashes.isEmpty
         else { throw RecordingSessionLedgerError.invalidCheckpoint }
 
         try validateScreenCheckpoint(checkpoint, allowMissing: false)

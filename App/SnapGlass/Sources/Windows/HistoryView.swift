@@ -1,7 +1,7 @@
-import SwiftUI
 import AppKit
 import HistoryCore
 import ImageIO
+import SwiftUI
 
 struct HistoryView: View {
     enum Segment: String, CaseIterable, Identifiable {
@@ -168,8 +168,10 @@ struct HistoryView: View {
         GeometryReader { geometry in
             let count = HistoryPresentation.columnCount(for: geometry.size.width - 32)
             ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16, alignment: .top), count: count),
-                          alignment: .leading, spacing: 20) {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 16, alignment: .top), count: count),
+                    alignment: .leading, spacing: 20
+                ) {
                     ForEach(visibleEntries) { entry in
                         HistoryScreenshotCard(
                             entry: entry, imageSize: thumbnailSizes[entry.id],
@@ -196,13 +198,13 @@ struct HistoryView: View {
             .focused($isGridFocused)
             .onReturnKey(enabled: selectedEntryID != nil) {
                 guard let id = selectedEntryID,
-                      let selected = visibleEntries.first(where: { $0.id == id })
+                    let selected = visibleEntries.first(where: { $0.id == id })
                 else { return }
                 Task { await openInEditor(selected) }
             }
             .onDeleteCommand {
                 guard let id = selectedEntryID,
-                      let selected = visibleEntries.first(where: { $0.id == id })
+                    let selected = visibleEntries.first(where: { $0.id == id })
                 else { return }
                 Task { await deleteEntry(selected) }
             }
@@ -212,7 +214,7 @@ struct HistoryView: View {
             .background(
                 Button {
                     guard let id = selectedEntryID,
-                          let selected = visibleEntries.first(where: { $0.id == id })
+                        let selected = visibleEntries.first(where: { $0.id == id })
                     else { return }
                     Task { await copyPresentedImage(selected) }
                 } label: {
@@ -226,8 +228,9 @@ struct HistoryView: View {
     }
 
     var visibleEntries: [HistoryEntry] {
-        HistoryPresentation.entries(entries, filter: favouriteFilter,
-                                    favouriteOrder: favouriteOrder, newestFirst: newestFirst)
+        HistoryPresentation.entries(
+            entries, filter: favouriteFilter,
+            favouriteOrder: favouriteOrder, newestFirst: newestFirst)
     }
 
     private var historyFilters: some View {
@@ -290,8 +293,9 @@ struct HistoryView: View {
         Button {
             Task { await toggleFavourite(entry) }
         } label: {
-            Label(entry.isFavourite ? "Remove favourite" : "Add favourite",
-                  systemImage: entry.isFavourite ? "star.slash" : "star")
+            Label(
+                entry.isFavourite ? "Remove favourite" : "Add favourite",
+                systemImage: entry.isFavourite ? "star.slash" : "star")
         }
         .disabled(updatingFavourites.contains(entry.id))
 

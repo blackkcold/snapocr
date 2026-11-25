@@ -35,15 +35,17 @@ public enum RecordingVolumeIdentityPolicy {
             fileURLWithPath: "/Volumes/\(components[2])",
             isDirectory: true
         )
-        let isSymlink = (try? FileManager.default.destinationOfSymbolicLink(
-            atPath: mountPoint.path
-        )) != nil
+        let isSymlink =
+            (try? FileManager.default.destinationOfSymbolicLink(
+                atPath: mountPoint.path
+            )) != nil
         if isSymlink { return false }
 
         guard let current = volumeUUIDString(for: directory),
-              let volumesRoot = volumeUUIDString(
-                  for: URL(fileURLWithPath: "/Volumes", isDirectory: true)
-              ) else {
+            let volumesRoot = volumeUUIDString(
+                for: URL(fileURLWithPath: "/Volumes", isDirectory: true)
+            )
+        else {
             return false
         }
         return current == volumesRoot

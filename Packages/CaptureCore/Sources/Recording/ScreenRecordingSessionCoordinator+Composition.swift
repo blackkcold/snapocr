@@ -23,12 +23,14 @@ extension ScreenRecordingSessionCoordinator {
         )
         let planner = try VideoSegmentPlanner(frameRate: configuration.video.frameRateLimit)
         let plannerReference = ScreenSegmentPlannerReference(planner: planner)
-        let roles = Set(configuration.audio.channelCountByRole.keys.filter {
-            $0 == .system || $0 == .microphone
-        })
-        let videoDimensions = configuration.video.validatedEvenOutputDimensions(
-            for: configuration.sourceDimensions ?? configuration.video.resolutionLimit
-        ) ?? configuration.video.resolutionLimit
+        let roles = Set(
+            configuration.audio.channelCountByRole.keys.filter {
+                $0 == .system || $0 == .microphone
+            })
+        let videoDimensions =
+            configuration.video.validatedEvenOutputDimensions(
+                for: configuration.sourceDimensions ?? configuration.video.resolutionLimit
+            ) ?? configuration.video.resolutionLimit
 
         let videoFactory = makeVideoWriterFactory(
             sessionRoot: sessionRoot,
@@ -62,9 +64,9 @@ extension ScreenRecordingSessionCoordinator {
         hostTicksPerSecond: UInt64
     ) throws -> any AudioRecordingControlling & Sendable {
         guard configuration.kind == .screen,
-              configuration.mode != .none,
-              configuration.layout == .separateTracks,
-              configuration.sampleRate == 48_000
+            configuration.mode != .none,
+            configuration.layout == .separateTracks,
+            configuration.sampleRate == 48_000
         else { throw ScreenRecordingSessionCoordinatorError.invalidConfiguration }
 
         let system = ScreenRingAudioFrameSource(ring: systemRing, hostTicksPerSecond: hostTicksPerSecond)
@@ -73,10 +75,11 @@ extension ScreenRecordingSessionCoordinator {
             let authorizer = AVMicrophoneAuthorizer()
             let capture = AVAudioEngineMicrophoneCaptureEngine()
             guard let format = capture.currentFormat,
-                  format.commonFormat == .pcmFormatFloat32,
-                  format.channelCount == 1 || format.channelCount == 2,
-                  format.sampleRate.isFinite,
-                  format.sampleRate > 0 else {
+                format.commonFormat == .pcmFormatFloat32,
+                format.channelCount == 1 || format.channelCount == 2,
+                format.sampleRate.isFinite,
+                format.sampleRate > 0
+            else {
                 throw AudioSourceError.invalidFormat
             }
             let sourceFormat = AudioSourceFormat(

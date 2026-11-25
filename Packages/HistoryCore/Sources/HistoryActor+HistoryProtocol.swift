@@ -159,12 +159,14 @@ extension HistoryActor {
 
         let tempID = UUID()
         let defaults = UserDefaults.standard
-        let configuredFormat = ImageFileFormat(
-            rawValue: defaults.string(forKey: PreferenceKeys.captureImageFormat)
-                ?? PreferenceDefaults.captureImageFormat
-        ) ?? .png
+        let configuredFormat =
+            ImageFileFormat(
+                rawValue: defaults.string(forKey: PreferenceKeys.captureImageFormat)
+                    ?? PreferenceDefaults.captureImageFormat
+            ) ?? .png
         let format = ImageEncoder.containsTransparency(image) ? ImageFileFormat.png : configuredFormat
-        let jpegQuality = defaults.object(forKey: PreferenceKeys.captureJPEGQuality) == nil
+        let jpegQuality =
+            defaults.object(forKey: PreferenceKeys.captureJPEGQuality) == nil
             ? PreferenceDefaults.captureJPEGQuality
             : defaults.double(forKey: PreferenceKeys.captureJPEGQuality)
         let imageURL = tempDir.appendingPathComponent("\(tempID)-capture.\(format.fileExtension)")

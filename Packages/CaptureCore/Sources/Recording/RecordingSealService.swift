@@ -2,6 +2,7 @@ import AVFoundation
 import CryptoKit
 import Darwin
 import Foundation
+
 /// Immutable settings for sealing one segment.
 public struct RecordingSealContext: Sendable, Hashable {
     /// Identity of the recording session.
@@ -219,10 +220,10 @@ public actor RecordingSealService {
         defer { isPublishing = false }
         var destinationIsDirectory: ObjCBool = false
         guard context.sampleRate > 0, !context.outputStem.isEmpty,
-              context.destinationDirectory.isFileURL,
-              fileManager.fileExists(
-                  atPath: context.destinationDirectory.path, isDirectory: &destinationIsDirectory
-              ), destinationIsDirectory.boolValue
+            context.destinationDirectory.isFileURL,
+            fileManager.fileExists(
+                atPath: context.destinationDirectory.path, isDirectory: &destinationIsDirectory
+            ), destinationIsDirectory.boolValue
         else { throw RecordingSealError.invalidContext }
         guard context.kind == .audio else { throw RecordingSealError.screenVideoUnsupported }
         guard videoChunks.isEmpty else { throw RecordingSealError.videoChunksUnsupported }
@@ -299,8 +300,8 @@ extension RecordingSealService {
     ) throws -> SealPlan {
         let coverage = bundle.coverage
         guard coverage.segmentIndex == bundle.checkpoints.segmentIndex,
-              coverage.segmentEndSample > coverage.segmentStartSample,
-              Set(coverage.tracks.map(\.role)).count == coverage.tracks.count
+            coverage.segmentEndSample > coverage.segmentStartSample,
+            Set(coverage.tracks.map(\.role)).count == coverage.tracks.count
         else { throw RecordingSealError.coverageMismatch }
         var active: [SealRolePlan] = []
         for track in coverage.tracks {
@@ -308,12 +309,12 @@ extension RecordingSealService {
             guard track.sampleRate == context.sampleRate else { throw RecordingSealError.coverageMismatch }
             guard track.wasActive else { continue }
             guard let first = track.firstSample, let last = track.lastSample,
-                  first >= coverage.segmentStartSample, last <= coverage.segmentEndSample,
-                  first <= last, (1...2).contains(track.channelCount)
+                first >= coverage.segmentStartSample, last <= coverage.segmentEndSample,
+                first <= last, (1...2).contains(track.channelCount)
             else { throw RecordingSealError.coverageMismatch }
             for range in track.missingRanges {
                 guard range.sampleCount >= 0, range.startSample >= coverage.segmentStartSample,
-                      range.endSample <= coverage.segmentEndSample
+                    range.endSample <= coverage.segmentEndSample
                 else { throw RecordingSealError.coverageMismatch }
             }
             active.append(
@@ -368,7 +369,8 @@ extension RecordingSealService {
         var stagedFileURLs: [RecordingTrackRole: URL] = [:]
         var manifestURL: URL?
         for item in encoded {
-            let destination = plan.isDirectory
+            let destination =
+                plan.isDirectory
                 ? transaction.partialURL.appendingPathComponent("\(strings(for: item.role).token).m4a")
                 : transaction.partialURL
             try await SegmentPortableMetadata.embed(record, from: item.result.url, to: destination)
@@ -433,11 +435,13 @@ extension RecordingSealService {
                 sampleCount: plan.segmentEndSample - plan.segmentStartSample
             )
             guard result.effectiveRange == expected,
-                  result.insertedSilenceFrames == rolePlan.expectedSilenceFrames
+                result.insertedSilenceFrames == rolePlan.expectedSilenceFrames
             else { throw RecordingSealError.coverageMismatch }
-            guard let track = bundle.coverage.tracks.first(where: {
-                $0.role == strings(for: rolePlan.role).role
-            }) else { throw RecordingSealError.coverageMismatch }
+            guard
+                let track = bundle.coverage.tracks.first(where: {
+                    $0.role == strings(for: rolePlan.role).role
+                })
+            else { throw RecordingSealError.coverageMismatch }
             encoded.append(
                 EncodedRole(role: rolePlan.role, coverage: track, result: result, verification: verification)
             )
@@ -481,7 +485,8 @@ extension RecordingSealService {
     private func rawOutputURL(
         role: RecordingTrackRole, plan: SealPlan, transaction: RecordingOutputTransaction
     ) -> URL {
-        let directory = plan.isDirectory
+        let directory =
+            plan.isDirectory
             ? transaction.partialURL
             : transaction.partialURL.deletingLastPathComponent()
         return directory.appendingPathComponent(".SnapGlass-\(UUID().uuidString)-\(strings(for: role).token).m4a")
@@ -506,7 +511,7 @@ extension RecordingSealService {
     ) throws -> [String: String] {
         if isDirectory {
             guard let manifestURL,
-                  manifestURL.deletingLastPathComponent().standardizedFileURL
+                manifestURL.deletingLastPathComponent().standardizedFileURL
                     == stagingURL.standardizedFileURL
             else { throw RecordingSealError.manifestRequired }
             let expected = Set(record.tracks.map(\.fileName) + [manifestURL.lastPathComponent])
@@ -533,7 +538,8 @@ extension RecordingSealService {
         for (index, track) in record.tracks.enumerated() {
             let role = try audioRole(from: track.role)
             guard files[role] == nil else { throw RecordingSealError.metadataInvalid }
-            files[role] = candidate.isDirectory
+            files[role] =
+                candidate.isDirectory
                 ? publishedURL.appendingPathComponent(track.fileName)
                 : publishedURL
             trackMap[role] = index

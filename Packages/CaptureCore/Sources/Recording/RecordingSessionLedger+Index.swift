@@ -55,9 +55,10 @@ extension RecordingSessionLedger {
             allEntries: allEntries, indexURL: indexURL, fileManager: fileManager
         )
         entriesByID[sessionID] = currentEntry
-        let index = RecordingIndexRecord(entries: entriesByID.values.sorted {
-            $0.sessionID.uuidString < $1.sessionID.uuidString
-        }, updatedAt: now())
+        let index = RecordingIndexRecord(
+            entries: entriesByID.values.sorted {
+                $0.sessionID.uuidString < $1.sessionID.uuidString
+            }, updatedAt: now())
         do {
             try RecordingLedgerFileSystem.atomicWrite(try Self.encode(index), to: indexURL)
         } catch {
@@ -144,9 +145,11 @@ extension RecordingSessionLedger {
 
     private func segmentProjection(index: Int, id: UUID) -> PublishedSegment {
         let checkpoints = state.checkpoints.values.filter { $0.segmentIndex == index }
-        let start = state.closed[index]?.coverage.segmentStartSample
+        let start =
+            state.closed[index]?.coverage.segmentStartSample
             ?? checkpoints.map(\.range.startSample).min() ?? 0
-        let end = state.closed[index]?.coverage.segmentEndSample
+        let end =
+            state.closed[index]?.coverage.segmentEndSample
             ?? checkpoints.map(\.range.endSample).max() ?? start
         let intent = state.intents[id]
         let published = state.published[id]
@@ -286,7 +289,7 @@ extension RecordingSessionLedger {
         for child in children.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             do { try RecordingLedgerFileSystem.validateNoSymlink(child) } catch { throw mapPathError(error) }
             guard RecordingLedgerFileSystem.isDirectory(child),
-                  let id = UUID(uuidString: child.lastPathComponent)
+                let id = UUID(uuidString: child.lastPathComponent)
             else { continue }
             let cached = try cachedRecord(
                 sessionID: id, indexURL: indexURL, fileManager: fileManager.value

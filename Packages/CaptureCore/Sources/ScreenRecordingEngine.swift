@@ -3,8 +3,8 @@ import AudioToolbox
 import CoreGraphics
 import CoreMedia
 import Foundation
-import SharedKit
 @preconcurrency import ScreenCaptureKit
+import SharedKit
 
 enum RecordingStreamSettings {
     static func make(
@@ -171,7 +171,8 @@ public actor ScreenRecordingEngine {
     /// Existing hidden partial output, if one remains after a failed session.
     public var partialOutputURL: URL? {
         guard let transaction,
-              FileManager.default.fileExists(atPath: transaction.partialURL.path) else {
+            FileManager.default.fileExists(atPath: transaction.partialURL.path)
+        else {
             return nil
         }
         return transaction.partialURL
@@ -231,9 +232,10 @@ public actor ScreenRecordingEngine {
                 excludedWindowIDs: initialExcludedWindowIDs
             )
             guard resolvedSource.dimensions.width.isFinite,
-                  resolvedSource.dimensions.height.isFinite,
-                  resolvedSource.dimensions.width > 0,
-                  resolvedSource.dimensions.height > 0 else {
+                resolvedSource.dimensions.height.isFinite,
+                resolvedSource.dimensions.width > 0,
+                resolvedSource.dimensions.height > 0
+            else {
                 throw ScreenRecordingEngineError.invalidSourceDimensions
             }
 
@@ -409,8 +411,9 @@ public actor ScreenRecordingEngine {
 
         while appliedExclusionRevision != exclusionRevision {
             guard isStreamCapturing,
-                  let stream,
-                  let activeSource else { return }
+                let stream,
+                let activeSource
+            else { return }
             let revision = exclusionRevision
             let excludedIDs = excludedWindowIDs
 
@@ -422,7 +425,8 @@ public actor ScreenRecordingEngine {
             do {
                 let content: SCShareableContent
                 if let cached = cachedShareableContent,
-                   Self.canResolve(activeSource, excludedWindowIDs: excludedIDs, in: cached) {
+                    Self.canResolve(activeSource, excludedWindowIDs: excludedIDs, in: cached)
+                {
                     content = cached
                 } else {
                     // Missing cached windows usually means a newly created own
@@ -490,7 +494,8 @@ public actor ScreenRecordingEngine {
 
         case let .window(windowID):
             guard let window = content.windows.first(where: { $0.windowID == windowID }),
-                  let display = content.displays.first(where: { $0.frame.contains(window.frame) }) else {
+                let display = content.displays.first(where: { $0.frame.contains(window.frame) })
+            else {
                 throw ScreenRecordingEngineError.sourceUnavailable(
                     "The selected window is no longer fully visible on one display."
                 )
@@ -515,9 +520,10 @@ public actor ScreenRecordingEngine {
             let region = sourceRect.standardized
             let displayBounds = CGRect(origin: .zero, size: display.frame.size)
             guard Self.isFinite(region),
-                  region.width > 0,
-                  region.height > 0,
-                  displayBounds.contains(region) else {
+                region.width > 0,
+                region.height > 0,
+                displayBounds.contains(region)
+            else {
                 throw ScreenRecordingEngineError.invalidRegion
             }
             let scale = Self.pixelScale(for: display)

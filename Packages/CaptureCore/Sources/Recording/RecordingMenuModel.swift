@@ -40,7 +40,8 @@ public enum RecordingMenuModel {
         let totalMinutes = totalSeconds / 60
         let minutes = totalMinutes % 60
         let hours = totalMinutes / 60
-        let elapsed = hours > 0
+        let elapsed =
+            hours > 0
             ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
             : String(format: "%d:%02d", totalMinutes, seconds)
 

@@ -34,7 +34,7 @@ struct PreferencesCardGrid<Content: View>: View {
                 GridItem(
                     .adaptive(minimum: PreferencesSpacing.minCardWidth, maximum: .infinity),
                     spacing: spacing
-                ),
+                )
             ],
             alignment: .leading,
             spacing: spacing

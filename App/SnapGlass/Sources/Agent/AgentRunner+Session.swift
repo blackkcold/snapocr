@@ -13,16 +13,19 @@ extension AgentRunner {
     /// - Parameter scenario: The validated scenario to start.
     /// - Returns: The controller that owns the session, or `nil` on setup failure.
     func startSession(scenario: AgentScenario) async -> RecordingSessionController? {
-        guard let agentDefaults = AgentPreferences(
-            storage: AgentMode.preferenceOverrides(for: configuration)
-        ) else {
+        guard
+            let agentDefaults = AgentPreferences(
+                storage: AgentMode.preferenceOverrides(for: configuration)
+            )
+        else {
             errors.append("preferences: cannot create the isolated in-memory store")
             return nil
         }
         let recordingRoot = configuration.rootURL
         let roots = RecordingPipelineRoots(
             sessionRoot: recordingRoot,
-            indexURL: recordingRoot
+            indexURL:
+                recordingRoot
                 .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
                 .appendingPathComponent("recording-index.json"),
             outputDirectory: recordingRoot
@@ -178,7 +181,8 @@ extension AgentRunner {
     func collectArtifacts(roots: RecordingPipelineRoots) async -> [AgentReport.Artifact] {
         var urls: [URL] = []
         if let pipeline = controller?.audioPipeline,
-           let record = try? await pipeline.ledger.snapshot() {
+            let record = try? await pipeline.ledger.snapshot()
+        {
             for segment in record.segments where segment.state == .published {
                 for relative in segment.files.values.sorted() {
                     let url = roots.outputDirectory.appendingPathComponent(relative)

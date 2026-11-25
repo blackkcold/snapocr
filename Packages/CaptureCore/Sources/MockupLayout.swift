@@ -61,7 +61,8 @@ public struct MockupLayout: Equatable, Sendable {
         )
 
         let rawBorder = max(0, finite(style.borderWidthRatio, fallback: 0)) * reference
-        let borderWidth = rawBorder > 0
+        let borderWidth =
+            rawBorder > 0
             ? min(max(1, rawBorder.rounded()), min(min(width, height) * 0.02, 12))
             : 0
 

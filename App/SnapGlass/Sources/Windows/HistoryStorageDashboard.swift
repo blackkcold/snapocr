@@ -1,5 +1,5 @@
-import SwiftUI
 import HistoryCore
+import SwiftUI
 
 struct HistoryStorageDashboard: View {
     let storageSizeGB: Double
@@ -139,7 +139,8 @@ struct HistoryStorageDashboard: View {
 
     private func modeBars(_ distribution: [String: Int]) -> some View {
         let total = max(distribution.values.reduce(0, +), 1)
-        let data = distribution
+        let data =
+            distribution
             .sorted { $0.value > $1.value }
             .map { (mode: $0.key, count: $0.value) }
 

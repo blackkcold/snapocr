@@ -44,7 +44,8 @@ struct ShortcutRecorderView: NSViewRepresentable {
 
         override func draw(_ dirtyRect: NSRect) {
             let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6)
-            let fillColor = isRecording
+            let fillColor =
+                isRecording
                 ? NSColor.controlAccentColor.withAlphaComponent(0.15)
                 : NSColor.controlBackgroundColor
             fillColor.setFill()

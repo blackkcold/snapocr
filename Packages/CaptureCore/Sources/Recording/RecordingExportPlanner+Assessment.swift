@@ -22,7 +22,8 @@ extension RecordingExportPlanner {
         session: RecordingSessionRecord,
         selection: ExportSelection
     ) -> ExportOutputSpec {
-        let roles: [RecordingTrackRole] = selection.trackSelection == .mixed
+        let roles: [RecordingTrackRole] =
+            selection.trackSelection == .mixed
             ? [.mixed]
             : [.system, .microphone]
         return ExportOutputSpec(

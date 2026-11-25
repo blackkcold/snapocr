@@ -7,10 +7,12 @@ extension RecordingExportView {
         let isMissing = segment.state == .missing
         let duration = Self.duration(Double(segment.sampleCount) / 48_000)
         return HStack(spacing: 8) {
-            Toggle(isOn: Binding(
-                get: { viewModel.selectedSegmentIDs.contains(segment.id) },
-                set: { viewModel.setSegmentSelected(segment.id, isSelected: $0) }
-            )) {
+            Toggle(
+                isOn: Binding(
+                    get: { viewModel.selectedSegmentIDs.contains(segment.id) },
+                    set: { viewModel.setSegmentSelected(segment.id, isSelected: $0) }
+                )
+            ) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppLocalization.string("Segment %d", segment.index + 1))
                     Text(duration)
@@ -71,10 +73,13 @@ extension RecordingExportView {
 
     var outputControls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker("Output format", selection: Binding(
-                get: { viewModel.outputMode },
-                set: { viewModel.setOutputMode($0) }
-            )) {
+            Picker(
+                "Output format",
+                selection: Binding(
+                    get: { viewModel.outputMode },
+                    set: { viewModel.setOutputMode($0) }
+                )
+            ) {
                 ForEach(viewModel.availableOutputModes, id: \.self) { mode in
                     outputModeTitle(mode).tag(mode)
                 }
@@ -84,11 +89,14 @@ extension RecordingExportView {
             HStack(spacing: 8) {
                 Text("Output name")
                     .frame(width: 90, alignment: .leading)
-                TextField("Recording name", text: Binding(
-                    get: { viewModel.outputStem },
-                    set: { viewModel.setOutputStem($0) }
-                ))
-                    .textFieldStyle(.roundedBorder)
+                TextField(
+                    "Recording name",
+                    text: Binding(
+                        get: { viewModel.outputStem },
+                        set: { viewModel.setOutputStem($0) }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
             }
 
             HStack(spacing: 8) {
@@ -169,10 +177,12 @@ extension RecordingExportView {
                 }
                 LabeledContent("Tracks", value: "\(summary.trackCount)")
                 if case .missing(let segmentID) = summary.missingState {
-                    Text(AppLocalization.string(
-                        "A segment is missing (%@). It is disabled; use Locate to open the recording folder.",
-                        segmentID.uuidString
-                    ))
+                    Text(
+                        AppLocalization.string(
+                            "A segment is missing (%@). It is disabled; use Locate to open the recording folder.",
+                            segmentID.uuidString
+                        )
+                    )
                     .font(.caption)
                     .foregroundStyle(.red)
                 }
@@ -222,7 +232,7 @@ extension RecordingExportView {
             Spacer(minLength: 4)
             Button("Export") {
                 Task {
-                    do { _ = try await viewModel.export() } catch { }
+                    do { _ = try await viewModel.export() } catch {}
                 }
             }
             .keyboardShortcut(.return, modifiers: .command)

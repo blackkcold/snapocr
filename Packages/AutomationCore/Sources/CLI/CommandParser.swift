@@ -52,11 +52,13 @@ public struct CommandParser: Sendable {
     /// 从已解析的选项构建 OCR 命令（两种语法的共享逻辑）。
     private func buildOCRCommand(file: String, args: [String]) -> AutomationCommand {
         let engine = parseArg(args, named: "--engine")
-        let lang = parseArg(args, named: "--lang")
+        let lang =
+            parseArg(args, named: "--lang")
             ?? parseArg(args, named: "--language")
-        let languages: [String]? = lang.map {
-            $0.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
-        } ?? parseList(args, named: "--languages")
+        let languages: [String]? =
+            lang.map {
+                $0.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
+            } ?? parseList(args, named: "--languages")
         let devCompare = args.contains("--dev-compare")
         let format = parseArg(args, named: "--format")
 
@@ -97,10 +99,11 @@ public struct CommandParser: Sendable {
         let subArgs = Array(args.dropFirst())
         switch subcommand {
         case "logs":
-            return .dev(subcommand: .logs(
-                format: parseArg(subArgs, named: "--format"),
-                output: parseArg(subArgs, named: "--output")
-            ))
+            return .dev(
+                subcommand: .logs(
+                    format: parseArg(subArgs, named: "--format"),
+                    output: parseArg(subArgs, named: "--output")
+                ))
         case "compare":
             guard let file = subArgs.first, !file.hasPrefix("--") else {
                 throw AutomationError.missingArgument("dev compare 需要指定文件路径")
@@ -151,59 +154,59 @@ public struct CommandParser: Sendable {
     }
 
     private static let helpTextContent = """
-    SnapGlass CLI — macOS 截图与高效 OCR 工具
+        SnapGlass CLI — macOS 截图与高效 OCR 工具
 
-    用法: snapglass-cli <command> [options]
+        用法: snapglass-cli <command> [options]
 
-    命令:
-      ocr         OCR 文本识别
-      barcode     条码/二维码识别
-      capture     截图
-      history     历史记录管理
-      dev         开发者工具
+        命令:
+          ocr         OCR 文本识别
+          barcode     条码/二维码识别
+          capture     截图
+          history     历史记录管理
+          dev         开发者工具
 
-    OCR:
-      snapglass-cli ocr file <path> [--engine <vision|tesseract>] [--lang <code>] [--dev-compare] [--format json]
+        OCR:
+          snapglass-cli ocr file <path> [--engine <vision|tesseract>] [--lang <code>] [--dev-compare] [--format json]
 
-      选项:
-        --engine <vision|tesseract>   OCR 引擎，默认 vision
-        --lang <code>                 识别语言，如 chi_sim、eng
-        --dev-compare                 同时运行 Vision 和 Tesseract 引擎并输出对比
-        --format json                 以 JSON 格式输出结果
+          选项:
+            --engine <vision|tesseract>   OCR 引擎，默认 vision
+            --lang <code>                 识别语言，如 chi_sim、eng
+            --dev-compare                 同时运行 Vision 和 Tesseract 引擎并输出对比
+            --format json                 以 JSON 格式输出结果
 
-      示例:
-        snapglass-cli ocr file ./screenshot.png --lang chi_sim
-        snapglass-cli ocr file ./sample.png --engine tesseract --lang chi_sim
-        snapglass-cli ocr file ./sample.png --dev-compare --format json
+          示例:
+            snapglass-cli ocr file ./screenshot.png --lang chi_sim
+            snapglass-cli ocr file ./sample.png --engine tesseract --lang chi_sim
+            snapglass-cli ocr file ./sample.png --dev-compare --format json
 
-    条码:
-      snapglass-cli barcode file <path> [--types <type1,type2>] [--format json]
+        条码:
+          snapglass-cli barcode file <path> [--types <type1,type2>] [--format json]
 
-      选项:
-        --types <qr,code128,...>      条码类型，默认全部
-        --format json                 以 JSON 格式输出结果
+          选项:
+            --types <qr,code128,...>      条码类型，默认全部
+            --format json                 以 JSON 格式输出结果
 
-      示例:
-        snapglass-cli barcode file ./qrcode.png
+          示例:
+            snapglass-cli barcode file ./qrcode.png
 
-    截图:
-      snapglass-cli capture --mode <area|window|fullscreen> [--output <path>]
+        截图:
+          snapglass-cli capture --mode <area|window|fullscreen> [--output <path>]
 
-    历史:
-      snapglass-cli history <list|search|delete|export|clear>
+        历史:
+          snapglass-cli history <list|search|delete|export|clear>
 
-    开发者:
-      snapglass-cli dev logs [--format json] [--output <path>]
+        开发者:
+          snapglass-cli dev logs [--format json] [--output <path>]
 
-      示例:
-        snapglass-cli dev logs --format json --output ./ocr-compare.json
+          示例:
+            snapglass-cli dev logs --format json --output ./ocr-compare.json
 
-    退出码 (附录 B):
-      0   成功
-      1   通用错误
-      2   参数错误
-      3   权限不足
-      4   引擎错误
-      5   文件错误
-    """
+        退出码 (附录 B):
+          0   成功
+          1   通用错误
+          2   参数错误
+          3   权限不足
+          4   引擎错误
+          5   文件错误
+        """
 }

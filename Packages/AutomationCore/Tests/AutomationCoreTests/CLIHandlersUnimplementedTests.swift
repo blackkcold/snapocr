@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import AutomationCore
 
 /// Tests for CLIHandlers that verify unimplemented stubs return expected failure messages.

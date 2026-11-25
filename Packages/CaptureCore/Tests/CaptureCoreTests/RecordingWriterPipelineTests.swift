@@ -28,7 +28,7 @@ struct RecordingWriterPipelineTests {
             onFailure: { _ in }
         )
 
-        for index in 0 ..< 30 {
+        for index in 0..<30 {
             let sample = try Self.makeVideoSample(dimensions: dimensions, index: index)
             queue.sync { pipeline.append(sample, type: .screen) }
             try await Task.sleep(for: .milliseconds(16))

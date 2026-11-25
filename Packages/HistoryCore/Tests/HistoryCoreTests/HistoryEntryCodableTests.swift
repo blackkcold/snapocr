@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import HistoryCore
 
 /// Tests for HistoryEntry Codable conformance.
@@ -125,17 +126,17 @@ struct HistoryEntryCodableTests {
 
     @Test func codable_legacyRecordWithoutIsProtectedKeyDecodes() throws {
         let legacyJSON = """
-        {
-          "id": "3F2504E0-4F89-11D3-9A0C-0305E82C3301",
-          "timestamp": 762134400,
-          "textContent": "legacy",
-          "ocrConfidence": 0.8,
-          "captureMode": "area",
-          "sourceType": "screenshot",
-          "isFavourite": false,
-          "tags": []
-        }
-        """
+            {
+              "id": "3F2504E0-4F89-11D3-9A0C-0305E82C3301",
+              "timestamp": 762134400,
+              "textContent": "legacy",
+              "ocrConfidence": 0.8,
+              "captureMode": "area",
+              "sourceType": "screenshot",
+              "isFavourite": false,
+              "tags": []
+            }
+            """
 
         let decoded = try JSONDecoder().decode(HistoryEntry.self, from: Data(legacyJSON.utf8))
 

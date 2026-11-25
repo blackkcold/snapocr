@@ -1,5 +1,5 @@
-import Foundation
 import CaptureCore
+import Foundation
 import SharedKit
 
 /// Resolves UI strings against the language chosen in Settings rather than the
@@ -8,7 +8,8 @@ import SharedKit
 /// Foundation paths that cannot: toasts, alerts, panels, and AppKit menus.
 enum AppLocalization {
     private static func language(in defaults: UserDefaults) -> AppLanguage {
-        let rawValue = defaults.string(forKey: PreferenceKeys.appLanguage)
+        let rawValue =
+            defaults.string(forKey: PreferenceKeys.appLanguage)
             ?? PreferenceDefaults.appLanguage
         return AppLanguage(rawValue: rawValue) ?? .system
     }
@@ -28,8 +29,9 @@ enum AppLocalization {
 
     private static func bundle() -> Bundle {
         guard let identifier = language(in: .standard).resourceIdentifier,
-              let path = Bundle.main.path(forResource: identifier, ofType: "lproj"),
-              let languageBundle = Bundle(path: path) else {
+            let path = Bundle.main.path(forResource: identifier, ofType: "lproj"),
+            let languageBundle = Bundle(path: path)
+        else {
             return .main
         }
         return languageBundle
@@ -101,7 +103,9 @@ enum AppLocalization {
             return localize("Screen-recording audio could not be finalized.")
         case .streamStopUnconfirmed:
             // swiftlint:disable:next line_length
-            return localize("The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one.")
+            return localize(
+                "The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one."
+            )
         }
     }
 

@@ -26,8 +26,8 @@ extension RecordingExportWorker {
             for clip in plan.clips {
                 try Task.checkCancellation()
                 guard let source = plan.sourceRanges.first(where: { $0.segmentID == clip.segmentID }),
-                      let url = source.sourceFiles.first(where: { $0.pathExtension.lowercased() == "mp4" }),
-                      let videoRange = clip.videoRange
+                    let url = source.sourceFiles.first(where: { $0.pathExtension.lowercased() == "mp4" }),
+                    let videoRange = clip.videoRange
                 else { throw ExportError.missingSource }
                 let actual = try RecordingExportPlanner.inspectVideoRange(
                     url: url,
@@ -126,9 +126,10 @@ extension RecordingExportWorker {
             sourceFormatHint: firstSource.formatDescription,
             transform: firstSource.track.preferredTransform,
             sampleRate: plan.outputSpec.audioFormat.sampleRate,
-            channelsByRole: Dictionary(uniqueKeysWithValues: roles.map {
-                ($0, plan.outputSpec.audioFormat.channelCountByRole[$0] ?? 2)
-            })
+            channelsByRole: Dictionary(
+                uniqueKeysWithValues: roles.map {
+                    ($0, plan.outputSpec.audioFormat.channelCountByRole[$0] ?? 2)
+                })
         )
         resources.add(writer.writer)
         try writer.start()
@@ -225,7 +226,7 @@ extension RecordingExportWorker {
         for url in uniqueURLs(source.urls) {
             try Task.checkCancellation()
             guard url.isFileURL, FileManager.default.fileExists(atPath: url.path),
-                  visited.insert(url.standardizedFileURL.path).inserted
+                visited.insert(url.standardizedFileURL.path).inserted
             else { throw ExportError.missingSource }
             let metadata: [ExportAudioTrackMetadata]
             switch source {
@@ -249,7 +250,8 @@ extension RecordingExportWorker {
                 metadata = tracks.compactMap { track in
                     guard let role = exportRole(track.role) else { return nil }
                     return ExportAudioTrackMetadata(
-                        role: role, range: SampleRange(
+                        role: role,
+                        range: SampleRange(
                             startSample: track.validRange.startSample,
                             sampleCount: track.validRange.sampleCount
                         ), sampleRate: record.sampleRate, channelCount: track.channelCount,
@@ -305,17 +307,19 @@ extension RecordingExportWorker {
         ).filter { $0.lastPathComponent.hasPrefix("checkpoint-") && $0.pathExtension == "json" }
         for sidecar in siblings {
             guard let data = try? Data(contentsOf: sidecar),
-                  let record = try? JSONDecoder().decode(RecordingCheckpointRecord.self, from: data),
-                  record.segmentIndex == segmentIndex,
-                  let track = record.tracks.first(where: { $0.fileName == url.lastPathComponent }),
-                  let role = exportRole(track.role)
+                let record = try? JSONDecoder().decode(RecordingCheckpointRecord.self, from: data),
+                record.segmentIndex == segmentIndex,
+                let track = record.tracks.first(where: { $0.fileName == url.lastPathComponent }),
+                let role = exportRole(track.role)
             else { continue }
-            return [ExportAudioTrackMetadata(
-                role: role,
-                range: SampleRange(startSample: record.startSample, sampleCount: record.sampleCount),
-                sampleRate: track.sampleRate, channelCount: track.channelCount,
-                primingFrames: 0, remainderFrames: 0
-            ),]
+            return [
+                ExportAudioTrackMetadata(
+                    role: role,
+                    range: SampleRange(startSample: record.startSample, sampleCount: record.sampleCount),
+                    sampleRate: track.sampleRate, channelCount: track.channelCount,
+                    primingFrames: 0, remainderFrames: 0
+                )
+            ]
         }
         throw ExportError.missingSource
     }
@@ -384,10 +388,10 @@ extension RecordingExportWorker {
             duration: .invalid, presentationTimeStamp: .invalid, decodeTimeStamp: .invalid
         )
         guard CMSampleBufferGetSampleTimingInfo(sample, at: 0, timingInfoOut: &timing) == noErr,
-              timing.presentationTimeStamp.isValid, timing.decodeTimeStamp.isValid
+            timing.presentationTimeStamp.isValid, timing.decodeTimeStamp.isValid
         else { throw ExportError.passthroughUnsupported }
         guard CMTimeCompare(timing.presentationTimeStamp, context.clipRange.start) >= 0,
-              CMTimeCompare(timing.presentationTimeStamp, CMTimeRangeGetEnd(context.clipRange)) < 0
+            CMTimeCompare(timing.presentationTimeStamp, CMTimeRangeGetEnd(context.clipRange)) < 0
         else { return false }
         if timingShift == nil {
             // Rebase DTS to the current output decode position. PTS keeps
@@ -409,8 +413,8 @@ extension RecordingExportWorker {
             )
         }
         guard copyStatus == noErr, let copied,
-              context.input.isReadyForMoreMediaData
-                  || waitUntilReady(context.input, writer: context.writer.writer)
+            context.input.isReadyForMoreMediaData
+                || waitUntilReady(context.input, writer: context.writer.writer)
         else { throw ExportError.publishFailed(stagingURL: context.writer.writer.outputURL) }
         guard context.input.append(copied) else {
             throw ExportError.publishFailed(stagingURL: context.writer.writer.outputURL)
@@ -420,8 +424,8 @@ extension RecordingExportWorker {
 
     static func videoSource(for clip: ExportClip, plan: ExportPlan) throws -> ExportVideoSource {
         guard let source = plan.sourceRanges.first(where: { $0.segmentID == clip.segmentID }),
-              let url = source.sourceFiles.first(where: { $0.pathExtension.lowercased() == "mp4" }),
-              url.isFileURL, FileManager.default.fileExists(atPath: url.path)
+            let url = source.sourceFiles.first(where: { $0.pathExtension.lowercased() == "mp4" }),
+            url.isFileURL, FileManager.default.fileExists(atPath: url.path)
         else { throw ExportError.missingSource }
         let asset = AVURLAsset(url: url)
         let tracks = asset.tracks(withMediaType: .video)
@@ -448,13 +452,13 @@ extension RecordingExportWorker {
 
     static func makePCMBuffer(channels: [[Float]], sampleRate: Int) throws -> AVAudioPCMBuffer {
         guard !channels.isEmpty, let frameCount = channels.first?.count, frameCount > 0,
-              channels.allSatisfy({ $0.count == frameCount }),
-              let format = AVAudioFormat(
+            channels.allSatisfy({ $0.count == frameCount }),
+            let format = AVAudioFormat(
                 standardFormatWithSampleRate: Double(sampleRate),
                 channels: AVAudioChannelCount(channels.count)
-              ),
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)),
-              let storage = buffer.floatChannelData
+            ),
+            let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)),
+            let storage = buffer.floatChannelData
         else { throw ExportError.passthroughUnsupported }
         buffer.frameLength = AVAudioFrameCount(frameCount)
         for channel in channels.indices {
@@ -524,9 +528,10 @@ extension RecordingExportWorker {
         case .singleFile:
             outputs = [url]
         case .directory:
-            outputs = (try? fileManager.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: nil
-            ).filter { $0.pathExtension.lowercased() == "m4a" }) ?? []
+            outputs =
+                (try? fileManager.contentsOfDirectory(
+                    at: url, includingPropertiesForKeys: nil
+                ).filter { $0.pathExtension.lowercased() == "m4a" }) ?? []
         }
         var trackCount = 0
         var duration: TimeInterval = 0

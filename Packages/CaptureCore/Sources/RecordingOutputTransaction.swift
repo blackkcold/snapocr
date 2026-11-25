@@ -30,7 +30,7 @@ public enum RecordingOutputTransactionError: Error, Equatable, LocalizedError, S
         case .publicationFailed:
             "The recording could not be published without overwriting an existing file."
         case .invalidDestinationDirectory, .unableToReservePartialFile, .invalidState,
-             .partialFileMissing, .writerNotFinished:
+            .partialFileMissing, .writerNotFinished:
             nil
         }
     }
@@ -74,7 +74,7 @@ public struct RecordingOutputRequest: Equatable, Sendable {
     ) throws {
         guard !stem.isEmpty else { throw RecordingOutputRequestError.emptyStem }
         guard stem != ".", stem != "..", !stem.hasPrefix("."),
-              !stem.contains("/"), !stem.contains("\\"), !stem.contains("\0")
+            !stem.contains("/"), !stem.contains("\\"), !stem.contains("\0")
         else {
             throw RecordingOutputRequestError.invalidStem
         }
@@ -241,7 +241,8 @@ struct AtomicRecordingOutputPublisher {
         guard status != 0 else { return .succeeded }
         if errorCode == EEXIST { return .destinationExists }
         if errorCode == EOPNOTSUPP || errorCode == ENOTSUP || errorCode == ENOSYS
-            || errorCode == EXDEV || errorCode == EPERM || errorCode == EINVAL {
+            || errorCode == EXDEV || errorCode == EPERM || errorCode == EINVAL
+        {
             return .unsupported
         }
         return .failed
@@ -548,7 +549,8 @@ public final class RecordingOutputTransaction {
     ) throws -> (partial: URL, final: URL) {
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+            isDirectory.boolValue
+        else {
             throw RecordingOutputTransactionError.invalidDestinationDirectory
         }
 

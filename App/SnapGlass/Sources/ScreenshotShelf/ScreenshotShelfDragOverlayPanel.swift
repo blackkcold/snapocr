@@ -147,8 +147,9 @@ final class ScreenshotShelfDragOverlayController {
             return
         }
         guard isShelfVisible(),
-              let shelfPanel = panelProvider(),
-              let card = viewModel.layout.cards.first(where: { $0.captureID == preview.cardID }) else {
+            let shelfPanel = panelProvider(),
+            let card = viewModel.layout.cards.first(where: { $0.captureID == preview.cardID })
+        else {
             hide()
             viewModel.cancelLocalDrag()
             return

@@ -10,18 +10,20 @@ let outputURL = URL(fileURLWithPath: CommandLine.arguments[1])
 let pointSize = NSSize(width: 800, height: 500)
 let scale = 2
 
-guard let bitmap = NSBitmapImageRep(
-    bitmapDataPlanes: nil,
-    pixelsWide: Int(pointSize.width) * scale,
-    pixelsHigh: Int(pointSize.height) * scale,
-    bitsPerSample: 8,
-    samplesPerPixel: 4,
-    hasAlpha: true,
-    isPlanar: false,
-    colorSpaceName: .deviceRGB,
-    bytesPerRow: 0,
-    bitsPerPixel: 0
-), let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+guard
+    let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: Int(pointSize.width) * scale,
+        pixelsHigh: Int(pointSize.height) * scale,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    ), let context = NSGraphicsContext(bitmapImageRep: bitmap)
+else {
     FileHandle.standardError.write(Data("Unable to create DMG background bitmap.\n".utf8))
     exit(1)
 }

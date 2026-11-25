@@ -14,7 +14,8 @@ extension RecordingExportViewModel {
             return
         }
         guard let previewService,
-              session?.segments.contains(where: { $0.id == segmentID && $0.state == .published }) == true else {
+            session?.segments.contains(where: { $0.id == segmentID && $0.state == .published }) == true
+        else {
             message = .previewUnavailable
             return
         }

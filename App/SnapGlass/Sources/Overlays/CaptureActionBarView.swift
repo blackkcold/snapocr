@@ -135,7 +135,8 @@ final class CaptureActionBarView: NSVisualEffectView {
 
     /// 识别中：按钮文案换「识别中…」并禁用，避免重复起任务。
     func setScanning(_ isScanning: Bool) {
-        let label = isScanning
+        let label =
+            isScanning
             ? AppLocalization.string("Scanning…")
             : AppLocalization.string("Scan Selection")
         scanButton.toolTip = label
@@ -159,9 +160,11 @@ final class CaptureActionBarView: NSVisualEffectView {
             (editButton, { [weak self] in self?.onEdit?() }),
             (pinButton, { [weak self] in self?.onPin?() }),
         ]
-        guard let action = actions.first(where: { button, _ in
-            button.convert(button.bounds, to: self).contains(point)
-        })?.1 else {
+        guard
+            let action = actions.first(where: { button, _ in
+                button.convert(button.bounds, to: self).contains(point)
+            })?.1
+        else {
             return false
         }
         action()

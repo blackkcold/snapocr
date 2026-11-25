@@ -63,12 +63,14 @@ final class PinnedImageView: NSView {
     private static let alphaHitThreshold: CGFloat = 0.05
     private static let minimumResizeWidth: CGFloat = 40
     private static let minimumResizeHeight: CGFloat = 40
-    private static let topLeftBottomRightCursor = diagonalResizeCursor(
-        symbolName: "arrow.up.left.and.arrow.down.right"
-    ) ?? NSCursor.crosshair
-    private static let topRightBottomLeftCursor = diagonalResizeCursor(
-        symbolName: "arrow.up.right.and.arrow.down.left"
-    ) ?? NSCursor.crosshair
+    private static let topLeftBottomRightCursor =
+        diagonalResizeCursor(
+            symbolName: "arrow.up.left.and.arrow.down.right"
+        ) ?? NSCursor.crosshair
+    private static let topRightBottomLeftCursor =
+        diagonalResizeCursor(
+            symbolName: "arrow.up.right.and.arrow.down.left"
+        ) ?? NSCursor.crosshair
 
     init(
         image: CGImage,
@@ -274,7 +276,8 @@ final class PinnedImageView: NSView {
     override func mouseDragged(with event: NSEvent) {
         let pointerLocation = convert(event.locationInWindow, from: nil)
         if activeResizeDirection != nil,
-           recoverResizeIfMouseButtonReleased(at: pointerLocation) {
+            recoverResizeIfMouseButtonReleased(at: pointerLocation)
+        {
             return
         }
         guard let window, let startLocation = dragStartLocation, let startFrame = dragStartFrame else { return }
@@ -332,7 +335,8 @@ final class PinnedImageView: NSView {
     /// 滚轮缩放；按住 ⌥ 时改为调节透明度。
     override func scrollWheel(with event: NSEvent) {
         if activeResizeDirection != nil,
-           !recoverResizeIfMouseButtonReleased(at: convert(event.locationInWindow, from: nil)) {
+            !recoverResizeIfMouseButtonReleased(at: convert(event.locationInWindow, from: nil))
+        {
             return
         }
         guard let window else { return }
@@ -349,7 +353,8 @@ final class PinnedImageView: NSView {
 
     override func magnify(with event: NSEvent) {
         if activeResizeDirection != nil,
-           !recoverResizeIfMouseButtonReleased(at: convert(event.locationInWindow, from: nil)) {
+            !recoverResizeIfMouseButtonReleased(at: convert(event.locationInWindow, from: nil))
+        {
             return
         }
         guard let window else { return }
@@ -478,7 +483,8 @@ final class PinnedImageView: NSView {
 
     private func alphaAt(point: CGPoint) -> CGFloat {
         guard let alphaMask, alphaMaskWidth > 0, alphaMaskHeight > 0,
-              bounds.width > 0, bounds.height > 0 else { return 1 }
+            bounds.width > 0, bounds.height > 0
+        else { return 1 }
         let normalizedX = min(max(point.x / bounds.width, 0), 0.9999)
         let normalizedY = min(max(point.y / bounds.height, 0), 0.9999)
         let column = Int(normalizedX * CGFloat(alphaMaskWidth))
@@ -496,15 +502,17 @@ final class PinnedImageView: NSView {
         let height = max(1, Int(CGFloat(image.height) * ratio))
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         let didDraw = pixels.withUnsafeMutableBytes { raw -> Bool in
-            guard let context = CGContext(
-                data: raw.baseAddress,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: width * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return false }
+            guard
+                let context = CGContext(
+                    data: raw.baseAddress,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+            else { return false }
             context.interpolationQuality = .none
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
             return true
@@ -589,7 +597,8 @@ extension PinnedImageView {
     private func preserveResizePointerFeedback(at point: CGPoint) -> Bool {
         guard activeResizeDirection != nil else { return false }
         if !recoverResizeIfMouseButtonReleased(at: point),
-           let activeResizeDirection {
+            let activeResizeDirection
+        {
             Self.resizeCursor(for: activeResizeDirection).set()
         }
         return true

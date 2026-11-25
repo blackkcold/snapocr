@@ -66,10 +66,12 @@ public struct OCRTextSelection: Sendable, Equatable {
 
         return (startLine...endLine).map { lineIndex in
             let lineLength = (lines[lineIndex] as NSString).length
-            let location = lineIndex == startLine
+            let location =
+                lineIndex == startLine
                 ? min(endpoints.start.offset, lineLength)
                 : 0
-            let upperBound = lineIndex == endLine
+            let upperBound =
+                lineIndex == endLine
                 ? min(endpoints.end.offset, lineLength)
                 : lineLength
             return OCRTextSelectionSlice(

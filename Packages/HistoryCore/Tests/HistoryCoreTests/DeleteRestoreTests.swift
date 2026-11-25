@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+
 @testable import HistoryCore
 
 /// 删除 → 撤销 的组合语义：撤销后必须仍能「还原原图」。
@@ -68,15 +69,16 @@ struct DeleteRestoreTests {
     }
 
     private func image(_ width: Int) throws -> CGImage {
-        let context = try #require(CGContext(
-            data: nil,
-            width: width,
-            height: 80,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: width,
+                height: 80,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.setFillColor(CGColor(gray: 0.5, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: 80))
         return try #require(context.makeImage())

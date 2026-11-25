@@ -14,9 +14,9 @@ public enum RecordingAudioPipelineFactory {
             outputDirectory = try RecordingLedgerFileSystem.canonicalDirectory(roots.outputDirectory, create: true)
         } catch { throw RecordingPipelineError.invalidConfiguration }
         guard configuration.kind == .audio, configuration.sampleRate == 48_000,
-              !configuration.channelCountByRole.isEmpty,
-              configuration.mode != .none,
-              let roles = Self.roles(for: configuration)
+            !configuration.channelCountByRole.isEmpty,
+            configuration.mode != .none,
+            let roles = Self.roles(for: configuration)
         else { throw RecordingPipelineError.invalidConfiguration }
 
         let sessionID = UUID()
@@ -53,13 +53,14 @@ public enum RecordingAudioPipelineFactory {
             indexURL: roots.indexURL,
             outputDirectory: outputDirectory
         )
-        let engineFactory: @Sendable (
-            AudioRecordingConfiguration,
-            any AudioCheckpointSink & Sendable,
-            AudioSampleClock
-        ) throws -> any AudioRecordingControlling & Sendable = { config, sink, clock in
-            try Self.makeNativeEngine(configuration: config, sink: sink, clock: clock)
-        }
+        let engineFactory:
+            @Sendable (
+                AudioRecordingConfiguration,
+                any AudioCheckpointSink & Sendable,
+                AudioSampleClock
+            ) throws -> any AudioRecordingControlling & Sendable = { config, sink, clock in
+                try Self.makeNativeEngine(configuration: config, sink: sink, clock: clock)
+            }
         return try RecordingSessionPipeline(
             roots: pipelineRoots,
             ledger: ledger,

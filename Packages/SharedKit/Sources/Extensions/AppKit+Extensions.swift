@@ -10,7 +10,7 @@ extension NSImage {
     /// - Returns: 转换后的 CGImage，失败返回 nil
     public var cgImage: CGImage? {
         guard let data = tiffRepresentation,
-              let source = CGImageSourceCreateWithData(data as CFData, nil)
+            let source = CGImageSourceCreateWithData(data as CFData, nil)
         else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
@@ -24,7 +24,8 @@ extension NSColor {
         let value = hex.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "#", with: "")
         guard value.count == 6 || value.count == 8,
-              let number = UInt64(value, radix: 16) else { return nil }
+            let number = UInt64(value, radix: 16)
+        else { return nil }
 
         let divisor = CGFloat(255)
         let red = CGFloat((number >> (value.count == 8 ? 24 : 16)) & 0xFF) / divisor

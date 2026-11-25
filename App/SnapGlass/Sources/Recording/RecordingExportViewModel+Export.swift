@@ -44,7 +44,8 @@ extension RecordingExportViewModel {
             await finishExportReleasingLeases(using: service, exportID: exportID)
             return result
         } catch {
-            let exportError = error as? ExportError
+            let exportError =
+                error as? ExportError
                 ?? (Task.isCancelled
                     ? ExportError.cancelled(stagingURL: nil)
                     : ExportError.publishFailed(stagingURL: nil))

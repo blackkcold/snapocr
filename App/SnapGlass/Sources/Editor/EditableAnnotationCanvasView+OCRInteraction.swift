@@ -33,8 +33,9 @@ extension EditableAnnotationCanvasNSView {
         }
 
         guard currentTool == .ocr,
-              [UInt16(123), 124, 125, 126].contains(event.keyCode),
-              !orderedOCRLines.isEmpty else { return false }
+            [UInt16(123), 124, 125, 126].contains(event.keyCode),
+            !orderedOCRLines.isEmpty
+        else { return false }
         moveOCRCaret(
             keyCode: event.keyCode,
             extendsSelection: event.modifierFlags.contains(.shift)
@@ -49,7 +50,8 @@ extension EditableAnnotationCanvasNSView {
 
         if !extendsSelection, !selection.isEmpty {
             let endpoints = selection.orderedEndpoints
-            let collapsed = keyCode == 123 || keyCode == 126
+            let collapsed =
+                keyCode == 123 || keyCode == 126
                 ? endpoints.start
                 : endpoints.end
             ocrTextSelection = OCRTextSelection(anchor: collapsed, extent: collapsed)
@@ -189,7 +191,8 @@ extension EditableAnnotationCanvasNSView {
 
     func updateOCRTextSelection(to point: CGPoint) {
         guard let anchor = ocrTextSelection?.anchor,
-              let hit = closestOCRLineHit(to: point) else { return }
+            let hit = closestOCRLineHit(to: point)
+        else { return }
         ocrTextSelection = OCRTextSelection(
             anchor: anchor,
             extent: textPosition(in: hit, at: point)

@@ -74,12 +74,14 @@ extension RecordingControlPanelView {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Recording audio"))
-        .accessibilityValue(Text(AppLocalization.string(
-            "Audio recording status: %@ · %d saved · Segment %d",
-            elapsed,
-            presentation.savedCount,
-            segmentNumber
-        )))
+        .accessibilityValue(
+            Text(
+                AppLocalization.string(
+                    "Audio recording status: %@ · %d saved · Segment %d",
+                    elapsed,
+                    presentation.savedCount,
+                    segmentNumber
+                )))
     }
 
     private func audioMeter(level: Float, color: Color) -> some View {

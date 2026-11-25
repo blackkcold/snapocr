@@ -38,13 +38,15 @@ public actor ColorHistoryStore {
     ///
     /// - Parameter baseURL: 存储根目录，默认应用支持目录；测试注入临时目录隔离。
     public init(baseURL: URL = .appSupportDirectory) throws {
-        let colorsDir = baseURL
+        let colorsDir =
+            baseURL
             .appendingPathComponent("History")
             .appendingPathComponent("v2")
             .appendingPathComponent("colors")
         try colorsDir.ensureDirectoryExists()
         self.fileURL = colorsDir.appendingPathComponent("colors.enc")
-        let keyURL = baseURL
+        let keyURL =
+            baseURL
             .appendingPathComponent("Security")
             .appendingPathComponent("history-v2.key")
         self.cryptoService = try CryptoService(keyURL: keyURL)
@@ -121,7 +123,8 @@ public actor ColorHistoryStore {
     /// 读取实时上限偏好（每次 save 时求值，UI 修改即时生效）。
     private static func configuredMaxItems() -> Int {
         let defaults = UserDefaults.standard
-        let configured = defaults.object(forKey: PreferenceKeys.colorHistoryMaxItems) == nil
+        let configured =
+            defaults.object(forKey: PreferenceKeys.colorHistoryMaxItems) == nil
             ? PreferenceDefaults.colorHistoryMaxItems
             : defaults.integer(forKey: PreferenceKeys.colorHistoryMaxItems)
         return min(max(configured, 10), 5_000)

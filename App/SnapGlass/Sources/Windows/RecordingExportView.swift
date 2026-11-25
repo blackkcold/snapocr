@@ -57,7 +57,9 @@ struct RecordingExportView: View {
             Button("Cancel", role: .cancel) { discardTarget = nil }
         } message: {
             // swiftlint:disable:next line_length
-            Text("The recording folder moves to the Trash. You can restore it from the Trash until the Trash is emptied.")
+            Text(
+                "The recording folder moves to the Trash. You can restore it from the Trash until the Trash is emptied."
+            )
         }
         .task {
             // The launch scan already warmed the catalog; this keeps the window

@@ -121,10 +121,11 @@ final class ScreenshotShelfDisplayFollower {
         }
 
         guard candidateDisplayID == pointerDisplayID,
-              let candidateSince,
-              now.timeIntervalSince(candidateSince) >= settleDelay,
-              pointerDisplayID != shelfDisplayID(),
-              canFollow() else { return }
+            let candidateSince,
+            now.timeIntervalSince(candidateSince) >= settleDelay,
+            pointerDisplayID != shelfDisplayID(),
+            canFollow()
+        else { return }
         if let lastFollowAt, now.timeIntervalSince(lastFollowAt) < followCooldown {
             return
         }
@@ -139,10 +140,12 @@ final class ScreenshotShelfDisplayFollower {
 
     private func currentPointerDisplayID(from displays: [Display]) -> CGDirectDisplayID? {
         guard !displays.isEmpty else { return nil }
-        guard let index = ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
-            for: pointerLocationProvider(),
-            displayFrames: displays.map(\.frame)
-        ) else { return nil }
+        guard
+            let index = ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+                for: pointerLocationProvider(),
+                displayFrames: displays.map(\.frame)
+            )
+        else { return nil }
         return displays[index].id
     }
 }

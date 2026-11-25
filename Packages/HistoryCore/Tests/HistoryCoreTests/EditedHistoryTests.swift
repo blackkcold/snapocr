@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+
 @testable import HistoryCore
 
 struct EditedHistoryTests {
@@ -8,7 +9,8 @@ struct EditedHistoryTests {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let history = try HistoryActor(baseURL: root)
-        let id = try await history.saveCapture(image: image(100), textContent: "old OCR",
+        let id = try await history.saveCapture(
+            image: image(100), textContent: "old OCR",
             ocrConfidence: 1, captureMode: "area")
         let original = try await history.imageData(for: id)
         _ = try await history.setFavourite(id: id, isFavourite: true)
@@ -35,7 +37,8 @@ struct EditedHistoryTests {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let history = try HistoryActor(baseURL: root)
-        let id = try await history.saveCapture(image: image(100), textContent: "old OCR",
+        let id = try await history.saveCapture(
+            image: image(100), textContent: "old OCR",
             ocrConfidence: 1, captureMode: "area")
         let original = try await history.imageData(for: id)
         // Prevent the metadata commit after new media files have been written.
@@ -65,9 +68,11 @@ struct EditedHistoryTests {
     }
 
     private func image(_ width: Int) throws -> CGImage {
-        let context = try #require(CGContext(data: nil, width: width, height: 80,
-            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let context = try #require(
+            CGContext(
+                data: nil, width: width, height: 80,
+                bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         context.setFillColor(CGColor(gray: 0.5, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: 80))
         return try #require(context.makeImage())

@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-
 @preconcurrency import ScreenCaptureKit
 import SharedKit
 
@@ -159,13 +158,15 @@ public final class CaptureOrchestrator: Sendable {
                 )
             )
         }
-        guard let plan = DisplayCanvasPlan.make(
-            displays: descriptors,
-            mode: mode,
-            gap: gap,
-            alignment: alignment,
-            highResolution: options.highResolution
-        ) else {
+        guard
+            let plan = DisplayCanvasPlan.make(
+                displays: descriptors,
+                mode: mode,
+                gap: gap,
+                alignment: alignment,
+                highResolution: options.highResolution
+            )
+        else {
             throw CaptureError.displayUnavailable
         }
 
@@ -196,16 +197,19 @@ public final class CaptureOrchestrator: Sendable {
             return result
         }
 
-        guard let composed = DisplayCanvasComposer.compose(
-            images: images,
-            plan: plan
-        ) else {
+        guard
+            let composed = DisplayCanvasComposer.compose(
+                images: images,
+                plan: plan
+            )
+        else {
             throw CaptureError.captureFailed(reason: "Unable to compose all displays")
         }
 
-        let mainDisplay = content.displays.first {
-            $0.displayID == CGMainDisplayID()
-        } ?? content.displays[0]
+        let mainDisplay =
+            content.displays.first {
+                $0.displayID == CGMainDisplayID()
+            } ?? content.displays[0]
         let displayInfo = CaptureDisplayInfo(
             displayID: mainDisplay.displayID,
             scaleFactor: plan.commonScale,
@@ -260,7 +264,8 @@ public final class CaptureOrchestrator: Sendable {
             for try await result in group {
                 results.append(result)
             }
-            return results
+            return
+                results
                 .sorted { $0.0 < $1.0 }
                 .map(\.1)
         }
@@ -268,9 +273,11 @@ public final class CaptureOrchestrator: Sendable {
 
     private static func pixelScale(for display: SCDisplay) -> CGFloat {
         if let screen = NSScreen.screens.first(where: { screen in
-            guard let number = screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")
-            ] as? UInt32 else { return false }
+            guard
+                let number = screen.deviceDescription[
+                    NSDeviceDescriptionKey("NSScreenNumber")
+                ] as? UInt32
+            else { return false }
             return number == display.displayID
         }) {
             return max(1, screen.backingScaleFactor)
@@ -409,7 +416,8 @@ extension CaptureOrchestrator {
             // 未指定窗口 ID，尝试通过 CG 枚举查找第一个非桌面窗口
             let windows = cgAdapter.enumerateWindows()
             guard let firstWindow = windows.first,
-                  let winID = firstWindow[kCGWindowNumber as String] as? UInt32 else {
+                let winID = firstWindow[kCGWindowNumber as String] as? UInt32
+            else {
                 throw CaptureError.windowNotFound
             }
             return try fallbackWindowResult(
@@ -468,16 +476,19 @@ extension CaptureOrchestrator {
             throw CaptureError.invalidRegion
         }
 
-        let displayID = cgAdapter.displayID(for: CGPoint(
-            x: areaRect.midX,
-            y: areaRect.midY
-        ))
+        let displayID = cgAdapter.displayID(
+            for: CGPoint(
+                x: areaRect.midX,
+                y: areaRect.midY
+            ))
 
-        guard let image = cgAdapter.captureRect(
-            areaRect,
-            displayID: displayID,
-            highResolution: options.highResolution
-        ) else {
+        guard
+            let image = cgAdapter.captureRect(
+                areaRect,
+                displayID: displayID,
+                highResolution: options.highResolution
+            )
+        else {
             throw CaptureError.captureFailed(reason: "CG fallback: failed to capture rect \(areaRect)")
         }
 

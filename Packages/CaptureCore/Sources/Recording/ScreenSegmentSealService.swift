@@ -77,7 +77,8 @@ public actor ScreenSegmentSealService {
         writer.startSession(atSourceTime: mediaOrigin)
         logger.info("screen.seal media origin=\(CMTimeGetSeconds(mediaOrigin))")
 
-        let audioTask: Task<Void, any Error>? = audioSinks.sinks.isEmpty
+        let audioTask: Task<Void, any Error>? =
+            audioSinks.sinks.isEmpty
             ? nil
             : Task { [self] in
                 try await appendAudioTracks(
@@ -156,7 +157,7 @@ public actor ScreenSegmentSealService {
         videoInput.markAsFinished()
         await writer.finishWriting()
         guard writer.status == .completed,
-              RecordingLedgerFileSystem.isRegularFile(transaction.partialURL)
+            RecordingLedgerFileSystem.isRegularFile(transaction.partialURL)
         else { throw ScreenSegmentSealError.writerFailed }
         try transaction.markWriterFinished()
         try RecordingLedgerFileSystem.syncFile(transaction.partialURL)
@@ -177,16 +178,16 @@ public actor ScreenSegmentSealService {
     ) throws -> SealRange {
         let ordered = checkpoints.sorted { $0.chunkIndex < $1.chunkIndex }
         guard context.kind == .screen,
-              context.destinationDirectory.isFileURL,
-              fileManager.fileExists(atPath: context.destinationDirectory.path),
-              !context.outputStem.isEmpty,
-              let first = ordered.first,
-              ordered.allSatisfy({ $0.segmentIndex == first.segmentIndex }),
-              Set(ordered.map(\.chunkIndex)).count == ordered.count,
-              ordered.allSatisfy({ $0.videoRange.sampleCount > 0 }),
-              zip(ordered, ordered.dropFirst()).allSatisfy({
-                  $0.videoRange.startSample + $0.videoRange.sampleCount == $1.videoRange.startSample
-              })
+            context.destinationDirectory.isFileURL,
+            fileManager.fileExists(atPath: context.destinationDirectory.path),
+            !context.outputStem.isEmpty,
+            let first = ordered.first,
+            ordered.allSatisfy({ $0.segmentIndex == first.segmentIndex }),
+            Set(ordered.map(\.chunkIndex)).count == ordered.count,
+            ordered.allSatisfy({ $0.videoRange.sampleCount > 0 }),
+            zip(ordered, ordered.dropFirst()).allSatisfy({
+                $0.videoRange.startSample + $0.videoRange.sampleCount == $1.videoRange.startSample
+            })
         else { throw ScreenSegmentSealError.invalidCheckpoints }
         guard context.sampleRate == 48_000 else { throw ScreenSegmentSealError.invalidContext }
 
@@ -194,7 +195,7 @@ public actor ScreenSegmentSealService {
         guard let last = ordered.last else { throw ScreenSegmentSealError.invalidCheckpoints }
         let endSample = last.videoRange.startSample + last.videoRange.sampleCount
         guard endSample > startSample,
-              endSample - startSample <= 3_540 * 48_000
+            endSample - startSample <= 3_540 * 48_000
         else { throw ScreenSegmentSealError.rangeMismatch }
         if let audio, audio.checkpoints.segmentIndex != first.segmentIndex {
             throw ScreenSegmentSealError.rangeMismatch
@@ -246,9 +247,10 @@ public actor ScreenSegmentSealService {
     private func publishSealedSegment(_ publication: SealPublication) async throws -> SealedSegment {
         let hash = try RecordingLedgerFileSystem.sha256(of: publication.transaction.partialURL)
         let hashes = [publication.transaction.finalURL.lastPathComponent: hash]
-        let stagedFiles = Dictionary(uniqueKeysWithValues: publication.trackMap.keys.map {
-            ($0, publication.transaction.partialURL)
-        })
+        let stagedFiles = Dictionary(
+            uniqueKeysWithValues: publication.trackMap.keys.map {
+                ($0, publication.transaction.partialURL)
+            })
         let candidate = SegmentPublicationCandidate(
             segmentID: publication.segmentID,
             segmentIndex: publication.segmentIndex,
@@ -285,7 +287,6 @@ public actor ScreenSegmentSealService {
             videoTrackIndex: 0
         )
     }
-
 
     func videoTrack(
         for url: URL

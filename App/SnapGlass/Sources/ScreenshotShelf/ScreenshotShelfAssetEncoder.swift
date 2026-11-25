@@ -52,11 +52,12 @@ enum ScreenshotShelfAssetEncoder {
 
     static func decodeThumbnail(from data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let options: CFDictionary = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 768,
-        ] as CFDictionary
+        let options: CFDictionary =
+            [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 768,
+            ] as CFDictionary
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options)
     }
 
@@ -65,7 +66,7 @@ enum ScreenshotShelfAssetEncoder {
         let width = max(1, Int(CGFloat(image.width) * scale))
         let height = max(1, Int(CGFloat(image.height) * scale))
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
+            let context = CGContext(
                 data: nil,
                 width: width,
                 height: height,
@@ -73,7 +74,8 @@ enum ScreenshotShelfAssetEncoder {
                 bytesPerRow: 0,
                 space: colorSpace,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              ) else { return nil }
+            )
+        else { return nil }
 
         context.interpolationQuality = .high
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))

@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+
 @testable import CaptureCore
 
 struct DisplayCanvasPlanTests {
@@ -118,15 +119,17 @@ struct DisplayCanvasPlanTests {
             frame: CGRect(x: 100, y: 0, width: 100, height: 100),
             pixelSize: CGSize(width: 100, height: 100)
         )
-        let plan = try #require(DisplayCanvasPlan.make(
-            displays: [leftDisplay, rightDisplay],
-            mode: .compactHorizontal,
-            highResolution: false
-        ))
-        let image = try #require(DisplayCanvasComposer.compose(
-            images: [1: left, 2: right],
-            plan: plan
-        ))
+        let plan = try #require(
+            DisplayCanvasPlan.make(
+                displays: [leftDisplay, rightDisplay],
+                mode: .compactHorizontal,
+                highResolution: false
+            ))
+        let image = try #require(
+            DisplayCanvasComposer.compose(
+                images: [1: left, 2: right],
+                plan: plan
+            ))
 
         #expect(image.width == 200)
         #expect(image.height == 100)
@@ -141,21 +144,23 @@ struct DisplayCanvasPlanTests {
         alpha: CGFloat,
         size: CGSize
     ) throws -> CGImage {
-        let context = try #require(CGContext(
-            data: nil,
-            width: Int(size.width),
-            height: Int(size.height),
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
-        context.setFillColor(CGColor(
-            red: red,
-            green: green,
-            blue: blue,
-            alpha: alpha
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: Int(size.width),
+                height: Int(size.height),
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+        context.setFillColor(
+            CGColor(
+                red: red,
+                green: green,
+                blue: blue,
+                alpha: alpha
+            ))
         context.fill(CGRect(origin: .zero, size: size))
         return try #require(context.makeImage())
     }

@@ -333,12 +333,13 @@ struct RecordingSettlementSupervisorTests {
             readiness: .poll { .ready },
             stop: {
                 await counter.record()
-                return .screen(ScreenRecordingOutcome(
-                    sessionID: sessionID,
-                    segmentURLs: [],
-                    droppedFrameCount: 0,
-                    failure: nil
-                ))
+                return .screen(
+                    ScreenRecordingOutcome(
+                        sessionID: sessionID,
+                        segmentURLs: [],
+                        droppedFrameCount: 0,
+                        failure: nil
+                    ))
             }
         )
 
@@ -370,12 +371,13 @@ struct RecordingSettlementSupervisorTests {
             readiness: .poll { .ready },
             stop: {
                 await counter.record()
-                return .screen(ScreenRecordingOutcome(
-                    sessionID: sessionID,
-                    segmentURLs: [],
-                    droppedFrameCount: 0,
-                    failure: nil
-                ))
+                return .screen(
+                    ScreenRecordingOutcome(
+                        sessionID: sessionID,
+                        segmentURLs: [],
+                        droppedFrameCount: 0,
+                        failure: nil
+                    ))
             }
         )
 
@@ -408,12 +410,13 @@ struct RecordingSettlementSupervisorTests {
             readiness: .poll { .ready },
             stop: {
                 await counter.record()
-                return .screen(ScreenRecordingOutcome(
-                    sessionID: sessionID,
-                    segmentURLs: [],
-                    droppedFrameCount: 0,
-                    failure: nil
-                ))
+                return .screen(
+                    ScreenRecordingOutcome(
+                        sessionID: sessionID,
+                        segmentURLs: [],
+                        droppedFrameCount: 0,
+                        failure: nil
+                    ))
             }
         )
 

@@ -115,9 +115,9 @@ extension RecordingSessionController {
             // The permission prompt may return after a cancel or a newer request.
             // Only a request that still owns the UI may create a pipeline.
             guard request.kind == .audio,
-                  currentRequest == request,
-                  request.disposition(generation: sessionGeneration, holdsResource: false) == .apply,
-                  status == .selectingSource
+                currentRequest == request,
+                request.disposition(generation: sessionGeneration, holdsResource: false) == .apply,
+                status == .selectingSource
             else { throw RecordingReadinessError.supersededStart }
             return request
         }
@@ -194,7 +194,7 @@ extension RecordingSessionController {
         } catch {
             cancelAudioStartBookkeeping()
             guard identity.disposition(generation: sessionGeneration, holdsResource: false) == .apply,
-                  lastAudioResult == nil
+                lastAudioResult == nil
             else {
                 releaseAudioResourceOwner(owner)
                 throw RecordingReadinessError.supersededStart
@@ -204,8 +204,9 @@ extension RecordingSessionController {
             throw error
         }
         guard identity.disposition(generation: sessionGeneration, holdsResource: false) == .apply,
-              lastAudioResult == nil,
-              audioResourceOwner == owner else {
+            lastAudioResult == nil,
+            audioResourceOwner == owner
+        else {
             // The factory ran on its worker; a cancel, watchdog, or replacement
             // settled while it did. Never adopt or start a pipeline for a session
             // that has already settled.
@@ -231,8 +232,9 @@ extension RecordingSessionController {
         cancelAudioStartBookkeeping()
         audioStartTask = nil
         guard identity.disposition(generation: sessionGeneration, holdsResource: true) == .apply,
-              lastAudioResult == nil,
-              audioResourceOwner == owner else {
+            lastAudioResult == nil,
+            audioResourceOwner == owner
+        else {
             // A genuine late success must stop its own pipeline exactly once; the
             // owner stays reserved until that retirement drains.
             scheduleAudioRetirement(pipeline, owner: owner)
@@ -253,7 +255,8 @@ extension RecordingSessionController {
             cancelAudioStartBookkeeping()
             audioStartTask = nil
             guard identity.disposition(generation: sessionGeneration, holdsResource: false) == .apply,
-                  lastAudioResult == nil else {
+                lastAudioResult == nil
+            else {
                 // The UI already settled (cancel, watchdog, bounded stop). The
                 // failed start owns no live resources, so release the owner and
                 // suppress a second visible failure.
@@ -322,11 +325,11 @@ extension RecordingSessionController {
                 return
             }
             guard let self, !Task.isCancelled,
-                  generation == self.sessionGeneration,
-                  self.audioResourceOwner == owner,
-                  self.audioStartReservation == owner,
-                  self.lastAudioResult == nil,
-                  self.audioStateMachine.state == .starting
+                generation == self.sessionGeneration,
+                self.audioResourceOwner == owner,
+                self.audioStartReservation == owner,
+                self.lastAudioResult == nil,
+                self.audioStateMachine.state == .starting
             else { return }
             self.outcomeState.markCaptureAttempted()
             self.completeAudioSession(

@@ -67,7 +67,7 @@ extension RecordingExportPlanner {
         guard index >= 0, index < tracks.count else { throw ExportError.passthroughUnsupported }
         let track = tracks[index]
         guard track.timeRange.isValid, track.timeRange.duration.isValid,
-              track.timeRange.duration.seconds.isFinite, track.timeRange.duration.seconds > 0
+            track.timeRange.duration.seconds.isFinite, track.timeRange.duration.seconds > 0
         else { throw ExportError.passthroughUnsupported }
         return track
     }
@@ -94,7 +94,7 @@ extension RecordingExportPlanner {
         )
         let trackEnd = CMTimeRangeGetEnd(track.timeRange)
         guard CMTimeCompare(requestedStart, track.timeRange.start) >= 0,
-              CMTimeCompare(requestedEnd, trackEnd) <= 0
+            CMTimeCompare(requestedEnd, trackEnd) <= 0
         else { throw ExportError.passthroughUnsupported }
         return VideoRequestBounds(start: requestedStart, end: requestedEnd, trackEnd: trackEnd)
     }
@@ -118,10 +118,10 @@ extension RecordingExportPlanner {
             try consumeVideoSample(sample, context: context, scan: &scan)
         }
         guard reader.status == .completed, scan.sampleCount > 0,
-              let startKeyframe = scan.startKeyframe, let endTime = scan.endTime,
-              let codec = scan.codec,
-              CMTimeCompare(endTime, bounds.end) >= 0,
-              CMTimeCompare(endTime, bounds.trackEnd) <= 0
+            let startKeyframe = scan.startKeyframe, let endTime = scan.endTime,
+            let codec = scan.codec,
+            CMTimeCompare(endTime, bounds.end) >= 0,
+            CMTimeCompare(endTime, bounds.trackEnd) <= 0
         else { throw ExportError.passthroughUnsupported }
         guard codec == "h264" || codec == "hevc" else { throw ExportError.passthroughUnsupported }
         return VideoScanResult(codec: codec, startKeyframe: startKeyframe, endTime: endTime)
@@ -151,9 +151,10 @@ extension RecordingExportPlanner {
             context.reader.cancelReading()
             throw ExportError.passthroughUnsupported
         }
-        let attachments = CMSampleBufferGetSampleAttachmentsArray(
-            sample, createIfNecessary: false
-        ) as? [[CFString: Any]]
+        let attachments =
+            CMSampleBufferGetSampleAttachmentsArray(
+                sample, createIfNecessary: false
+            ) as? [[CFString: Any]]
         for index in 0..<count {
             try consumeVideoTiming(
                 timings[index], attachments: attachments, index: index,
@@ -174,8 +175,9 @@ extension RecordingExportPlanner {
             throw ExportError.passthroughUnsupported
         }
         if !isNotSync(attachments: attachments, index: index),
-           CMTimeCompare(timing.presentationTimeStamp, context.requestedStart) <= 0,
-           scan.startKeyframe.map({ CMTimeCompare(timing.presentationTimeStamp, $0) > 0 }) ?? true {
+            CMTimeCompare(timing.presentationTimeStamp, context.requestedStart) <= 0,
+            scan.startKeyframe.map({ CMTimeCompare(timing.presentationTimeStamp, $0) > 0 }) ?? true
+        {
             scan.startKeyframe = timing.presentationTimeStamp
         }
         if CMTimeCompare(timing.presentationTimeStamp, context.requestedEnd) < 0 {
@@ -193,7 +195,7 @@ extension RecordingExportPlanner {
         let duration = timing.duration.isValid && timing.duration.value > 0 ? timing.duration : .zero
         let sampleEnd = CMTimeAdd(timing.presentationTimeStamp, duration)
         guard sampleEnd.isValid,
-              scan.endTime.map({ CMTimeCompare(sampleEnd, $0) > 0 }) ?? true
+            scan.endTime.map({ CMTimeCompare(sampleEnd, $0) > 0 }) ?? true
         else { return }
         scan.endTime = sampleEnd
     }
@@ -217,8 +219,8 @@ extension RecordingExportPlanner {
         let effectiveStart = max(segmentStartSample, rawStart)
         let effectiveEnd = min(segmentEnd, rawEnd)
         guard effectiveEnd > effectiveStart,
-              effectiveStart <= requested.startSample,
-              effectiveEnd >= requested.sampleCount + requested.startSample
+            effectiveStart <= requested.startSample,
+            effectiveEnd >= requested.sampleCount + requested.startSample
         else { throw ExportError.passthroughUnsupported }
         let duration = CMTimeSubtract(scan.endTime, scan.startKeyframe)
         guard duration.isValid, duration.value > 0, duration.timescale > 0 else {

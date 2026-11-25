@@ -49,7 +49,8 @@ extension CaptureViewModel {
             )
             setup.task?.cancel()
             guard let selection,
-                  case .capture(let captureSelection) = selection else {
+                case .capture(let captureSelection) = selection
+            else {
                 return
             }
             await performAreaSelection(
@@ -144,8 +145,9 @@ extension CaptureViewModel {
         let imageSource: CaptureImageSource
         if overlayMode == .snapshot {
             guard let displayID = selection.displayID,
-                  let snapshot = capturedDisplays.images[displayID],
-                  let displayFrame = capturedDisplays.displayFrames[displayID] else {
+                let snapshot = capturedDisplays.images[displayID],
+                let displayFrame = capturedDisplays.displayFrames[displayID]
+            else {
                 showStaticSnapshotFailure()
                 return
             }
@@ -357,11 +359,13 @@ extension CaptureViewModel {
     /// Performs OCR on the image currently in the clipboard.
     public func ocrFromClipboard() {
         Task {
-            guard let image = NSPasteboard.general.readObjects(
-                forClasses: [NSImage.self],
-                options: nil
-            )?.first as? NSImage,
-                  let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            guard
+                let image = NSPasteboard.general.readObjects(
+                    forClasses: [NSImage.self],
+                    options: nil
+                )?.first as? NSImage,
+                let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            else {
                 showToast(message: AppLocalization.string("No image found in clipboard"), type: .error)
                 return
             }
@@ -446,11 +450,12 @@ extension CaptureViewModel {
                 captureMode = mode
                 capturedImage = image
             }
-            let image = if let normalizedMaskPath {
-                try SelectionMaskProcessor.apply(to: capturedImage, normalizedPath: normalizedMaskPath)
-            } else {
-                capturedImage
-            }
+            let image =
+                if let normalizedMaskPath {
+                    try SelectionMaskProcessor.apply(to: capturedImage, normalizedPath: normalizedMaskPath)
+                } else {
+                    capturedImage
+                }
             let displayScale = (pinRect?.width ?? livePointWidth).map { pointWidth in
                 PinnedImageGeometry.displayScale(
                     imagePixelWidth: CGFloat(image.width),
@@ -499,18 +504,21 @@ extension CaptureViewModel {
         guard !isPinning else { return (image, nil) }
         if forceOriginal { return (image, nil) }
 
-        let isEnabled = forceMockup || boolPreference(
-            forKey: PreferenceKeys.captureMockupEnabled,
-            defaultValue: PreferenceDefaults.captureMockupEnabled
-        )
+        let isEnabled =
+            forceMockup
+            || boolPreference(
+                forKey: PreferenceKeys.captureMockupEnabled,
+                defaultValue: PreferenceDefaults.captureMockupEnabled
+            )
         if MockupPolicy.applies(
             captureMode: captureMode,
             isPinning: false,
             isEnabled: isEnabled
         ) {
-            let rawPreset = UserDefaults.standard.string(
-                forKey: PreferenceKeys.captureMockupPreset
-            ) ?? PreferenceDefaults.captureMockupPreset
+            let rawPreset =
+                UserDefaults.standard.string(
+                    forKey: PreferenceKeys.captureMockupPreset
+                ) ?? PreferenceDefaults.captureMockupPreset
             let style = MockupPolicy.style(for: rawPreset)
             // 6K mockups take hundreds of milliseconds; keep the main thread
             // free so the action bar, toast, and shelf appear immediately.
@@ -527,11 +535,12 @@ extension CaptureViewModel {
             defaultValue: PreferenceDefaults.captureWindowStyling
         )
         if windowStylingEnabled,
-           case .window = captureMode,
-           let style = WindowScreenshotStyling.mockupStyle(
-               for: image,
-               scale: displayScale ?? 2
-           ) {
+            case .window = captureMode,
+            let style = WindowScreenshotStyling.mockupStyle(
+                for: image,
+                scale: displayScale ?? 2
+            )
+        {
             let rendered = await Task.detached(priority: .userInitiated) {
                 MockupRenderer.render(image, style: style)
             }.value
@@ -557,21 +566,24 @@ extension CaptureViewModel {
             screenshotShelfManager.beginCaptureSuppression()
             defer { screenshotShelfManager.endCaptureSuppression() }
 
-            let mode = DisplayCanvasMode(
-                rawValue: Self.stringPreference(
-                    forKey: PreferenceKeys.displayCanvasMode,
-                    defaultValue: PreferenceDefaults.displayCanvasMode
-                )
-            ) ?? .compactHorizontal
-            let gap = UserDefaults.standard.object(
-                forKey: PreferenceKeys.displayCanvasGap
-            ) as? Double ?? PreferenceDefaults.displayCanvasGap
-            let alignment = DisplayCanvasAlignment(
-                rawValue: Self.stringPreference(
-                    forKey: PreferenceKeys.displayCanvasAlignment,
-                    defaultValue: PreferenceDefaults.displayCanvasAlignment
-                )
-            ) ?? .start
+            let mode =
+                DisplayCanvasMode(
+                    rawValue: Self.stringPreference(
+                        forKey: PreferenceKeys.displayCanvasMode,
+                        defaultValue: PreferenceDefaults.displayCanvasMode
+                    )
+                ) ?? .compactHorizontal
+            let gap =
+                UserDefaults.standard.object(
+                    forKey: PreferenceKeys.displayCanvasGap
+                ) as? Double ?? PreferenceDefaults.displayCanvasGap
+            let alignment =
+                DisplayCanvasAlignment(
+                    rawValue: Self.stringPreference(
+                        forKey: PreferenceKeys.displayCanvasAlignment,
+                        defaultValue: PreferenceDefaults.displayCanvasAlignment
+                    )
+                ) ?? .start
 
             do {
                 let result = try await captureOrchestrator.captureAllDisplays(

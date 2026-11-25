@@ -28,15 +28,15 @@ extension RecordingSessionLedger {
                 checkpoint.videoURL, under: root, allowingMissing: allowMissing
             )
             guard let expectedVideoHash = checkpoint.contentHashes[videoPath],
-                  expectedVideoHash.count == 64,
-                  expectedVideoHash.allSatisfy(\.isHexDigit)
+                expectedVideoHash.count == 64,
+                expectedVideoHash.allSatisfy(\.isHexDigit)
             else { throw RecordingSessionLedgerError.invalidCheckpoint }
 
             var referencedPaths: Set<String> = [videoPath]
             if let audio = checkpoint.audioCheckpoint {
                 guard audio.segmentIndex == checkpoint.segmentIndex,
-                      audio.startSample >= 0, audio.sampleCount > 0,
-                      !audio.trackFiles.isEmpty
+                    audio.startSample >= 0, audio.sampleCount > 0,
+                    !audio.trackFiles.isEmpty
                 else { throw RecordingSessionLedgerError.invalidCheckpoint }
                 for path in audio.trackFiles.values {
                     try RecordingLedgerFileSystem.validateRelativePath(path)
@@ -98,12 +98,12 @@ extension RecordingSessionLedger {
         replay: Bool
     ) throws {
         guard intent.segmentIndex >= 0, intent.effectiveRange.startSample >= 0,
-              intent.effectiveRange.sampleCount > 0, intent.coverage.segmentIndex == intent.segmentIndex,
-              intent.coverage.segmentStartSample == intent.effectiveRange.startSample,
-              intent.coverage.segmentEndSample == intent.effectiveRange.endSample,
-              !intent.contentHashes.isEmpty, intent.stagingURL.isFileURL, intent.reservedFinalURL.isFileURL,
-              intent.stagingURL.standardizedFileURL.path != intent.reservedFinalURL.standardizedFileURL.path,
-              intent.stagingURL.deletingLastPathComponent().standardizedFileURL
+            intent.effectiveRange.sampleCount > 0, intent.coverage.segmentIndex == intent.segmentIndex,
+            intent.coverage.segmentStartSample == intent.effectiveRange.startSample,
+            intent.coverage.segmentEndSample == intent.effectiveRange.endSample,
+            !intent.contentHashes.isEmpty, intent.stagingURL.isFileURL, intent.reservedFinalURL.isFileURL,
+            intent.stagingURL.standardizedFileURL.path != intent.reservedFinalURL.standardizedFileURL.path,
+            intent.stagingURL.deletingLastPathComponent().standardizedFileURL
                 == intent.reservedFinalURL.deletingLastPathComponent().standardizedFileURL
         else { throw RecordingSessionLedgerError.invalidPublication }
         do {
@@ -117,7 +117,7 @@ extension RecordingSessionLedger {
                 }
             }
             guard intent.isDirectory || intent.contentHashes.count == 1,
-                  intent.isDirectory || intent.contentHashes[intent.reservedFinalURL.lastPathComponent] != nil
+                intent.isDirectory || intent.contentHashes[intent.reservedFinalURL.lastPathComponent] != nil
             else { throw RecordingSessionLedgerError.invalidPublication }
 
             let stageExists = fileManager.fileExists(atPath: intent.stagingURL.path)
@@ -152,13 +152,13 @@ extension RecordingSessionLedger {
             for (name, expected) in intent.contentHashes {
                 let file = try RecordingLedgerFileSystem.resolve(name, under: productURL)
                 guard RecordingLedgerFileSystem.isRegularFile(file),
-                      try RecordingLedgerFileSystem.sha256(of: file) == expected
+                    try RecordingLedgerFileSystem.sha256(of: file) == expected
                 else { throw RecordingSessionLedgerError.invalidPublication }
             }
         } else {
             guard RecordingLedgerFileSystem.isRegularFile(productURL),
-                  let expected = intent.contentHashes[intent.reservedFinalURL.lastPathComponent],
-                  try RecordingLedgerFileSystem.sha256(of: productURL) == expected
+                let expected = intent.contentHashes[intent.reservedFinalURL.lastPathComponent],
+                try RecordingLedgerFileSystem.sha256(of: productURL) == expected
             else { throw RecordingSessionLedgerError.invalidPublication }
         }
     }
@@ -193,12 +193,12 @@ extension RecordingSessionLedger {
         against intent: RecordingPublishIntent
     ) throws {
         guard segment.id == intent.segmentID, segment.index == intent.segmentIndex,
-              segment.startSample == intent.effectiveRange.startSample,
-              segment.sampleCount == intent.effectiveRange.sampleCount,
-              segment.state == .published,
-              segment.videoURL != nil || !segment.files.isEmpty,
-              Set(segment.files.keys).isSubset(of: ["mixed", "system", "microphone"]),
-              Set(segment.trackMap.keys) == Set(segment.files.keys)
+            segment.startSample == intent.effectiveRange.startSample,
+            segment.sampleCount == intent.effectiveRange.sampleCount,
+            segment.state == .published,
+            segment.videoURL != nil || !segment.files.isEmpty,
+            Set(segment.files.keys).isSubset(of: ["mixed", "system", "microphone"]),
+            Set(segment.trackMap.keys) == Set(segment.files.keys)
         else { throw RecordingSessionLedgerError.invalidPublication }
     }
 
@@ -215,11 +215,11 @@ extension RecordingSessionLedger {
             return
         }
         guard !intent.isDirectory,
-              videoURL.standardizedFileURL == intent.reservedFinalURL.standardizedFileURL,
-              let videoTrackIndex = segment.videoTrackIndex, videoTrackIndex >= 0,
-              segment.files.values.allSatisfy({
-                  URL(fileURLWithPath: $0).lastPathComponent == videoURL.lastPathComponent
-              })
+            videoURL.standardizedFileURL == intent.reservedFinalURL.standardizedFileURL,
+            let videoTrackIndex = segment.videoTrackIndex, videoTrackIndex >= 0,
+            segment.files.values.allSatisfy({
+                URL(fileURLWithPath: $0).lastPathComponent == videoURL.lastPathComponent
+            })
         else { throw RecordingSessionLedgerError.invalidPublication }
         guard verifyFiles else { return }
         try validatePublishedVideoHash(videoURL, against: intent, allowMissingFiles: allowMissingFiles)
@@ -273,11 +273,12 @@ extension RecordingSessionLedger {
                 allowingMissing: context.allowMissingFiles
             )
             let fileName = URL(fileURLWithPath: relative).lastPathComponent
-            let expected = context.intent.isDirectory
+            let expected =
+                context.intent.isDirectory
                 ? context.intent.reservedFinalURL.appendingPathComponent(fileName)
                 : context.intent.reservedFinalURL
             guard resolved.standardizedFileURL == expected.standardizedFileURL,
-                  seen.insert(relative).inserted
+                seen.insert(relative).inserted
             else { throw RecordingSessionLedgerError.invalidPublication }
             guard context.verifyFiles else { return }
             try validatePublishedFileHash(resolved, context: context)
@@ -294,11 +295,13 @@ extension RecordingSessionLedger {
             }
             return
         }
-        let expectedHash = context.intent.isDirectory
+        let expectedHash =
+            context.intent.isDirectory
             ? context.intent.contentHashes[resolved.lastPathComponent]
             : context.intent.contentHashes[context.intent.reservedFinalURL.lastPathComponent]
         guard let expectedHash,
-              try RecordingLedgerFileSystem.sha256(of: resolved) == expectedHash else {
+            try RecordingLedgerFileSystem.sha256(of: resolved) == expectedHash
+        else {
             throw RecordingSessionLedgerError.invalidPublication
         }
     }
@@ -308,12 +311,12 @@ extension RecordingSessionLedger {
     /// Validates an adopted segment: media must live inside the session root.
     static func validateAdoptedSegment(_ segment: PublishedSegment, sessionRoot: URL) throws {
         guard segment.state == .published, segment.index >= 0,
-              segment.startSample >= 0, segment.sampleCount > 0,
-              (segment.videoURL == nil) == (segment.videoTrackIndex == nil),
-              segment.materialURL != nil || segment.videoURL != nil,
-              !segment.files.isEmpty || segment.videoURL != nil,
-              Set(segment.files.keys).isSubset(of: ["mixed", "system", "microphone"]),
-              Set(segment.trackMap.keys) == Set(segment.files.keys)
+            segment.startSample >= 0, segment.sampleCount > 0,
+            (segment.videoURL == nil) == (segment.videoTrackIndex == nil),
+            segment.materialURL != nil || segment.videoURL != nil,
+            !segment.files.isEmpty || segment.videoURL != nil,
+            Set(segment.files.keys).isSubset(of: ["mixed", "system", "microphone"]),
+            Set(segment.trackMap.keys) == Set(segment.files.keys)
         else { throw RecordingSessionLedgerError.invalidPublication }
         do {
             for relative in segment.files.values {

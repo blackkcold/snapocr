@@ -1,9 +1,8 @@
 import AppKit
 import CaptureCore
 import Foundation
-import SharedKit
-
 @preconcurrency import ScreenCaptureKit
+import SharedKit
 
 /// Screen capture start, its bounded watchdog, first-frame promotion, and the one
 /// initial cleanup for a start that never became a recording.
@@ -15,8 +14,8 @@ extension RecordingSessionController {
         request: RecordingRequestIdentity
     ) async {
         guard isCurrentRequest(request),
-              let activeSession,
-              activeSession.request == request
+            let activeSession,
+            activeSession.request == request
         else { return }
         let generation = request.generation
         // Access is decided before any writer, journal, or deadline exists. A denial
@@ -68,7 +67,8 @@ extension RecordingSessionController {
         engine: ScreenRecordingEngine,
         generation: UUID
     ) async throws {
-        let audioFactoryOverride: ScreenAudioEngineFactoryOverride? = screenAudioFailureInjection
+        let audioFactoryOverride: ScreenAudioEngineFactoryOverride? =
+            screenAudioFailureInjection
             ? Self.injectedFailingAudioFactory()
             : nil
         let coordinator = try ScreenRecordingSessionCoordinator.makeProduction(
@@ -84,8 +84,8 @@ extension RecordingSessionController {
             onFailure: { [weak self] _ in
                 Task { @MainActor [weak self] in
                     guard let self,
-                          generation == self.sessionGeneration,
-                          self.screenPipelineAdapter != nil
+                        generation == self.sessionGeneration,
+                        self.screenPipelineAdapter != nil
                     else { return }
                     _ = await self.stopAndSave()
                 }
@@ -176,8 +176,8 @@ extension RecordingSessionController {
         // stop, so the ticket must go away before it can fire a second one. A
         // frame that arrived meanwhile is kept: it already promoted the session.
         guard isCurrentRequest(request),
-              screenStartOwnership.ownerGeneration == generation,
-              !screenStartOwnership.isStopping
+            screenStartOwnership.ownerGeneration == generation,
+            !screenStartOwnership.isStopping
         else {
             if let ticket = screenSettlementTicket {
                 await settlementSupervisor.disarm(ticket: ticket)
@@ -206,9 +206,9 @@ extension RecordingSessionController {
                 return
             }
             guard let self, !Task.isCancelled,
-                  generation == self.sessionGeneration,
-                  self.screenStartOwnership.isPlatformStartOutstanding,
-                  self.status == .starting
+                generation == self.sessionGeneration,
+                self.screenStartOwnership.isPlatformStartOutstanding,
+                self.status == .starting
             else { return }
             self.outcomeState.markCaptureAttempted()
             // The platform start never returned. The stream may exist and may be
@@ -226,9 +226,9 @@ extension RecordingSessionController {
     /// main-actor polling task behind it.
     func handleScreenFirstFrame(generation: UUID) async {
         guard generation == sessionGeneration,
-              let request = currentRequest,
-              request.generation == generation,
-              isCurrentRequest(request)
+            let request = currentRequest,
+            request.generation == generation,
+            isCurrentRequest(request)
         else { return }
         // A cancelled first-frame wait must never promote the settled session.
         guard screenStartOwnership.firstFrameAccepted(generation: generation) else { return }
@@ -331,7 +331,8 @@ extension RecordingSessionController {
                 outcome = try await adapter.stopAndSave()
             } catch {
                 if let coordinatorError = error as? ScreenRecordingSessionCoordinatorError,
-                   coordinatorError == .streamStopUnconfirmed {
+                    coordinatorError == .streamStopUnconfirmed
+                {
                     stopConfirmed = false
                     if let self, self.screenStartOwnership.ownerGeneration == generation {
                         self.unconfirmedScreenStop = (adapter, await adapter.materialRoot())
@@ -419,8 +420,8 @@ extension RecordingSessionController {
         generation: UUID
     ) async -> Bool {
         guard let coordinatorError = error as? ScreenRecordingSessionCoordinatorError,
-              coordinatorError == .streamStopUnconfirmed,
-              let adapter = screenPipelineAdapter
+            coordinatorError == .streamStopUnconfirmed,
+            let adapter = screenPipelineAdapter
         else { return false }
         guard screenStartOwnership.stopUnconfirmed(generation: generation) else { return true }
         unconfirmedScreenStop = (adapter, await adapter.materialRoot())

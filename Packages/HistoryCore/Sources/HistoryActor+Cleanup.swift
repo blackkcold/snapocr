@@ -105,7 +105,8 @@ extension HistoryActor {
     func enforceDiskQuota() async throws {
         let now = ContinuousClock().now
         if let last = lastDiskQuotaScan,
-           last.duration(to: now) < Self.diskQuotaScanInterval {
+            last.duration(to: now) < Self.diskQuotaScanInterval
+        {
             return
         }
         // 先记账再扫描：失败时回滚，保持「下次保存立即重试」的原语义。
@@ -125,9 +126,11 @@ extension HistoryActor {
 
         let directories = [entriesDir, imagesDir, thumbsDir]
         for dir in directories {
-            guard let files = try? FileManager.default.contentsOfDirectory(
-                at: dir, includingPropertiesForKeys: [.fileSizeKey]
-            ) else { continue }
+            guard
+                let files = try? FileManager.default.contentsOfDirectory(
+                    at: dir, includingPropertiesForKeys: [.fileSizeKey]
+                )
+            else { continue }
 
             for file in files {
                 let attrs = try? file.resourceValues(forKeys: [.fileSizeKey])

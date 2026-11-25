@@ -115,12 +115,13 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         )
 
         // 6. 日志回调
-        logHandler?(OCRLogEntry(
-            timestamp: Date(),
-            visionConfidence: avgConfidence,
-            visionText: result.text,
-            visionTimeMs: processingTime
-        ))
+        logHandler?(
+            OCRLogEntry(
+                timestamp: Date(),
+                visionConfidence: avgConfidence,
+                visionText: result.text,
+                visionTimeMs: processingTime
+            ))
 
         return result
     }
@@ -134,14 +135,14 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
     /// - Returns: 语言标识符数组（如 `["en-US", "zh-Hans", "ja-JP"]`）
     func supportedLanguages() -> [String] {
         #if !targetEnvironment(macCatalyst)
-        // supportedRecognitionLanguages(for:revision:) 在 macOS 12 已弃用但无替代 API
-        // macOS 13+ 该调用仍正常工作；仅 .accurate 级别返回完整语言列表
-        if let languages = try? VNRecognizeTextRequest.supportedRecognitionLanguages(
-            for: .accurate,
-            revision: VNRecognizeTextRequestRevision3
-        ) {
-            return Self.deduplicateLanguages(languages)
-        }
+            // supportedRecognitionLanguages(for:revision:) 在 macOS 12 已弃用但无替代 API
+            // macOS 13+ 该调用仍正常工作；仅 .accurate 级别返回完整语言列表
+            if let languages = try? VNRecognizeTextRequest.supportedRecognitionLanguages(
+                for: .accurate,
+                revision: VNRecognizeTextRequestRevision3
+            ) {
+                return Self.deduplicateLanguages(languages)
+            }
         #endif
         // 兜底返回已知支持的常用语言
         return ["en-US", "zh-Hans", "zh-Hant", "ja-JP", "ko-KR", "fr-FR", "de-DE", "es-ES"]

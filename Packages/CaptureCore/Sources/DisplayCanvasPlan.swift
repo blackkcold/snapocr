@@ -16,7 +16,8 @@ public struct DisplayCanvasDisplay: Equatable, Sendable {
 
     public var pixelScale: CGFloat {
         guard frame.width > 0, frame.height > 0,
-              pixelSize.width > 0, pixelSize.height > 0 else { return 1 }
+            pixelSize.width > 0, pixelSize.height > 0
+        else { return 1 }
         return max(pixelSize.width / frame.width, pixelSize.height / frame.height)
     }
 }
@@ -109,13 +110,15 @@ public struct DisplayCanvasPlan: Equatable, Sendable {
         alignment: DisplayCanvasAlignment = .start,
         highResolution: Bool = true
     ) -> DisplayCanvasPlan? {
-        let usable = deduplicated(displays.filter {
-            $0.frame.width > 0 && $0.frame.height > 0
-                && $0.pixelSize.width > 0 && $0.pixelSize.height > 0
-        })
+        let usable = deduplicated(
+            displays.filter {
+                $0.frame.width > 0 && $0.frame.height > 0
+                    && $0.pixelSize.width > 0 && $0.pixelSize.height > 0
+            })
         guard !usable.isEmpty else { return nil }
 
-        let commonScale = highResolution
+        let commonScale =
+            highResolution
             ? max(usable.map { max($0.pixelScale, 1) }.max() ?? 1, 1)
             : 1
         let resolvedGap = max(0, gap)
@@ -275,7 +278,8 @@ public struct DisplayCanvasPlan: Equatable, Sendable {
         return displays.filter { display in
             // Frame-only: mirrored displays can report different backing pixel
             // sizes while representing the same screen.
-            let key = "\(display.frame.origin.x),\(display.frame.origin.y),"
+            let key =
+                "\(display.frame.origin.x),\(display.frame.origin.y),"
                 + "\(display.frame.width),\(display.frame.height)"
             return seen.insert(key).inserted
         }

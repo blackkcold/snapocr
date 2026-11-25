@@ -1,7 +1,7 @@
-import SwiftUI
-import AppKit
 import AnnotationCore
+import AppKit
 import SharedKit
+import SwiftUI
 
 struct EditorView: View {
     @ObservedObject var editorVM: EditorViewModel
@@ -218,11 +218,12 @@ struct EditorView: View {
                     Text(copyButtonTitle)
                 }
                 .keyboardShortcut("c", modifiers: .command)
-                .help(editorVM.isApplyingCrop
-                      ? Text("Processing crop…")
-                      : (editorVM.isShareAppearanceEnabled
-                          ? Text("Copy Share Image")
-                          : Text("Copy the annotated image to the clipboard (⌘C)")))
+                .help(
+                    editorVM.isApplyingCrop
+                        ? Text("Processing crop…")
+                        : (editorVM.isShareAppearanceEnabled
+                            ? Text("Copy Share Image")
+                            : Text("Copy the annotated image to the clipboard (⌘C)")))
 
                 Menu {
                     Button("Copy Share Image") {
@@ -252,9 +253,11 @@ struct EditorView: View {
                 editorVM.save()
             }
             .keyboardShortcut("s", modifiers: .command)
-            .help(editorVM.isApplyingCrop
-                  ? Text("Processing crop…")
-                  : Text("Save the annotated image (⌘S)"))
+            .help(
+                editorVM.isApplyingCrop
+                    ? Text("Processing crop…")
+                    : Text("Save the annotated image (⌘S)")
+            )
             .disabled(editorVM.isApplyingCrop || editorVM.isWritingImage)
             .buttonStyle(.borderedProminent)
         }

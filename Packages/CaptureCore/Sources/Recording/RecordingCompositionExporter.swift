@@ -63,11 +63,12 @@ enum RecordingExportWorker {
             transaction = outputTransaction
             let stageURL = outputTransaction.partialURL
 
-            let sourceURLs = plan.audioSourcesBySegment.values.flatMap(\.urls)
+            let sourceURLs =
+                plan.audioSourcesBySegment.values.flatMap(\.urls)
                 + plan.sourceRanges.flatMap(\.sourceFiles)
             let finalPath = canonicalPath(outputTransaction.finalURL)
             guard !sourceURLs.contains(where: { canonicalPath($0) == finalPath }),
-                  canonicalPath(stageURL) != finalPath
+                canonicalPath(stageURL) != finalPath
             else { throw ExportError.destinationUnavailable }
 
             try outputTransaction.prepareForWriting()
@@ -137,7 +138,7 @@ enum RecordingExportWorker {
             case .cancelled:
                 throw ExportError.cancelled(stagingURL: stageURL)
             case .exportInProgress, .emptySelection, .overLimit, .incompatibleCodec,
-                 .missingSource, .destinationUnavailable, .passthroughUnsupported:
+                .missingSource, .destinationUnavailable, .passthroughUnsupported:
                 throw ExportError.publishFailed(stagingURL: stageURL)
             case .publishFailed:
                 throw ExportError.publishFailed(stagingURL: stageURL)
@@ -167,12 +168,12 @@ final class ExportAudioCursor {
 
     init(url: URL, metadata: ExportAudioTrackMetadata, outputSampleRate: Int) throws {
         guard metadata.range.sampleCount > 0, metadata.sampleRate > 0,
-              (1...2).contains(metadata.channelCount), metadata.sampleRate == outputSampleRate
+            (1...2).contains(metadata.channelCount), metadata.sampleRate == outputSampleRate
         else { throw ExportError.passthroughUnsupported }
         let file: AVAudioFile
         do { file = try AVAudioFile(forReading: url) } catch { throw ExportError.missingSource }
         guard Int(file.processingFormat.sampleRate.rounded()) == metadata.sampleRate,
-              Int(file.processingFormat.channelCount) == metadata.channelCount
+            Int(file.processingFormat.channelCount) == metadata.channelCount
         else { throw ExportError.missingSource }
         let validFrames = AVAudioFramePosition(metadata.range.sampleCount)
         let priming = AVAudioFramePosition(max(0, metadata.primingFrames))
@@ -190,8 +191,8 @@ final class ExportAudioCursor {
 
     func read(_ range: SampleRange) throws -> [[Float]] {
         guard range.startSample >= self.range.startSample,
-              range.endSample <= self.range.endSample,
-              range.sampleCount > 0
+            range.endSample <= self.range.endSample,
+            range.sampleCount > 0
         else { throw ExportError.missingSource }
         let offset = range.startSample - self.range.startSample
         let frameOffset = AVAudioFramePosition(offset * Int64(sampleRate) / 48_000)
@@ -244,7 +245,7 @@ final class ExportAudioSink {
 
     func append(_ buffer: AVAudioPCMBuffer, presentationSample: Int64) async throws {
         guard presentationSample == outputFrame, Int(buffer.format.sampleRate.rounded()) == sampleRate,
-              Int(buffer.format.channelCount) == channelCount
+            Int(buffer.format.channelCount) == channelCount
         else { throw ExportError.passthroughUnsupported }
         guard let data = try makeSampleBuffer(from: buffer, presentationSample: presentationSample) else {
             throw ExportError.passthroughUnsupported
@@ -318,10 +319,11 @@ final class ExportAssetWriter {
         sampleRate: Int,
         channelsByRole: [RecordingTrackRole: Int]
     ) throws -> ExportAssetWriter {
-        try make(Input(
-            url: url, type: .m4a, sourceVideo: nil, transform: .identity,
-            sampleRate: sampleRate, channelsByRole: channelsByRole
-        ))
+        try make(
+            Input(
+                url: url, type: .m4a, sourceVideo: nil, transform: .identity,
+                sampleRate: sampleRate, channelsByRole: channelsByRole
+            ))
     }
 
     static func videoFile(
@@ -331,10 +333,11 @@ final class ExportAssetWriter {
         sampleRate: Int,
         channelsByRole: [RecordingTrackRole: Int]
     ) throws -> ExportAssetWriter {
-        try make(Input(
-            url: url, type: .mp4, sourceVideo: sourceFormatHint, transform: transform,
-            sampleRate: sampleRate, channelsByRole: channelsByRole
-        ))
+        try make(
+            Input(
+                url: url, type: .mp4, sourceVideo: sourceFormatHint, transform: transform,
+                sampleRate: sampleRate, channelsByRole: channelsByRole
+            ))
     }
 
     private static func make(_ input: Input) throws -> ExportAssetWriter {

@@ -10,7 +10,8 @@ extension HistoryActor {
     /// metadata reference. Any failure leaves the old image and original intact.
     public func replaceImage(id: UUID, image: CGImage) throws {
         guard var entry = entries[id] ?? diskCache[id] ?? loadEntryFromDiskSync(id: id),
-              entry.imagePath != nil else { throw HistoryError.entryNotFound(id: id) }
+            entry.imagePath != nil
+        else { throw HistoryError.entryNotFound(id: id) }
         let originalURL = mediaURL(for: id, revision: nil, thumbnail: false)
         guard FileManager.default.fileExists(atPath: originalURL.path) else {
             throw HistoryError.fileIOError(path: originalURL.path)
@@ -80,7 +81,8 @@ extension HistoryActor {
         // A crop revision changes the pixel size; restoring must put the grid
         // aspect ratio and pin scaling back to the original dimensions.
         if let source = CGImageSourceCreateWithData(data as CFData, nil),
-           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        {
             entry.pixelWidth = image.width
             entry.pixelHeight = image.height
         }
@@ -103,19 +105,21 @@ extension HistoryActor {
             try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
                 .filter { file in
                     let stem = file.deletingPathExtension().lastPathComponent
-                    return stem == id.uuidString || (stem.hasPrefix(id.uuidString + "-")
-                        && UUID(uuidString: String(stem.dropFirst(37))) != nil)
+                    return stem == id.uuidString
+                        || (stem.hasPrefix(id.uuidString + "-")
+                            && UUID(uuidString: String(stem.dropFirst(37))) != nil)
                 }
         }
     }
 
     private func removeObsoleteEdits(for entry: HistoryEntry) {
         do {
-            let keep = Set([
-                mediaURL(for: entry.id, revision: nil, thumbnail: false),
-                mediaURL(for: entry.id, revision: nil, thumbnail: true),
-                imageFileURL(for: entry.id), thumbnailFileURL(for: entry.id),
-            ].map { $0.standardizedFileURL.path })
+            let keep = Set(
+                [
+                    mediaURL(for: entry.id, revision: nil, thumbnail: false),
+                    mediaURL(for: entry.id, revision: nil, thumbnail: true),
+                    imageFileURL(for: entry.id), thumbnailFileURL(for: entry.id),
+                ].map { $0.standardizedFileURL.path })
             for file in try mediaFiles(for: entry.id) where !keep.contains(file.standardizedFileURL.path) {
                 try removeIfExists(file)
             }
@@ -143,7 +147,7 @@ extension HistoryActor {
             kCGImageSourceThumbnailMaxPixelSize: 200,
         ]
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         else { throw HistoryError.fileIOError(path: "Thumbnail encoding") }
         return try pngData(image)
     }

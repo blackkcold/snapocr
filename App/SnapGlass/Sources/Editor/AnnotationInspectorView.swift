@@ -296,18 +296,24 @@ struct AnnotationInspectorView: View {
                     Label("Duplicate", systemImage: "plus.square.on.square")
                 }
                 Spacer()
-                Button(action: { viewModel.moveSelectedNodeInLayer(by: -1) }, label: {
-                    Image(systemName: "square.2.layers.3d.bottom.filled")
-                        .frame(width: DS.Hit.small, height: DS.Hit.small)
-                        .contentShape(Rectangle())
-                })
+                Button(
+                    action: { viewModel.moveSelectedNodeInLayer(by: -1) },
+                    label: {
+                        Image(systemName: "square.2.layers.3d.bottom.filled")
+                            .frame(width: DS.Hit.small, height: DS.Hit.small)
+                            .contentShape(Rectangle())
+                    }
+                )
                 .help("Send backward")
                 .accessibilityLabel("Send backward")
-                Button(action: { viewModel.moveSelectedNodeInLayer(by: 1) }, label: {
-                    Image(systemName: "square.2.layers.3d.top.filled")
-                        .frame(width: DS.Hit.small, height: DS.Hit.small)
-                        .contentShape(Rectangle())
-                })
+                Button(
+                    action: { viewModel.moveSelectedNodeInLayer(by: 1) },
+                    label: {
+                        Image(systemName: "square.2.layers.3d.top.filled")
+                            .frame(width: DS.Hit.small, height: DS.Hit.small)
+                            .contentShape(Rectangle())
+                    }
+                )
                 .help("Bring forward")
                 .accessibilityLabel("Bring forward")
             }
@@ -375,8 +381,8 @@ struct AnnotationInspectorView: View {
                     "Click to copy a single color. Drag to sample a region.",
                     systemImage: "eyedropper"
                 )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 if let hover = viewModel.pickerHoverColor {
                     colorRow(hover, title: "Hover")

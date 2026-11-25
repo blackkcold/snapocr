@@ -40,7 +40,8 @@ public final class ScreenAudioBridge: @unchecked Sendable {
         self.systemRing = systemRing
         self.microphoneRing = microphoneRing
         self.hostTicksPerSecond = max(1, hostTicksPerSecond)
-        let byteCount = MemoryLayout<AudioBufferList>.size
+        let byteCount =
+            MemoryLayout<AudioBufferList>.size
             + (Self.maximumBuffers - 1) * MemoryLayout<AudioBuffer>.size
         rawBufferList = UnsafeMutableRawPointer.allocate(
             byteCount: byteCount,
@@ -67,14 +68,14 @@ public final class ScreenAudioBridge: @unchecked Sendable {
 
         let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
         guard frameCount > 0,
-              CMSampleBufferIsValid(sampleBuffer),
-              CMSampleBufferDataIsReady(sampleBuffer),
-              let info = Self.streamInfo(sampleBuffer),
-              loadBufferList(sampleBuffer, bufferCount: info.bufferCount),
-              let result = write(
-                  frameCount: frameCount,
-                  hostTime: hostTime(for: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
-              )
+            CMSampleBufferIsValid(sampleBuffer),
+            CMSampleBufferDataIsReady(sampleBuffer),
+            let info = Self.streamInfo(sampleBuffer),
+            loadBufferList(sampleBuffer, bufferCount: info.bufferCount),
+            let result = write(
+                frameCount: frameCount,
+                hostTime: hostTime(for: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+            )
         else {
             throw ScreenAudioBridgeError.invalidSample
         }
@@ -96,11 +97,11 @@ public final class ScreenAudioBridge: @unchecked Sendable {
 
     private func append(_ block: AudioPCMBlock, role: RecordingTrackRole, ring: AudioSourceRingBuffer) throws {
         guard block.role == role,
-              block.sampleRate == 48_000,
-              block.frameCount > 0,
-              block.range.sampleCount == Int64(block.frameCount),
-              block.channelCount == block.channels.count,
-              block.channels.allSatisfy({ $0.count == block.frameCount })
+            block.sampleRate == 48_000,
+            block.frameCount > 0,
+            block.range.sampleCount == Int64(block.frameCount),
+            block.channelCount == block.channels.count,
+            block.channels.allSatisfy({ $0.count == block.frameCount })
         else { throw ScreenAudioBridgeError.invalidBlock }
 
         let result = withPointers(block.channels, at: 0, collected: []) { pointers in
@@ -141,7 +142,8 @@ public final class ScreenAudioBridge: @unchecked Sendable {
 
     private func loadBufferList(_ sampleBuffer: CMSampleBuffer, bufferCount: Int) -> Bool {
         guard (1...Self.maximumBuffers).contains(bufferCount) else { return false }
-        let size = MemoryLayout<AudioBufferList>.size
+        let size =
+            MemoryLayout<AudioBufferList>.size
             + (bufferCount - 1) * MemoryLayout<AudioBuffer>.size
         var needed = 0
         var retainedBlock: CMBlockBuffer?
@@ -166,8 +168,8 @@ public final class ScreenAudioBridge: @unchecked Sendable {
             for channel in 0..<channelCount {
                 let buffer = bufferList[channel]
                 guard buffer.mNumberChannels == 1,
-                      let data = buffer.mData?.assumingMemoryBound(to: Float.self),
-                      Int(buffer.mDataByteSize) >= frameCount * MemoryLayout<Float>.size
+                    let data = buffer.mData?.assumingMemoryBound(to: Float.self),
+                    Int(buffer.mDataByteSize) >= frameCount * MemoryLayout<Float>.size
                 else { return nil }
                 planarPointers[channel] = UnsafeBufferPointer(start: data, count: frameCount)
             }
@@ -178,9 +180,9 @@ public final class ScreenAudioBridge: @unchecked Sendable {
             )
         }
         guard bufferList.count == 1,
-              bufferList[0].mNumberChannels == UInt32(channelCount),
-              let data = bufferList[0].mData?.assumingMemoryBound(to: Float.self),
-              Int(bufferList[0].mDataByteSize) >= frameCount * channelCount * MemoryLayout<Float>.size
+            bufferList[0].mNumberChannels == UInt32(channelCount),
+            let data = bufferList[0].mData?.assumingMemoryBound(to: Float.self),
+            Int(bufferList[0].mDataByteSize) >= frameCount * channelCount * MemoryLayout<Float>.size
         else { return nil }
         return systemRing.write(
             interleaved: UnsafeBufferPointer(start: data, count: frameCount * channelCount),
@@ -191,16 +193,16 @@ public final class ScreenAudioBridge: @unchecked Sendable {
 
     private static func streamInfo(_ sampleBuffer: CMSampleBuffer) -> (bufferCount: Int, channelCount: Int)? {
         guard let description = CMSampleBufferGetFormatDescription(sampleBuffer),
-              let stream = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
-              stream.mFormatID == kAudioFormatLinearPCM,
-              stream.mSampleRate > 0,
-              stream.mFramesPerPacket == 1,
-              stream.mBitsPerChannel == 32,
-              stream.mFormatFlags & kAudioFormatFlagIsFloat != 0,
-              stream.mFormatFlags & kAudioFormatFlagIsPacked != 0,
-              stream.mFormatFlags & kAudioFormatFlagIsSignedInteger == 0,
-              stream.mFormatFlags & kAudioFormatFlagIsBigEndian == 0,
-              stream.mChannelsPerFrame == 1 || stream.mChannelsPerFrame == 2
+            let stream = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
+            stream.mFormatID == kAudioFormatLinearPCM,
+            stream.mSampleRate > 0,
+            stream.mFramesPerPacket == 1,
+            stream.mBitsPerChannel == 32,
+            stream.mFormatFlags & kAudioFormatFlagIsFloat != 0,
+            stream.mFormatFlags & kAudioFormatFlagIsPacked != 0,
+            stream.mFormatFlags & kAudioFormatFlagIsSignedInteger == 0,
+            stream.mFormatFlags & kAudioFormatFlagIsBigEndian == 0,
+            stream.mChannelsPerFrame == 1 || stream.mChannelsPerFrame == 2
         else { return nil }
         let channels = Int(stream.mChannelsPerFrame)
         let nonInterleaved = stream.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
@@ -210,7 +212,7 @@ public final class ScreenAudioBridge: @unchecked Sendable {
         }
         let bytesPerFrame = 4 * stream.mChannelsPerFrame
         guard stream.mBytesPerFrame == bytesPerFrame,
-              stream.mBytesPerPacket == bytesPerFrame
+            stream.mBytesPerPacket == bytesPerFrame
         else { return nil }
         return (1, channels)
     }

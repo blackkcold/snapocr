@@ -17,10 +17,12 @@ extension RecordingExportViewModel {
 
             for exportRoot in roots {
                 var isDirectory = ObjCBool(false)
-                guard FileManager.default.fileExists(
-                    atPath: exportRoot.root.path,
-                    isDirectory: &isDirectory
-                ), isDirectory.boolValue else {
+                guard
+                    FileManager.default.fileExists(
+                        atPath: exportRoot.root.path,
+                        isDirectory: &isDirectory
+                    ), isDirectory.boolValue
+                else {
                     continue
                 }
                 do {
@@ -85,7 +87,7 @@ extension RecordingExportViewModel {
     /// - Parameter sessionID: Session chosen in the recoverable group.
     func recoverRecording(_ sessionID: UUID) async {
         guard recoveringRecordingID == nil,
-              let recording = recoverableRecordings.first(where: { $0.id == sessionID })
+            let recording = recoverableRecordings.first(where: { $0.id == sessionID })
         else { return }
         recoveringRecordingID = sessionID
         recoveryNotice = nil
@@ -110,7 +112,7 @@ extension RecordingExportViewModel {
     /// - Parameter sessionID: Session chosen in the recoverable group.
     func discardRecording(_ sessionID: UUID) async {
         guard discardingRecordingID == nil,
-              let recording = recoverableRecordings.first(where: { $0.id == sessionID })
+            let recording = recoverableRecordings.first(where: { $0.id == sessionID })
         else { return }
         discardingRecordingID = sessionID
         recoveryNotice = nil

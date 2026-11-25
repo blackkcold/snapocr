@@ -53,9 +53,10 @@ struct RecordingSessionLedgerTests {
             indexURL: paths.indexURL,
             sessionID: paths.sessionID
         )
-        try await ledger.register(RecordingSessionRecord(
-            id: paths.sessionID, kind: .audio, layout: .mixed, startedAt: Date(), segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: paths.sessionID, kind: .audio, layout: .mixed, startedAt: Date(), segments: []
+            ))
         let outside = paths.root.appendingPathComponent("outside.caf")
         try Data([0x01]).write(to: outside)
         let commit = CheckpointCommit(

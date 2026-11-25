@@ -11,16 +11,16 @@ extension TesseractLibrary {
     var diagnosticsDescription: String {
         guard isAvailable else {
             return """
-            Tesseract: 未安装
-            请通过 Homebrew 安装: brew install tesseract
-            或从 https://github.com/tesseract-ocr/tesseract 下载
-            """
+                Tesseract: 未安装
+                请通过 Homebrew 安装: brew install tesseract
+                或从 https://github.com/tesseract-ocr/tesseract 下载
+                """
         }
         return """
-        Tesseract: 已加载 (v\(version))
-        语言数据路径: \(TesseractOCREngine.tessdataDirectory().path)
-        语言包: \(availableLanguagePacks().joined(separator: ", "))
-        """
+            Tesseract: 已加载 (v\(version))
+            语言数据路径: \(TesseractOCREngine.tessdataDirectory().path)
+            语言包: \(availableLanguagePacks().joined(separator: ", "))
+            """
     }
 
     /// 列出 tessdata 目录中已安装的语言包。
@@ -32,7 +32,8 @@ extension TesseractLibrary {
 
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+            isDirectory.boolValue
+        else {
             return []
         }
 

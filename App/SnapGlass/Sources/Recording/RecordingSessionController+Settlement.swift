@@ -113,7 +113,8 @@ extension RecordingSessionController {
             // that ran twice). Keep any real material reachable for recovery and
             // never touch the newer session.
             if case let .audio(result) = settlement, Self.audioResultWasSaved(result),
-               let pipeline {
+                let pipeline
+            {
                 registerRecoveryMaterials(sessionID: result.sessionID, pipeline: pipeline)
             }
             return
@@ -145,7 +146,8 @@ extension RecordingSessionController {
         // states must be able to finish; without this the session would stay in
         // `.recording`, refuse the next recording, and never show its result.
         if reason != .requested,
-           audioStateMachine.state == .starting || audioStateMachine.state == .recording {
+            audioStateMachine.state == .starting || audioStateMachine.state == .recording
+        {
             audioStateMachine.apply(.stopRequested)
             audioStateMachine.beginFinalization()
         }

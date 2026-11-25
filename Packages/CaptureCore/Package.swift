@@ -10,10 +10,10 @@ let package = Package(
         .library(
             name: "CaptureCore",
             targets: ["CaptureCore"]
-        ),
+        )
     ],
     dependencies: [
-        .package(path: "../SharedKit"),
+        .package(path: "../SharedKit")
     ],
     targets: [
         .target(

@@ -1,9 +1,8 @@
 import AppKit
 import CaptureCore
+@preconcurrency import ScreenCaptureKit
 import SharedKit
 import SwiftUI
-
-@preconcurrency import ScreenCaptureKit
 
 // MARK: - AreaTrackingView 绘制
 
@@ -63,10 +62,10 @@ extension AreaTrackingView {
 
     private var snapshotFrame: CGImage? {
         guard bounds.width > 0, bounds.height > 0,
-              let displayID = screen.deviceDescription[
-                  NSDeviceDescriptionKey("NSScreenNumber")
-              ] as? CGDirectDisplayID,
-              let frame = capturedFrames[displayID]
+            let displayID = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? CGDirectDisplayID,
+            let frame = capturedFrames[displayID]
         else { return nil }
 
         let viewAspectRatio = bounds.width / bounds.height
@@ -134,10 +133,10 @@ extension AreaTrackingView {
     /// frame for the screen this panel covers.
     func sampleColor(at viewPoint: CGPoint) -> SampledColor? {
         guard let window,
-              let displayID = screen.deviceDescription[
-                  NSDeviceDescriptionKey("NSScreenNumber")
-              ] as? CGDirectDisplayID,
-              let frame = capturedFrames[displayID]
+            let displayID = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? CGDirectDisplayID,
+            let frame = capturedFrames[displayID]
         else { return nil }
 
         let viewRect = CGRect(origin: viewPoint, size: .zero)
@@ -181,7 +180,8 @@ extension AreaTrackingView {
             width: swatchSize + swatchPadding + textWidth + textPadding * 2,
             height: lineHeight * 2 + 8
         )
-        let rect = hoverLabelRect.isEmpty
+        let rect =
+            hoverLabelRect.isEmpty
             ? LabelPlacement.rect(
                 size: labelSize,
                 near: point,

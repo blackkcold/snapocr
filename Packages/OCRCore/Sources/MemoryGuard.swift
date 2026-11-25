@@ -31,7 +31,7 @@ public struct MemoryGuard: Sendable {
     ///
     /// 当前进程常驻内存超过此值时触发降级。
     /// 来源: 设计文档 7.1+ 节，200MB。
-    public static let memoryPressureThreshold: UInt64 = 200 * 1024 * 1024 // 200MB
+    public static let memoryPressureThreshold: UInt64 = 200 * 1024 * 1024  // 200MB
 
     // MARK: - 图片检查
 
@@ -69,7 +69,8 @@ public struct MemoryGuard: Sendable {
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
 
         guard let data = image.dataProvider?.data as Data?,
-              let source = CGImageSourceCreateWithData(data as CFData, options) else {
+            let source = CGImageSourceCreateWithData(data as CFData, options)
+        else {
             return nil
         }
 

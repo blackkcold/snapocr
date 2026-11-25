@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+
 @testable import CaptureCore
 
 struct CaptureProtocolTests {
@@ -289,11 +290,12 @@ struct CaptureProtocolTests {
             windowTitle: "Settings — com.example.browser"
         )
 
-        #expect(WindowCapturePolicy.isSelectable(
-            candidate,
-            currentBundleIdentifier: "com.snapglass.app",
-            systemWindowLevel: 20
-        ))
+        #expect(
+            WindowCapturePolicy.isSelectable(
+                candidate,
+                currentBundleIdentifier: "com.snapglass.app",
+                systemWindowLevel: 20
+            ))
     }
 
     @Test func windowCapturePolicyRejectsBlankTitleWindows() {
@@ -312,16 +314,18 @@ struct CaptureProtocolTests {
             windowTitle: nil
         )
 
-        #expect(!WindowCapturePolicy.isSelectable(
-            blankTitle,
-            currentBundleIdentifier: nil,
-            systemWindowLevel: 20
-        ))
-        #expect(!WindowCapturePolicy.isSelectable(
-            nilTitle,
-            currentBundleIdentifier: nil,
-            systemWindowLevel: 20
-        ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                blankTitle,
+                currentBundleIdentifier: nil,
+                systemWindowLevel: 20
+            ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                nilTitle,
+                currentBundleIdentifier: nil,
+                systemWindowLevel: 20
+            ))
     }
 
     @Test func windowCapturePolicyRejectsWindowManagerTitles() {
@@ -340,16 +344,18 @@ struct CaptureProtocolTests {
             windowTitle: "ddpm helper panel"
         )
 
-        #expect(!WindowCapturePolicy.isSelectable(
-            ddpm,
-            currentBundleIdentifier: nil,
-            systemWindowLevel: 20
-        ))
-        #expect(!WindowCapturePolicy.isSelectable(
-            lowercasedDDPM,
-            currentBundleIdentifier: nil,
-            systemWindowLevel: 20
-        ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                ddpm,
+                currentBundleIdentifier: nil,
+                systemWindowLevel: 20
+            ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                lowercasedDDPM,
+                currentBundleIdentifier: nil,
+                systemWindowLevel: 20
+            ))
     }
 
     @Test func windowCapturePolicyRejectsSelfAndSystemUI() {
@@ -375,21 +381,24 @@ struct CaptureProtocolTests {
             windowTitle: "Window Server"
         )
 
-        #expect(!WindowCapturePolicy.isSelectable(
-            selfWindow,
-            currentBundleIdentifier: "com.snapglass.app",
-            systemWindowLevel: 20
-        ))
-        #expect(!WindowCapturePolicy.isSelectable(
-            dockWindow,
-            currentBundleIdentifier: "com.snapglass.app",
-            systemWindowLevel: 20
-        ))
-        #expect(!WindowCapturePolicy.isSelectable(
-            menuBarWindow,
-            currentBundleIdentifier: "com.snapglass.app",
-            systemWindowLevel: 20
-        ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                selfWindow,
+                currentBundleIdentifier: "com.snapglass.app",
+                systemWindowLevel: 20
+            ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                dockWindow,
+                currentBundleIdentifier: "com.snapglass.app",
+                systemWindowLevel: 20
+            ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                menuBarWindow,
+                currentBundleIdentifier: "com.snapglass.app",
+                systemWindowLevel: 20
+            ))
     }
 
     @Test func windowCapturePolicyRejectsTinyOrOffscreenWindows() {
@@ -408,28 +417,32 @@ struct CaptureProtocolTests {
             windowTitle: "Browser"
         )
 
-        #expect(!WindowCapturePolicy.isSelectable(
-            tinyWindow,
-            currentBundleIdentifier: nil,
-            systemWindowLevel: 20
-        ))
-        #expect(!WindowCapturePolicy.isSelectable(
-            offscreenWindow,
-            currentBundleIdentifier: nil,
-            systemWindowLevel: 20
-        ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                tinyWindow,
+                currentBundleIdentifier: nil,
+                systemWindowLevel: 20
+            ))
+        #expect(
+            !WindowCapturePolicy.isSelectable(
+                offscreenWindow,
+                currentBundleIdentifier: nil,
+                systemWindowLevel: 20
+            ))
     }
 
     private func makeOpaqueImage(width: Int, height: Int) throws -> CGImage {
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else {
             throw CaptureError.captureFailed(reason: "Unable to create test image")
         }
         context.setFillColor(CGColor(gray: 1, alpha: 1))
@@ -454,22 +467,23 @@ struct CaptureProtocolTests {
         }
 
         guard let provider = CGDataProvider(data: Data(pixels) as CFData),
-              let image = CGImage(
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bitsPerPixel: 32,
-                  bytesPerRow: width * 4,
-                  space: CGColorSpaceCreateDeviceRGB(),
-                  bitmapInfo: CGBitmapInfo(
-                      rawValue: CGBitmapInfo.byteOrder32Big.rawValue
-                          | CGImageAlphaInfo.last.rawValue
-                  ),
-                  provider: provider,
-                  decode: nil,
-                  shouldInterpolate: false,
-                  intent: .defaultIntent
-              ) else {
+            let image = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(
+                    rawValue: CGBitmapInfo.byteOrder32Big.rawValue
+                        | CGImageAlphaInfo.last.rawValue
+                ),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+            )
+        else {
             throw CaptureError.captureFailed(reason: "Unable to finalize test image")
         }
         return image
@@ -477,7 +491,8 @@ struct CaptureProtocolTests {
 
     private func redComponent(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {
         guard let data = image.dataProvider?.data,
-              let bytes = CFDataGetBytePtr(data) else {
+            let bytes = CFDataGetBytePtr(data)
+        else {
             return 0
         }
         return bytes[yCoordinate * image.bytesPerRow + xCoordinate * 4]
@@ -485,7 +500,8 @@ struct CaptureProtocolTests {
 
     private func greenComponent(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {
         guard let data = image.dataProvider?.data,
-              let bytes = CFDataGetBytePtr(data) else {
+            let bytes = CFDataGetBytePtr(data)
+        else {
             return 0
         }
         return bytes[yCoordinate * image.bytesPerRow + xCoordinate * 4 + 1]
@@ -493,7 +509,8 @@ struct CaptureProtocolTests {
 
     private func alpha(atX xCoordinate: Int, y yCoordinate: Int, in image: CGImage) -> UInt8 {
         guard let data = image.dataProvider?.data,
-              let bytes = CFDataGetBytePtr(data) else {
+            let bytes = CFDataGetBytePtr(data)
+        else {
             return 0
         }
         return bytes[yCoordinate * image.bytesPerRow + xCoordinate * 4 + 3]

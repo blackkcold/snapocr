@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import CaptureCore
 
 final class RecordingCompositionExporterTests: XCTestCase {

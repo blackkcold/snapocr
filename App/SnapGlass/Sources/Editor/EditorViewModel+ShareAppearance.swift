@@ -60,7 +60,8 @@ extension EditorViewModel {
     func setShareAppearanceEnabled(_ enabled: Bool) {
         if enabled {
             guard mockupStyle == nil else { return }
-            let style = lastEnabledMockupStyle
+            let style =
+                lastEnabledMockupStyle
                 ?? baselineMockupStyle
                 ?? MockupPolicy.style(
                     for: UserDefaults.standard.string(forKey: PreferenceKeys.captureMockupPreset)
@@ -192,9 +193,9 @@ extension EditorViewModel {
         // erase the saved look from history. The history menu still offers an
         // explicit "Remove Share Appearance".
         guard let style = mockupStyle,
-              let id = sourceEntryID,
-              style != lastCommittedMockupStyle,
-              let json = Self.styleJSON(style)
+            let id = sourceEntryID,
+            style != lastCommittedMockupStyle,
+            let json = Self.styleJSON(style)
         else { return }
 
         Task { [weak self] in
@@ -218,9 +219,9 @@ extension EditorViewModel {
         Self.persistLastMockupStyle(lastEnabledMockupStyle ?? mockupStyle)
 
         guard let style = mockupStyle,
-              let id = sourceEntryID,
-              style != lastCommittedMockupStyle,
-              let json = Self.styleJSON(style)
+            let id = sourceEntryID,
+            style != lastCommittedMockupStyle,
+            let json = Self.styleJSON(style)
         else { return }
 
         do {
@@ -255,9 +256,10 @@ extension EditorViewModel {
     }
 
     static func lastPersistedMockupStyle() -> MockupStyle? {
-        guard let json = UserDefaults.standard.string(
-            forKey: PreferenceKeys.editorMockupLastStyleJSON
-        ), let data = json.data(using: .utf8)
+        guard
+            let json = UserDefaults.standard.string(
+                forKey: PreferenceKeys.editorMockupLastStyleJSON
+            ), let data = json.data(using: .utf8)
         else { return nil }
         return try? JSONDecoder().decode(MockupStyle.self, from: data)
     }

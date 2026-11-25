@@ -13,9 +13,9 @@ extension EditableAnnotationCanvasNSView {
     func handleToolKeyDown(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags
         guard !modifiers.contains(.command),
-              !modifiers.contains(.option),
-              !modifiers.contains(.control),
-              let characters = event.charactersIgnoringModifiers?.lowercased()
+            !modifiers.contains(.option),
+            !modifiers.contains(.control),
+            let characters = event.charactersIgnoringModifiers?.lowercased()
         else { return false }
 
         guard let tool = Self.toolShortcuts[characters] else { return false }

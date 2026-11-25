@@ -1,7 +1,9 @@
 import AVFoundation
 import Foundation
 import Testing
+
 @testable import CaptureCore
+
 struct T7CAFContents {
     let sampleRate: Double
     let channelCount: Int
@@ -228,7 +230,8 @@ actor T7SpySink: SegmentCheckpointSink {
     }
     func finishSegmentBundle() async throws -> RecordingSegmentCheckpointBundle {
         let set = try await finishSegment()
-        let end = commits.map { $0.range.startSample + $0.range.sampleCount }.max()
+        let end =
+            commits.map { $0.range.startSample + $0.range.sampleCount }.max()
             ?? segmentBoundary.startSample
         let coverage = RecordingSegmentCoverage(
             segmentIndex: segmentBoundary.index,
@@ -503,10 +506,11 @@ struct SegmentedWriterCoordinatorTests {
 
         let set = try await coordinator.closeSegment(at: 0)
         #expect(set.checkpoints.count == 2)
-        #expect(set.checkpoints.map(\.range) == [
-            SampleRange(startSample: 0, sampleCount: 480),
-            SampleRange(startSample: 480, sampleCount: 480),
-        ])
+        #expect(
+            set.checkpoints.map(\.range) == [
+                SampleRange(startSample: 0, sampleCount: 480),
+                SampleRange(startSample: 480, sampleCount: 480),
+            ])
         #expect(Set(set.checkpoints.map(\.checkpointID)).count == 2)
     }
 
@@ -615,11 +619,12 @@ struct SegmentedWriterCoordinatorTests {
 
         let commits = try await coordinator.commitAvailableCheckpoints()
         #expect(commits.map(\.segmentIndex) == [0, 1, 2])
-        #expect(commits.map(\.range) == [
-            SampleRange(startSample: 0, sampleCount: 100),
-            SampleRange(startSample: 100, sampleCount: 100),
-            SampleRange(startSample: 200, sampleCount: 100),
-        ])
+        #expect(
+            commits.map(\.range) == [
+                SampleRange(startSample: 0, sampleCount: 100),
+                SampleRange(startSample: 100, sampleCount: 100),
+                SampleRange(startSample: 200, sampleCount: 100),
+            ])
         #expect(commits.map { $0.range.startSample + $0.range.sampleCount } == [100, 200, 300])
 
         for index in 0..<2 {

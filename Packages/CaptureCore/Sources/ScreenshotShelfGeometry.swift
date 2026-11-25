@@ -127,12 +127,14 @@ public enum ScreenshotShelfGeometry {
         metrics: ScreenshotShelfMetrics
     ) -> [CGFloat] {
         guard availableWidth.isFinite, availableWidth > 0,
-              !naturalWidths.isEmpty else { return [] }
+            !naturalWidths.isEmpty
+        else { return [] }
 
         let validWidths = naturalWidths.filter { $0.isFinite && $0 > 0 }
         guard validWidths.count == naturalWidths.count else { return [] }
 
-        let contentLimit = availableWidth
+        let contentLimit =
+            availableWidth
             - metrics.screenMargin * 2
             - metrics.endMenuWidth
             - metrics.cardSpacing * CGFloat(max(0, validWidths.count - 1))
@@ -171,21 +173,24 @@ public enum ScreenshotShelfGeometry {
         metrics: ScreenshotShelfMetrics = ScreenshotShelfMetrics()
     ) -> CGRect {
         guard visibleFrame.minX.isFinite,
-              visibleFrame.minY.isFinite,
-              visibleFrame.width.isFinite,
-              visibleFrame.height.isFinite,
-              visibleFrame.width > 0,
-              visibleFrame.height > 0,
-              cardHeight.isFinite,
-              cardHeight > 0,
-              !cardWidths.isEmpty else { return .zero }
+            visibleFrame.minY.isFinite,
+            visibleFrame.width.isFinite,
+            visibleFrame.height.isFinite,
+            visibleFrame.width > 0,
+            visibleFrame.height > 0,
+            cardHeight.isFinite,
+            cardHeight > 0,
+            !cardWidths.isEmpty
+        else { return .zero }
 
         // A frame that cannot even hold the action menu and shadow inset is not a usable shelf.
         let minimumWidth = metrics.shadowInset * 2 + metrics.endMenuWidth
-        let minimumHeight = metrics.topInset + metrics.railZone + metrics.railGap
+        let minimumHeight =
+            metrics.topInset + metrics.railZone + metrics.railGap
             + metrics.shadowBottomInset + 1
         guard visibleFrame.width >= minimumWidth,
-              visibleFrame.height >= minimumHeight else { return .zero }
+            visibleFrame.height >= minimumHeight
+        else { return .zero }
 
         let panelWidth = metrics.panelWidth(cardWidths: cardWidths)
         let panelHeight = metrics.panelHeight(cardHeight: cardHeight)
@@ -221,9 +226,10 @@ public enum ScreenshotShelfGeometry {
         screenFrame: CGRect
     ) -> CGRect {
         guard visibleFrame.width.isFinite,
-              visibleFrame.height.isFinite,
-              screenFrame.width.isFinite,
-              screenFrame.height.isFinite else { return .zero }
+            visibleFrame.height.isFinite,
+            screenFrame.width.isFinite,
+            screenFrame.height.isFinite
+        else { return .zero }
 
         var frame = visibleFrame
         if frame.maxY >= screenFrame.maxY - 1 {
@@ -254,15 +260,16 @@ public enum ScreenshotShelfGeometry {
         handleHeight: CGFloat = ScreenshotShelfMetrics.collapsedHandleHeight
     ) -> CGRect {
         guard expandedFrame.minX.isFinite,
-              expandedFrame.minY.isFinite,
-              expandedFrame.width.isFinite,
-              expandedFrame.height.isFinite,
-              expandedFrame.width > 0,
-              expandedFrame.height > 0,
-              handleWidth.isFinite,
-              handleHeight.isFinite,
-              handleWidth > 0,
-              handleHeight > 0 else { return .zero }
+            expandedFrame.minY.isFinite,
+            expandedFrame.width.isFinite,
+            expandedFrame.height.isFinite,
+            expandedFrame.width > 0,
+            expandedFrame.height > 0,
+            handleWidth.isFinite,
+            handleHeight.isFinite,
+            handleWidth > 0,
+            handleHeight > 0
+        else { return .zero }
 
         let width = min(handleWidth, expandedFrame.width)
         let height = min(handleHeight, expandedFrame.height)
@@ -288,9 +295,10 @@ public enum ScreenshotShelfGeometry {
         localY: CGFloat
     ) -> CGPoint {
         guard panelFrame.minX.isFinite,
-              panelFrame.maxY.isFinite,
-              localX.isFinite,
-              localY.isFinite else { return .zero }
+            panelFrame.maxY.isFinite,
+            localX.isFinite,
+            localY.isFinite
+        else { return .zero }
 
         return CGPoint(
             x: panelFrame.minX + localX,
@@ -319,15 +327,16 @@ public enum ScreenshotShelfGeometry {
         hangerHeight: CGFloat
     ) -> CGRect {
         guard cardTopLeft.x.isFinite,
-              cardTopLeft.y.isFinite,
-              cardWidth.isFinite,
-              cardHeight.isFinite,
-              padding.isFinite,
-              hangerHeight.isFinite,
-              cardWidth > 0,
-              cardHeight > 0,
-              padding >= 0,
-              hangerHeight >= 0 else { return .zero }
+            cardTopLeft.y.isFinite,
+            cardWidth.isFinite,
+            cardHeight.isFinite,
+            padding.isFinite,
+            hangerHeight.isFinite,
+            cardWidth > 0,
+            cardHeight > 0,
+            padding >= 0,
+            hangerHeight >= 0
+        else { return .zero }
 
         return CGRect(
             x: cardTopLeft.x - padding,

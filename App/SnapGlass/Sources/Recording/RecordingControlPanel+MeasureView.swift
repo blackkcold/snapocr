@@ -154,22 +154,25 @@ struct RecordingControlPanelMeasureView: View {
             meterBar
         }
         VStack(alignment: .leading, spacing: 1) {
-            Button(action: {}, label: {
-                Text(
-                    expanded
-                        ? AppLocalization.string(
-                            "%d saved · current segment %d",
-                            RecordingHUDWorstCaseText.savedSegments,
-                            RecordingHUDWorstCaseText.segmentNumber
-                        )
-                        : AppLocalization.string(
-                            "Segment %d",
-                            RecordingHUDWorstCaseText.segmentNumber
-                        )
-                )
-                .font(.system(size: 10, weight: .medium))
-                .lineLimit(1)
-            })
+            Button(
+                action: {},
+                label: {
+                    Text(
+                        expanded
+                            ? AppLocalization.string(
+                                "%d saved · current segment %d",
+                                RecordingHUDWorstCaseText.savedSegments,
+                                RecordingHUDWorstCaseText.segmentNumber
+                            )
+                            : AppLocalization.string(
+                                "Segment %d",
+                                RecordingHUDWorstCaseText.segmentNumber
+                            )
+                    )
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+                }
+            )
             .buttonStyle(.plain)
 
             if expanded {
@@ -290,30 +293,39 @@ struct RecordingControlPanelMeasureView: View {
                 .fixedSize()
         }
 
-        Button(action: {}, label: {
-            Image(systemName: "folder")
-                .font(.system(size: 11, weight: .semibold))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(.primary.opacity(0.08)))
-        })
+        Button(
+            action: {},
+            label: {
+                Image(systemName: "folder")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(.primary.opacity(0.08)))
+            }
+        )
         .buttonStyle(.plain)
         .fixedSize()
 
-        Button(action: {}, label: {
-            Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(.primary.opacity(0.08)))
-        })
+        Button(
+            action: {},
+            label: {
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(.primary.opacity(0.08)))
+            }
+        )
         .buttonStyle(.plain)
         .fixedSize()
 
-        Button(action: {}, label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(.primary.opacity(0.08)))
-        })
+        Button(
+            action: {},
+            label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(.primary.opacity(0.08)))
+            }
+        )
         .buttonStyle(.plain)
         .fixedSize()
     }
@@ -326,14 +338,17 @@ struct RecordingControlPanelMeasureView: View {
     }
 
     private func previewButton(isPlaying: Bool) -> some View {
-        Button(action: {}, label: {
-            Label(
-                isPlaying ? "Stop preview" : "Preview",
-                systemImage: isPlaying ? "stop.fill" : "play.fill"
-            )
-            .labelStyle(.titleAndIcon)
-            .font(.system(size: 10, weight: .medium))
-        })
+        Button(
+            action: {},
+            label: {
+                Label(
+                    isPlaying ? "Stop preview" : "Preview",
+                    systemImage: isPlaying ? "stop.fill" : "play.fill"
+                )
+                .labelStyle(.titleAndIcon)
+                .font(.system(size: 10, weight: .medium))
+            }
+        )
         .buttonStyle(.bordered)
         .controlSize(.mini)
         .frame(minHeight: 28)
@@ -364,49 +379,61 @@ struct RecordingControlPanelMeasureView: View {
     }
 
     private var cancelButton: some View {
-        Button(action: {}, label: {
-            Text("Cancel")
-                .font(.system(size: DS.Typography.t12, weight: .medium))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(.primary.opacity(0.08)))
-        })
+        Button(
+            action: {},
+            label: {
+                Text("Cancel")
+                    .font(.system(size: DS.Typography.t12, weight: .medium))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(.primary.opacity(0.08)))
+            }
+        )
         .buttonStyle(.plain)
         .fixedSize()
     }
 
     private var stopButton: some View {
-        Button(action: {}, label: {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color.red)
-                .frame(width: 28, height: 28)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(.white)
-                        .frame(width: 8, height: 8)
-                }
-        })
+        Button(
+            action: {},
+            label: {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color.red)
+                    .frame(width: 28, height: 28)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                            .fill(.white)
+                            .frame(width: 8, height: 8)
+                    }
+            }
+        )
         .buttonStyle(.plain)
         .fixedSize()
     }
 
     private var closeButton: some View {
-        Button(action: {}, label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(.primary.opacity(0.08)))
-        })
+        Button(
+            action: {},
+            label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(.primary.opacity(0.08)))
+            }
+        )
         .buttonStyle(.plain)
     }
 
     private var closeWhileSavingButton: some View {
-        Button(action: {}, label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(.primary.opacity(0.08)))
-        })
+        Button(
+            action: {},
+            label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(.primary.opacity(0.08)))
+            }
+        )
         .buttonStyle(.plain)
     }
 

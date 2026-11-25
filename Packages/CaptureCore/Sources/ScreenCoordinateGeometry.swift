@@ -18,7 +18,8 @@ public enum ScreenCoordinateGeometry {
         quartzScreenFrame: CGRect
     ) -> CGRect? {
         guard appKitScreenFrame.width > 0, appKitScreenFrame.height > 0,
-              quartzScreenFrame.width > 0, quartzScreenFrame.height > 0 else {
+            quartzScreenFrame.width > 0, quartzScreenFrame.height > 0
+        else {
             return nil
         }
 
@@ -45,7 +46,7 @@ public enum ScreenCoordinateGeometry {
         quartzScreenFrame: CGRect
     ) -> CGPoint? {
         guard appKitScreenFrame.width > 0, appKitScreenFrame.height > 0,
-              quartzScreenFrame.width > 0, quartzScreenFrame.height > 0
+            quartzScreenFrame.width > 0, quartzScreenFrame.height > 0
         else {
             return nil
         }

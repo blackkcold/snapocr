@@ -83,7 +83,8 @@ public actor LanguagePackDownloader {
 
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+            isDirectory.boolValue
+        else {
             return
         }
 
@@ -237,7 +238,7 @@ public actor LanguagePackDownloader {
             data.reserveCapacity(10 * 1024 * 1024)
         }
 
-        let progressUpdateInterval: Int64 = 10 * 1024 // 每 10KB 更新一次进度
+        let progressUpdateInterval: Int64 = 10 * 1024  // 每 10KB 更新一次进度
 
         for try await byte in asyncBytes {
             // 检查是否被取消
@@ -287,7 +288,8 @@ public actor LanguagePackDownloader {
 
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+            isDirectory.boolValue
+        else {
             return []
         }
 
@@ -320,7 +322,7 @@ public actor LanguagePackDownloader {
 
         guard fileManager.fileExists(atPath: path.path) else {
             logger.warning("尝试删除不存在的语言包 '\(lang)'")
-            return // 不存在也算成功
+            return  // 不存在也算成功
         }
 
         try fileManager.removeItem(at: path)

@@ -72,11 +72,12 @@ extension EditableAnnotationCanvasNSView {
         shareStyle = style
 
         if isToggle,
-           preservingPresentation,
-           zoomScale > 1.0001,
-           previousSize != .zero,
-           previousContent.width > 0,
-           previousContent.height > 0 {
+            preservingPresentation,
+            zoomScale > 1.0001,
+            previousSize != .zero,
+            previousContent.width > 0,
+            previousContent.height > 0
+        {
             let layout = mockupLayout(for: previousSize)
             let fit = fitCanvasRect(for: previousSize)
             let fitContent = layout.contentRect(
@@ -196,7 +197,8 @@ extension EditableAnnotationCanvasNSView {
     }
 
     private func notifyZoomChanged() {
-        let actualScale = fitImageRect.width > 0 && lastImageSize.width > 0
+        let actualScale =
+            fitImageRect.width > 0 && lastImageSize.width > 0
             ? (fitImageRect.width * zoomScale) / lastImageSize.width
             : 1
         onZoomChanged?(zoomScale, actualScale)

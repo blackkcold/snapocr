@@ -2,6 +2,7 @@ import AVFoundation
 import CryptoKit
 import Foundation
 import Testing
+
 @testable import CaptureCore
 
 /// One synthetic block appended to the Task 8 checkpoint fixture.
@@ -212,9 +213,9 @@ enum T8TestSupport {
         while let sampleBuffer = output.copyNextSampleBuffer() {
             let frameCount = Int(CMSampleBufferGetNumSamples(sampleBuffer))
             guard frameCount > 0,
-                  let format = CMSampleBufferGetFormatDescription(sampleBuffer),
-                  let description = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
-                  let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer)
+                let format = CMSampleBufferGetFormatDescription(sampleBuffer),
+                let description = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
+                let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer)
             else { continue }
             let channelCount = Int(description.mChannelsPerFrame)
             if channels.isEmpty {
@@ -360,7 +361,7 @@ struct AudioTrackEncoderTests {
                 [
                     T8Append(role: .system, startSample: 0, frameCount: 4_800, amplitude: 0.6),
                     T8Append(role: .microphone, startSample: 0, frameCount: 4_800, amplitude: 0.4),
-                ],
+                ]
             ]
         )
         let context = RecordingSealContext(
@@ -383,11 +384,12 @@ struct AudioTrackEncoderTests {
         #expect(sealed.files[.microphone]?.lastPathComponent == "mic.m4a")
         #expect(sealed.files[.mixed] == nil)
         let systemURL = try #require(sealed.files[.system])
-        #expect(try T8TestSupport.visibleFileNames(in: systemURL.deletingLastPathComponent()) == [
-            "manifest.json",
-            "mic.m4a",
-            "system.m4a",
-        ])
+        #expect(
+            try T8TestSupport.visibleFileNames(in: systemURL.deletingLastPathComponent()) == [
+                "manifest.json",
+                "mic.m4a",
+                "system.m4a",
+            ])
     }
 
     @Test func aacTrimMetadataRoundTrips() async throws {
@@ -442,7 +444,7 @@ struct AudioTrackEncoderTests {
                     insertedSilenceFrames: result.insertedSilenceFrames,
                     encodedPacketCount: verification.encodedPacketCount,
                     decodedFrameCount: verification.decodedFrameCount
-                ),
+                )
             ],
             missingRanges: []
         )
@@ -477,9 +479,10 @@ struct AudioTrackEncoderTests {
         for (index, commit) in fixture.commits.enumerated() {
             try await encoder.append(commit)
             #expect(await encoder.contextStartCount == 1, "context restarted after checkpoint \(index)")
-            #expect(try T8TestSupport.visibleFileNames(in: root.appendingPathComponent("encoded")) == [
-                "encoded.m4a"
-            ])
+            #expect(
+                try T8TestSupport.visibleFileNames(in: root.appendingPathComponent("encoded")) == [
+                    "encoded.m4a"
+                ])
         }
         _ = try await encoder.finish()
         #expect(await encoder.contextStartCount == 1)
@@ -501,9 +504,10 @@ struct AudioTrackEncoderTests {
             ]
         )
         let microphoneCoverage = try #require(fixture.bundle.coverage.tracks.first { $0.role == "microphone" })
-        #expect(microphoneCoverage.missingRanges == [
-            RecordingSampleRange(startSample: 4_800, sampleCount: 4_800)
-        ])
+        #expect(
+            microphoneCoverage.missingRanges == [
+                RecordingSampleRange(startSample: 4_800, sampleCount: 4_800)
+            ])
 
         let systemEncoder = try encoder(root: root, role: .system, name: "system.m4a")
         try await systemEncoder.beginSegment(0)

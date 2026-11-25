@@ -49,7 +49,8 @@ public enum RecordingRecoveryAdoption {
             throw RecordingRecoveryAdoptionError.sessionUnavailable
         }
 
-        let sessionRoot = root
+        let sessionRoot =
+            root
             .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(recording.id.uuidString.lowercased(), isDirectory: true)
         guard RecordingLedgerFileSystem.isDirectory(sessionRoot) else {
@@ -76,13 +77,14 @@ public enum RecordingRecoveryAdoption {
             // No `register` line survived: adopt the media and register the kind
             // the catalog resolved, which is what a normal session would have done.
             do {
-                try await ledger.register(RecordingSessionRecord(
-                    id: recording.id,
-                    kind: recording.kind == .audio ? .audio : .screen,
-                    layout: recording.kind == .audio ? .mixed : .separateTracks,
-                    startedAt: recording.createdAt,
-                    segments: []
-                ))
+                try await ledger.register(
+                    RecordingSessionRecord(
+                        id: recording.id,
+                        kind: recording.kind == .audio ? .audio : .screen,
+                        layout: recording.kind == .audio ? .mixed : .separateTracks,
+                        startedAt: recording.createdAt,
+                        segments: []
+                    ))
             } catch {
                 throw RecordingRecoveryAdoptionError.journalUnreadable
             }
@@ -133,7 +135,7 @@ public enum RecordingRecoveryAdoption {
 
         for material in recording.materials {
             guard let relative = try? RecordingLedgerFileSystem.validateChild(material, under: sessionRoot),
-                  RecordingLedgerFileSystem.isRegularFile(material)
+                RecordingLedgerFileSystem.isRegularFile(material)
             else { continue }
             let ext = material.pathExtension.lowercased()
             if videoExtensions.contains(ext) {
@@ -152,8 +154,11 @@ public enum RecordingRecoveryAdoption {
             if materialURL == nil { materialURL = material }
         }
 
-        if files.isEmpty, let videoURL, let relative = try? RecordingLedgerFileSystem
-            .validateChild(videoURL, under: sessionRoot) {
+        if files.isEmpty, let videoURL,
+            let relative =
+                try? RecordingLedgerFileSystem
+                .validateChild(videoURL, under: sessionRoot)
+        {
             // A screen session whose only media is the video container mirrors a
             // normal screen publication: the video file is both video and audio.
             files["mixed"] = relative

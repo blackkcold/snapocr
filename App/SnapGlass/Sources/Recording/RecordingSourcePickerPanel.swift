@@ -1,8 +1,7 @@
 import AppKit
 import CaptureCore
-import SwiftUI
-
 @preconcurrency import ScreenCaptureKit
+import SwiftUI
 
 struct RecordingSourceSelection: Sendable {
     let source: RecordingSource
@@ -186,10 +185,12 @@ final class RecordingSourcePickerPanel: NSPanel {
         self.requestID = requestID
         let screensByID: [CGDirectDisplayID: NSScreen] = Dictionary(
             uniqueKeysWithValues: NSScreen.screens.compactMap { screen -> (CGDirectDisplayID, NSScreen)? in
-            guard let displayID = screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")
-            ] as? CGDirectDisplayID else { return nil }
-            return (displayID, screen)
+                guard
+                    let displayID = screen.deviceDescription[
+                        NSDeviceDescriptionKey("NSScreenNumber")
+                    ] as? CGDirectDisplayID
+                else { return nil }
+                return (displayID, screen)
             }
         )
         let displayOptions = content.displays.map { display in
@@ -206,11 +207,12 @@ final class RecordingSourcePickerPanel: NSPanel {
         let appBundleIdentifier = Bundle.main.bundleIdentifier
         windows = content.windows.compactMap { window in
             guard window.isOnScreen,
-                  window.windowLayer == 0,
-                  window.owningApplication?.bundleIdentifier != appBundleIdentifier,
-                  let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !title.isEmpty,
-                  let display = displayOptions.first(where: { $0.frame.contains(window.frame) }) else {
+                window.windowLayer == 0,
+                window.owningApplication?.bundleIdentifier != appBundleIdentifier,
+                let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !title.isEmpty,
+                let display = displayOptions.first(where: { $0.frame.contains(window.frame) })
+            else {
                 return nil
             }
             return RecordingWindowOption(
@@ -268,23 +270,25 @@ final class RecordingSourcePickerPanel: NSPanel {
     }
 
     private func selectDisplay(_ display: RecordingDisplayOption) {
-        finish(with: RecordingSourceSelection(
-            source: .display(displayID: display.id),
-            displayID: display.id,
-            displayFrame: display.frame,
-            sourceFrame: display.frame,
-            displayPixelSize: display.pixelSize
-        ))
+        finish(
+            with: RecordingSourceSelection(
+                source: .display(displayID: display.id),
+                displayID: display.id,
+                displayFrame: display.frame,
+                sourceFrame: display.frame,
+                displayPixelSize: display.pixelSize
+            ))
     }
 
     private func selectWindow(_ window: RecordingWindowOption) {
-        finish(with: RecordingSourceSelection(
-            source: .window(windowID: window.id),
-            displayID: window.display.id,
-            displayFrame: window.display.frame,
-            sourceFrame: window.frame,
-            displayPixelSize: window.display.pixelSize
-        ))
+        finish(
+            with: RecordingSourceSelection(
+                source: .window(windowID: window.id),
+                displayID: window.display.id,
+                displayFrame: window.display.frame,
+                sourceFrame: window.frame,
+                displayPixelSize: window.display.pixelSize
+            ))
     }
 
     private func selectRegion(_ display: RecordingDisplayOption) {
@@ -308,22 +312,24 @@ final class RecordingSourcePickerPanel: NSPanel {
             on: screen
         ) { result in
             guard case .recordingRegion(let region) = result,
-                  region.displayID == display.id,
-                  let source = RecordingSource.makeRegion(
+                region.displayID == display.id,
+                let source = RecordingSource.makeRegion(
                     displayID: region.displayID,
                     quartzRect: region.quartzRect,
                     displayFrame: CGDisplayBounds(region.displayID)
-                  ) else {
+                )
+            else {
                 completion(nil)
                 return
             }
-            completion(RecordingSourceSelection(
-                source: source,
-                displayID: display.id,
-                displayFrame: display.frame,
-                sourceFrame: region.quartzRect,
-                displayPixelSize: display.pixelSize
-            ))
+            completion(
+                RecordingSourceSelection(
+                    source: source,
+                    displayID: display.id,
+                    displayFrame: display.frame,
+                    sourceFrame: region.quartzRect,
+                    displayPixelSize: display.pixelSize
+                ))
         }
     }
 

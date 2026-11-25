@@ -67,5 +67,6 @@ struct ScreenCapturePermissionGate: Sendable {
 /// keeps this file free of app-only dependencies and unit-testable.
 enum ScreenCapturePermissionCopy {
     /// The one sentence shown when screen recording is off.
-    static let deniedKey = "Screen recording access is off. Enable SnapGlass in System Settings → Privacy & Security → Screen Recording, then try again."  // swiftlint:disable:this line_length
+    static let deniedKey =
+        "Screen recording access is off. Enable SnapGlass in System Settings → Privacy & Security → Screen Recording, then try again."  // swiftlint:disable:this line_length
 }

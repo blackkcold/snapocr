@@ -30,9 +30,10 @@ public enum ScreenshotShelfSessionDirectoryPolicy {
         guard let separator = remainder.firstIndex(of: "-") else { return nil }
         let token = remainder[..<separator]
         guard !token.isEmpty,
-              token.allSatisfy({ $0.isNumber }),
-              let pid = Int32(token),
-              pid > 0 else { return nil }
+            token.allSatisfy({ $0.isNumber }),
+            let pid = Int32(token),
+            pid > 0
+        else { return nil }
         return pid
     }
 

@@ -8,9 +8,11 @@ import Foundation
 /// roots under the user caches directory instead of the temporary directory.
 enum TestTemporaryDirectory {
     static func root(_ name: String) -> URL {
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let base =
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
-        return base
+        return
+            base
             .appendingPathComponent("SnapGlassTests", isDirectory: true)
             .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
     }

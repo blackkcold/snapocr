@@ -30,10 +30,12 @@ struct ShareAppearancePreviewSheet: View {
             ZStack {
                 CheckerboardBackground(square: 10)
                 if let preview = viewModel.sharePreview {
-                    Image(nsImage: NSImage(
-                        cgImage: preview,
-                        size: NSSize(width: preview.width, height: preview.height)
-                    ))
+                    Image(
+                        nsImage: NSImage(
+                            cgImage: preview,
+                            size: NSSize(width: preview.width, height: preview.height)
+                        )
+                    )
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()

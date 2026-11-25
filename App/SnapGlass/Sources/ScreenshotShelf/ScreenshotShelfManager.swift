@@ -99,9 +99,10 @@ final class ScreenshotShelfManager {
 
     var orderedCaptureIDs: [UUID] { state.entries.map(\.captureID) }
     var historyIDsByCaptureID: [UUID: UUID] {
-        Dictionary(uniqueKeysWithValues: state.entries.compactMap { entry in
-            entry.historyID.map { (entry.captureID, $0) }
-        })
+        Dictionary(
+            uniqueKeysWithValues: state.entries.compactMap { entry in
+                entry.historyID.map { (entry.captureID, $0) }
+            })
     }
     var hasItems: Bool { !state.entries.isEmpty }
     var canToggle: Bool { isEnabled && hasItems && !isRecordingShelfHidden }
@@ -173,11 +174,11 @@ final class ScreenshotShelfManager {
             schedulePrewarm()
         }
         refreshPresentation(immediate: true)
-#if DEBUG
-        if observesSystemEvents {
-            ShowcaseShelfSeeder.schedule(manager: self)
-        }
-#endif
+        #if DEBUG
+            if observesSystemEvents {
+                ShowcaseShelfSeeder.schedule(manager: self)
+            }
+        #endif
     }
 
     func publishCurrentState() {
@@ -237,7 +238,8 @@ final class ScreenshotShelfManager {
     }
 
     private func currentMockupPreset() -> MockupPreset {
-        let raw = defaults.string(forKey: PreferenceKeys.captureMockupPreset)
+        let raw =
+            defaults.string(forKey: PreferenceKeys.captureMockupPreset)
             ?? PreferenceDefaults.captureMockupPreset
         return MockupPolicy.preset(for: raw)
     }
@@ -257,7 +259,8 @@ final class ScreenshotShelfManager {
         let presets = MockupPreset.allCases
         let nextIndex: Int
         if let current = card.mockupStyle,
-           let index = presets.firstIndex(where: { $0.style == current }) {
+            let index = presets.firstIndex(where: { $0.style == current })
+        {
             nextIndex = (index + 1) % presets.count
         } else {
             nextIndex = presets.firstIndex(of: currentMockupPreset()) ?? 0
@@ -271,25 +274,30 @@ final class ScreenshotShelfManager {
         guard let data = try? await originalData(for: captureID) else { return }
         // Decode, full-size render, and both encodes stay off the main actor:
         // a 6K window/fullscreen capture takes hundreds of milliseconds.
-        guard let rendered = await Task.detached(priority: .userInitiated, operation: {
-            () -> (assets: ScreenshotShelfEncodedAssets, preview: CGImage?)? in
-            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let rawImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
-            else { return nil }
-            let presented = style.flatMap { MockupRenderer.render(rawImage, style: $0) } ?? rawImage
-            guard let assets = ScreenshotShelfAssetEncoder.encode(presented) else {
-                return nil
-            }
-            return (
-                assets,
-                ScreenshotShelfAssetEncoder.previewImage(from: presented)
-            )
-        }).value else { return }
+        guard
+            let rendered = await Task.detached(
+                priority: .userInitiated,
+                operation: {
+                    () -> (assets: ScreenshotShelfEncodedAssets, preview: CGImage?)? in
+                    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                        let rawImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+                    else { return nil }
+                    let presented = style.flatMap { MockupRenderer.render(rawImage, style: $0) } ?? rawImage
+                    guard let assets = ScreenshotShelfAssetEncoder.encode(presented) else {
+                        return nil
+                    }
+                    return (
+                        assets,
+                        ScreenshotShelfAssetEncoder.previewImage(from: presented)
+                    )
+                }
+            ).value
+        else { return }
 
         // Re-read after awaiting: `linkHistory` or `remove` may have changed the
         // card while the render was running. Never write back a stale snapshot.
         guard var card = cardsByID[captureID],
-              state.entries.contains(where: { $0.captureID == captureID })
+            state.entries.contains(where: { $0.captureID == captureID })
         else { return }
 
         cachedThumbnailBytes = max(0, cachedThumbnailBytes - (card.thumbnailData?.count ?? 0))
@@ -308,7 +316,8 @@ final class ScreenshotShelfManager {
         )
 
         if let historyID = cardsByID[captureID]?.historyID,
-           let history = HistoryActor.shared {
+            let history = HistoryActor.shared
+        {
             let json = style.flatMap { try? JSONEncoder().encode($0) }.flatMap {
                 String(data: $0, encoding: .utf8)
             }
@@ -338,9 +347,10 @@ final class ScreenshotShelfManager {
         // on screen. Moving a visible shelf here would go through the plain frame path,
         // which can slide the window across the desktop; the follower owns that motion.
         if phase == .hidden || phase == .disappearing {
-            activeDisplayID = ScreenshotShelfScreenResolver.displayID(
-                underMouse: NSEvent.mouseLocation
-            ) ?? activeDisplayID
+            activeDisplayID =
+                ScreenshotShelfScreenResolver.displayID(
+                    underMouse: NSEvent.mouseLocation
+                ) ?? activeDisplayID
         }
         refreshPresentation()
     }
@@ -461,9 +471,10 @@ final class ScreenshotShelfManager {
         imagePixelWidth: CGFloat
     ) -> CGFloat {
         guard displayScale.isFinite, displayScale > 0,
-              imagePixelWidth.isFinite, imagePixelWidth > 0,
-              let scaleSourcePixelWidth,
-              scaleSourcePixelWidth == imagePixelWidth else {
+            imagePixelWidth.isFinite, imagePixelWidth > 0,
+            let scaleSourcePixelWidth,
+            scaleSourcePixelWidth == imagePixelWidth
+        else {
             return 1
         }
         return displayScale
@@ -477,18 +488,25 @@ final class ScreenshotShelfManager {
             return try Data(contentsOf: artifact.url)
         }
         if let style = cardsByID[captureID]?.mockupStyle,
-           let rawData = try await originalData(for: captureID),
-           let raw = NSImage(data: rawData)?.cgImage(
-               forProposedRect: nil,
-               context: nil,
-               hints: nil
-           ),
-           let rendered = await Task.detached(priority: .userInitiated, operation: {
-               MockupRenderer.render(raw, style: style)
-           }).value,
-           let assets = await Task.detached(priority: .utility, operation: {
-               ScreenshotShelfAssetEncoder.encode(rendered)
-           }).value {
+            let rawData = try await originalData(for: captureID),
+            let raw = NSImage(data: rawData)?.cgImage(
+                forProposedRect: nil,
+                context: nil,
+                hints: nil
+            ),
+            let rendered = await Task.detached(
+                priority: .userInitiated,
+                operation: {
+                    MockupRenderer.render(raw, style: style)
+                }
+            ).value,
+            let assets = await Task.detached(
+                priority: .utility,
+                operation: {
+                    ScreenshotShelfAssetEncoder.encode(rendered)
+                }
+            ).value
+        {
             return assets.originalData
         }
         return try await originalData(for: captureID)
@@ -523,7 +541,8 @@ final class ScreenshotShelfManager {
     /// full-screen app covers it, the shelf hides instead of appearing on top of it.
     func followPointerDisplay(_ displayID: CGDirectDisplayID) {
         guard let screen = ScreenshotShelfScreenResolver.screen(for: displayID),
-              canFollowPointerDisplay else { return }
+            canFollowPointerDisplay
+        else { return }
         activeDisplayID = displayID
         refreshFullScreenSuppression()
         guard phase == .visible, shouldPresentPanel else { return }

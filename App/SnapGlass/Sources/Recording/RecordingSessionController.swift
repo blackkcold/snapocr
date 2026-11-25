@@ -2,25 +2,26 @@ import AppKit
 import CaptureCore
 import Foundation
 import OSLog
+@preconcurrency import ScreenCaptureKit
 import SharedKit
 
-@preconcurrency import ScreenCaptureKit
-
-typealias AudioPipelineFactory = @Sendable (
-    AudioRecordingConfiguration,
-    RecordingPipelineRoots,
-    String?
-) async throws -> RecordingSessionPipeline
+typealias AudioPipelineFactory =
+    @Sendable (
+        AudioRecordingConfiguration,
+        RecordingPipelineRoots,
+        String?
+    ) async throws -> RecordingSessionPipeline
 
 /// Replaces the screen audio engine factory in agent runs.
 ///
 /// Production never sets it; the agent channel uses it to prove that a failed
 /// audio track leaves the video intact.
-typealias ScreenAudioEngineFactoryOverride = @Sendable (
-    AudioRecordingConfiguration,
-    any AudioCheckpointSink & Sendable,
-    AudioSampleClock
-) throws -> any AudioRecordingControlling & Sendable
+typealias ScreenAudioEngineFactoryOverride =
+    @Sendable (
+        AudioRecordingConfiguration,
+        any AudioCheckpointSink & Sendable,
+        AudioSampleClock
+    ) throws -> any AudioRecordingControlling & Sendable
 
 struct RecordingPreferenceSnapshot: Sendable {
     let codec: RecordingVideoCodec
@@ -35,24 +36,29 @@ struct RecordingPreferenceSnapshot: Sendable {
     let customVolumeUUID: String?
 
     init(defaults: UserDefaults) {
-        let storedCodec = defaults.string(forKey: PreferenceKeys.recordingVideoCodec)
+        let storedCodec =
+            defaults.string(forKey: PreferenceKeys.recordingVideoCodec)
             ?? PreferenceDefaults.recordingVideoCodec
         codec = RecordingVideoCodec(rawValue: storedCodec) ?? .h264
-        resolutionProfile = defaults.string(forKey: PreferenceKeys.recordingResolution)
+        resolutionProfile =
+            defaults.string(forKey: PreferenceKeys.recordingResolution)
             ?? PreferenceDefaults.recordingResolution
 
-        let storedFrameRate = (defaults.object(forKey: PreferenceKeys.recordingFrameRate) as? NSNumber)?.intValue
+        let storedFrameRate =
+            (defaults.object(forKey: PreferenceKeys.recordingFrameRate) as? NSNumber)?.intValue
             ?? PreferenceDefaults.recordingFrameRate
         frameRate = [24, 30, 60].contains(storedFrameRate) ? storedFrameRate : PreferenceDefaults.recordingFrameRate
 
         let storedBitrate =
             (defaults.object(forKey: PreferenceKeys.recordingAverageVideoBitrate) as? NSNumber)?.intValue
             ?? PreferenceDefaults.recordingAverageVideoBitrate
-        averageVideoBitrate = [2, 4, 8, 12, 16, 20].contains(storedBitrate / 1_000_000)
+        averageVideoBitrate =
+            [2, 4, 8, 12, 16, 20].contains(storedBitrate / 1_000_000)
             ? storedBitrate
             : PreferenceDefaults.recordingAverageVideoBitrate
 
-        capturesSystemAudio = defaults.object(forKey: PreferenceKeys.recordingSystemAudio) == nil
+        capturesSystemAudio =
+            defaults.object(forKey: PreferenceKeys.recordingSystemAudio) == nil
             ? PreferenceDefaults.recordingSystemAudio
             : defaults.bool(forKey: PreferenceKeys.recordingSystemAudio)
         screenAudioMode = RecordingAudioPreferenceStore.mode(for: .screen, in: defaults)

@@ -15,113 +15,124 @@ extension ScreenshotShelfManager {
 
     private func installWorkspaceObservers() {
         let workspaceCenter = NSWorkspace.shared.notificationCenter
-        notificationObservers.append(workspaceCenter.addObserver(
-            forName: NSWorkspace.activeSpaceDidChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                // A Space switch changes the context under a parked pointer; do not let a
-                // pending dwell pop the shelf open on the new Space.
-                self?.cancelDwellTask()
-                self?.refreshFullScreenSuppression()
-            }
-        })
-        notificationObservers.append(workspaceCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.cancelDwellTask()
-                self?.refreshFullScreenSuppression()
-            }
-        })
+        notificationObservers.append(
+            workspaceCenter.addObserver(
+                forName: NSWorkspace.activeSpaceDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    // A Space switch changes the context under a parked pointer; do not let a
+                    // pending dwell pop the shelf open on the new Space.
+                    self?.cancelDwellTask()
+                    self?.refreshFullScreenSuppression()
+                }
+            })
+        notificationObservers.append(
+            workspaceCenter.addObserver(
+                forName: NSWorkspace.didActivateApplicationNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.cancelDwellTask()
+                    self?.refreshFullScreenSuppression()
+                }
+            })
     }
 
     private func installAppObservers() {
-        notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if let activeDisplayID = self.activeDisplayID,
-                   ScreenshotShelfScreenResolver.screen(for: activeDisplayID) == nil {
-                    self.activeDisplayID = ScreenshotShelfScreenResolver.displayID(
-                        underMouse: NSEvent.mouseLocation
-                    )
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let activeDisplayID = self.activeDisplayID,
+                        ScreenshotShelfScreenResolver.screen(for: activeDisplayID) == nil
+                    {
+                        self.activeDisplayID = ScreenshotShelfScreenResolver.displayID(
+                            underMouse: NSEvent.mouseLocation
+                        )
+                    }
+                    self.finishHideImmediately()
+                    self.refreshPresentation(immediate: true)
                 }
-                self.finishHideImmediately()
-                self.refreshPresentation(immediate: true)
-            }
-        })
-        notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: defaults,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refreshPreferences() }
-        })
-        notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: HistoryActor.imagesDidChange,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in await self?.reconcileHistory() }
-        })
-        notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: NSMenu.didBeginTrackingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.isMenuTracking = true
-                self?.cancelCollapseTask()
-                self?.cancelDwellTask()
-            }
-        })
-        notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: NSMenu.didEndTrackingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.isMenuTracking = false
-                self.scheduleCollapseIfNeeded()
-                // A pointer still resting on the handle resumes its dwell after the menu closes.
-                if self.viewModel.isPointerInside,
-                   self.modeState.mode == .collapsed,
-                   self.phase == .visible {
-                    self.modeState.pointerEntered(
-                        at: self.viewModel.pointerLocation,
-                        now: Date(),
-                        dwell: Self.dwellDelay
-                    )
-                    self.scheduleDwellIfNeeded()
+            })
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: UserDefaults.didChangeNotification,
+                object: defaults,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.refreshPreferences() }
+            })
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: HistoryActor.imagesDidChange,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in await self?.reconcileHistory() }
+            })
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSMenu.didBeginTrackingNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.isMenuTracking = true
+                    self?.cancelCollapseTask()
+                    self?.cancelDwellTask()
                 }
-            }
-        })
+            })
+        notificationObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSMenu.didEndTrackingNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.isMenuTracking = false
+                    self.scheduleCollapseIfNeeded()
+                    // A pointer still resting on the handle resumes its dwell after the menu closes.
+                    if self.viewModel.isPointerInside,
+                        self.modeState.mode == .collapsed,
+                        self.phase == .visible
+                    {
+                        self.modeState.pointerEntered(
+                            at: self.viewModel.pointerLocation,
+                            now: Date(),
+                            dwell: Self.dwellDelay
+                        )
+                        self.scheduleDwellIfNeeded()
+                    }
+                }
+            })
     }
 
     private func installLockStateObservers() {
         let distributedCenter = DistributedNotificationCenter.default()
-        notificationObservers.append(distributedCenter.addObserver(
-            forName: Notification.Name("com.apple.screenIsLocked"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.setScreenLocked(true) }
-        })
-        notificationObservers.append(distributedCenter.addObserver(
-            forName: Notification.Name("com.apple.screenIsUnlocked"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.setScreenLocked(false) }
-        })
+        notificationObservers.append(
+            distributedCenter.addObserver(
+                forName: Notification.Name("com.apple.screenIsLocked"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.setScreenLocked(true) }
+            })
+        notificationObservers.append(
+            distributedCenter.addObserver(
+                forName: Notification.Name("com.apple.screenIsUnlocked"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.setScreenLocked(false) }
+            })
     }
 
     func setScreenLocked(_ isLocked: Bool) {
@@ -195,7 +206,8 @@ extension ScreenshotShelfManager {
 
         let targetDisplayID = (displayScreen ?? NSScreen.main)
             .flatMap(ScreenshotShelfScreenResolver.displayID(for:))
-        let isCovered = (frontmostAppCoversDisplay
+        let isCovered =
+            (frontmostAppCoversDisplay
             ?? ScreenshotShelfScreenResolver.frontmostAppCoversDisplay)(targetDisplayID)
         guard isCovered != isFullScreenSuppressed else { return }
         isFullScreenSuppressed = isCovered

@@ -245,18 +245,20 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
     ///   configuration, or dimensions cannot be used.
     public init(destinationURL: URL, configuration: RecordingConfiguration, dimensions: CGSize) throws {
         guard destinationURL.isFileURL,
-              destinationURL.pathExtension.lowercased() == "mp4",
-              !FileManager.default.fileExists(atPath: destinationURL.path) else {
+            destinationURL.pathExtension.lowercased() == "mp4",
+            !FileManager.default.fileExists(atPath: destinationURL.path)
+        else {
             throw ScreenVideoWriterBridgeError.invalidDestination
         }
         guard dimensions.width.isFinite,
-              dimensions.height.isFinite,
-              dimensions.width >= 2,
-              dimensions.height >= 2,
-              dimensions.width.rounded(.towardZero) == dimensions.width,
-              dimensions.height.rounded(.towardZero) == dimensions.height,
-              Int(dimensions.width).isMultiple(of: 2),
-              Int(dimensions.height).isMultiple(of: 2) else {
+            dimensions.height.isFinite,
+            dimensions.width >= 2,
+            dimensions.height >= 2,
+            dimensions.width.rounded(.towardZero) == dimensions.width,
+            dimensions.height.rounded(.towardZero) == dimensions.height,
+            Int(dimensions.width).isMultiple(of: 2),
+            Int(dimensions.height).isMultiple(of: 2)
+        else {
             throw ScreenVideoWriterBridgeError.invalidConfiguration
         }
         do {
@@ -333,8 +335,9 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
     @discardableResult
     public func append(video sampleBuffer: CMSampleBuffer) throws -> Bool {
         guard CMSampleBufferIsValid(sampleBuffer),
-              CMSampleBufferDataIsReady(sampleBuffer),
-              CMSampleBufferGetImageBuffer(sampleBuffer) != nil else {
+            CMSampleBufferDataIsReady(sampleBuffer),
+            CMSampleBufferGetImageBuffer(sampleBuffer) != nil
+        else {
             throw ScreenVideoWriterBridgeError.invalidVideoSample
         }
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -372,7 +375,8 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
         if !hasStartedWriting {
             let started = faultInjection.startWriting?() ?? writer.startWriting()
             guard started else {
-                let reason = writer.error?.localizedDescription
+                let reason =
+                    writer.error?.localizedDescription
                     ?? "The media writer could not start."
                 diagnosticsState.startWritingResult = .failed
                 diagnosticsState.lastErrorDescription = reason
@@ -440,7 +444,8 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
         guard !isFinishing else { throw ScreenVideoWriterBridgeError.alreadyFinished }
         let accepted = faultInjection.append?(sampleBuffer) ?? videoInput.append(sampleBuffer)
         guard accepted else {
-            let reason = writer.error?.localizedDescription
+            let reason =
+                writer.error?.localizedDescription
                 ?? "The media writer rejected a video sample."
             diagnosticsState.appendFailureCount += 1
             diagnosticsState.lastErrorDescription = reason
@@ -457,13 +462,14 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
         } else {
             duration = CMTime(value: 1, timescale: CMTimeScale(frameRate))
         }
-        acceptedFrames.append(VideoFrameSample(
-            index: frameIndex,
-            presentationTime: presentationTime,
-            decodeTime: CMSampleBufferGetDecodeTimeStamp(sampleBuffer),
-            duration: duration,
-            isSync: isSync
-        ))
+        acceptedFrames.append(
+            VideoFrameSample(
+                index: frameIndex,
+                presentationTime: presentationTime,
+                decodeTime: CMSampleBufferGetDecodeTimeStamp(sampleBuffer),
+                duration: duration,
+                isSync: isSync
+            ))
         return true
     }
 
@@ -548,13 +554,15 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
                 )
 
                 guard writerStatus == .completed,
-                      let attributes = try? FileManager.default.attributesOfItem(atPath: self.destinationURL.path),
-                      ((attributes[.size] as? NSNumber)?.int64Value ?? 0) > 0 else {
+                    let attributes = try? FileManager.default.attributesOfItem(atPath: self.destinationURL.path),
+                    ((attributes[.size] as? NSNumber)?.int64Value ?? 0) > 0
+                else {
                     self.logger.error("screen.writer finish produced no usable file")
                     self.discardDestinationIfEmpty()
-                    continuation.resume(throwing: ScreenVideoWriterBridgeError.writerFailed(
-                        writerError ?? "The video chunk could not be finalized."
-                    ))
+                    continuation.resume(
+                        throwing: ScreenVideoWriterBridgeError.writerFailed(
+                            writerError ?? "The video chunk could not be finalized."
+                        ))
                     return
                 }
                 continuation.resume(returning: result)
@@ -569,12 +577,14 @@ public final class ScreenVideoWriterBridge: @unchecked Sendable {
     }
 
     private static func isSyncSample(_ sampleBuffer: CMSampleBuffer) -> Bool {
-        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
-            sampleBuffer,
-            createIfNecessary: false
-        ) as? [[CFString: Any]],
-        let first = attachments.first,
-        let notSync = first[kCMSampleAttachmentKey_NotSync] as? NSNumber else {
+        guard
+            let attachments = CMSampleBufferGetSampleAttachmentsArray(
+                sampleBuffer,
+                createIfNecessary: false
+            ) as? [[CFString: Any]],
+            let first = attachments.first,
+            let notSync = first[kCMSampleAttachmentKey_NotSync] as? NSNumber
+        else {
             return true
         }
         return !notSync.boolValue

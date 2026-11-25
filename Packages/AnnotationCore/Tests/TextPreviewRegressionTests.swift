@@ -1,15 +1,19 @@
 import CoreGraphics
 import Foundation
 import Testing
+
 @testable import AnnotationCore
 
 struct TextPreviewRegressionTests {
     @Test func tightTextRemainsVisibleWhenPreviewIsReduced() throws {
-        let context = try #require(CGContext(data: nil, width: 2000, height: 1000,
-            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let context = try #require(
+            CGContext(
+                data: nil, width: 2000, height: 1000,
+                bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         let base = try #require(context.makeImage())
-        var node = AnnotationNode(tool: .text, color: CGColor(gray: 1, alpha: 1),
+        var node = AnnotationNode(
+            tool: .text, color: CGColor(gray: 1, alpha: 1),
             points: [CGPoint(x: 0.1, y: 0.1)], text: "Visible text", fontSize: 24)
         let size = TextTool().suggestedSize(for: node)
         node.normalizedRect = CGRect(x: 0.1, y: 0.1, width: size.width / 2000, height: size.height / 1000)

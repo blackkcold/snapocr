@@ -20,7 +20,8 @@ extension ScreenshotShelfManager {
         }
 
         guard shouldPresentPanel,
-              let screen = displayScreen ?? NSScreen.screens.first else {
+            let screen = displayScreen ?? NSScreen.screens.first
+        else {
             switch phase {
             case .visible, .appearing:
                 hidePanel(immediate: immediate)
@@ -122,13 +123,14 @@ extension ScreenshotShelfManager {
     /// deliberate while still allowing a quick click on the handle to open it immediately.
     func scheduleDwellIfNeeded() {
         guard collapseToRail,
-              phase == .visible,
-              modeState.mode == .collapsed,
-              viewModel.isPointerInside,
-              !isMenuTracking,
-              !modeState.isSuppressed,
-              !modeState.isInteractionHeld,
-              let deadline = modeState.dwellDeadline else { return }
+            phase == .visible,
+            modeState.mode == .collapsed,
+            viewModel.isPointerInside,
+            !isMenuTracking,
+            !modeState.isSuppressed,
+            !modeState.isInteractionHeld,
+            let deadline = modeState.dwellDeadline
+        else { return }
 
         let delay = max(0.01, deadline.timeIntervalSinceNow)
         dwellTask?.cancel()
@@ -141,12 +143,13 @@ extension ScreenshotShelfManager {
 
     func expandIfPointerDwelled() {
         guard collapseToRail,
-              phase == .visible,
-              modeState.mode == .collapsed,
-              viewModel.isPointerInside,
-              !isMenuTracking,
-              !modeState.isSuppressed,
-              !modeState.isInteractionHeld else { return }
+            phase == .visible,
+            modeState.mode == .collapsed,
+            viewModel.isPointerInside,
+            !isMenuTracking,
+            !modeState.isSuppressed,
+            !modeState.isInteractionHeld
+        else { return }
         guard modeState.expandIfDwellElapsed(now: Date()) else { return }
         refreshPresentation()
     }
@@ -159,11 +162,12 @@ extension ScreenshotShelfManager {
 
     func scheduleCollapseIfNeeded() {
         guard collapseToRail,
-              phase == .visible,
-              modeState.mode == .expanded,
-              !isMenuTracking,
-              !modeState.isSuppressed,
-              !viewModel.isPointerInside else { return }
+            phase == .visible,
+            modeState.mode == .expanded,
+            !isMenuTracking,
+            !modeState.isSuppressed,
+            !viewModel.isPointerInside
+        else { return }
         let delay: TimeInterval
         if let deadline = modeState.idleDeadline {
             delay = max(0.05, deadline.timeIntervalSinceNow)
@@ -181,11 +185,12 @@ extension ScreenshotShelfManager {
 
     func collapseIfIdle() {
         guard collapseToRail,
-              phase == .visible,
-              modeState.mode == .expanded,
-              !isMenuTracking,
-              !viewModel.isPointerInside,
-              !modeState.isSuppressed else { return }
+            phase == .visible,
+            modeState.mode == .expanded,
+            !isMenuTracking,
+            !viewModel.isPointerInside,
+            !modeState.isSuppressed
+        else { return }
         guard modeState.collapseIfIdle(now: Date()) else { return }
         refreshPresentation()
         scheduleArmExpansion()
@@ -200,8 +205,9 @@ extension ScreenshotShelfManager {
             // A pointer that returned during the cooldown must rest for a fresh dwell before the
             // shelf opens; the cooldown never expands it by itself.
             guard self.viewModel.isPointerInside,
-                  self.modeState.mode == .collapsed,
-                  self.phase == .visible else { return }
+                self.modeState.mode == .collapsed,
+                self.phase == .visible
+            else { return }
             self.modeState.pointerEntered(
                 at: self.viewModel.pointerLocation,
                 now: Date(),
@@ -296,8 +302,9 @@ extension ScreenshotShelfManager {
         } completionHandler: {
             Task { @MainActor [weak self, weak panel] in
                 guard let self, let panel,
-                      self.phase == .visible,
-                      generation == self.presentationGeneration else {
+                    self.phase == .visible,
+                    generation == self.presentationGeneration
+                else {
                     self?.isDisplayHandoff = false
                     return
                 }
@@ -404,7 +411,8 @@ extension ScreenshotShelfManager {
             anchor: anchor,
             metrics: metrics
         )
-        let frame = modeState.mode == .collapsed
+        let frame =
+            modeState.mode == .collapsed
             ? ScreenshotShelfGeometry.collapsedFrame(expandedFrame: expandedFrame)
             : expandedFrame
         return ScreenshotShelfLayout(
@@ -468,7 +476,8 @@ extension ScreenshotShelfManager {
         } completionHandler: {
             Task { @MainActor [weak self, weak panel] in
                 guard let self, let panel,
-                      generation == self.presentationGeneration else { return }
+                    generation == self.presentationGeneration
+                else { return }
                 self.phase = .visible
                 panel.alphaValue = 1
                 panel.assertSharingType()
@@ -536,7 +545,8 @@ extension ScreenshotShelfManager {
         } completionHandler: {
             Task { @MainActor [weak self, weak panel] in
                 guard let self, let panel,
-                      generation == self.presentationGeneration else { return }
+                    generation == self.presentationGeneration
+                else { return }
                 panel.orderOut(nil)
                 panel.alphaValue = 1
                 self.phase = .hidden
@@ -588,8 +598,9 @@ extension ScreenshotShelfManager {
 
     func installClickDismissMonitorIfNeeded() {
         guard !collapseToRail,
-              globalMouseMonitor == nil,
-              phase == .visible || phase == .appearing else { return }
+            globalMouseMonitor == nil,
+            phase == .visible || phase == .appearing
+        else { return }
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
@@ -607,7 +618,8 @@ extension ScreenshotShelfManager {
 
     func prewarm() {
         guard createsPanel, isEnabled, panel == nil,
-              let screen = displayScreen ?? NSScreen.main else { return }
+            let screen = displayScreen ?? NSScreen.main
+        else { return }
 
         let metrics = ScreenshotShelfMetrics()
         let frame = CGRect(

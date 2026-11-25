@@ -75,7 +75,6 @@ final class SystemApplicationActivationController: ApplicationActivationControll
     }
 }
 
-
 struct AppWindowRegistrationView: NSViewRepresentable {
     let id: String
     var appearanceMode: String = PreferenceDefaults.appearanceMode

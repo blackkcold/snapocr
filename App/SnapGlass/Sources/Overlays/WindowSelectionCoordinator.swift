@@ -1,9 +1,8 @@
 import AppKit
 import CaptureCore
+@preconcurrency import ScreenCaptureKit
 import SharedKit
 import SwiftUI
-
-@preconcurrency import ScreenCaptureKit
 
 struct SelectableWindow {
     let windowID: CGWindowID
@@ -14,10 +13,12 @@ struct SelectableWindow {
     let displayCount: Int
 
     var displayName: String {
-        let app = appName?.isEmpty == false
+        let app =
+            appName?.isEmpty == false
             ? appName ?? AppLocalization.string("Unknown App")
             : AppLocalization.string("Unknown App")
-        let title = windowTitle?.isEmpty == false
+        let title =
+            windowTitle?.isEmpty == false
             ? windowTitle ?? AppLocalization.string("Untitled")
             : AppLocalization.string("Untitled")
         return "\(app) — \(title)"
@@ -242,7 +243,8 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
         for row in rows where visibleWindows.indices.contains(row) {
             let window = visibleWindows[row]
             guard thumbnails[window.windowID] != nil,
-                  !loadingWindowIDs.contains(window.windowID) else { continue }
+                !loadingWindowIDs.contains(window.windowID)
+            else { continue }
             loadThumbnail(for: window, forceRefresh: true)
         }
     }
@@ -255,10 +257,11 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
         guard visibleWindows.indices.contains(row) else { return nil }
 
         let window = visibleWindows[row]
-        let reusable = tableView.makeView(
-            withIdentifier: WindowPickerCell.reuseIdentifier,
-            owner: self
-        ) as? WindowPickerCell
+        let reusable =
+            tableView.makeView(
+                withIdentifier: WindowPickerCell.reuseIdentifier,
+                owner: self
+            ) as? WindowPickerCell
         let cell = reusable ?? WindowPickerCell(frame: .zero)
         cell.identifier = WindowPickerCell.reuseIdentifier
         cell.configure(window: window, thumbnail: thumbnails[window.windowID])
@@ -296,13 +299,15 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
 
     private func loadThumbnailIfNeeded(for window: SelectableWindow) {
         guard thumbnails[window.windowID] == nil,
-              !loadingWindowIDs.contains(window.windowID) else { return }
+            !loadingWindowIDs.contains(window.windowID)
+        else { return }
         loadThumbnail(for: window, forceRefresh: false)
     }
 
     private func loadThumbnail(for window: SelectableWindow, forceRefresh: Bool) {
         guard let content,
-              loadingWindowIDs.insert(window.windowID).inserted else { return }
+            loadingWindowIDs.insert(window.windowID).inserted
+        else { return }
 
         let windowID = window.windowID
         let sharedContent = content
@@ -327,9 +332,10 @@ final class WindowSelectionCoordinator: NSObject, NSTableViewDataSource, NSTable
     /// 把缩略图写回**当前仍代表该窗口**的行；被复用到别的窗口的 cell 一律跳过。
     private func applyThumbnail(_ image: NSImage, to windowID: CGWindowID) {
         guard let row = rowByWindowID[windowID],
-              let tableView,
-              let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? WindowPickerCell,
-              cell.representedWindowID == windowID else { return }
+            let tableView,
+            let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? WindowPickerCell,
+            cell.representedWindowID == windowID
+        else { return }
         cell.setThumbnail(image)
     }
 }

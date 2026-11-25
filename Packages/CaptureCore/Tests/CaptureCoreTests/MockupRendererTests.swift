@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+
 @testable import CaptureCore
 
 struct MockupRendererTests {
@@ -134,15 +135,16 @@ struct MockupRendererTests {
             for: CGSize(width: 100, height: 100),
             style: style
         )
-        let context = try #require(CGContext(
-            data: nil,
-            width: 300,
-            height: 300,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 300,
+                height: 300,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
 
         MockupRenderer.draw(
             image,
@@ -192,15 +194,16 @@ struct MockupRendererTests {
             for: CGSize(width: 100, height: 100),
             style: style
         )
-        let context = try #require(CGContext(
-            data: nil,
-            width: 300,
-            height: 300,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 300,
+                height: 300,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
 
         MockupRenderer.draw(
             image,
@@ -232,15 +235,16 @@ struct MockupRendererTests {
             for: CGSize(width: 100, height: 100),
             style: style
         )
-        let context = try #require(CGContext(
-            data: nil,
-            width: 100,
-            height: 100,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 100,
+                height: 100,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
 
         context.saveGState()
         context.clip(to: CGRect(x: 0, y: 0, width: 10, height: 10))
@@ -271,15 +275,16 @@ struct MockupRendererTests {
     }
 
     private func makeImage(size: CGSize) throws -> CGImage {
-        let context = try #require(CGContext(
-            data: nil,
-            width: Int(size.width),
-            height: Int(size.height),
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: Int(size.width),
+                height: Int(size.height),
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1))
         context.fill(CGRect(origin: .zero, size: size))
         return try #require(context.makeImage())

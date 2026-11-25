@@ -13,7 +13,8 @@ extension RecordingSessionLedger {
             return
         }
         if let existing = state.intents.values.first(where: { $0.segmentIndex == intent.segmentIndex }),
-           existing.segmentID != intent.segmentID {
+            existing.segmentID != intent.segmentID
+        {
             throw RecordingSessionLedgerError.idempotencyConflict
         }
         try append(.publishIntent(intent))
@@ -72,7 +73,8 @@ extension RecordingSessionLedger {
             return other
         }
         if state.intents.values.contains(where: { $0.segmentIndex == effective.index })
-            || state.published.values.contains(where: { $0.index == effective.index }) {
+            || state.published.values.contains(where: { $0.index == effective.index })
+        {
             throw RecordingSessionLedgerError.idempotencyConflict
         }
         try append(.adopted(effective))
@@ -107,21 +109,26 @@ extension RecordingSessionLedger {
 
     func segmentPublicationCandidate(segmentID: UUID) async throws -> SegmentPublicationCandidate {
         let intent = try publishIntent(segmentID: segmentID)
-        let productURL = fileManager.value.fileExists(atPath: intent.stagingURL.path)
+        let productURL =
+            fileManager.value.fileExists(atPath: intent.stagingURL.path)
             ? intent.stagingURL
             : intent.reservedFinalURL
         let record = try await Self.portableRecord(for: intent, productURL: productURL)
         guard record.segmentID == intent.segmentID, record.segmentIndex == intent.segmentIndex,
-              record.startSample == intent.effectiveRange.startSample,
-              record.sampleCount == intent.effectiveRange.sampleCount
+            record.startSample == intent.effectiveRange.startSample,
+            record.sampleCount == intent.effectiveRange.sampleCount
         else { throw RecordingSessionLedgerError.invalidPublication }
-        let files = Dictionary(uniqueKeysWithValues: try record.tracks.map { track -> (RecordingTrackRole, URL) in
-            guard let role = Self.role(from: track.role) else { throw RecordingSessionLedgerError.invalidPublication }
-            let url = intent.isDirectory
-                ? intent.stagingURL.appendingPathComponent(track.fileName)
-                : intent.stagingURL
-            return (role, url)
-        })
+        let files = Dictionary(
+            uniqueKeysWithValues: try record.tracks.map { track -> (RecordingTrackRole, URL) in
+                guard let role = Self.role(from: track.role) else {
+                    throw RecordingSessionLedgerError.invalidPublication
+                }
+                let url =
+                    intent.isDirectory
+                    ? intent.stagingURL.appendingPathComponent(track.fileName)
+                    : intent.stagingURL
+                return (role, url)
+            })
         return SegmentPublicationCandidate(
             segmentID: intent.segmentID,
             segmentIndex: intent.segmentIndex,
@@ -169,7 +176,7 @@ extension RecordingSessionLedger {
             let candidate = try candidateProductURLs(intent, useFinal: useFinal)
             for (name, expected) in intent.contentHashes {
                 guard let url = candidate[name], RecordingLedgerFileSystem.isRegularFile(url),
-                      try RecordingLedgerFileSystem.sha256(of: url) == expected
+                    try RecordingLedgerFileSystem.sha256(of: url) == expected
                 else { return false }
             }
             return true
@@ -196,7 +203,7 @@ extension RecordingSessionLedger {
             guard urls.count == intent.contentHashes.count else { return false }
             for (name, expected) in intent.contentHashes {
                 guard let url = urls[name], RecordingLedgerFileSystem.isRegularFile(url),
-                      try RecordingLedgerFileSystem.sha256(of: url) == expected
+                    try RecordingLedgerFileSystem.sha256(of: url) == expected
                 else { return false }
             }
             return true
@@ -209,9 +216,10 @@ extension RecordingSessionLedger {
     ) throws -> [String: URL] {
         if intent.isDirectory {
             let product = useFinal ? intent.reservedFinalURL : intent.stagingURL
-            return Dictionary(uniqueKeysWithValues: intent.contentHashes.keys.map {
-                ($0, product.appendingPathComponent($0))
-            })
+            return Dictionary(
+                uniqueKeysWithValues: intent.contentHashes.keys.map {
+                    ($0, product.appendingPathComponent($0))
+                })
         }
         return [intent.reservedFinalURL.lastPathComponent: useFinal ? intent.reservedFinalURL : intent.stagingURL]
     }

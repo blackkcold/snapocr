@@ -1,5 +1,5 @@
-import Foundation
 import CaptureCore
+import Foundation
 import SharedKit
 
 enum RecordingAudioPreferenceStore {
@@ -29,7 +29,8 @@ enum RecordingAudioPreferenceStore {
 
         // Migrate only an actual stored legacy value. Registered/default values are not user choices.
         if resolution.persistScreenMode,
-           persisted[PreferenceKeys.recordingSystemAudio] is Bool {
+            persisted[PreferenceKeys.recordingSystemAudio] is Bool
+        {
             defaults.set(
                 RecordingAudioPreferenceMigration.preferenceValue(for: resolution.screenMode),
                 forKey: PreferenceKeys.recordingScreenAudioMode
@@ -58,7 +59,8 @@ enum RecordingAudioPreferenceStore {
     /// 128 kbps without rewriting the user's preference.
     static func bitRate(for kind: RecordingKind, in defaults: UserDefaults = .standard) -> Int {
         let key = bitRateKey(for: kind)
-        let storedBitRate = (defaults.object(forKey: key) as? NSNumber)?.intValue
+        let storedBitRate =
+            (defaults.object(forKey: key) as? NSNumber)?.intValue
             ?? defaultBitRate
         return supportedBitRates.contains(storedBitRate) ? storedBitRate : defaultBitRate
     }
@@ -84,11 +86,13 @@ enum RecordingAudioPreferenceStore {
         in defaults: UserDefaults = .standard,
         fileManager: FileManager = .default
     ) -> RecordingPipelineRoots? {
-        guard let directory = RecordingDestinationPreferences.directory(
-            for: kind.outputKind,
-            in: defaults,
-            fileManager: fileManager
-        ) else {
+        guard
+            let directory = RecordingDestinationPreferences.directory(
+                for: kind.outputKind,
+                in: defaults,
+                fileManager: fileManager
+            )
+        else {
             return nil
         }
         return pipelineRoots(for: directory)
@@ -112,8 +116,8 @@ enum RecordingAudioPreferenceStore {
         let mode = mode(for: .audio, in: defaults)
         let layout: AudioOutputLayout =
             defaults.string(forKey: PreferenceKeys.recordingOutputLayout) == "separateTracks"
-                ? .separateTracks
-                : .mixed
+            ? .separateTracks
+            : .mixed
         let bitRate = bitRate(for: .audio, in: defaults)
 
         let channels: [RecordingTrackRole: Int]
@@ -189,10 +193,11 @@ extension CaptureViewModel {
     }
 
     var canStartRecording: Bool {
-        !isRecordingBusy && RecordingCaptureAvailability.canBeginRecording(
-            isCapturing: isCapturing,
-            isScrollCaptureActive: isScrollCaptureActive
-        )
+        !isRecordingBusy
+            && RecordingCaptureAvailability.canBeginRecording(
+                isCapturing: isCapturing,
+                isScrollCaptureActive: isScrollCaptureActive
+            )
     }
 
     var needsRecordingQuitConfirmation: Bool {
@@ -264,9 +269,11 @@ extension CaptureViewModel {
         // may return after a cancel, so only this identity may start the session.
         let needsMicrophonePermission =
             configuration.mode == .microphone || configuration.mode == .systemAndMicrophone
-        guard let request = recordingSessionController.beginAudioRequest(
-            requiresMicrophonePermission: needsMicrophonePermission
-        ) else {
+        guard
+            let request = recordingSessionController.beginAudioRequest(
+                requiresMicrophonePermission: needsMicrophonePermission
+            )
+        else {
             showToast(
                 message: AppLocalization.string(
                     "The previous recording is still stopping. Try again when it finishes."
@@ -366,7 +373,8 @@ extension CaptureViewModel {
 
         guard state == .authorized else {
             guard showsGuidance else { return false }
-            let key = initialState == .unknown
+            let key =
+                initialState == .unknown
                 ? "Microphone access is needed to record your voice."
                 : "Microphone access is denied. Enable it in System Settings, or use system audio instead."
             showToast(message: AppLocalization.string(key), type: .error)
@@ -461,14 +469,16 @@ extension CaptureViewModel {
     }
 
     func refreshRecordingShelfVisibility() {
-        let statusIsRecording = recordingStatus == .starting
+        let statusIsRecording =
+            recordingStatus == .starting
             || recordingStatus == .recording
             || recordingStatus == .saving
         setRecordingShelfVisibility(isRecording: isAudioRecordingActive || statusIsRecording)
     }
 
     private func setRecordingShelfVisibility(isRecording: Bool) {
-        let shouldHide = UserDefaults.standard.object(forKey: PreferenceKeys.recordingHideShelfWhileRecording) as? Bool
+        let shouldHide =
+            UserDefaults.standard.object(forKey: PreferenceKeys.recordingHideShelfWhileRecording) as? Bool
             ?? PreferenceDefaults.recordingHideShelfWhileRecording
         screenshotShelfManager.setRecordingActive(isRecording, hideShelf: shouldHide)
     }

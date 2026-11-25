@@ -1,8 +1,8 @@
+import BarcodeCore
 import CoreGraphics
 import Foundation
 import ImageIO
 import OCRCore
-import BarcodeCore
 import SharedKit
 
 public struct CLIHandlers: Sendable {
@@ -224,7 +224,8 @@ public struct CLIHandlers: Sendable {
         }
         let url = URL(fileURLWithPath: path)
         guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
+        else {
             throw AutomationError.fileNotFound("无法读取图片: \(path)（格式不支持或文件损坏）")
         }
         return cgImage
@@ -309,7 +310,8 @@ public struct CLIHandlers: Sendable {
             },
         ]
         guard let jsonData = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
-              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            let jsonString = String(data: jsonData, encoding: .utf8)
+        else {
             return AutomationResult(success: false, output: "JSON 序列化失败", exitCode: .general)
         }
         return AutomationResult(success: true, output: jsonString, data: jsonData, exitCode: .success)
@@ -335,7 +337,8 @@ public struct CLIHandlers: Sendable {
             },
         ]
         guard let jsonData = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
-              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            let jsonString = String(data: jsonData, encoding: .utf8)
+        else {
             return AutomationResult(success: false, output: "JSON 序列化失败", exitCode: .general)
         }
         return AutomationResult(success: true, output: jsonString, data: jsonData, exitCode: .success)

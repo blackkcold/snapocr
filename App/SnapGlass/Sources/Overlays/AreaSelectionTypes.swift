@@ -91,7 +91,8 @@ private final class AreaSelectionSession {
             let consumed = MainActor.assumeIsolated { () -> Bool in
                 guard let self, !self.didFinish, keyCode == 53 else { return false }
                 if let keyWindow = NSApp.keyWindow,
-                    self.panels.contains(where: { $0 === keyWindow }) {
+                    self.panels.contains(where: { $0 === keyWindow })
+                {
                     return false
                 }
                 self.finish(with: nil)

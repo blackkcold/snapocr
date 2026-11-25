@@ -1,5 +1,10 @@
 import AnnotationCore
+import AppKit
 import CaptureCore
+import CoreText
+import OCRCore
+import SharedKit
+import SwiftUI
 
 /// 画布渲染尺寸的量化档位。
 ///
@@ -13,11 +18,6 @@ enum CanvasRenderScale {
         return steps.first { $0 >= value } ?? value
     }
 }
-import AppKit
-import CoreText
-import OCRCore
-import SharedKit
-import SwiftUI
 
 /// Base image resampled for the current on-screen size.
 struct CanvasBaseDisplayCache {
@@ -202,7 +202,6 @@ final class EditableAnnotationCanvasNSView: NSView {
     /// window while typing still sees unsaved content.
     var onTextDraftChanged: ((String) -> Void)?
 
-
     override var acceptsFirstResponder: Bool { true }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -236,9 +235,10 @@ final class EditableAnnotationCanvasNSView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         guard hoveredHandle != nil else { return }
-        let dirty = hoveredHandle.flatMap { handle in
-            selectedNode.map { handleInvalidationRect(handle, for: $0) }
-        } ?? .null
+        let dirty =
+            hoveredHandle.flatMap { handle in
+                selectedNode.map { handleInvalidationRect(handle, for: $0) }
+            } ?? .null
         hoveredHandle = nil
         if !dirty.isNull {
             setNeedsDisplay(dirty.insetBy(dx: -2, dy: -2))
@@ -297,11 +297,12 @@ final class EditableAnnotationCanvasNSView: NSView {
                 CGFloat(max(image.width, image.height))
             )
             let baseImage = baseDisplayImage(for: image, targetMaxDimension: targetMaxDimension)
-            let displayImage = previewImage(
-                for: image,
-                baseImage: baseImage,
-                maximumDimension: targetMaxDimension
-            ) ?? baseImage
+            let displayImage =
+                previewImage(
+                    for: image,
+                    baseImage: baseImage,
+                    maximumDimension: targetMaxDimension
+                ) ?? baseImage
 
             if let style = shareStyle {
                 if style.background.isTransparent {
@@ -341,9 +342,10 @@ final class EditableAnnotationCanvasNSView: NSView {
             // A style slider behaves the same way: the rest of the document
             // stays on the cached bitmap while only the edited node is redrawn.
             if let liveStyleNodeID,
-               let liveStyleNode = nodes.first(where: { $0.id == liveStyleNodeID }),
-               liveStyleNode.tool != .blur,
-               liveStyleNode.id != interactiveNode?.id {
+                let liveStyleNode = nodes.first(where: { $0.id == liveStyleNodeID }),
+                liveStyleNode.tool != .blur,
+                liveStyleNode.id != interactiveNode?.id
+            {
                 drawInteractiveNode(liveStyleNode, in: context, imageSize: imageSize)
             }
         } else {
@@ -367,19 +369,20 @@ final class EditableAnnotationCanvasNSView: NSView {
     private static let checkerTile: CGImage? = {
         let size = 16
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: size,
-                  height: size,
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
+            let context = CGContext(
+                data: nil,
+                width: size,
+                height: size,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
         else { return nil }
         let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         let base = CGColor(colorSpace: space, components: [0.17, 0.17, 0.17, 1]) ?? CGColor(gray: 0.17, alpha: 1)
-        let alternate = CGColor(colorSpace: space, components: [0.23, 0.23, 0.23, 1])
+        let alternate =
+            CGColor(colorSpace: space, components: [0.23, 0.23, 0.23, 1])
             ?? CGColor(gray: 0.23, alpha: 1)
         context.setFillColor(base)
         context.fill(CGRect(x: 0, y: 0, width: size, height: size))
@@ -441,7 +444,8 @@ final class EditableAnnotationCanvasNSView: NSView {
                 + Self.colorLabelTextPadding * 2,
             height: lineHeight * 2 + 8
         )
-        let placementRect = shareStyle == nil
+        let placementRect =
+            shareStyle == nil
             ? imageDisplayRect
             : canvasRect(for: lastImageSize)
         let visible = bounds.intersection(placementRect)
