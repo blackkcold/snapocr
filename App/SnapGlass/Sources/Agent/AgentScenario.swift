@@ -205,6 +205,12 @@ struct AgentScenario: Codable, Equatable, Sendable {
     ///
     /// Defaults to `false`: a plain scenario measures the process's real cold start.
     var hudWarmup: Bool
+    /// Seconds after launch to run the production HUD prewarm before recording.
+    ///
+    /// Harness-only: the `hud-first-use` scenario waits past the real launch
+    /// prewarm delay, so it measures a normal user's first recording after the
+    /// process has warmed instead of the raw cold-start path.
+    var hudPrewarmAfterSeconds: Double?
     /// Whether to suppress the readiness observation so the deadline path runs.
     ///
     /// Harness-only failure injection: capture still runs for real, but the
@@ -239,6 +245,7 @@ struct AgentScenario: Codable, Equatable, Sendable {
         simulateStallAfterStart: Bool = true,
         audioMode: String = "system",
         hudWarmup: Bool = false,
+        hudPrewarmAfterSeconds: Double? = nil,
         suppressFirstSample: Bool = false,
         simulateScreenPermissionDenied: Bool = false,
         simulateScreenAudioFailure: Bool = false,
@@ -255,6 +262,7 @@ struct AgentScenario: Codable, Equatable, Sendable {
         self.simulateStallAfterStart = simulateStallAfterStart
         self.audioMode = audioMode
         self.hudWarmup = hudWarmup
+        self.hudPrewarmAfterSeconds = hudPrewarmAfterSeconds
         self.suppressFirstSample = suppressFirstSample
         self.simulateScreenPermissionDenied = simulateScreenPermissionDenied
         self.simulateScreenAudioFailure = simulateScreenAudioFailure
@@ -273,6 +281,7 @@ struct AgentScenario: Codable, Equatable, Sendable {
         case simulateStallAfterStart
         case audioMode
         case hudWarmup
+        case hudPrewarmAfterSeconds
         case suppressFirstSample
         case simulateScreenPermissionDenied
         case simulateScreenAudioFailure
@@ -294,6 +303,10 @@ struct AgentScenario: Codable, Equatable, Sendable {
             try values.decodeIfPresent(Bool.self, forKey: .simulateStallAfterStart) ?? true
         audioMode = try values.decodeIfPresent(String.self, forKey: .audioMode) ?? "system"
         hudWarmup = try values.decodeIfPresent(Bool.self, forKey: .hudWarmup) ?? false
+        hudPrewarmAfterSeconds = try values.decodeIfPresent(
+            Double.self,
+            forKey: .hudPrewarmAfterSeconds
+        )
         suppressFirstSample = try values.decodeIfPresent(Bool.self, forKey: .suppressFirstSample) ?? false
         simulateScreenPermissionDenied =
             try values.decodeIfPresent(Bool.self, forKey: .simulateScreenPermissionDenied) ?? false
@@ -323,6 +336,11 @@ struct AgentScenario: Codable, Equatable, Sendable {
     func validate() throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ValidationError.emptyName
+        }
+        if let prewarmDelay = hudPrewarmAfterSeconds {
+            guard prewarmDelay.isFinite, prewarmDelay >= 0, prewarmDelay <= 30 else {
+                throw ValidationError.invalidExpectation("hudPrewarmAfterSeconds must be within [0, 30]")
+            }
         }
         guard let scenarioMode = AgentScenarioMode(rawValue: mode) else {
             throw ValidationError.unknownMode(mode)

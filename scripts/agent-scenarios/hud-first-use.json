@@ -1,0 +1,18 @@
+{
+  "name": "hud-first-use",
+  "audioSeconds": 2,
+  "screenSeconds": 0,
+  "firstSampleDeadlineSeconds": 8,
+  "simulateMainStallMs": 0,
+  "simulateStallAfterStart": false,
+  "audioMode": "microphone",
+  "hudWarmup": false,
+  "hudPrewarmAfterSeconds": 2,
+  "expect": {
+    "artifactPlayable": true,
+    "hudFirstVisibleUnderMs": 100,
+    "sizeThatFitsBeforeFirstVisible": 0,
+    "becameRecording": true,
+    "noZeroByteArtifacts": true
+  }
+}

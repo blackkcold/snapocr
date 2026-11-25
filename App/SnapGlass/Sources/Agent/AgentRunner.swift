@@ -106,30 +106,7 @@ enum AgentHUDWarmup {
     /// Creates the real panel off-screen and dismisses it before the clock starts.
     static func run() async {
         AgentHUDMetrics.end()
-        let actions = RecordingControlPanelActions(
-            onCancel: {},
-            onStop: {},
-            onRetry: {},
-            onReveal: { _ in },
-            onDismiss: {},
-            onHideWhileSaving: {},
-            onCornerChange: { _ in },
-            onToggleAudioDetails: {},
-            onPreview: {},
-            onStopPreview: {},
-            onOpenLatest: { _ in },
-            onOpenRecordings: {},
-            onJoinExport: {}
-        )
-        let panel = RecordingControlPanel(
-            on: nil,
-            corner: .bottomLeading,
-            opacity: 1,
-            hoverRestore: false,
-            actions: actions
-        )
-        panel.present(state: .starting(kind: .audio, phase: .startingAudioPipeline))
-        panel.dismiss()
+        RecordingHUDPrewarm.run()
         // Let the panel's deferred measurement task drain while counting is off,
         // so warmup work cannot appear in the measured window.
         await Task.yield()
@@ -193,6 +170,14 @@ final class AgentRunner {
         }
         self.scenario = scenario
         record("scenarioLoaded")
+        if let prewarmDelay = scenario.hudPrewarmAfterSeconds {
+            // Simulates the production launch prewarm: the user waited this long
+            // before the first recording, so the first-visible gate measures a
+            // warm panel instead of the process's cold-start path.
+            try? await Task.sleep(for: .seconds(prewarmDelay))
+            RecordingHUDPrewarm.run()
+            record("hudPrewarm")
+        }
         if scenario.hudWarmup {
             await AgentHUDWarmup.run()
             record("hudWarmup")
