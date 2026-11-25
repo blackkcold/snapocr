@@ -10,7 +10,15 @@ ERRORS=0
 
 for pkg in "${PACKAGES[@]}"; do
     echo "=== Testing $pkg ==="
-    if swift test --package-path "Packages/$pkg"; then
+    result=0
+    if [ "$pkg" = "CaptureCore" ]; then
+        # Audio and writer suites share system media services; CI runs CaptureCore
+        # serially, and the local script must match that isolation.
+        swift test --package-path "Packages/$pkg" --no-parallel || result=$?
+    else
+        swift test --package-path "Packages/$pkg" || result=$?
+    fi
+    if [ "$result" -eq 0 ]; then
         echo "  ✅ $pkg tests passed"
     else
         echo "  ❌ $pkg tests failed"
