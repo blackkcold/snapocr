@@ -12,17 +12,28 @@ public enum PreferenceKeys {
     public static let editorMockupLastStyleJSON = "editor_mockupLastStyleJSON"
     /// Draw share appearance directly on the editor canvas.
     public static let editorShareCanvasPreview = "editor_shareCanvasPreview"
+    /// Whether the app launches at login.
     public static let launchAtLogin = "general_launchAtLogin"
+    /// App language identifier; `system` follows the macOS language.
     public static let appLanguage = "general_appLanguage"
+    /// Light/dark appearance override; `system` follows the macOS appearance.
     public static let appearanceMode = "appearance_mode"
 
+    /// Whether a finished capture opens in the editor window.
     public static let captureOpenEditor = "capture_openEditor"
+    /// Whether a finished capture is copied to the clipboard.
     public static let captureCopyToClipboard = "capture_copyToClipboard"
+    /// Whether the pointer is drawn into the capture.
     public static let captureIncludeCursor = "capture_includeCursor"
+    /// Whether OCR runs automatically after each capture.
     public static let captureAutoOCR = "capture_autoOCR"
+    /// Whether recognized OCR text is copied to the clipboard without user action.
     public static let captureCopyOCRText = "capture_copyOCRText"
+    /// Interactive area-selection style, stored as a `CaptureSelectionStyle` raw value.
     public static let captureSelectionStyle = "capture_selectionStyle"
+    /// Background shown while selecting an area, stored as a `CaptureOverlayMode` raw value.
     public static let captureOverlayMode = "capture_overlayMode"
+    /// Whether captures keep the display's native Retina resolution.
     public static let captureHighResolution = "capture_highResolution"
     /// Whether window captures get rounded corners and a soft shadow.
     public static let captureWindowStyling = "capture_windowStyling"
@@ -36,8 +47,11 @@ public enum PreferenceKeys {
     public static let displayCanvasGap = "capture_displayCanvasGap"
     /// Alignment inside compact canvas modes.
     public static let displayCanvasAlignment = "capture_displayCanvasAlignment"
+    /// Saved image format for new captures, stored as an `ImageFileFormat` raw value.
     public static let captureImageFormat = "capture_imageFormat"
+    /// JPEG compression quality from 0 to 1, applied when the format is JPEG.
     public static let captureJPEGQuality = "capture_jpegQuality"
+    /// Number of dominant colors the color picker extracts and lists.
     public static let pickerDominantColorCount = "capture_pickerDominantColorCount"
     /// Pin shortcut override; absent means "use the code-level default".
     public static let pinSelectionShortcut = "capture_pinSelectionShortcut"
@@ -106,21 +120,35 @@ public enum PreferenceKeys {
     /// Screen corner used by the floating recording control panel.
     public static let recordingHUDCorner = "recording_hudCorner"
 
+    /// Preferred OCR language; `auto` keeps the enabled-language order unchanged.
     public static let ocrLanguagePriority = "ocr_languagePriority"
+    /// Languages OCR may use, in priority order, as compact language codes.
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"
+    /// Minimum OCR confidence from 0 to 1 before recognized text is accepted.
     public static let ocrConfidenceThreshold = "ocr_confidenceThreshold"
+    /// OCR engine identifier; `vision` is the default and `tesseract` the alternative.
     public static let ocrEngine = "ocr_engine"
 
+    /// Legacy retention policy identifier, read only when no day count exists.
     public static let historyRetentionPolicy = "history_retentionPolicy"
+    /// Days a history entry is kept; 0 keeps entries indefinitely.
     public static let historyRetentionDays = "history_retentionDays"
+    /// Maximum number of entries kept per history asset kind.
     public static let historyMaxItems = "history_maxItems"
+    /// History storage ceiling in gigabytes.
     public static let historyStorageSize = "history_storageSize"
+    /// Whether finished captures are written to history automatically.
     public static let historyAutoSave = "history_autoSave"
+    /// Whether history stores OCR text with each entry.
     public static let historySaveFullText = "history_saveFullText"
+    /// Whether picked colors are recorded in the color history.
     public static let colorHistoryEnabled = "history_colorHistoryEnabled"
+    /// Maximum number of colors kept in the color history.
     public static let colorHistoryMaxItems = "history_colorHistoryMaxItems"
 
+    /// Whether developer-only settings and diagnostics are visible.
     public static let developerMode = "dev_devMode"
+    /// Whether the developer engine-comparison panel is enabled.
     public static let engineComparison = "dev_engineComparison"
 }
 
@@ -128,29 +156,50 @@ public enum PreferenceKeys {
 public enum PreferenceDefaults {
     /// Preserve Return-to-submit as the default text editing behavior.
     public static let editorEnterInsertsNewline = false
+    /// Show the annotation inspector by default.
     public static let editorInspectorVisible = true
     /// Draw share appearance live on the editor canvas.
     public static let editorShareCanvasPreview = true
+    /// Do not launch at login by default.
     public static let launchAtLogin = false
+    /// Follow the macOS language by default.
     public static let appLanguage = "system"
+    /// Follow the macOS appearance by default.
     public static let appearanceMode = "system"
 
+    /// Open finished captures in the editor by default.
     public static let captureOpenEditor = true
+    /// Copy finished captures to the clipboard by default.
     public static let captureCopyToClipboard = true
+    /// Leave the pointer out of captures by default.
     public static let captureIncludeCursor = false
+    /// Run OCR on demand instead of after every capture by default.
     public static let captureAutoOCR = false
+    /// Leave recognized text on the clipboard untouched by default.
     public static let captureCopyOCRText = false
+    /// Select a rectangle by default.
     public static let captureSelectionStyle = CaptureSelectionStyle.rectangle.rawValue
+    /// Keep the desktop visible during selection by default.
     public static let captureOverlayMode = CaptureOverlayMode.live.rawValue
+    /// Capture at native Retina resolution by default.
     public static let captureHighResolution = true
+    /// Round window corners and add a shadow by default.
     public static let captureWindowStyling = true
+    /// Leave share backgrounds off by default.
     public static let captureMockupEnabled = false
+    /// Use the light mockup template by default.
     public static let captureMockupPreset = "light"
+    /// Lay all displays out in a horizontal strip by default.
     public static let displayCanvasMode = "compactHorizontal"
+    /// Place displays edge to edge with no gap by default.
     public static let displayCanvasGap = 0.0
+    /// Align displays to the start of the canvas by default.
     public static let displayCanvasAlignment = "start"
+    /// Save captures as lossless PNG by default.
     public static let captureImageFormat = "png"
+    /// Encode JPEGs at 90% quality by default.
     public static let captureJPEGQuality = 0.9
+    /// List five dominant colors by default.
     public static let pickerDominantColorCount = 5
     /// Enable the recent screenshot shelf by default.
     public static let screenshotShelfEnabled = true
@@ -203,21 +252,35 @@ public enum PreferenceDefaults {
     /// Keep the recording control panel in the top-trailing corner by default.
     public static let recordingHUDCorner = "topTrailing"
 
+    /// Choose the OCR priority language automatically by default.
     public static let ocrLanguagePriority = "auto"
+    /// Enable English, Simplified and Traditional Chinese, Japanese and Korean by default.
     public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]
+    /// Accept OCR text at 80% confidence or higher by default.
     public static let ocrConfidenceThreshold = 0.8
+    /// Use the Vision framework for OCR by default.
     public static let ocrEngine = "vision"
 
+    /// Keep history for 30 days when only the legacy policy is stored.
     public static let historyRetentionPolicy = "30days"
+    /// Keep history entries for 30 days by default.
     public static let historyRetentionDays = 30
+    /// Keep up to 200 entries per history asset kind by default.
     public static let historyMaxItems = 200
+    /// Cap history storage at 1 GB by default.
     public static let historyStorageSize = 1.0
+    /// Write finished captures to history automatically by default.
     public static let historyAutoSave = true
+    /// Store only the image, without OCR text, by default.
     public static let historySaveFullText = false
+    /// Record picked colors in the color history by default.
     public static let colorHistoryEnabled = true
+    /// Keep up to 100 colors in the color history by default.
     public static let colorHistoryMaxItems = 100
 
+    /// Hide developer settings by default.
     public static let developerMode = false
+    /// Disable the engine-comparison panel by default.
     public static let engineComparison = false
 }
 
@@ -634,6 +697,7 @@ public enum ScreenshotShelfAnchor: String, CaseIterable, Sendable {
         case trailing
     }
 
+    /// Horizontal placement of the shelf: leading, centered, or trailing on the usable screen.
     public var horizontalPlacement: HorizontalPlacement {
         switch self {
         case .topLeading: .leading
