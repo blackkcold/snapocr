@@ -11,11 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 新增中英双语 GitHub Pages 官网（功能、下载、FAQ 与 SEO）与英文 README。
 - App 的「关于」页新增官网入口，并更新四语言简介文案。
 - 新增 DEBUG-only Showcase 离屏导出器与 `scripts/export-showcase.sh`，生成截图架、分享外观、录制 HUD 与窗口美化的文档图。
+- 新增 `scripts/setup-dev.sh`：一次性设置 blame-ignore、校验 `swift-format` 版本并生成 Xcode 工程。
+- 发版清单新增 GitHub Social Preview 与站点 OG 的分离校验。
 
 ### Changed
 - README 重构为用户导向：首屏工作流、1.7 更新、功能、下载校验与常见问题；开发构建细节收进折叠区。
 - README 与官网站点换用真实功能截图（截图架、分享外观、录制 HUD、窗口美化）。
 - `.swift-format` 统一为 4-space 并全量格式化 Swift 源码；SwiftLint 的 brace/comma 规则交由 swift-format，长度阈值随格式化结果小幅上调。
+- CI 固定 `swift-format` 至 Xcode 工具链（6.3.0 canonical，604.0.0 为已验证 fallback），新增 `.swift-format-version` 与版本校验。
+- `stall-main` 主线程探针改为 `DispatchSourceTimer` + 有界 in-flight ping；HUD 首现断言在 warmup 稳态下测量（阈值仍为 300ms），连续 5 次通过。
+- 本地 `scripts/test.sh` 对 CaptureCore 串行运行，与 CI 对齐，避免并行音频/写入器抖动。
+
+### Fixed
+- 修复 `check-localization.sh` 在并行运行时共用固定 `/tmp` 文件、互相截断导致误报本地化失败；改用进程替换。
+- 录制直通导出遇到非预期格式时改为 CF 类型校验 + `unsafeDowncast`，不再强转崩溃；权限文案的行长 disable 移到长字面量上。
 
 ## [1.7.2] - 2026-11-24
 
