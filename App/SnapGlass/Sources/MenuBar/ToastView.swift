@@ -7,6 +7,7 @@ public struct ToastView: View {
     /// The message to display.
     let message: ToastMessage
 
+    /// The toast's icon, message, and optional action button.
     public var body: some View {
         HStack(spacing: DS.Space.s12) {
             Image(systemName: iconName)
@@ -63,6 +64,7 @@ public struct ToastModifier: ViewModifier {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Overlays the toast on the modified content and animates it in and out.
     public func body(content: Content) -> some View {
         ZStack(alignment: edge == .top ? .top : .bottom) {
             content

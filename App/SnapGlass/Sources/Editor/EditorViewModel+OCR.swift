@@ -9,6 +9,11 @@ import SwiftUI
 // MARK: - EditorViewModel OCR / Color Picker / Barcode
 
 extension EditorViewModel {
+    /// Recognizes text in the current base image and publishes the recognized lines.
+    ///
+    /// Any earlier pass is cancelled first. A newer pass, or a crop that replaces
+    /// the base image, discards the result of the previous one. The overlay is
+    /// shown again when lines arrive, and failures are reported as a toast.
     public func startOCR() {
         ocrTask?.cancel()
         ocrGeneration &+= 1
@@ -48,22 +53,30 @@ extension EditorViewModel {
         startOCR()
     }
 
+    /// Copies one recognized line to the clipboard.
     public func copyOCRLine(_ line: OCRLine) {
         copyOCRText(line.text)
     }
 
+    /// Copies several recognized lines, one per line.
     public func copyOCRLines(_ lines: [OCRLine]) {
         copyOCRText(lines.map(\.text).joined(separator: "\n"))
     }
 
+    /// Copies the text the user selected in the OCR overlay.
     public func copyOCRSelection(_ text: String) {
         copyOCRText(text)
     }
 
+    /// Copies every recognized line in the current image.
     public func copyAllOCRText() {
         copyOCRLines(ocrLines)
     }
 
+    /// Turns a recognized line into a text annotation sized to that line.
+    ///
+    /// The new node adopts the current text style and font size is raised, if
+    /// needed, so the annotation matches the height of the recognized line.
     public func addOCRLineAsAnnotation(_ line: OCRLine) {
         let rect = line.editorBoundingBox
         let node = AnnotationNode(

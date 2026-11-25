@@ -25,6 +25,7 @@ private enum CaptureImageSource {
 }
 
 extension CaptureViewModel {
+    /// Starts the area-selection overlay and captures the chosen region.
     public func captureArea() {
         startAreaCapture()
     }

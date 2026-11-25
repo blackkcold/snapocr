@@ -3,6 +3,7 @@ import AppKit
 /// Tracks app-owned windows that must stay out of a display or region recording.
 @MainActor
 public final class RecordingWindowExclusionRegistry {
+    /// The registry that app panels register with and that the recording engine reads.
     public static let shared = RecordingWindowExclusionRegistry()
 
     private var windowIDs: Set<CGWindowID> = []
@@ -11,10 +12,16 @@ public final class RecordingWindowExclusionRegistry {
     /// Receives the complete live exclusion set after a window is added or removed.
     public var onChange: (Set<CGWindowID>) -> Void = { _ in }
 
+    /// Creates an empty registry.
     public init() {}
 
+    /// Identifiers currently excluded from capture.
     public var currentWindowIDs: Set<CGWindowID> { windowIDs }
 
+    /// Excludes a window until it closes or is unregistered.
+    ///
+    /// Windows that are not yet on screen are ignored; registering the same
+    /// window twice keeps a single exclusion and a single close observer.
     public func register(_ window: NSWindow) {
         guard window.windowNumber > 0 else { return }
         let windowID = CGWindowID(window.windowNumber)
@@ -32,6 +39,7 @@ public final class RecordingWindowExclusionRegistry {
         onChange(windowIDs)
     }
 
+    /// Stops excluding a window and removes its close observer.
     public func unregister(_ windowID: CGWindowID) {
         guard windowIDs.remove(windowID) != nil else { return }
         if let observer = closeObservers.removeValue(forKey: windowID) {

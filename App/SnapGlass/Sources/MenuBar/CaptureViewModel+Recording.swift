@@ -304,6 +304,7 @@ extension CaptureViewModel {
         }
     }
 
+    /// Opens the Recordings window, for example after a recording finishes.
     public func openRecordingsWindow() {
         openWindow?(AppWindowPresenter.recordingsWindowID)
     }
@@ -324,6 +325,14 @@ extension CaptureViewModel {
         )
     }
 
+    /// Applies a source-routing change to the active audio recording.
+    ///
+    /// The change is rejected when no audio recording is running or when the new
+    /// mode needs microphone access the user has not granted. A committed change
+    /// also updates the menu-bar source state.
+    ///
+    /// - Parameter event: The routing change, positioned at an integer sample offset.
+    /// - Returns: Whether the change was committed, or why the previous route remains active.
     public func applyAudioRoute(_ event: RouteEvent) async -> RouteCommitResult {
         guard isAudioRecordingActive else {
             return .unchanged(reason: "audio recording is not active")
@@ -383,6 +392,7 @@ extension CaptureViewModel {
         return true
     }
 
+    /// Progress snapshots for the active audio recording, starting at subscription.
     public func audioRecordingProgress() -> AsyncStream<RecordingProgress> {
         recordingSessionController.makeAudioProgressStream()
     }
