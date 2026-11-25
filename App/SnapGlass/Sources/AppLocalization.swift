@@ -102,8 +102,8 @@ enum AppLocalization {
         case .audioFinalizationFailed:
             return localize("Screen-recording audio could not be finalized.")
         case .streamStopUnconfirmed:
-            // swiftlint:disable:next line_length
             return localize(
+                // swiftlint:disable:next line_length
                 "The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one."
             )
         }

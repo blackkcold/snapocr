@@ -149,8 +149,8 @@ struct AudioRecordingPreferencesView: View {
             if showsFirstUseHint, audioShortcut.isEmpty {
                 PreferencesCardCaption(
                     // This is one localized key; splitting it would change the lookup key.
-                    // swiftlint:disable:next line_length
                     text:
+                        // swiftlint:disable:next line_length
                         "No audio-recording shortcut is assigned by default. Record one here if you want a global shortcut."
                 )
             }

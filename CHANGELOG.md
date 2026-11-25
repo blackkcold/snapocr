@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - README 重构为用户导向：首屏工作流、1.7 更新、功能、下载校验与常见问题；开发构建细节收进折叠区。
 - README 与官网站点换用真实功能截图（截图架、分享外观、录制 HUD、窗口美化）。
+- `.swift-format` 统一为 4-space 并全量格式化 Swift 源码；SwiftLint 的 brace/comma 规则交由 swift-format，长度阈值随格式化结果小幅上调。
 
 ## [1.7.2] - 2026-11-24
 

@@ -56,7 +56,6 @@ struct RecordingExportView: View {
             }
             Button("Cancel", role: .cancel) { discardTarget = nil }
         } message: {
-            // swiftlint:disable:next line_length
             Text(
                 "The recording folder moves to the Trash. You can restore it from the Trash until the Trash is emptied."
             )

@@ -14,28 +14,26 @@ disabled_rules:
   - vertical_whitespace
   - colon
   - comma
+  - opening_brace
+  - trailing_comma
 
 line_length: 120
 # 0.9.5 起四个核心文件（编辑器画布/滚动拼接/区域选区/编辑器 VM）随功能增长越过旧上限。
 # 拆分留到后续重构，本版先把上限对齐现状，避免发版被结构性告警阻断。
+# swift-format 4-space 全量格式化后，换行拆分使部分文件增加 1–17 行；阈值随格式化结果小幅上调。
 file_length:
-  warning: 750
+  warning: 780
   error: 1200
 type_body_length:
-  warning: 450
+  warning: 470
 function_body_length:
-  warning: 70
+  warning: 75
 cyclomatic_complexity:
   warning: 12
 identifier_name:
   min_length: 3
   # `ok` 是 RecordingSpaceState 的 public 领域值，保留短名避免 API 破坏。
   excluded: [id, URL, key, tag, qr, ok]
-
-# 与 swift-format 的 multiElementCollectionTrailingCommas 对齐：
-# 多行集合字面量必须保留尾逗号（SE-0084 / SE-0439 官方规范）。
-trailing_comma:
-  mandatory_comma: true
 
 # 排除所有 .build 目录（第三方依赖与派生测试 runner）。
 # 注意：SwiftLint 的 excluded 不支持 glob 通配，必须显式列出每个嵌套 .build。

@@ -137,7 +137,6 @@ public struct WindowCapturePlan: Equatable, Sendable {
         self.isCrossDisplay = isCrossDisplay
     }
 
-    // swiftlint:disable function_body_length
     /// Builds a capture plan from window/display geometry.
     ///
     /// - Parameters:
@@ -236,8 +235,6 @@ public struct WindowCapturePlan: Equatable, Sendable {
             isCrossDisplay: intersections.count > 1
         )
     }
-
-    // swiftlint:enable function_body_length
 
     /// Scales every segment and the canvas into a thumbnail-sized plan.
     ///
