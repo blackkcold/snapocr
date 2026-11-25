@@ -67,6 +67,18 @@ if command -v xcodebuild >/dev/null 2>&1; then
     done
 fi
 
+# Static checks that protect against regressions the compiler cannot see. The
+# format gate holds the Phase 2 ratcheting budget, so it fails when a new
+# diagnostic appears (or when a batch leaves diagnostics behind).
+echo ""
+echo "=== Static checks ==="
+if bash scripts/check-swift-format.sh; then
+    echo "  ✅ swift-format gate passed"
+else
+    echo "  ❌ swift-format gate failed"
+    ERRORS=$((ERRORS + 1))
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
     echo ""
     echo "❌ $ERRORS test group(s) failed"

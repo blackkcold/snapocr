@@ -18,16 +18,12 @@
 `.github/workflows/ci.yml` 在每次 push 到 `main` 或 PR 时触发，包含以下 jobs：
 
 ### lint
-- 安装 SwiftLint
-- 校验 `swift-format` 版本：`xcrun swift-format --version` 必须命中 `.swift-format-version`，
-  否则 job 失败并提示升级 runner 或改用已验证等价的构建（`scripts/check-swift-format-version.sh`）
-- 运行 `xcrun swift-format lint --recursive .`
+- 下载 `.swiftlint-version` 固定的 `portable_swiftlint.zip`，并用 `scripts/check-swiftlint-version.sh` 校验版本
+- 运行 `scripts/check-swift-format.sh`：先校验 `.swift-format-version`，再以 `--strict` 全仓 lint 并核对诊断预算
 - 运行 `swiftlint lint --strict`
+- 运行 `scripts/check-localization.sh`
 
-`swift-format` 不再由 Homebrew 安装：runner 镜像自带的 Xcode 工具链就是本地使用的同一二进制，
-版本不符时失败而不是静默重排。`swift-format lint` 目前只报告警告、退出码为 0，
-存量 698 条 DocC 警告（`AllPublicDeclarationsHaveDocumentation` / `ValidateDocumentationComments`）
-留待单独重构；CI 失败与否由退出码与 SwiftLint 决定。
+`swift-format lint`（非 strict）即使有诊断也返回 0，不能作为闸门。包装脚本用 `--strict` 把每条诊断变成 error，并核对诊断数：`.swift-format-budget` 是当前唯一允许的诊断上限（Phase 2 从 698 逐步降到 0），新增诊断或超出预算都会失败；给脚本传路径时是零容忍模式，用于逐批验收。`swift-format` 不通过 Homebrew 安装：runner 镜像自带的 Xcode 工具链就是本地使用的同一二进制，版本不符时失败而不是静默重排。SwiftLint 同理按 `.swiftlint-version` 固定，CI 不再使用 `brew install swiftlint`，避免 runner 解析到不同版本导致同一份代码忽红忽绿。
 
 ### build
 - `xcodegen generate`
@@ -115,10 +111,11 @@ shasum -a 256 SnapGlass-vX.Y.Z.dmg
 ## 本地复现 CI
 
 ```bash
-# 等效 lint（先确认格式器版本，再跑两条 lint）
-bash scripts/check-swift-format-version.sh
-xcrun swift-format lint --recursive . --configuration .swift-format
+# 等效 lint（版本固定 + 诊断预算闸门）
+bash scripts/check-swiftlint-version.sh
+bash scripts/check-swift-format.sh
 swiftlint lint --strict --config .swiftlint.yml
+bash scripts/check-localization.sh
 
 # 等效 build
 xcodegen generate

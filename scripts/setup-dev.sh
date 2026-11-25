@@ -18,6 +18,14 @@ echo "▸ formatter version"
 # Fails when the toolchain's swift-format drifts from .swift-format-version.
 bash scripts/check-swift-format-version.sh
 
+echo "▸ SwiftLint version"
+if command -v swiftlint >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/swiftlint" ]]; then
+    # Fails when the installed SwiftLint drifts from .swiftlint-version.
+    bash scripts/check-swiftlint-version.sh
+else
+    echo "⚠ SwiftLint not found; install the pinned portable build (see Docs/CONTRIBUTING.md)."
+fi
+
 echo "▸ Xcode project"
 if ! command -v xcodegen >/dev/null 2>&1; then
     echo "✗ xcodegen not found: brew install xcodegen" >&2
@@ -29,8 +37,8 @@ echo "  SnapGlass.xcodeproj generated"
 if command -v swiftlint >/dev/null 2>&1; then
     echo "▸ SwiftLint $(swiftlint version)"
 else
-    echo "⚠ SwiftLint not found (brew install swiftlint); the Xcode build phase only warns."
+    echo "⚠ SwiftLint not found (see Docs/CONTRIBUTING.md); the Xcode build phase only warns."
 fi
 
 echo ""
-echo "✅ Local setup complete. Verify with: bash scripts/check-localization.sh && swiftlint lint --strict"
+echo "✅ Local setup complete. Verify with: bash scripts/check-localization.sh && bash scripts/check-swift-format.sh && bash scripts/check-swiftlint-version.sh && swiftlint lint --strict"
