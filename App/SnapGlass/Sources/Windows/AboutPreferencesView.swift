@@ -24,15 +24,31 @@ struct AboutPreferencesView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text("Offline-first, privacy-first macOS screenshot and OCR tool.")
+                        Text(
+                            LocalizedStringKey(
+                                """
+                                Offline-first macOS screenshot, scrolling capture, OCR, and screen recording. \
+                                No telemetry; Apple Vision runs on-device.
+                                """
+                            )
+                        )
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Divider()
 
-                        Button("View on GitHub") {
-                            openGitHub()
+                        HStack(spacing: 10) {
+                            Button("Website") {
+                                openWebsite()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("View on GitHub") {
+                                openGitHub()
+                            }
+                            .buttonStyle(.bordered)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -67,6 +83,11 @@ struct AboutPreferencesView: View {
 
     private var copyright: LocalizedStringKey {
         "Copyright © SnapGlass Contributors. Released under the MIT License."
+    }
+
+    private func openWebsite() {
+        guard let url = URL(string: "https://blackkcold.github.io/snapocr/") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func openGitHub() {

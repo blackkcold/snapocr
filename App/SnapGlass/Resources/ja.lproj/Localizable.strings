@@ -209,7 +209,8 @@
 "Check for new releases and download updates." = "新しいリリースを確認し、アップデートをダウンロードします。";
 "Version, credits, and project links." = "バージョン、クレジット、プロジェクトリンク。";
 "About SnapGlass" = "SnapGlassについて";
-"Offline-first, privacy-first macOS screenshot and OCR tool." = "オフライン優先・プライバシー優先のmacOSスクリーンショット＆OCRツール。";
+"Offline-first macOS screenshot, scrolling capture, OCR, and screen recording. No telemetry; Apple Vision runs on-device." = "オフライン優先の macOS スクリーンショット、スクロールキャプチャ、OCR、画面収録。テレメトリなし。Apple Vision はオンデバイスで動作します。";
+"Website" = "ウェブサイト";
 "App version" = "アプリバージョン";
 "Build" = "ビルド番号";
 "Copyright © SnapGlass Contributors. Released under the MIT License." = "Copyright © SnapGlass Contributors。MITライセンスの下で公開されています。";
