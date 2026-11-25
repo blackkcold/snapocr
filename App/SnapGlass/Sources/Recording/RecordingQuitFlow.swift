@@ -185,6 +185,9 @@ public struct RecordingRequestIdentity: Equatable, Sendable {
     ///   - generation: The generation the controller currently considers current.
     ///   - holdsResource: Whether the late result still owns a pipeline, adapter,
     ///     or capture stream that must be stopped.
+    /// - Returns: `.apply` for a current generation, `.cleanupOnly` for a stale
+    ///   result that holds a resource, and `.discard` for a stale result that
+    ///   holds nothing.
     public func disposition(
         generation: UUID,
         holdsResource: Bool
@@ -371,6 +374,9 @@ struct RecordingStartOwnership: Equatable, Sendable {
     /// Classifies a cancel while this start has not become a recording.
     ///
     /// - Parameter generation: The generation the cancel targets.
+    /// - Returns: The route the caller must take; `.notOwner` when the generation
+    ///   is stale, `.notStarting` once the session records, and `.alreadyStopping`
+    ///   when a stop is already in flight.
     mutating func requestCancel(generation: UUID) -> CancelRoute {
         guard ownerGeneration == generation else { return .notOwner }
         guard !didRequestInitialStop else { return .alreadyStopping }

@@ -141,10 +141,9 @@ public actor LanguagePackDownloader {
     ///
     /// - Parameter lang: Tesseract 语言代码（如 `"chi_sim"`, `"eng"`）。
     /// - Returns: 下载后的语言包文件本地 URL。
-    /// - Throws:
-    ///   - `LanguagePackError.unsupportedLanguage` 当语言代码不受支持时。
-    ///   - `LanguagePackError.downloadFailed` 当下载失败时。
-    ///   - `CancellationError` 当下载被取消时。
+    /// - Throws: `LanguagePackError.unsupportedLanguage` 当语言代码不受支持；
+    ///   `LanguagePackError.downloadFailed` 当下载或写入失败；
+    ///   `CancellationError` 当下载被取消；创建 tessdata 目录失败时抛出文件系统错误。
     public func downloadLanguage(_ lang: String) async throws -> URL {
         // 1. 验证语言代码
         guard Self.supportedLanguageCodes.contains(lang) else {

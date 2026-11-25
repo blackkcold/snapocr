@@ -7,6 +7,8 @@ extension HistoryActor {
     ///
     /// - Parameter persistedEntries: 调用方已取得的持久化快照。`save` 的满额预检
     ///   与这里共用同一份快照，避免一次保存里重复合并磁盘缓存。
+    /// - Throws: 删除条目时抛出 ``HistoryError/fileIOError``；当所有条目都是收藏或
+    ///   受保护条目时抛出 ``HistoryError/storageFull(current:max:)``。
     func evictOldest(in persistedEntries: [UUID: HistoryEntry]) async throws {
         let sorted = persistedEntries.values.sorted { $0.timestamp < $1.timestamp }
         guard let oldest = sorted.first else { return }
@@ -74,6 +76,8 @@ extension HistoryActor {
     /// history row never survives without the image needed to reopen it.
     ///
     /// - Parameter persisted: 本轮清理开始时的持久化快照；返回值已移除被删条目。
+    /// - Returns: 移除被淘汰条目后的快照，供后续清理阶段使用。
+    /// - Throws: 删除过期或超额条目时抛出 ``HistoryError/fileIOError``。
     func enforceEntryLimits(_ persisted: [UUID: HistoryEntry]) async throws -> [UUID: HistoryEntry] {
         var remaining = persisted
         let retentionDays = cleanupPolicy.retentionDays(for: .image)

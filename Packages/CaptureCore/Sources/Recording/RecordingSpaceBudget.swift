@@ -193,6 +193,8 @@ public struct RecordingSpaceBudget: Sendable {
     ///   - configuration: The media configuration to estimate.
     ///   - capacityProvider: Reads free bytes and volume identity.
     ///   - recordingRoot: The directory that receives checkpoints and final media.
+    ///   - expectedVolumeUUID: Volume identity the root must match; `nil` skips
+    ///     the identity check.
     public init(
         configuration: RecordingStorageConfiguration,
         capacityProvider: any VolumeCapacityProviding,

@@ -138,6 +138,8 @@ public final class OCRPipeline: Sendable {
     ///   - image: 输入图像
     ///   - options: 识别选项
     /// - Returns: OCR 识别结果
+    /// - Throws: 所选引擎抛出的 ``OCRError``，例如 ``OCRError/engineUnavailable(_:)``
+    ///   或 ``OCRError/recognitionFailed(reason:)``。
     private func performRecognition(image: CGImage, options: OCROptions) async throws -> OCRResult {
         switch options.engineSelection {
         case .vision:

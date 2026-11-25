@@ -75,6 +75,10 @@ public actor ScreenshotShelfSessionStore {
     ///   - thumbnailData: Display-sized thumbnail bytes.
     ///   - captureID: Stable identity for this screenshot.
     /// - Returns: Capture IDs whose cached original and thumbnail were evicted.
+    /// - Throws: ``ScreenshotShelfSessionStoreError/thumbnailExceedsBudget`` or
+    ///   ``ScreenshotShelfSessionStoreError/originalExceedsBudget`` when the bytes
+    ///   exceed a budget, and ``ScreenshotShelfSessionStoreError/storageFailure``
+    ///   when the session directory or an encrypted asset cannot be written.
     @discardableResult
     public func store(
         originalData: Data,
@@ -170,6 +174,8 @@ public actor ScreenshotShelfSessionStore {
     ///
     /// - Parameter captureID: Stable identity for the screenshot.
     /// - Returns: Original image bytes, or `nil` when the asset is not stored.
+    /// - Throws: ``ScreenshotShelfSessionStoreError/storageFailure`` when the
+    ///   encrypted asset cannot be read or does not decrypt.
     public func originalData(for captureID: UUID) throws -> Data? {
         guard let asset = assets[captureID] else { return nil }
 
@@ -193,6 +199,8 @@ public actor ScreenshotShelfSessionStore {
     /// Removes one screenshot's encrypted original and cached thumbnail.
     ///
     /// - Parameter captureID: Stable identity for the screenshot.
+    /// - Throws: ``ScreenshotShelfSessionStoreError/storageFailure`` when the file
+    ///   exists but cannot be removed.
     public func remove(captureID: UUID) throws {
         try removeStoredAsset(for: captureID)
     }

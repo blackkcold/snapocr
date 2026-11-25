@@ -132,10 +132,7 @@ final class TesseractLibrary: @unchecked Sendable {
     /// 使用 Tesseract 引擎对图像数据执行 OCR 识别。
     ///
     /// - Parameters:
-    ///   - imageData: 图像的 RGBA 像素数据。
-    ///   - width: 图像宽度（像素）。
-    ///   - height: 图像高度（像素）。
-    ///   - bytesPerRow: 每行字节数。
+    ///   - rgba: 图像的 RGBA 像素数据。
     ///   - languages: Tesseract 语言代码数组，用 `+` 连接后传入引擎。
     ///   - tessdataPath: tessdata 目录的路径。
     /// - Returns: 包含识别文本和平均置信度的元组。
@@ -293,10 +290,9 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
     ///   - languages: 语言列表，按优先级排序（Vision 框架语言代码）。
     ///   - options: 识别选项。
     /// - Returns: 包含文本、置信度、引擎信息的 `OCRResult`。
-    /// - Throws:
-    ///   - `OCRError.engineUnavailable` 当 Tesseract 未安装或语言数据不可用时。
-    ///   - `OCRError.languageNotSupported` 当语言包未下载时。
-    ///   - `OCRError.recognitionFailed` 当识别过程出错时。
+    /// - Throws: `OCRError.engineUnavailable` 当 Tesseract 未安装或语言数据不可用；
+    ///   `OCRError.languageNotSupported` 当语言包未下载；`OCRError.recognitionFailed`
+    ///   当识别过程出错。
     func recognize(
         image: CGImage,
         languages: [String],

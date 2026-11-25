@@ -47,6 +47,8 @@ public enum WindowCapturePolicy {
     ///   - candidate: Window metadata to evaluate.
     ///   - currentBundleIdentifier: Bundle identifier of SnapGlass, which must not capture itself.
     ///   - systemWindowLevel: First Core Graphics level reserved for system UI, normally the Dock level.
+    /// - Returns: `true` only for an on-screen, titled window below the system
+    ///   level that is neither SnapGlass nor a system surface.
     public static func isSelectable(
         _ candidate: WindowCaptureCandidate,
         currentBundleIdentifier: String?,

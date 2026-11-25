@@ -207,6 +207,8 @@ actor RecordingSettlementSupervisor {
     ///     presented the recording state after readiness succeeded. When it never
     ///     acknowledges, the interface is unresponsive and the session is stopped
     ///     and saved here instead of running unbounded.
+    ///   - livenessDeadline: Optional deadline for the recording to keep showing
+    ///     liveness after readiness; `nil` disables the liveness check.
     ///   - readiness: The single readiness source to watch.
     ///   - stop: The one stop for this ticket. Runs off the main actor.
     /// - Returns: The ticket every later settle/disarm call must present.

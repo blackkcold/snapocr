@@ -322,7 +322,9 @@ struct AgentScenario: Codable, Equatable, Sendable {
 
     /// Loads and validates one scenario file.
     ///
-    /// - Parameter url: Scenario JSON on disk.
+    /// - Parameters:
+    ///   - url: Scenario JSON on disk.
+    ///   - data: Pre-loaded bytes; `nil` reads `url` from disk.
     /// - Returns: The decoded, validated scenario.
     /// - Throws: Decoding errors or ``ValidationError`` for unusable values.
     static func load(from url: URL, data: Data? = nil) throws -> AgentScenario {

@@ -53,6 +53,12 @@ extension RecordingSessionLedger {
     ///
     /// - Parameter segment: Segment whose media already exists in the session root.
     /// - Returns: The journaled segment (the existing one on a repeat adoption).
+    /// - Throws: ``RecordingSessionLedgerError/readOnly`` when the ledger cannot be
+    ///   written, ``RecordingSessionLedgerError/missingSession`` when no session is
+    ///   loaded, ``RecordingSessionLedgerError/invalidPublication`` or a path error
+    ///   when the segment references media outside the session root or of the wrong
+    ///   shape, and ``RecordingSessionLedgerError/idempotencyConflict`` when the
+    ///   index already holds a different segment at that position.
     @discardableResult
     public func adoptPublishedSegment(_ segment: PublishedSegment) async throws -> PublishedSegment {
         try ensureWritable()

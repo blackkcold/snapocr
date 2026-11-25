@@ -110,6 +110,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     ///
     /// - Parameters:
     ///   - id: 唯一标识符，默认自动生成
+    ///   - timestamp: 截图时间，默认当前时间
     ///   - textContent: OCR 识别文本
     ///   - ocrConfidence: 识别置信度
     ///   - captureMode: 截图模式
@@ -121,6 +122,7 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     ///   - isFavourite: 是否收藏
     ///   - tags: 用户自定义标签
     ///   - isProtected: 是否为受保护条目（自动清理不淘汰）
+    ///   - mockupStyleJSON: 分享外观的编码 JSON，可选
     public init(
         id: UUID = UUID(),
         timestamp: Date = Date(),

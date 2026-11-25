@@ -10,7 +10,11 @@ import SwiftUI
 extension CaptureViewModel {
     /// Performs OCR on the specified image.
     ///
-    /// - Parameter image: The image to perform OCR on.
+    /// - Parameters:
+    ///   - image: The image to perform OCR on.
+    ///   - copyToClipboard: Copies recognized text instead of offering a text action.
+    /// - Returns: The recognition result, or `nil` when recognition failed and a
+    ///   failure toast was shown.
     func performOCR(on image: CGImage, copyToClipboard: Bool) async -> OCRResult? {
         do {
             let options = Self.currentOCROptions()

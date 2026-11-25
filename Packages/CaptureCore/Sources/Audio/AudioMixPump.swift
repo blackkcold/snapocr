@@ -67,6 +67,8 @@ public struct AudioPumpTick: Sendable {
     ///   - blocks: Output blocks keyed by output role.
     ///   - gapFramesByRole: Session frames filled with silence per source role.
     ///   - isSilence: Whether every block is silence.
+    ///   - systemLevel: RMS level of the system-audio input, clamped to `0...1`.
+    ///   - micLevel: RMS level of the microphone input, clamped to `0...1`.
     public init(
         range: SampleRange,
         hostTime: UInt64,

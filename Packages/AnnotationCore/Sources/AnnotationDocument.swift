@@ -163,7 +163,7 @@ public struct AnnotationDocument: Sendable {
 
     /// 将归一化坐标转换为图片实际像素坐标。
     ///
-    /// - Parameter normalizedPoint: 归一化点 (x, y 均在 [0, 1])
+    /// - Parameter point: 归一化点 (x, y 均在 [0, 1])
     /// - Returns: 图片上的实际像素坐标
     public func denormalize(point: CGPoint) -> CGPoint {
         CGPoint(
@@ -174,7 +174,7 @@ public struct AnnotationDocument: Sendable {
 
     /// 将归一化矩形转换为图片实际像素矩形。
     ///
-    /// - Parameter normalizedRect: 归一化矩形
+    /// - Parameter rect: 归一化矩形
     /// - Returns: 图片上的实际像素矩形
     public func denormalize(rect: CGRect) -> CGRect {
         CGRect(
@@ -187,7 +187,7 @@ public struct AnnotationDocument: Sendable {
 
     /// 将图片实际像素坐标转换为归一化坐标。
     ///
-    /// - Parameter pixelPoint: 图片像素坐标
+    /// - Parameter point: 图片像素坐标
     /// - Returns: 归一化点
     public func normalize(point: CGPoint) -> CGPoint {
         CGPoint(

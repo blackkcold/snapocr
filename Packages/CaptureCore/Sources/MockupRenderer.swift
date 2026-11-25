@@ -73,9 +73,16 @@ public enum MockupRenderer {
     /// map the image-pixel layout into that space. This is the shared entry
     /// point for the exporter and (later) the editor canvas.
     ///
-    /// - Parameter backdrop: Repaints the area behind a transparent image after
-    ///   the shadow's opaque fill is cleared. The editor canvas uses it to keep
-    ///   its checkerboard visible through transparent pixels.
+    /// - Parameters:
+    ///   - image: The source image, already at its final pixel size.
+    ///   - style: Background, padding, radius, shadow, and border to apply.
+    ///   - layout: Geometry computed for the image in its own pixel space.
+    ///   - context: The destination context to draw into.
+    ///   - origin: Target-space position of the canvas origin.
+    ///   - scale: Target points (or pixels) per image pixel.
+    ///   - backdrop: Repaints the area behind a transparent image after the
+    ///     shadow's opaque fill is cleared. The editor canvas uses it to keep its
+    ///     checkerboard visible through transparent pixels.
     public static func draw(
         _ image: CGImage,
         style: MockupStyle,

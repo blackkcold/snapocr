@@ -37,8 +37,14 @@ extension RecordingSessionController {
     ///   - roots: The destination snapshot taken at invocation.
     ///   - isCustomDestination: Whether the user picked the destination. A custom
     ///     external folder is validated at its exact path and never falls back.
+    ///   - expectedVolumeUUID: Volume identity the destination must match; `nil`
+    ///     skips the identity check.
     ///   - request: The identity created by ``beginAudioRequest(requiresMicrophonePermission:)`` before the
     ///     permission prompt. `nil` creates a fresh identity for legacy callers.
+    /// - Throws: ``RecordingPipelineError/alreadyStarted`` when another audio start
+    ///   still owns the slot, ``RecordingReadinessError/supersededStart`` when the
+    ///   request was cancelled or replaced, and the destination or pipeline error
+    ///   when the location check, pipeline factory, or pipeline start fails.
     func startAudio(
         _ configuration: AudioRecordingConfiguration,
         roots: RecordingPipelineRoots,

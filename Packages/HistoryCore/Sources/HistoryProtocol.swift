@@ -27,6 +27,10 @@ public protocol HistoryProtocol: Sendable {
     /// 如果存储数量超过上限，会自动触发清理策略。
     ///
     /// - Parameter entry: 要保存的历史条目
+    /// - Throws: ``HistoryError/encryptionFailed(reason:)`` 当条目或图片无法加密，
+    ///   ``HistoryError/fileIOError(path:)`` 当媒体文件无法写入，
+    ///   ``HistoryError/storageFull(current:max:)`` 当条目数已达上限且没有可淘汰的
+    ///   非收藏、非保护条目。
     func save(_ entry: HistoryEntry) async throws
 
     /// 加载指定历史条目
@@ -35,6 +39,8 @@ public protocol HistoryProtocol: Sendable {
     ///
     /// - Parameter id: 条目唯一标识符
     /// - Returns: 历史条目，若不存在则返回 `nil`
+    /// - Throws: 存储实现无法读取或解密该条目时抛出的错误；``HistoryActor`` 把不可读
+    ///   条目当作不存在并返回 `nil`。
     func load(id: UUID) async throws -> HistoryEntry?
 
     /// 搜索历史条目
@@ -43,6 +49,8 @@ public protocol HistoryProtocol: Sendable {
     ///
     /// - Parameter query: 搜索关键词
     /// - Returns: 匹配的条目列表
+    /// - Throws: 存储实现无法枚举持久化条目时抛出的错误；``HistoryActor`` 只读内存与
+    ///   磁盘快照，不会抛错。
     func search(query: String) async throws -> [HistoryEntry]
 
     /// 删除指定历史条目
@@ -50,6 +58,7 @@ public protocol HistoryProtocol: Sendable {
     /// 同时从内存缓存和磁盘中移除条目及其关联的图片和缩略图文件。
     ///
     /// - Parameter id: 要删除的条目标识符
+    /// - Throws: ``HistoryError/fileIOError(path:)`` 当条目、图片或缩略图无法从磁盘移除。
     func delete(id: UUID) async throws
 
     /// 清空所有历史记录
@@ -63,6 +72,8 @@ public protocol HistoryProtocol: Sendable {
     ///
     /// - Parameter limit: 最大返回数量
     /// - Returns: 最近的条目列表
+    /// - Throws: 存储实现无法枚举持久化条目时抛出的错误；``HistoryActor`` 只读内存与
+    ///   磁盘快照，不会抛错。
     func recent(limit: Int) async throws -> [HistoryEntry]
 
     /// 导出指定条目的数据
@@ -73,6 +84,8 @@ public protocol HistoryProtocol: Sendable {
     ///   - ids: 要导出的条目 ID 列表
     ///   - format: 导出格式
     /// - Returns: 导出数据
+    /// - Throws: ``HistoryError/entryNotFound(id:)`` 当给定的 ID 都不存在，以及编码
+    ///   导出数据失败时抛出的编码错误。
     func export(ids: [UUID], format: HistoryExportFormat) async throws -> Data
 
     /// 获取历史记录统计快照

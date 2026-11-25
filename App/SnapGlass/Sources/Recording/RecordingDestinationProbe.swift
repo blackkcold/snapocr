@@ -66,6 +66,8 @@ struct RecordingDestinationProbe: Sendable {
     /// - Parameters:
     ///   - directory: The write destination to validate or create.
     ///   - isCustom: Whether the user picked the directory.
+    ///   - expectedVolumeUUID: Volume the destination must live on; `nil` skips
+    ///     the identity check.
     ///   - deadline: The maximum time to wait for the filesystem.
     /// - Throws: ``RecordingDestinationError`` for an invalid, unreadable,
     ///   timed-out, or insufficient destination.

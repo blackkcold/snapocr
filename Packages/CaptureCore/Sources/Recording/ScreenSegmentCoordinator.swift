@@ -317,6 +317,9 @@ public actor ScreenSegmentCoordinator: AudioCheckpointSink {
     /// real recording length instead of collapsing to the last burst of frames.
     ///
     /// - Parameter hostTime: The current monotonic host time.
+    /// - Throws: ``ScreenSegmentCoordinatorError/noOpenVideoChunk`` when no chunk is
+    ///   open, and the writer, checkpoint, or ledger error when the repeated frame
+    ///   cannot be appended to the open chunk.
     private func appendFreezeFrameIfNeeded(hostTime: UInt64) async throws {
         guard currentVideoWriter != nil,
             let sample = lastSampleBuffer,

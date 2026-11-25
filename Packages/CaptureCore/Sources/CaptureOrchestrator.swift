@@ -61,12 +61,11 @@ public final class CaptureOrchestrator: Sendable {
     ///   - mode: 捕获模式，默认全屏。
     ///   - options: 捕获选项，默认标准配置（含光标、高分辨率、2x 缩放）。
     /// - Returns: 截图结果 `CaptureResult`。
-    /// - Throws:
-    ///   - `CaptureError.permissionDenied` — 屏幕录制权限被拒绝
-    ///   - `CaptureError.displayUnavailable` — 没有可用的显示器
-    ///   - `CaptureError.windowNotFound` — 未找到指定窗口
-    ///   - `CaptureError.captureFailed(reason:)` — 截图操作失败（主路径和降级均失败）
-    ///   - `CaptureError.invalidRegion` — 截图区域无效
+    /// - Throws: `CaptureError.permissionDenied` 当屏幕录制权限被拒绝；
+    ///   `CaptureError.displayUnavailable` 当没有可用显示器；
+    ///   `CaptureError.windowNotFound` 当指定窗口不存在；
+    ///   `CaptureError.invalidRegion` 当截图区域无效；
+    ///   `CaptureError.captureFailed(reason:)` 当主路径与降级路径都失败。
     public func capture(
         mode: CaptureMode = .fullscreen,
         options: CaptureOptions = CaptureOptions()
@@ -113,8 +112,14 @@ public final class CaptureOrchestrator: Sendable {
     /// This path intentionally stays on ScreenCaptureKit and does not invoke the legacy
     /// Core Graphics fallback, which would be too expensive when several previews load.
     ///
-    /// - Parameter content: Optional pre-fetched `SCShareableContent` to reuse,
-    ///   avoiding a fresh enumeration per thumbnail.
+    /// - Parameters:
+    ///   - windowID: The window to capture.
+    ///   - maximumSize: Upper bound for the returned image, in pixels.
+    ///   - content: Optional pre-fetched `SCShareableContent` to reuse, avoiding
+    ///     a fresh enumeration per thumbnail.
+    /// - Returns: The window's current contents as an image.
+    /// - Throws: The ScreenCaptureKit error when the window is gone or the still
+    ///   image cannot be produced.
     public func captureWindowThumbnail(
         windowID: CGWindowID,
         maximumSize: CGSize,

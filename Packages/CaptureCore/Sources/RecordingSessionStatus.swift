@@ -65,6 +65,8 @@ public extension RecordingSessionStatus {
     /// - Parameters:
     ///   - isCapturing: Whether an area capture is currently in progress.
     ///   - hasFailure: Whether a failed recording is still awaiting the user's attention.
+    /// - Returns: The indicator for an area capture or failure first, otherwise the
+    ///   indicator for the current session status.
     func menuBarIndicator(isCapturing: Bool, hasFailure: Bool = false) -> RecordingMenuBarIndicator {
         if isCapturing { return .capturing }
         if hasFailure { return .failed }

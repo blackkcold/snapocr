@@ -31,6 +31,8 @@ extension ScreenSegmentCoordinator {
     /// which the sink rejects as a non-contiguous range.
     ///
     /// - Parameter sample: Exclusive session sample the caller needs written.
+    /// - Throws: The audio sink's append error when a block cannot be written;
+    ///   the flush lock is released before the error propagates.
     func flushAudio(through sample: Int64) async throws {
         await acquireAudioFlush()
         do {
@@ -48,6 +50,7 @@ extension ScreenSegmentCoordinator {
     /// observed at entry is consumed, so nothing is overwritten by the final assign.
     ///
     /// - Parameter sample: Exclusive session sample the caller needs written.
+    /// - Throws: The audio sink's append error when a block cannot be written.
     func writePendingAudio(through sample: Int64) async throws {
         guard let sink = currentAudioSink else { return }
         let observedCount = pendingAudio.count
