@@ -12,8 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: brew install swiftlint
-      - run: brew install swift-format
-      - run: swift-format lint --recursive . --configuration .swift-format
+      # swift-format ships inside Xcode; CI runs the same binary as local
+      # development. The pin lives in .swift-format-version, so a runner image
+      # update fails this job instead of silently reformatting the repository.
+      - name: Verify swift-format version
+        run: |
+          xcrun swift-format --version
+          bash scripts/check-swift-format-version.sh
+      - run: xcrun swift-format lint --recursive . --configuration .swift-format
       - run: swiftlint lint --strict --config .swiftlint.yml
       - run: bash scripts/check-localization.sh
 
