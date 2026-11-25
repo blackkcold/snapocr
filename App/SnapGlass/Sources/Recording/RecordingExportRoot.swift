@@ -15,10 +15,11 @@ struct RecordingExportRoot: Sendable, Hashable {
         let standardizedRoot = root.standardizedFileURL
         self.kind = kind
         self.root = standardizedRoot
-        self.indexURL = indexURL?.standardizedFileURL
+        self.indexURL =
+            indexURL?.standardizedFileURL
             ?? standardizedRoot
-                .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
-                .appendingPathComponent("recording-index.json")
+            .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
+            .appendingPathComponent("recording-index.json")
     }
 }
 

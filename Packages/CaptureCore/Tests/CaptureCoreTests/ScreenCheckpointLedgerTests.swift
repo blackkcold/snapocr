@@ -20,13 +20,14 @@ struct ScreenCheckpointLedgerTests {
             indexURL: indexURL,
             sessionID: sessionID
         )
-        try await ledger.register(RecordingSessionRecord(
-            id: sessionID,
-            kind: .screen,
-            layout: .separateTracks,
-            startedAt: Date(timeIntervalSince1970: 1_800_000_000),
-            segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: sessionID,
+                kind: .screen,
+                layout: .separateTracks,
+                startedAt: Date(timeIntervalSince1970: 1_800_000_000),
+                segments: []
+            ))
 
         let media = Data([0x53, 0x43, 0x4b])
         let videoURL = sessionRoot.appendingPathComponent("chunk-000000.mp4")

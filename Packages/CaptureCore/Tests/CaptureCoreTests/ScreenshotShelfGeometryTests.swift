@@ -34,7 +34,8 @@ struct ScreenshotShelfGeometryTests {
 
     @Test func panelReservesRoomForTheStrongestHoverShadow() {
         for cardHeight in [64.0, 96.0, 160.0] {
-            let bottomRoom = metrics.panelHeight(cardHeight: cardHeight)
+            let bottomRoom =
+                metrics.panelHeight(cardHeight: cardHeight)
                 - (metrics.cardTopOffset + cardHeight)
             #expect(
                 bottomRoom >= ScreenshotShelfMetrics.hoverShadowBottomExtent,
@@ -115,7 +116,8 @@ struct ScreenshotShelfGeometryTests {
         )
 
         #expect(fitted.count == 6)
-        let contentWidth = fitted.reduce(0, +)
+        let contentWidth =
+            fitted.reduce(0, +)
             + metrics.cardSpacing * 5
             + metrics.endMenuWidth
         #expect(contentWidth <= visibleWidth - metrics.screenMargin * 2 + 0.5)

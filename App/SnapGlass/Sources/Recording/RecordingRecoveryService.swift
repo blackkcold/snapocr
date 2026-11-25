@@ -119,7 +119,8 @@ actor RecordingRecoveryService {
         // Fall back to the root implied by the scanned media path, so a recovery
         // still works when the folder list changed between scan and action.
         if let material = recording.materials.first {
-            let sessionsDirectory = material
+            let sessionsDirectory =
+                material
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()

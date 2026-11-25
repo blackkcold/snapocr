@@ -177,13 +177,15 @@ extension ScrollStitchActor {
         )
 
         if let lastFrame = capturedFrames.last,
-           deduper.isDuplicate(lastFrame.image, result.image) {
+            deduper.isDuplicate(lastFrame.image, result.image)
+        {
             throw ScrollError.duplicateFrameDetected(index: capturedFrames.count)
         }
 
-        let predictedOffset = capturedFrames.last.map {
-            overlapDetector.findBestMatchOffset($0.image, result.image)
-        } ?? 0
+        let predictedOffset =
+            capturedFrames.last.map {
+                overlapDetector.findBestMatchOffset($0.image, result.image)
+            } ?? 0
         let frame = ScrollFrame(
             image: result.image,
             index: capturedFrames.count,
@@ -321,15 +323,17 @@ extension ScrollStitchActor {
             throw ScrollError.memoryPressureHigh
         }
 
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: outputHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: outputHeight,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else {
             throw ScrollError.stitchFailed(reason: "无法创建合成画布")
         }
         stitchCanvasAllocationCount += 1
@@ -340,12 +344,14 @@ extension ScrollStitchActor {
             try Task.checkCancellation()
 
             let image = frames[index].image
-            context.draw(image, in: CGRect(
-                x: 0,
-                y: outputHeight - offsetY - image.height,
-                width: image.width,
-                height: image.height
-            ))
+            context.draw(
+                image,
+                in: CGRect(
+                    x: 0,
+                    y: outputHeight - offsetY - image.height,
+                    width: image.width,
+                    height: image.height
+                ))
         }
 
         guard let image = context.makeImage() else {
@@ -416,24 +422,28 @@ extension ScrollStitchActor {
         guard height <= limit else {
             throw ScrollError.stitchFailed(reason: "首帧高度超出输出预算")
         }
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: limit,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: limit,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else {
             throw ScrollError.stitchFailed(reason: "无法创建合成画布")
         }
 
-        context.draw(firstFrame.image, in: CGRect(
-            x: 0,
-            y: limit - height,
-            width: width,
-            height: height
-        ))
+        context.draw(
+            firstFrame.image,
+            in: CGRect(
+                x: 0,
+                y: limit - height,
+                width: width,
+                height: height
+            ))
 
         liveStitch = LiveStitchState(
             context: context,
@@ -495,12 +505,14 @@ extension ScrollStitchActor {
         }
 
         // 按原始尺寸绘制，超出画布的部分由 CGContext 裁掉；用 min() 会缩放变形。
-        live.context.draw(image, in: CGRect(
-            x: 0,
-            y: live.limit - top - image.height,
-            width: image.width,
-            height: image.height
-        ))
+        live.context.draw(
+            image,
+            in: CGRect(
+                x: 0,
+                y: live.limit - top - image.height,
+                width: image.width,
+                height: image.height
+            ))
 
         live.lastTop = top
         live.frames += 1
@@ -530,15 +542,17 @@ extension ScrollStitchActor {
         }
         let image: CGImage
         if height * 4 < live.limit {
-            guard let exactContext = CGContext(
-                data: nil,
-                width: live.width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else {
+            guard
+                let exactContext = CGContext(
+                    data: nil,
+                    width: live.width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+            else {
                 throw ScrollError.stitchFailed(reason: "无法创建输出画布")
             }
             guard let cropped = full.cropping(to: CGRect(x: 0, y: 0, width: live.width, height: height)) else {
@@ -586,9 +600,10 @@ extension ScrollStitchActor {
     /// 与阈值比较后更新压力级别（参照设计文档 §附录 E）。
     private func updateMemoryPressure() {
         var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<mach_task_basic_info>.size
-        ) / 4
+        var count =
+            mach_msg_type_number_t(
+                MemoryLayout<mach_task_basic_info>.size
+            ) / 4
 
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
@@ -620,9 +635,10 @@ extension ScrollStitchActor {
     /// 获取当前内存压力级别。
     public nonisolated func currentMemoryLevel() -> MemoryPressureLevel {
         var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<mach_task_basic_info>.size
-        ) / 4
+        var count =
+            mach_msg_type_number_t(
+                MemoryLayout<mach_task_basic_info>.size
+            ) / 4
 
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
@@ -678,9 +694,10 @@ extension ScrollStitchActor {
     /// 获取当前进程内存使用量。
     private func currentMemoryUsage() -> UInt64 {
         var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<mach_task_basic_info>.size
-        ) / 4
+        var count =
+            mach_msg_type_number_t(
+                MemoryLayout<mach_task_basic_info>.size
+            ) / 4
 
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {

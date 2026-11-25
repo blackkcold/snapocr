@@ -56,14 +56,14 @@ public struct TextAnonymizer: Sendable {
     /// 固定电话 (区号-号码)
     private static let landlinePattern = "\\d{3,4}-\\d{7,8}"
 
-/// 敏感数据类型
-private enum SensitiveDataType: Sendable, CaseIterable {
-    case phone
-    case idCard
-    case email
-    case bankCard
-    case landline
-}
+    /// 敏感数据类型
+    private enum SensitiveDataType: Sendable, CaseIterable {
+        case phone
+        case idCard
+        case email
+        case bankCard
+        case landline
+    }
 
     // MARK: - Properties
 

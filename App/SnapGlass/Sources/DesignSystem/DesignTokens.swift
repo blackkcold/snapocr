@@ -163,7 +163,6 @@ enum Palette {
 
 // swiftlint:enable identifier_name type_name
 
-
 extension Color {
     /// RGB 0–255 的采样色 → SwiftUI 颜色。
     init(sampled color: SampledColor) {

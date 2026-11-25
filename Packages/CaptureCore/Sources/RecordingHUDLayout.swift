@@ -262,8 +262,10 @@ public enum RecordingHUDPlacement {
         if !frame(for: fallback, size: size, in: screenFrame).intersects(captured) {
             return fallback
         }
-        for corner in cornerOrder where
-            !frame(for: corner, size: size, in: screenFrame).intersects(captured) {
+        for corner in cornerOrder
+        where
+            !frame(for: corner, size: size, in: screenFrame).intersects(captured)
+        {
             return corner
         }
         return fallback

@@ -100,7 +100,7 @@ public struct URLSchemeRouter: Sendable {
     /// 解析 URL 查询参数为 `[String: String]` 字典。
     private func parseQueryParams(_ url: URL) -> [String: String] {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let items = components.queryItems
+            let items = components.queryItems
         else {
             return [:]
         }

@@ -37,14 +37,16 @@ struct RecordingConfigurationTests {
         preferredBitrate = 20_000_000
         includesSystemAudio = true
 
-        #expect(sessionConfiguration == RecordingConfiguration(
-            codec: .h264,
-            resolutionLimit: CGSize(width: 1_920, height: 1_080),
-            frameRateLimit: 30,
-            averageVideoBitrate: 8_000_000,
-            maximumKeyFrameIntervalSeconds: 1,
-            capturesSystemAudio: false
-        ))
+        #expect(
+            sessionConfiguration
+                == RecordingConfiguration(
+                    codec: .h264,
+                    resolutionLimit: CGSize(width: 1_920, height: 1_080),
+                    frameRateLimit: 30,
+                    averageVideoBitrate: 8_000_000,
+                    maximumKeyFrameIntervalSeconds: 1,
+                    capturesSystemAudio: false
+                ))
     }
 
     @Test func outputDimensionsCapWithoutUpscalingOrChangingAspectRatio() {

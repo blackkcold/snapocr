@@ -114,7 +114,8 @@ final class BarcodeResultPanel: NSVisualEffectView {
             return true
         }
         if let field = primaryPayloadField,
-           field.convert(field.bounds, to: self).contains(point) {
+            field.convert(field.bounds, to: self).contains(point)
+        {
             window?.makeFirstResponder(field)
             field.selectText(nil)
             return true
@@ -274,7 +275,7 @@ final class BarcodeResultPanel: NSVisualEffectView {
             header(
                 title: AppLocalization.string("%lld barcodes found", payloads.count),
                 badge: nil
-            ),
+            )
         ]
         for payload in payloads.prefix(Self.maximumRows) {
             views.append(row(for: payload))

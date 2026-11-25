@@ -1,8 +1,8 @@
-import SwiftUI
 import AutomationCore
+import BarcodeCore
 import CaptureCore
 import OCRCore
-import BarcodeCore
+import SwiftUI
 
 // MARK: - Routing View
 
@@ -108,7 +108,7 @@ struct RoutingView: View {
     private func executeOCR(file: String) async throws -> String {
         let url = URL(fileURLWithPath: file)
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else {
             throw RoutingError.fileNotFound(file)
         }
@@ -121,7 +121,7 @@ struct RoutingView: View {
     private func executeBarcode(file: String) async throws -> String {
         let url = URL(fileURLWithPath: file)
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else {
             throw RoutingError.fileNotFound(file)
         }
@@ -138,9 +138,11 @@ struct RoutingView: View {
     }
 
     private func saveCGImage(_ image: CGImage, to url: URL) throws {
-        guard let dest = CGImageDestinationCreateWithURL(
-            url as CFURL, "public.png" as CFString, 1, nil
-        ) else {
+        guard
+            let dest = CGImageDestinationCreateWithURL(
+                url as CFURL, "public.png" as CFString, 1, nil
+            )
+        else {
             throw RoutingError.saveFailed(url.path)
         }
         CGImageDestinationAddImage(dest, image, nil)

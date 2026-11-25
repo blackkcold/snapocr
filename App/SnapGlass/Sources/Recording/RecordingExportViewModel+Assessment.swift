@@ -14,7 +14,8 @@ extension RecordingExportViewModel {
 
     func validatedPlan() throws -> ExportPlan {
         guard validatedPlanGeneration == assessmentGeneration,
-              let cachedPlan else {
+            let cachedPlan
+        else {
             if let overage = assessment?.overageSeconds, overage > 0 {
                 throw ExportError.overLimit(overageSeconds: overage)
             }
@@ -27,7 +28,8 @@ extension RecordingExportViewModel {
 
     func setSegmentSelected(_ segmentID: UUID, isSelected: Bool) {
         guard let segment = session?.segments.first(where: { $0.id == segmentID }),
-              segment.state == .published else { return }
+            segment.state == .published
+        else { return }
         if isSelected {
             selectedSegmentIDs.insert(segmentID)
         } else {
@@ -45,7 +47,8 @@ extension RecordingExportViewModel {
 
     func setTrimRange(_ range: SampleRange, for segmentID: UUID) {
         guard let segment = session?.segments.first(where: { $0.id == segmentID }),
-              segment.state == .published, segment.sampleCount > 0 else { return }
+            segment.state == .published, segment.sampleCount > 0
+        else { return }
         let segmentEnd = segment.startSample + segment.sampleCount
         let start = max(segment.startSample, range.startSample)
         let end = min(segmentEnd, range.startSample + range.sampleCount)
@@ -149,7 +152,8 @@ extension RecordingExportViewModel {
                 return
             }
             guard self.assessmentGeneration == generation,
-                  self.selectedSessionID == session.id else {
+                self.selectedSessionID == session.id
+            else {
                 await RecordingExportWork.release(result.leases, using: service)
                 return
             }

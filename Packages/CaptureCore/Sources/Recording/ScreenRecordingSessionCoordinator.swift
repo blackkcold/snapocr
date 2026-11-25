@@ -137,7 +137,8 @@ public struct ScreenRecordingOutcome: Sendable, Hashable {
         audioFailure: String? = nil,
         dropAccounting: ScreenRecordingDropAccounting? = nil
     ) {
-        let accounting = dropAccounting
+        let accounting =
+            dropAccounting
             ?? ScreenRecordingDropAccounting(
                 captureCallbackDrops: droppedFrameCount,
                 frameStreamDrops: 0,
@@ -203,11 +204,12 @@ public actor ScreenRecordingSessionCoordinator {
         @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition
     // Session state below is `internal` because the frame pipeline and its failure
     // bookkeeping live in `ScreenRecordingSessionCoordinator+FramePipeline.swift`.
-    let audioEngineFactory: @Sendable (
-        AudioRecordingConfiguration,
-        any AudioCheckpointSink & Sendable,
-        AudioSampleClock
-    ) throws -> any AudioRecordingControlling & Sendable
+    let audioEngineFactory:
+        @Sendable (
+            AudioRecordingConfiguration,
+            any AudioCheckpointSink & Sendable,
+            AudioSampleClock
+        ) throws -> any AudioRecordingControlling & Sendable
     private let audio: ScreenAudioBridge
 
     var configuration: ScreenRecordingStartConfiguration?
@@ -233,11 +235,12 @@ public actor ScreenRecordingSessionCoordinator {
         engine: ScreenRecordingEngine,
         segmentCompositionFactory:
             @escaping @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition,
-        audioEngineFactory: @escaping @Sendable (
-            AudioRecordingConfiguration,
-            any AudioCheckpointSink & Sendable,
-            AudioSampleClock
-        ) throws -> any AudioRecordingControlling & Sendable,
+        audioEngineFactory:
+            @escaping @Sendable (
+                AudioRecordingConfiguration,
+                any AudioCheckpointSink & Sendable,
+                AudioSampleClock
+            ) throws -> any AudioRecordingControlling & Sendable,
         audio: ScreenAudioBridge
     ) {
         self.engine = engine
@@ -259,11 +262,13 @@ public actor ScreenRecordingSessionCoordinator {
     public static func makeProduction(
         engine: ScreenRecordingEngine,
         roots: RecordingPipelineRoots,
-        audioEngineFactoryOverride: (@Sendable (
-            AudioRecordingConfiguration,
-            any AudioCheckpointSink & Sendable,
-            AudioSampleClock
-        ) throws -> any AudioRecordingControlling & Sendable)? = nil
+        audioEngineFactoryOverride: (
+            @Sendable (
+                AudioRecordingConfiguration,
+                any AudioCheckpointSink & Sendable,
+                AudioSampleClock
+            ) throws -> any AudioRecordingControlling & Sendable
+        )? = nil
     ) throws -> ScreenRecordingSessionCoordinator {
         let ticksPerSecond = AudioSourceTimestampMapper.nativeHostTicksPerSecond()
         let systemRing = try AudioSourceRingBuffer(
@@ -280,19 +285,20 @@ public actor ScreenRecordingSessionCoordinator {
         let compositionFactory: @Sendable (ScreenRecordingStartConfiguration) throws -> ScreenSegmentComposition = {
             try makeComposition(configuration: $0, roots: roots)
         }
-        let audioFactory: @Sendable (
-            AudioRecordingConfiguration,
-            any AudioCheckpointSink & Sendable,
-            AudioSampleClock
-        ) throws -> any AudioRecordingControlling & Sendable = { configuration, sink, clock in
-            try makeAudioEngine(
-                configuration: configuration,
-                sink: sink,
-                clock: clock,
-                systemRing: systemRing,
-                hostTicksPerSecond: ticksPerSecond
-            )
-        }
+        let audioFactory:
+            @Sendable (
+                AudioRecordingConfiguration,
+                any AudioCheckpointSink & Sendable,
+                AudioSampleClock
+            ) throws -> any AudioRecordingControlling & Sendable = { configuration, sink, clock in
+                try makeAudioEngine(
+                    configuration: configuration,
+                    sink: sink,
+                    clock: clock,
+                    systemRing: systemRing,
+                    hostTicksPerSecond: ticksPerSecond
+                )
+            }
         return ScreenRecordingSessionCoordinator(
             engine: engine,
             segmentCompositionFactory: compositionFactory,
@@ -344,10 +350,10 @@ public actor ScreenRecordingSessionCoordinator {
         _ configuration: ScreenRecordingStartConfiguration
     ) throws {
         guard configuration.audio.kind == .screen,
-              configuration.audio.layout == .separateTracks,
-              configuration.audio.sampleRate == 48_000,
-              configuration.video.frameRateLimit > 0,
-              configuration.destinationDirectory.isFileURL
+            configuration.audio.layout == .separateTracks,
+            configuration.audio.sampleRate == 48_000,
+            configuration.video.frameRateLimit > 0,
+            configuration.destinationDirectory.isFileURL
         else { throw ScreenRecordingSessionCoordinatorError.invalidConfiguration }
     }
 
@@ -360,15 +366,16 @@ public actor ScreenRecordingSessionCoordinator {
             kind: .screen,
             layout: .separateTracks
         )
-        await composition.coordinator.configureSealContext(RecordingSealContext(
-            sessionID: composition.coordinator.sessionID,
-            kind: .screen,
-            layout: .separateTracks,
-            sampleRate: configuration.audio.sampleRate,
-            outputStem: "Recording-\(composition.coordinator.sessionID.uuidString.lowercased())",
-            destinationDirectory: configuration.destinationDirectory,
-            bitRate: configuration.audio.bitRate
-        ))
+        await composition.coordinator.configureSealContext(
+            RecordingSealContext(
+                sessionID: composition.coordinator.sessionID,
+                kind: .screen,
+                layout: .separateTracks,
+                sampleRate: configuration.audio.sampleRate,
+                outputStem: "Recording-\(composition.coordinator.sessionID.uuidString.lowercased())",
+                destinationDirectory: configuration.destinationDirectory,
+                bitRate: configuration.audio.bitRate
+            ))
         return composition
     }
 
@@ -378,8 +385,9 @@ public actor ScreenRecordingSessionCoordinator {
         continuation: AsyncStream<ScreenVideoFrameEvent>.Continuation,
         onFailure: @escaping @Sendable (String) -> Void
     ) async throws {
-        let reuseAudio = configuration.audio.mode == .system
-            || configuration.audio.mode == .systemAndMicrophone
+        let reuseAudio =
+            configuration.audio.mode == .system
+                || configuration.audio.mode == .systemAndMicrophone
             ? ScreenAudioOutputReuse(bridge: audio)
             : nil
         do {
@@ -466,7 +474,8 @@ public actor ScreenRecordingSessionCoordinator {
         if let processingFailure { return processingFailure }
         guard let composition else { return nil }
         let diagnostics = await composition.coordinator.writerDiagnostics()
-        let failed = diagnostics.startWritingResult == .failed
+        let failed =
+            diagnostics.startWritingResult == .failed
             || diagnostics.syncDropCount > 0
             || diagnostics.appendFailureCount > 0
         guard failed else { return nil }
@@ -533,7 +542,8 @@ public actor ScreenRecordingSessionCoordinator {
             let urls = try await composition.coordinator.publishedVideoURLs()
             guard !urls.isEmpty else { throw ScreenRecordingSessionCoordinatorError.noPublishedSegments }
             let engineFailure = await engine.segmentedFailureDescription()
-            let failure = processingFailure
+            let failure =
+                processingFailure
                 ?? audioResult?.failure
                 ?? engineFailure
             let dropAccounting = ScreenRecordingDropAccounting(

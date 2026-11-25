@@ -167,9 +167,11 @@ enum AgentMode {
     /// `FileManager.temporaryDirectory` lives under `/var`, which is a symlink
     /// the recording ledger rejects; the caches directory is a real path.
     static func defaultBaseDirectory(fileManager: FileManager = .default) -> URL {
-        let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let caches =
+            fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches")
-        return caches
+        return
+            caches
             .appendingPathComponent("com.snapglass.agent", isDirectory: true)
             .appendingPathComponent(String(ProcessInfo.processInfo.processIdentifier), isDirectory: true)
     }

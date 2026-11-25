@@ -100,9 +100,11 @@ struct RecordingWriterLifecycleTests {
             writerError: nil
         )
 
-        #expect(decision == .retainPartial(
-            reason: "The capture stream could not stop cleanly: device disconnected"
-        ))
+        #expect(
+            decision
+                == .retainPartial(
+                    reason: "The capture stream could not stop cleanly: device disconnected"
+                ))
     }
 
     @Test func completedWriterWithoutFailureRequestsPublication() {

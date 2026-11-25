@@ -26,7 +26,8 @@ extension RecordingExportPlanner {
             if matching.isEmpty {
                 trackMap[outputRole] = .missingSilence
             } else if outputRole == .mixed && selection == .mixed,
-                      matching.contains(where: { $0.mediaKind == .published }) {
+                matching.contains(where: { $0.mediaKind == .published })
+            {
                 trackMap[outputRole] = .mixedFromPublished
             } else {
                 trackMap[outputRole] = .reencodeAudio
@@ -45,11 +46,12 @@ extension RecordingExportPlanner {
         outputRoles: [RecordingTrackRole],
         descriptorsByID: [UUID: [PlannerAudioDescriptor]]
     ) -> ExportOutputSpec {
-        let channelCounts = Dictionary(uniqueKeysWithValues: outputRoles.map { role in
-            let matches = descriptorsByID.values.flatMap { matchingDescriptors($0, outputRole: role) }
-            let channels = matches.map(\.channelCount).filter { (1...2).contains($0) }.max() ?? 2
-            return (role, min(2, max(1, channels)))
-        })
+        let channelCounts = Dictionary(
+            uniqueKeysWithValues: outputRoles.map { role in
+                let matches = descriptorsByID.values.flatMap { matchingDescriptors($0, outputRole: role) }
+                let channels = matches.map(\.channelCount).filter { (1...2).contains($0) }.max() ?? 2
+                return (role, min(2, max(1, channels)))
+            })
         return ExportOutputSpec(
             destination: selection.destination,
             shape: outputShape(wantsVideo: wantsVideo, selection: selection.trackSelection),
@@ -84,7 +86,7 @@ extension RecordingExportPlanner {
         var sourceRanges: [ExportSourceRange] = []
         for segment in segments {
             guard let requested = scan.requestedByID[segment.id],
-                  let effective = scan.effectiveByID[segment.id]
+                let effective = scan.effectiveByID[segment.id]
             else { continue }
             let descriptors = scan.descriptorsByID[segment.id] ?? []
             let clip = ExportClip(
@@ -93,9 +95,10 @@ extension RecordingExportPlanner {
             )
             clips.append(clip)
             for outputRole in outputRoles {
-                sourceRanges.append(sourceRange(
-                    segment: segment, role: outputRole, clip: clip, descriptors: descriptors
-                ))
+                sourceRanges.append(
+                    sourceRange(
+                        segment: segment, role: outputRole, clip: clip, descriptors: descriptors
+                    ))
             }
         }
         return (clips, sourceRanges)
@@ -171,8 +174,8 @@ extension RecordingExportPlanner {
         var videoBytes: Int64 = 0
         for clip in clips {
             guard let segment = segments.first(where: { $0.id == clip.segmentID }),
-                  let url = segment.videoURL,
-                  segment.sampleCount > 0
+                let url = segment.videoURL,
+                segment.sampleCount > 0
             else { continue }
             let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
             guard let size = (attributes?[.size] as? NSNumber)?.int64Value else { continue }

@@ -1,7 +1,6 @@
 import AppKit
 import CaptureCore
 import Foundation
-
 @preconcurrency import ScreenCaptureKit
 
 /// One attempt at enumerating the screen sources needed by the recording picker.

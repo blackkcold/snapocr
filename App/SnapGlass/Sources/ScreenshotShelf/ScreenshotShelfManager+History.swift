@@ -22,7 +22,8 @@ extension ScreenshotShelfManager {
             else { continue }
             let historyStyle = HistoryMockupPresenter.style(from: historyEntry)
             if var card = cardsByID[entry.captureID],
-               card.mockupStyle != historyStyle {
+                card.mockupStyle != historyStyle
+            {
                 card.mockupStyle = historyStyle
                 cardsByID[entry.captureID] = card
                 historyPresentationKeys[entry.captureID] = nil
@@ -111,25 +112,33 @@ extension ScreenshotShelfManager {
         }
         let key = "\(revision?.uuidString ?? "nil")|\(styleJSON ?? "nil")"
         if historyPresentationKeys[captureID] == key,
-           dragExportStore.artifact(for: captureID) != nil {
+            dragExportStore.artifact(for: captureID) != nil
+        {
             return
         }
 
         if let style = card.mockupStyle {
             do {
                 guard let rawData = try await history.imageData(for: historyID),
-                      let raw = NSImage(data: rawData)?.cgImage(
-                          forProposedRect: nil,
-                          context: nil,
-                          hints: nil
-                      )
+                    let raw = NSImage(data: rawData)?.cgImage(
+                        forProposedRect: nil,
+                        context: nil,
+                        hints: nil
+                    )
                 else { return }
-                guard let presented = await Task.detached(priority: .userInitiated, operation: {
-                    MockupRenderer.render(raw, style: style)
-                }).value,
-                      let assets = await Task.detached(priority: .utility, operation: {
-                          ScreenshotShelfAssetEncoder.encode(presented)
-                      }).value
+                guard
+                    let presented = await Task.detached(
+                        priority: .userInitiated,
+                        operation: {
+                            MockupRenderer.render(raw, style: style)
+                        }
+                    ).value,
+                    let assets = await Task.detached(
+                        priority: .utility,
+                        operation: {
+                            ScreenshotShelfAssetEncoder.encode(presented)
+                        }
+                    ).value
                 else { return }
 
                 await setThumbnail(assets.thumbnailData, for: captureID)

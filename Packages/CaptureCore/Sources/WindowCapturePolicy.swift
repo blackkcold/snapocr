@@ -38,7 +38,7 @@ public enum WindowCapturePolicy {
     /// hide window-manager overlays (e.g. DDPM) that appear as ordinary windows
     /// but carry no useful content. Comparison is case-insensitive substring.
     private static let excludedWindowTitleKeywords: Set<String> = [
-        "ddpm",
+        "ddpm"
     ]
 
     /// Returns whether a window is a useful user-facing capture target.
@@ -53,17 +53,19 @@ public enum WindowCapturePolicy {
         systemWindowLevel: Int
     ) -> Bool {
         guard candidate.isOnScreen,
-              candidate.layer >= 0,
-              candidate.layer < systemWindowLevel,
-              candidate.frame.width >= 64,
-              candidate.frame.height >= 48,
-              let bundleIdentifier = candidate.bundleIdentifier?.lowercased(),
-              !bundleIdentifier.isEmpty else {
+            candidate.layer >= 0,
+            candidate.layer < systemWindowLevel,
+            candidate.frame.width >= 64,
+            candidate.frame.height >= 48,
+            let bundleIdentifier = candidate.bundleIdentifier?.lowercased(),
+            !bundleIdentifier.isEmpty
+        else {
             return false
         }
 
         if let currentBundleIdentifier,
-           bundleIdentifier == currentBundleIdentifier.lowercased() {
+            bundleIdentifier == currentBundleIdentifier.lowercased()
+        {
             return false
         }
 
@@ -75,7 +77,8 @@ public enum WindowCapturePolicy {
         // indicates an overlay, a utility surface, or a window manager's floating
         // panel that has nothing worth capturing.
         guard let windowTitle = candidate.windowTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !windowTitle.isEmpty else {
+            !windowTitle.isEmpty
+        else {
             return false
         }
 

@@ -95,7 +95,8 @@ public actor HistoryActor: HistoryProtocol {
         self.thumbsDir = storageURL.appendingPathComponent("thumbs")
         self.tempDir = storageURL.appendingPathComponent("tmp")
 
-        let keyURL = baseURL
+        let keyURL =
+            baseURL
             .appendingPathComponent("Security")
             .appendingPathComponent("history-v2.key")
         self.cryptoService = try CryptoService(keyURL: keyURL)
@@ -171,22 +172,26 @@ extension HistoryActor {
             let configured = defaults.integer(forKey: PreferenceKeys.historyRetentionDays)
             retentionDays = configured == 0 ? Int.max : min(max(configured, 1), 3_650)
         } else {
-            let legacyValue = defaults.string(forKey: PreferenceKeys.historyRetentionPolicy)
+            let legacyValue =
+                defaults.string(forKey: PreferenceKeys.historyRetentionPolicy)
                 ?? PreferenceDefaults.historyRetentionPolicy
-            retentionDays = switch legacyValue {
-            case "7days": 7
-            case "90days": 90
-            case "forever": Int.max
-            default: 30
-            }
+            retentionDays =
+                switch legacyValue {
+                case "7days": 7
+                case "90days": 90
+                case "forever": Int.max
+                default: 30
+                }
         }
 
-        let configuredMaxItems = defaults.object(forKey: PreferenceKeys.historyMaxItems) == nil
+        let configuredMaxItems =
+            defaults.object(forKey: PreferenceKeys.historyMaxItems) == nil
             ? PreferenceDefaults.historyMaxItems
             : defaults.integer(forKey: PreferenceKeys.historyMaxItems)
         let maxItems = min(max(configuredMaxItems, 10), 5_000)
 
-        let configuredStorageSize = defaults.object(forKey: PreferenceKeys.historyStorageSize) == nil
+        let configuredStorageSize =
+            defaults.object(forKey: PreferenceKeys.historyStorageSize) == nil
             ? PreferenceDefaults.historyStorageSize
             : defaults.double(forKey: PreferenceKeys.historyStorageSize)
         let storageSizeGB = min(max(configuredStorageSize, 0.1), 10)

@@ -23,7 +23,7 @@ extension RecordingExportPlanner {
         sessionLayout: AudioOutputLayout
     ) throws -> [PlannerAudioDescriptor] {
         guard let source, !source.urls.isEmpty,
-              source.urls.allSatisfy({ $0.isFileURL && fileExists($0) })
+            source.urls.allSatisfy({ $0.isFileURL && fileExists($0) })
         else { throw ExportError.missingSource }
         let descriptors = try inspectAudioSources(source, segment: segment, sessionLayout: sessionLayout)
         guard !descriptors.isEmpty else { throw ExportError.missingSource }
@@ -42,16 +42,18 @@ extension RecordingExportPlanner {
             case .checkpointPCM:
                 result.append(try checkpointDescriptor(url: url, segment: segment, mediaKind: mediaKind))
             case .publishedMedia:
-                result.append(contentsOf: try publishedDescriptors(
-                    url: url, segment: segment, layout: sessionLayout, mediaKind: mediaKind
-                ))
+                result.append(
+                    contentsOf: try publishedDescriptors(
+                        url: url, segment: segment, layout: sessionLayout, mediaKind: mediaKind
+                    ))
             case .recoveredMedia:
                 // Recovered media is the recorder's original file, not a sealed
                 // product: read the format from the file itself and report an
                 // honest missing source when it cannot be decoded as audio.
-                result.append(contentsOf: try recoveredDescriptors(
-                    url: url, segment: segment, layout: sessionLayout, mediaKind: mediaKind
-                ))
+                result.append(
+                    contentsOf: try recoveredDescriptors(
+                        url: url, segment: segment, layout: sessionLayout, mediaKind: mediaKind
+                    ))
             }
         }
         guard !result.isEmpty else { throw ExportError.missingSource }
@@ -75,10 +77,10 @@ extension RecordingExportPlanner {
     ) throws -> PlannerAudioDescriptor {
         let match = try checkpointMatch(for: url)
         guard let (record, track) = match,
-              record.segmentIndex == segment.index,
-              record.sampleCount > 0, track.frameCount >= record.sampleCount,
-              let role = recordingRole(track.role), track.sampleRate > 0,
-              (1...2).contains(track.channelCount)
+            record.segmentIndex == segment.index,
+            record.sampleCount > 0, track.frameCount >= record.sampleCount,
+            let role = recordingRole(track.role), track.sampleRate > 0,
+            (1...2).contains(track.channelCount)
         else { throw ExportError.missingSource }
         return PlannerAudioDescriptor(
             role: role,
@@ -98,8 +100,8 @@ extension RecordingExportPlanner {
         ).filter { $0.lastPathComponent.hasPrefix("checkpoint-") && $0.pathExtension == "json" }
         for sidecar in sidecars {
             guard let data = try? Data(contentsOf: sidecar),
-                  let record = try? JSONDecoder().decode(RecordingCheckpointRecord.self, from: data),
-                  let track = record.tracks.first(where: { $0.fileName == url.lastPathComponent })
+                let record = try? JSONDecoder().decode(RecordingCheckpointRecord.self, from: data),
+                let track = record.tracks.first(where: { $0.fileName == url.lastPathComponent })
             else { continue }
             return (record, track)
         }

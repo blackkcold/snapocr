@@ -1,15 +1,15 @@
+import CaptureCore
 import Foundation
-import SwiftUI
 import KeyboardShortcuts
 import SharedKit
-import CaptureCore
+import SwiftUI
 
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var viewModel: CaptureViewModel
     @EnvironmentObject private var router: PreferencesRouter
     @EnvironmentObject private var updater: UpdaterManager
-    
+
     var body: some View {
         if let update = updater.availableUpdate {
             Button {
@@ -93,14 +93,14 @@ struct MenuBarView: View {
         .globalKeyboardShortcut(.ocrFromClipboard)
 
         Divider()
-        
+
         Button("History") {
             AppWindowPresenter.present(id: "history") {
                 openWindow(id: "history")
             }
         }
         .keyboardShortcut("h", modifiers: [.command, .shift])
-        
+
         Button("Preferences...") {
             AppWindowPresenter.present(id: "preferences") {
                 openWindow(id: "preferences")
@@ -167,16 +167,18 @@ struct MenuBarView: View {
             // per-second update and can block the main thread on its fence. The
             // elapsed time is resolved when the menu is built (the menu is rebuilt
             // when it opens), which is the moment the user reads it.
-            Text(localizedStopTitle(
-                kind: .audio,
-                duration: viewModel.audioRecordingElapsedSeconds(at: Date())
-            ))
+            Text(
+                localizedStopTitle(
+                    kind: .audio,
+                    duration: viewModel.audioRecordingElapsedSeconds(at: Date())
+                ))
         }
-        .disabled(!RecordingMenuModel.isEnabled(
-            kind: .audio,
-            isRecording: viewModel.isAudioRecordingActive,
-            isSaving: viewModel.isRecordingSaving
-        ))
+        .disabled(
+            !RecordingMenuModel.isEnabled(
+                kind: .audio,
+                isRecording: viewModel.isAudioRecordingActive,
+                isSaving: viewModel.isRecordingSaving
+            ))
     }
 
     private var screenStopAction: some View {
@@ -187,11 +189,12 @@ struct MenuBarView: View {
             // timeline in a ControlCenter-hosted menu scene.
             Text(localizedStopTitle(kind: .screen, duration: screenRecordingElapsed(at: Date())))
         }
-        .disabled(!RecordingMenuModel.isEnabled(
-            kind: .screen,
-            isRecording: viewModel.recordingStatus == .starting || viewModel.recordingStatus == .recording,
-            isSaving: viewModel.isRecordingSaving
-        ))
+        .disabled(
+            !RecordingMenuModel.isEnabled(
+                kind: .screen,
+                isRecording: viewModel.recordingStatus == .starting || viewModel.recordingStatus == .recording,
+                isSaving: viewModel.isRecordingSaving
+            ))
     }
 
     private var audioSourceMenu: some View {

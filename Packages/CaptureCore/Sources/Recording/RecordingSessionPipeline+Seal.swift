@@ -50,16 +50,17 @@ extension RecordingSessionPipeline {
             let bundle = try await coordinator.closeSegmentBundle(at: index, isFinal: true)
             let segmentID = await ledger.segmentID(for: index)
             let sessionRecord = try await ledger.snapshot()
-            diagnosticBroadcaster.yield(.init(
-                phase: .sealStarted,
-                sessionID: ledger.sessionID,
-                segmentIndex: index,
-                range: RecordingSampleRange(
-                    startSample: bundle.coverage.segmentStartSample,
-                    sampleCount: bundle.coverage.segmentEndSample - bundle.coverage.segmentStartSample
-                ),
-                byteCount: Self.byteCount(bundle.checkpoints.checkpoints)
-            ))
+            diagnosticBroadcaster.yield(
+                .init(
+                    phase: .sealStarted,
+                    sessionID: ledger.sessionID,
+                    segmentIndex: index,
+                    range: RecordingSampleRange(
+                        startSample: bundle.coverage.segmentStartSample,
+                        sampleCount: bundle.coverage.segmentEndSample - bundle.coverage.segmentStartSample
+                    ),
+                    byteCount: Self.byteCount(bundle.checkpoints.checkpoints)
+                ))
             let context = RecordingSealContext(
                 sessionID: ledger.sessionID,
                 kind: .audio,
@@ -77,25 +78,27 @@ extension RecordingSessionPipeline {
             await checkpointSink?.sealFinished(segmentIndex: index)
             let duration = started.duration(to: .now).components
             let seconds = Double(duration.seconds) + Double(duration.attoseconds) / 1e18
-            diagnosticBroadcaster.yield(.init(
-                phase: .sealFinished,
-                sessionID: ledger.sessionID,
-                segmentIndex: index,
-                range: RecordingSampleRange(
-                    startSample: sealed.effectiveRange.startSample,
-                    sampleCount: sealed.effectiveRange.sampleCount
-                ),
-                durationSeconds: seconds
-            ))
-            diagnosticBroadcaster.yield(.init(
-                phase: .published,
-                sessionID: ledger.sessionID,
-                segmentIndex: index,
-                range: RecordingSampleRange(
-                    startSample: sealed.effectiveRange.startSample,
-                    sampleCount: sealed.effectiveRange.sampleCount
-                )
-            ))
+            diagnosticBroadcaster.yield(
+                .init(
+                    phase: .sealFinished,
+                    sessionID: ledger.sessionID,
+                    segmentIndex: index,
+                    range: RecordingSampleRange(
+                        startSample: sealed.effectiveRange.startSample,
+                        sampleCount: sealed.effectiveRange.sampleCount
+                    ),
+                    durationSeconds: seconds
+                ))
+            diagnosticBroadcaster.yield(
+                .init(
+                    phase: .published,
+                    sessionID: ledger.sessionID,
+                    segmentIndex: index,
+                    range: RecordingSampleRange(
+                        startSample: sealed.effectiveRange.startSample,
+                        sampleCount: sealed.effectiveRange.sampleCount
+                    )
+                ))
             await publishProgress()
         } catch {
             pipelineFailure = pipelineFailure ?? "segment seal/publish failed: \(error)"
@@ -108,8 +111,8 @@ extension RecordingSessionPipeline {
         coverage: RecordingSegmentCoverage
     ) throws -> PublishedSegment {
         guard sealed.segmentID == intent.segmentID, sealed.index == intent.segmentIndex,
-              sealed.effectiveRange.startSample == intent.effectiveRange.startSample,
-              sealed.effectiveRange.sampleCount == intent.effectiveRange.sampleCount
+            sealed.effectiveRange.startSample == intent.effectiveRange.startSample,
+            sealed.effectiveRange.sampleCount == intent.effectiveRange.sampleCount
         else { throw RecordingSessionLedgerError.invalidPublication }
         var files: [String: String] = [:]
         var trackMap: [String: Int] = [:]

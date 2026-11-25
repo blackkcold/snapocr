@@ -1,11 +1,11 @@
-import SwiftUI
-import SharedKit
-import CaptureCore
-import OCRCore
-import BarcodeCore
-import HistoryCore
-import ScrollCore
 import AppKit
+import BarcodeCore
+import CaptureCore
+import HistoryCore
+import OCRCore
+import ScrollCore
+import SharedKit
+import SwiftUI
 
 /// View model for managing capture state and coordinating between menu bar and capture services.
 ///
@@ -18,16 +18,16 @@ import AppKit
 public final class CaptureViewModel: ObservableObject {
     /// The orchestrator for handling screen captures
     public let captureOrchestrator: CaptureOrchestrator
-    
+
     /// The pipeline for performing OCR
     public let ocrPipeline: OCRPipeline
-    
+
     /// The engine for detecting barcodes
     public let barcodeEngine: VisionBarcodeEngine
 
     /// The actor responsible for assembling scrolling screenshots.
     public let scrollEngine: ScrollStitchActor
-    
+
     /// Whether a capture is currently in progress
     @Published public var isCapturing = false
 
@@ -61,7 +61,7 @@ public final class CaptureViewModel: ObservableObject {
 
     /// Whether the shelf can currently be toggled from the menu.
     @Published public internal(set) var canToggleScreenshotShelf = false
-    
+
     /// 编辑器窗口的多标签工作区：一个窗口承载多份文档。
     ///
     /// 新截图永远作为新标签打开，不再替换当前会话，因此「截图时正在编辑
@@ -155,21 +155,21 @@ public final class CaptureViewModel: ObservableObject {
             self?.showToast(message: message, type: type)
         }
     }
-    
+
     /// Sets up the global hotkeys using HotKeyManager.
     private func setupHotKeys() {
         HotKeyManager.shared.onCaptureArea = { [weak self] in
             self?.captureArea()
         }
-        
+
         HotKeyManager.shared.onCaptureWindow = { [weak self] in
             self?.captureWindow()
         }
-        
+
         HotKeyManager.shared.onCaptureFullscreen = { [weak self] in
             self?.captureFullscreen()
         }
-        
+
         HotKeyManager.shared.onOCRFromClipboard = { [weak self] in
             self?.ocrFromClipboard()
         }
@@ -178,7 +178,7 @@ public final class CaptureViewModel: ObservableObject {
             self?.toggleScreenshotShelf()
         }
     }
-    
+
     /// Checks screen recording permissions on launch and opens the permission guide if needed.
     public func checkPermissionsOnLaunch() {
         Task {
@@ -210,7 +210,7 @@ public final class CaptureViewModel: ObservableObject {
             action: action
         )
         toastMessage = toast
-        
+
         // Auto dismiss
         Task {
             try? await Task.sleep(for: .seconds(action == nil ? 3 : 6))

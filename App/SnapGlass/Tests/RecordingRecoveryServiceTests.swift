@@ -56,7 +56,8 @@ struct RecordingRecoveryServiceTests {
         let exportRoot = RecordingExportRoot(kind: .audio, root: root)
         let service = RecordingRecoveryService()
         let recording = try #require(await service.scan(roots: [exportRoot]).first)
-        let sessionDirectory = root
+        let sessionDirectory =
+            root
             .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
 
@@ -110,9 +111,10 @@ struct RecordingRecoveryServiceTests {
         await #expect(throws: RecordingRecoveryService.ServiceError.sessionUnavailable) {
             try await service.recover(missing)
         }
-        #expect(!FileManager.default.fileExists(
-            atPath: root.appendingPathComponent(".SnapGlassSessions").path
-        ))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: root.appendingPathComponent(".SnapGlassSessions").path
+            ))
     }
 
     @Test func scanOfAnUnreadableRootReturnsNothing() async {
@@ -120,7 +122,7 @@ struct RecordingRecoveryServiceTests {
             .appendingPathComponent("snapglass-missing-\(UUID().uuidString)", isDirectory: true)
         let service = RecordingRecoveryService()
         let found = await service.scan(roots: [
-            RecordingExportRoot(kind: .audio, root: missing),
+            RecordingExportRoot(kind: .audio, root: missing)
         ])
         #expect(found.isEmpty)
     }
@@ -128,9 +130,11 @@ struct RecordingRecoveryServiceTests {
     // MARK: Fixtures
 
     private func makeRoot(_ name: String) throws -> URL {
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let base =
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
-        let root = base
+        let root =
+            base
             .appendingPathComponent("SnapGlassTests", isDirectory: true)
             .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -144,20 +148,23 @@ struct RecordingRecoveryServiceTests {
         sessionID: UUID,
         seconds: Double
     ) async throws -> URL {
-        let sessionRoot = root
+        let sessionRoot =
+            root
             .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
         try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
-        let indexURL = root
+        let indexURL =
+            root
             .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent("recording-index.json")
         let ledger = try RecordingSessionLedger(
             sessionRoot: sessionRoot, indexURL: indexURL, sessionID: sessionID
         )
-        try await ledger.register(RecordingSessionRecord(
-            id: sessionID, kind: .audio, layout: .mixed,
-            startedAt: Date(timeIntervalSince1970: 1_800_000_000), segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: sessionID, kind: .audio, layout: .mixed,
+                startedAt: Date(timeIntervalSince1970: 1_800_000_000), segments: []
+            ))
         let segmentDirectory = sessionRoot.appendingPathComponent("segment-00000000", isDirectory: true)
         try FileManager.default.createDirectory(at: segmentDirectory, withIntermediateDirectories: true)
         let caf = segmentDirectory.appendingPathComponent("mixed-0001.caf")
@@ -166,20 +173,23 @@ struct RecordingRecoveryServiceTests {
     }
 
     private func makeZeroByteVideoSession(root: URL, sessionID: UUID) async throws {
-        let sessionRoot = root
+        let sessionRoot =
+            root
             .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
         try FileManager.default.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
-        let indexURL = root
+        let indexURL =
+            root
             .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent("recording-index.json")
         let ledger = try RecordingSessionLedger(
             sessionRoot: sessionRoot, indexURL: indexURL, sessionID: sessionID
         )
-        try await ledger.register(RecordingSessionRecord(
-            id: sessionID, kind: .screen, layout: .separateTracks,
-            startedAt: Date(timeIntervalSince1970: 1_800_000_000), segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: sessionID, kind: .screen, layout: .separateTracks,
+                startedAt: Date(timeIntervalSince1970: 1_800_000_000), segments: []
+            ))
         let segmentDirectory = sessionRoot.appendingPathComponent("segment-00000000", isDirectory: true)
         try FileManager.default.createDirectory(at: segmentDirectory, withIntermediateDirectories: true)
         try Data().write(to: segmentDirectory.appendingPathComponent("chunk-00000000.mp4"))

@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+
 @testable import SharedKit
 
 struct PreferenceKeysTests {
@@ -77,15 +78,17 @@ struct ImageEncoderTests {
     }
 
     private func makeImage() throws -> CGImage {
-        guard let context = CGContext(
-            data: nil,
-            width: 16,
-            height: 16,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: 16,
+                height: 16,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            )
+        else {
             throw AppError.internalError("Unable to create test context")
         }
         context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1))

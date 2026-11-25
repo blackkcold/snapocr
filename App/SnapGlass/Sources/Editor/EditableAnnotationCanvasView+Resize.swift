@@ -9,7 +9,8 @@ import SwiftUI
 extension EditableAnnotationCanvasNSView {
     func beginSelectionInteraction(at point: CGPoint, clickCount: Int) {
         if let selectedNode = selectedNode,
-           let handle = resizeHandle(at: point, for: selectedNode) {
+            let handle = resizeHandle(at: point, for: selectedNode)
+        {
             originalNode = selectedNode
             interactiveNode = selectedNode
             let contentPoint = contentHandlePoint(handle, for: selectedNode)
@@ -125,16 +126,17 @@ extension EditableAnnotationCanvasNSView {
             )
             node.normalizedRect = proposedBounds
         } else {
-            let requestedScale: CGFloat = switch handle {
-            case .left, .right:
-                widthScale
-            case .top, .bottom:
-                heightScale
-            case .bottomLeft, .bottomRight, .topLeft, .topRight:
-                abs(widthScale - 1) >= abs(heightScale - 1) ? widthScale : heightScale
-            case .start, .end:
-                1
-            }
+            let requestedScale: CGFloat =
+                switch handle {
+                case .left, .right:
+                    widthScale
+                case .top, .bottom:
+                    heightScale
+                case .bottomLeft, .bottomRight, .topLeft, .topRight:
+                    abs(widthScale - 1) >= abs(heightScale - 1) ? widthScale : heightScale
+                case .start, .end:
+                    1
+                }
             let minimumScale = max(
                 max(4 / max(source.fontSize, 1), 0.01 / oldBounds.width),
                 0.01 / oldBounds.height

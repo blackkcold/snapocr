@@ -54,21 +54,24 @@ struct ScreenshotShelfManagerTests {
     }
 
     @Test func staleCaptureScaleFallsBackToOneWhenImageWidthChanges() {
-        #expect(ScreenshotShelfManager.displayScaleForPinning(
-            displayScale: 2,
-            scaleSourcePixelWidth: 800,
-            imagePixelWidth: 800
-        ) == 2)
-        #expect(ScreenshotShelfManager.displayScaleForPinning(
-            displayScale: 2,
-            scaleSourcePixelWidth: 800,
-            imagePixelWidth: 640
-        ) == 1)
-        #expect(ScreenshotShelfManager.displayScaleForPinning(
-            displayScale: 2,
-            scaleSourcePixelWidth: nil,
-            imagePixelWidth: 800
-        ) == 1)
+        #expect(
+            ScreenshotShelfManager.displayScaleForPinning(
+                displayScale: 2,
+                scaleSourcePixelWidth: 800,
+                imagePixelWidth: 800
+            ) == 2)
+        #expect(
+            ScreenshotShelfManager.displayScaleForPinning(
+                displayScale: 2,
+                scaleSourcePixelWidth: 800,
+                imagePixelWidth: 640
+            ) == 1)
+        #expect(
+            ScreenshotShelfManager.displayScaleForPinning(
+                displayScale: 2,
+                scaleSourcePixelWidth: nil,
+                imagePixelWidth: 800
+            ) == 1)
     }
 
     @Test func captureCompletedCarriesMockupStyleForReEditAndBadge() throws {
@@ -233,15 +236,17 @@ struct ScreenshotShelfManagerTests {
     }
 
     private func makeImage() throws -> CGImage {
-        guard let context = CGContext(
-            data: nil,
-            width: 2,
-            height: 2,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ), let image = context.makeImage() else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: 2,
+                height: 2,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ), let image = context.makeImage()
+        else {
             throw ScreenshotShelfManagerTestError.imageUnavailable
         }
         return image

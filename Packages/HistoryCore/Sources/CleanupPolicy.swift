@@ -310,9 +310,10 @@ public struct CleanupPolicy: Sendable {
     /// - Returns: 驻留内存字节数，查询失败返回 0
     public static func residentMemorySize() -> UInt64 {
         var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<mach_task_basic_info>.size
-        ) / 4
+        var count =
+            mach_msg_type_number_t(
+                MemoryLayout<mach_task_basic_info>.size
+            ) / 4
 
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {

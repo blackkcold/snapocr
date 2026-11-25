@@ -26,7 +26,8 @@ enum ScreenshotShelfNativeDragGeometry {
     /// Resolves the card size from the current layout, not the drag-start preview.
     static func cardSize(at index: Int, layout: ScreenshotShelfLayout) -> CGSize? {
         guard layout.cards.indices.contains(index),
-              layout.cardWidths.indices.contains(index) else { return nil }
+            layout.cardWidths.indices.contains(index)
+        else { return nil }
         let width = layout.cardWidths[index]
         let height = layout.cardHeight
         guard width.isFinite, width > 0, height.isFinite, height > 0 else { return nil }
@@ -125,9 +126,10 @@ final class ScreenshotShelfDragOutController {
     private func handleDrag(_ event: NSEvent, panel: ScreenshotShelfPanel) -> Bool {
         let preview = model.dragPreview
         let pointer = panel.convertPoint(toScreen: event.locationInWindow)
-        let localPointer = panel.contentView.map {
-            localPoint(fromWindow: event.locationInWindow, in: $0)
-        } ?? .zero
+        let localPointer =
+            panel.contentView.map {
+                localPoint(fromWindow: event.locationInWindow, in: $0)
+            } ?? .zero
         let isOutside = ScreenshotShelfDragOutGeometry.isOutside(
             point: pointer,
             panelFrame: panel.frame
@@ -179,7 +181,8 @@ final class ScreenshotShelfDragOutController {
     private func prepareIfNeeded(_ captureID: UUID) {
         if preparingCaptureID == captureID,
             let startedAt = preparationStartedAt,
-            now().timeIntervalSince(startedAt) < preparationTimeout {
+            now().timeIntervalSince(startedAt) < preparationTimeout
+        {
             return
         }
 
@@ -207,16 +210,19 @@ final class ScreenshotShelfDragOutController {
         pointerLocal: CGPoint
     ) {
         guard let view = panel.contentView,
-              let index = model.layout.cards.firstIndex(where: { $0.captureID == preview.cardID }),
-              model.layout.cardWidths.indices.contains(index) else {
+            let index = model.layout.cards.firstIndex(where: { $0.captureID == preview.cardID }),
+            model.layout.cardWidths.indices.contains(index)
+        else {
             rollbackLocalHandoff()
             return
         }
 
-        guard let cardSize = ScreenshotShelfNativeDragGeometry.cardSize(
-            at: index,
-            layout: model.layout
-        ) else {
+        guard
+            let cardSize = ScreenshotShelfNativeDragGeometry.cardSize(
+                at: index,
+                layout: model.layout
+            )
+        else {
             rollbackLocalHandoff()
             return
         }

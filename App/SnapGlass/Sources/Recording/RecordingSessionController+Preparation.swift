@@ -1,9 +1,8 @@
 import AppKit
 import CaptureCore
 import Foundation
-import SharedKit
-
 @preconcurrency import ScreenCaptureKit
+import SharedKit
 
 /// Source preparation: countdown, source picker, destination recheck, and the
 /// agent-channel entry points that skip the picker.
@@ -305,7 +304,7 @@ extension RecordingSessionController {
     @discardableResult
     func beginScreenRequest() -> RecordingRequestIdentity? {
         guard status == .idle, !hasLiveCaptureResources, !isAudioSessionActive,
-              !hasPendingBackgroundFinalization, !screenStartOwnership.blocksNewStart
+            !hasPendingBackgroundFinalization, !screenStartOwnership.blocksNewStart
         else { return nil }
         let request = RecordingRequestIdentity(kind: .screen)
         dismissFailurePanel()
@@ -394,7 +393,7 @@ extension RecordingSessionController {
     @discardableResult
     func beginAudioRequest(requiresMicrophonePermission: Bool = true) -> RecordingRequestIdentity? {
         guard status == .idle, !hasLiveCaptureResources, !isAudioSessionActive,
-              !hasPendingBackgroundFinalization
+            !hasPendingBackgroundFinalization
         else { return nil }
         let request = RecordingRequestIdentity(kind: .audio)
         dismissFailurePanel()

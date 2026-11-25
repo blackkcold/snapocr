@@ -4,7 +4,8 @@ import AppKit
 extension EditableAnnotationCanvasNSView {
     func prepareVerticalCropIfNeeded() {
         guard verticalCropOnly, currentTool == .crop, image != nil,
-              pendingCropRect.isEmpty else { return }
+            pendingCropRect.isEmpty
+        else { return }
         pendingCropRect = CGRect(x: 0, y: 0, width: 1, height: 1)
         interaction = .adjustingCrop
         needsDisplay = true
@@ -79,8 +80,9 @@ extension EditableAnnotationCanvasNSView {
     func confirmPendingCrop() {
         let cropViewRect = viewRect(from: pendingCropRect)
         guard currentTool == .crop,
-              cropViewRect.width > 5,
-              cropViewRect.height > 5 else { return }
+            cropViewRect.width > 5,
+            cropViewRect.height > 5
+        else { return }
         let node = makeNode(
             tool: .crop,
             points: [],
@@ -122,7 +124,8 @@ extension EditableAnnotationCanvasNSView {
     }
 
     private func drawCropConfirmationHint(for rect: CGRect) {
-        let hint = verticalCropOnly
+        let hint =
+            verticalCropOnly
             ? AppLocalization.string("Drag the top or bottom edge, then press Return")
             : AppLocalization.string("Return / double-click to crop")
         let attributes: [NSAttributedString.Key: Any] = [
@@ -134,7 +137,8 @@ extension EditableAnnotationCanvasNSView {
         let maximumCenterX = imageDisplayRect.maxX - size.width / 2 - 8
         let centerX = min(max(rect.midX, minimumCenterX), maximumCenterX)
         let preferredY = rect.minY - size.height - 16
-        let originY = preferredY >= imageDisplayRect.minY
+        let originY =
+            preferredY >= imageDisplayRect.minY
             ? preferredY
             : min(rect.maxY + 8, imageDisplayRect.maxY - size.height - 8)
         let labelRect = CGRect(

@@ -1,10 +1,9 @@
 import AppKit
 import BarcodeCore
 import CaptureCore
+@preconcurrency import ScreenCaptureKit
 import SharedKit
 import SwiftUI
-
-@preconcurrency import ScreenCaptureKit
 
 // MARK: - AreaTrackingView
 
@@ -241,7 +240,8 @@ final class AreaTrackingView: NSView {
             }
             // 双击保留为「复制」快捷路径；手柄上的双击不触发，避免误判。
             if event.clickCount == 2, style == .rectangle,
-               selectionRect.contains(point), hitHandle(at: point) == nil {
+                selectionRect.contains(point), hitHandle(at: point) == nil
+            {
                 completeSelection(action: .copy)
                 return
             }
@@ -333,7 +333,8 @@ final class AreaTrackingView: NSView {
 
     /// 从「已选」状态在空白处重新起框；先记住旧框，空点一下可恢复。
     private func beginNewSelection(at point: CGPoint) {
-        pendingPreviousSelection = selectionRect.isEmpty || onColorPicked != nil
+        pendingPreviousSelection =
+            selectionRect.isEmpty || onColorPicked != nil
             ? nil
             : (selectionRect, freeformPoints)
         phase = .drawing
@@ -394,9 +395,10 @@ final class AreaTrackingView: NSView {
     /// 松手即出栏；动作栏与手柄同时在线，不再有单独的确认态。
     private func showActionBar() {
         guard purpose == .capture,
-              phase == .selected,
-              selectionRect.width > 5,
-              selectionRect.height > 5 else { return }
+            phase == .selected,
+            selectionRect.width > 5,
+            selectionRect.height > 5
+        else { return }
         hoveredHandle = nil
         actionBar.isHidden = false
         actionBar.updatePinShortcutHint()
@@ -408,9 +410,10 @@ final class AreaTrackingView: NSView {
 
     func completeSelection(action: AreaCaptureAction) {
         guard purpose == .capture,
-              phase == .selected,
-              selectionRect.width > 5,
-              selectionRect.height > 5 else { return }
+            phase == .selected,
+            selectionRect.width > 5,
+            selectionRect.height > 5
+        else { return }
         dismissBarcodePanel()
         onSelectionComplete?(makeSelectionResult(action: action))
     }
@@ -429,21 +432,24 @@ final class AreaTrackingView: NSView {
             normalizedPath = nil
         }
         let rects = selectionRects()
-        return .capture(AreaCaptureSelectionResult(
-            screenRect: rects.quartz,
-            appKitRect: rects.appKit,
-            displayID: screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")
-            ] as? CGDirectDisplayID,
-            normalizedPath: normalizedPath,
-            action: action
-        ))
+        return .capture(
+            AreaCaptureSelectionResult(
+                screenRect: rects.quartz,
+                appKitRect: rects.appKit,
+                displayID: screen.deviceDescription[
+                    NSDeviceDescriptionKey("NSScreenNumber")
+                ] as? CGDirectDisplayID,
+                normalizedPath: normalizedPath,
+                action: action
+            ))
     }
 
     private func makeRecordingRegionResult() -> AreaSelectionResult? {
-        guard let displayID = screen.deviceDescription[
-            NSDeviceDescriptionKey("NSScreenNumber")
-        ] as? CGDirectDisplayID else {
+        guard
+            let displayID = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? CGDirectDisplayID
+        else {
             return nil
         }
         return .recordingRegion(
@@ -481,7 +487,8 @@ final class AreaTrackingView: NSView {
         if !keepingSide && !belowFits && !aboveFits {
             originY = bounds.midY - size.height / 2
         } else {
-            originY = actionBarAbove
+            originY =
+                actionBarAbove
                 ? selectionRect.maxY + margin
                 : selectionRect.minY - size.height - margin
         }
@@ -553,17 +560,19 @@ extension AreaTrackingView {
         let appKitRect = window.convertToScreen(windowRect)
         let center = CGPoint(x: appKitRect.midX, y: appKitRect.midY)
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }),
-              let displayID = screen.deviceDescription[
-                  NSDeviceDescriptionKey("NSScreenNumber")
-              ] as? CGDirectDisplayID else {
+            let displayID = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? CGDirectDisplayID
+        else {
             return (appKitRect, appKitRect)
         }
 
-        let quartz = ScreenCoordinateGeometry.quartzRect(
-            from: appKitRect,
-            appKitScreenFrame: screen.frame,
-            quartzScreenFrame: CGDisplayBounds(displayID)
-        ) ?? appKitRect
+        let quartz =
+            ScreenCoordinateGeometry.quartzRect(
+                from: appKitRect,
+                appKitScreenFrame: screen.frame,
+                quartzScreenFrame: CGDisplayBounds(displayID)
+            ) ?? appKitRect
         return (appKitRect, quartz)
     }
 
@@ -608,8 +617,9 @@ extension AreaTrackingView {
             return
         }
         if phase == .selected,
-           event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
-           let character = event.charactersIgnoringModifiers?.lowercased() {
+            event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
+            let character = event.charactersIgnoringModifiers?.lowercased()
+        {
             if character == "e" {
                 completeSelection(action: .edit)
                 return
@@ -641,7 +651,6 @@ extension AreaTrackingView {
     }
 
 }
-
 
 extension AreaTrackingView.ResizeHandle {
     /// 八方向手柄对应的系统光标（对角线在 macOS 15 以下退回十字）。

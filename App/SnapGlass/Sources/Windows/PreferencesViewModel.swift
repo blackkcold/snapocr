@@ -1,5 +1,5 @@
-import SwiftUI
 import Combine
+import SwiftUI
 
 final class PreferencesViewModel: ObservableObject {
     @Published var defaultLanguage: String {
@@ -35,14 +35,15 @@ final class PreferencesViewModel: ObservableObject {
     @Published var devModeEnabled: Bool {
         didSet { UserDefaults.standard.set(devModeEnabled, forKey: "devModeEnabled") }
     }
-    
+
     init() {
         self.defaultLanguage = UserDefaults.standard.string(forKey: "defaultLanguage") ?? "en-US"
         self.launchAtLogin = UserDefaults.standard.bool(forKey: "launchAtLogin")
         self.autoCopyToClipboard = UserDefaults.standard.bool(forKey: "autoCopyToClipboard")
         self.defaultCaptureMode = UserDefaults.standard.string(forKey: "defaultCaptureMode") ?? "area"
         self.saveLocation = UserDefaults.standard.string(forKey: "saveLocation") ?? "~/Pictures/SnapGlass"
-        self.ocrLanguagePriority = UserDefaults.standard.stringArray(forKey: "ocrLanguagePriority")
+        self.ocrLanguagePriority =
+            UserDefaults.standard.stringArray(forKey: "ocrLanguagePriority")
             ?? ["en-US", "zh-Hans"]
         self.ocrEngine = UserDefaults.standard.string(forKey: "ocrEngine") ?? "vision"
         self.confidenceThreshold = {
@@ -59,7 +60,7 @@ final class PreferencesViewModel: ObservableObject {
         }()
         self.devModeEnabled = UserDefaults.standard.bool(forKey: "devModeEnabled")
     }
-    
+
     func exportLogs() {
         print("Exporting logs...")
     }

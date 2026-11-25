@@ -129,9 +129,9 @@ struct CapturePreferencesView: View {
 
             PreferencesCardCaption(
                 text: """
-                Area captures ask whether to copy or edit when you confirm the selection. \
-                These settings apply to window, fullscreen, and scrolling captures.
-                """
+                    Area captures ask whether to copy or edit when you confirm the selection. \
+                    These settings apply to window, fullscreen, and scrolling captures.
+                    """
             )
 
             Toggle("Open annotation editor", isOn: $openEditor)
@@ -280,15 +280,15 @@ private struct MockupPreview: View {
         let width = 360
         let height = 220
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
         else { return nil }
 
         context.setFillColor(CGColor(gray: 1, alpha: 1))
@@ -303,12 +303,13 @@ private struct MockupPreview: View {
         ]
         for (offset, color) in lights {
             context.setFillColor(color)
-            context.fillEllipse(in: CGRect(
-                x: offset,
-                y: CGFloat(height) - 24,
-                width: 9,
-                height: 9
-            ))
+            context.fillEllipse(
+                in: CGRect(
+                    x: offset,
+                    y: CGFloat(height) - 24,
+                    width: 9,
+                    height: 9
+                ))
         }
 
         context.setFillColor(CGColor(gray: 0.88, alpha: 1))

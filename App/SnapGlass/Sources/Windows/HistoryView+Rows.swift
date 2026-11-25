@@ -13,11 +13,13 @@ struct ColorHistoryCard: View {
         Button(action: onCopy) {
             VStack(alignment: .leading, spacing: 8) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(
-                        red: Double(entry.color.red) / 255,
-                        green: Double(entry.color.green) / 255,
-                        blue: Double(entry.color.blue) / 255
-                    ))
+                    .fill(
+                        Color(
+                            red: Double(entry.color.red) / 255,
+                            green: Double(entry.color.green) / 255,
+                            blue: Double(entry.color.blue) / 255
+                        )
+                    )
                     .frame(height: 56)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)

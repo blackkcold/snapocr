@@ -167,12 +167,13 @@ extension CaptureViewModel {
             forKey: PreferenceKeys.historySaveFullText,
             defaultValue: PreferenceDefaults.historySaveFullText
         )
-        let shouldSaveToHistory = switch destination {
-        case .configured: autoSave
-        case .clipboardOnly: imageCopySucceeded
-        case .editorOnly: true
-        case .pinOnly: true
-        }
+        let shouldSaveToHistory =
+            switch destination {
+            case .configured: autoSave
+            case .clipboardOnly: imageCopySucceeded
+            case .editorOnly: true
+            case .pinOnly: true
+            }
         guard shouldSaveToHistory else { return nil }
         return await saveToHistoryAndWait(
             image: image,
@@ -201,11 +202,14 @@ extension CaptureViewModel {
             forKey: PreferenceKeys.captureAutoOCR,
             defaultValue: PreferenceDefaults.captureAutoOCR
         )
-        let shouldCopyOCRText = destination != .clipboardOnly && Self.boolPreference(
-            forKey: PreferenceKeys.captureCopyOCRText,
-            defaultValue: PreferenceDefaults.captureCopyOCRText
-        )
-        let ocrResult = shouldRunOCR
+        let shouldCopyOCRText =
+            destination != .clipboardOnly
+            && Self.boolPreference(
+                forKey: PreferenceKeys.captureCopyOCRText,
+                defaultValue: PreferenceDefaults.captureCopyOCRText
+            )
+        let ocrResult =
+            shouldRunOCR
             ? await performOCR(on: image, copyToClipboard: shouldCopyOCRText)
             : nil
 

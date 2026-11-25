@@ -404,15 +404,16 @@ public enum RecordingExportPlanner {
             let requested = plan.requestedRanges[clip.segmentID] ?? clip.requestedRange
             let actual = actualRanges[clip.segmentID] ?? plan.effectiveRanges[clip.segmentID] ?? clip.effectiveRange
             guard requested.sampleCount > 0, actual.sampleCount > 0,
-                  actual.startSample <= requested.startSample,
-                  actual.endSample >= requested.endSample,
-                  actual.startSample >= 0
+                actual.startSample <= requested.startSample,
+                actual.endSample >= requested.endSample,
+                actual.startSample >= 0
             else { throw ExportError.missingSource }
             effective[clip.segmentID] = actual
-            clips.append(ExportClip(
-                segmentID: clip.segmentID, index: clip.index,
-                requestedRange: requested, effectiveRange: actual, videoRange: clip.videoRange
-            ))
+            clips.append(
+                ExportClip(
+                    segmentID: clip.segmentID, index: clip.index,
+                    requestedRange: requested, effectiveRange: actual, videoRange: clip.videoRange
+                ))
         }
         let duration = clips.reduce(0.0) { $0 + Double($1.effectiveRange.sampleCount) / Double(sessionSampleRate) }
         let overage = max(0, duration - maximumExportDuration)

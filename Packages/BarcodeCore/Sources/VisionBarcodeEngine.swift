@@ -66,11 +66,12 @@ public final class VisionBarcodeEngine: BarcodeProtocol, Sendable {
             return []
         }
 
-        let results = observations
+        let results =
+            observations
             .filter { $0.confidence >= minimumConfidence }
             .compactMap { observation -> BarcodeResult? in
                 guard let payload = observation.payloadStringValue,
-                      let type = Self.mapToBarcodeType(observation.symbology)
+                    let type = Self.mapToBarcodeType(observation.symbology)
                 else {
                     return nil
                 }

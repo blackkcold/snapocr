@@ -20,9 +20,9 @@ extension View {
     ) -> some View {
         if #available(macOS 26.0, *) {
             #if compiler(>=6.2)
-            glassEffect(Glass.regular, in: shapePath(shape))
+                glassEffect(Glass.regular, in: shapePath(shape))
             #else
-            background(fallbackMaterial, in: shapePath(shape))
+                background(fallbackMaterial, in: shapePath(shape))
             #endif
         } else {
             background(fallbackMaterial, in: shapePath(shape))
@@ -36,16 +36,16 @@ extension View {
     ) -> some View {
         if #available(macOS 26.0, *) {
             #if compiler(>=6.2)
-            if tinted {
-                glassEffect(
-                    Glass.regular.tint(.accentColor.opacity(0.35)).interactive(),
-                    in: shapePath(shape)
-                )
-            } else {
-                glassEffect(Glass.regular.interactive(), in: shapePath(shape))
-            }
+                if tinted {
+                    glassEffect(
+                        Glass.regular.tint(.accentColor.opacity(0.35)).interactive(),
+                        in: shapePath(shape)
+                    )
+                } else {
+                    glassEffect(Glass.regular.interactive(), in: shapePath(shape))
+                }
             #else
-            background(.ultraThinMaterial, in: shapePath(shape))
+                background(.ultraThinMaterial, in: shapePath(shape))
             #endif
         } else {
             background(.ultraThinMaterial, in: shapePath(shape))
@@ -60,14 +60,14 @@ extension View {
         case .capsule: return AnyShape(Capsule())
         case .concentric(let minimumRadius):
             #if compiler(>=6.2)
-            if #available(macOS 26.0, *) {
-                return AnyShape(
-                    ConcentricRectangle(
-                        corners: .concentric(minimum: .fixed(minimumRadius)),
-                        isUniform: true
+                if #available(macOS 26.0, *) {
+                    return AnyShape(
+                        ConcentricRectangle(
+                            corners: .concentric(minimum: .fixed(minimumRadius)),
+                            isUniform: true
+                        )
                     )
-                )
-            }
+                }
             #endif
             return AnyShape(RoundedRectangle(cornerRadius: minimumRadius))
         }
@@ -80,11 +80,11 @@ struct GlassGroup<Content: View>: View {
     var body: some View {
         if #available(macOS 26.0, *) {
             #if compiler(>=6.2)
-            GlassEffectContainer {
-                content
-            }
+                GlassEffectContainer {
+                    content
+                }
             #else
-            content
+                content
             #endif
         } else {
             content

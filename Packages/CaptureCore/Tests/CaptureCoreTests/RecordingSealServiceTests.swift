@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import Testing
+
 @testable import CaptureCore
 
 /// Thread-safe publication hook used by the Task 8 seal tests.
@@ -136,7 +137,7 @@ struct RecordingSealServiceTests {
                 [
                     T8Append(role: .system, startSample: 0, frameCount: 4_800, amplitude: 0.6),
                     T8Append(role: .microphone, startSample: 0, frameCount: 4_800, amplitude: 0.4),
-                ],
+                ]
             ]
         )
     }
@@ -224,9 +225,10 @@ struct RecordingSealServiceTests {
         #expect(sealed.trackMap == [.system: 0, .microphone: 1])
         #expect(sealed.videoURL == nil)
         #expect(sealed.videoTrackIndex == nil)
-        #expect(Set(try T8TestSupport.visibleFileNames(in: directory)) == [
-            "manifest.json", "mic.m4a", "system.m4a",
-        ])
+        #expect(
+            Set(try T8TestSupport.visibleFileNames(in: directory)) == [
+                "manifest.json", "mic.m4a", "system.m4a",
+            ])
         #expect(try T8TestSupport.visibleFileNames(in: destination) == ["take-00"])
 
         let manifestURL = try #require(sealed.manifestURL)
@@ -273,7 +275,7 @@ struct RecordingSealServiceTests {
                     insertedSilenceFrames: 0,
                     encodedPacketCount: 94,
                     decodedFrameCount: 96_000
-                ),
+                )
             ],
             missingRanges: [RecordingSampleRange(startSample: 120_000, sampleCount: 480)],
             videoURL: videoURL,

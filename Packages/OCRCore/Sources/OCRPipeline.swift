@@ -214,9 +214,10 @@ public final class OCRPipeline: Sendable {
             guard let tileResult else { continue }
             resultEngine = resultEngine ?? tileResult.engineType
             let tile = tiles[index]
-            mappedLines.append(contentsOf: tileResult.observations.map {
-                TiledOCRProcessor.remap($0, from: tile, fullImageSize: fullSize)
-            })
+            mappedLines.append(
+                contentsOf: tileResult.observations.map {
+                    TiledOCRProcessor.remap($0, from: tile, fullImageSize: fullSize)
+                })
         }
 
         try Task.checkCancellation()
@@ -225,7 +226,8 @@ public final class OCRPipeline: Sendable {
             throw OCRError.recognitionFailed(reason: "未识别到任何有效文本")
         }
 
-        let confidence = mergedLines.reduce(Float(0)) { $0 + $1.confidence }
+        let confidence =
+            mergedLines.reduce(Float(0)) { $0 + $1.confidence }
             / Float(mergedLines.count)
         return OCRResult(
             text: mergedLines.map(\.text).joined(separator: "\n"),

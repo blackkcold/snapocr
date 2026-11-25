@@ -1,0 +1,5 @@
+# Formatting-only commits excluded from git blame.
+# See https://git-scm.com/docs/git-config#Documentation/git-config.txt-blameignoreRevsFile
+#
+# 4-space swift-format alignment of all Swift sources.
+9a1ef3a8c7744271b47a2845f4348f7255ffbe29

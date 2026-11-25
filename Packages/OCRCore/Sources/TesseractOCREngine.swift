@@ -32,19 +32,21 @@ final class TesseractLibrary: @unchecked Sendable {
     // MARK: - C 函数指针类型
 
     private typealias TessBaseAPICreateFunc = @convention(c) () -> OpaquePointer?
-    private typealias TessBaseAPIInit3Func = @convention(c) (
-        OpaquePointer?,
-        UnsafePointer<CChar>?,
-        UnsafePointer<CChar>?
-    ) -> Int32
-    private typealias TessBaseAPISetImageFunc = @convention(c) (
-        OpaquePointer?,
-        UnsafePointer<UInt8>?,
-        Int32,
-        Int32,
-        Int32,
-        Int32
-    ) -> Void
+    private typealias TessBaseAPIInit3Func =
+        @convention(c) (
+            OpaquePointer?,
+            UnsafePointer<CChar>?,
+            UnsafePointer<CChar>?
+        ) -> Int32
+    private typealias TessBaseAPISetImageFunc =
+        @convention(c) (
+            OpaquePointer?,
+            UnsafePointer<UInt8>?,
+            Int32,
+            Int32,
+            Int32,
+            Int32
+        ) -> Void
     private typealias TessBaseAPIGetUTF8TextFunc = @convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?
     private typealias TessBaseAPIMeanTextConfFunc = @convention(c) (OpaquePointer?) -> Int32
     private typealias TessBaseAPIDeleteFunc = @convention(c) (OpaquePointer?) -> Void
@@ -144,14 +146,14 @@ final class TesseractLibrary: @unchecked Sendable {
         tessdataPath: String
     ) throws -> (text: String, confidence: Float) {
         guard isAvailable,
-              let create = tessBaseAPICreate,
-              let init3 = tessBaseAPIInit3,
-              let setImage = tessBaseAPISetImage,
-              let getText = tessBaseAPIGetUTF8Text,
-              let getConf = tessBaseAPIMeanTextConf,
-              let delete = tessBaseAPIDelete,
-              let deleteText = tessDeleteText,
-              let recognize = tessBaseAPIRecognize
+            let create = tessBaseAPICreate,
+            let init3 = tessBaseAPIInit3,
+            let setImage = tessBaseAPISetImage,
+            let getText = tessBaseAPIGetUTF8Text,
+            let getConf = tessBaseAPIMeanTextConf,
+            let delete = tessBaseAPIDelete,
+            let deleteText = tessDeleteText,
+            let recognize = tessBaseAPIRecognize
         else {
             throw OCRError.engineUnavailable(.tesseract(languageDataPath: URL(fileURLWithPath: tessdataPath)))
         }
@@ -361,15 +363,16 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
         )
 
         // 8. 日志回调
-        logHandler?(OCRLogEntry(
-            timestamp: Date(),
-            visionConfidence: 0,
-            tesseractConfidence: rawConfidence,
-            visionText: "",
-            tesseractText: recognizedText,
-            visionTimeMs: 0,
-            tesseractTimeMs: processingTime
-        ))
+        logHandler?(
+            OCRLogEntry(
+                timestamp: Date(),
+                visionConfidence: 0,
+                tesseractConfidence: rawConfidence,
+                visionText: "",
+                tesseractText: recognizedText,
+                visionTimeMs: 0,
+                tesseractTimeMs: processingTime
+            ))
 
         return result
     }
@@ -386,7 +389,8 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
 
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: tessdataDir.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+            isDirectory.boolValue
+        else {
             return []
         }
 
@@ -440,15 +444,17 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
         var rawData = [UInt8](repeating: 0, count: height * bytesPerRow)
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let context = CGContext(
-            data: &rawData,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: &rawData,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+            )
+        else {
             throw OCRError.recognitionFailed(reason: "无法创建位图上下文以转换图像数据")
         }
 
@@ -473,7 +479,7 @@ final class TesseractOCREngine: OCRProtocol, @unchecked Sendable {
             OCRLine(
                 text: line,
                 confidence: confidence,
-                boundingBox: .zero // Tesseract 逐行 API 不提供 bounding box
+                boundingBox: .zero  // Tesseract 逐行 API 不提供 bounding box
             )
         }
     }

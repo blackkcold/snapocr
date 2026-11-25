@@ -321,7 +321,8 @@ public enum RecordingHUDPreferences {
             return PreferenceDefaults.recordingHUDOpacity
         }
         let rawValue = storedValue.doubleValue
-        let normalizedValue = rawValue.isNaN
+        let normalizedValue =
+            rawValue.isNaN
             ? PreferenceDefaults.recordingHUDOpacity
             : min(max(rawValue, opacityRange.lowerBound), opacityRange.upperBound)
         if rawValue != normalizedValue {
@@ -367,7 +368,8 @@ public enum RecordingHUDPreferences {
     /// The value is validated by `CaptureCore`, which owns the corner model.
     public static func cornerIdentifier(in defaults: UserDefaults = .standard) -> String {
         guard let rawValue = defaults.string(forKey: PreferenceKeys.recordingHUDCorner),
-              !rawValue.isEmpty else {
+            !rawValue.isEmpty
+        else {
             return PreferenceDefaults.recordingHUDCorner
         }
         return rawValue
@@ -418,11 +420,14 @@ public enum RecordingDestinationPreferences {
         if let customDirectory = customDirectory(for: kind, in: defaults) {
             return customDirectory
         }
-        guard let moviesDirectory = moviesDirectory
-            ?? fileManager.urls(for: .moviesDirectory, in: .userDomainMask).first else {
+        guard
+            let moviesDirectory = moviesDirectory
+                ?? fileManager.urls(for: .moviesDirectory, in: .userDomainMask).first
+        else {
             return nil
         }
-        return moviesDirectory
+        return
+            moviesDirectory
             .appendingPathComponent("SnapGlass", isDirectory: true)
             .appendingPathComponent("Recordings", isDirectory: true)
     }
@@ -461,7 +466,8 @@ public enum RecordingDestinationPreferences {
         defaults.set(standardized.path, forKey: customDirectoryKey(for: kind))
         let volumeKey = customDirectoryVolumeUUIDKey(for: kind)
         if let volumeUUID = RecordingVolumeIdentityPolicy.volumeUUIDString(for: standardized),
-           !RecordingVolumeIdentityPolicy.isStaleVolumesMountPoint(standardized) {
+            !RecordingVolumeIdentityPolicy.isStaleVolumesMountPoint(standardized)
+        {
             defaults.set(volumeUUID, forKey: volumeKey)
         } else {
             // A reserved /Volumes directory that looks like a stale mount point
@@ -485,7 +491,8 @@ public enum RecordingDestinationPreferences {
             return nil
         }
         guard let value = defaults.string(forKey: customDirectoryVolumeUUIDKey(for: kind)),
-              !value.isEmpty else {
+            !value.isEmpty
+        else {
             return nil
         }
         return value
@@ -526,7 +533,8 @@ public enum RecordingDestinationPreferences {
         }
         // Audio keeps the legacy bitrate key as its own key; screen gets a copy.
         if defaults.object(forKey: PreferenceKeys.recordingScreenAudioBitRate) == nil,
-           let legacyBitRate = defaults.object(forKey: PreferenceKeys.recordingAudioBitRate) as? NSNumber {
+            let legacyBitRate = defaults.object(forKey: PreferenceKeys.recordingAudioBitRate) as? NSNumber
+        {
             pending[PreferenceKeys.recordingScreenAudioBitRate] = legacyBitRate.intValue
         }
 
@@ -588,7 +596,8 @@ public enum RecordingDestinationPreferences {
 
     private static func legacyCustomDirectoryPath(in defaults: UserDefaults) -> String? {
         guard let path = defaults.string(forKey: PreferenceKeys.recordingCustomOutputDirectory),
-              !path.isEmpty else {
+            !path.isEmpty
+        else {
             return nil
         }
         return path

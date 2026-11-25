@@ -412,11 +412,13 @@ private final class DestinationProbeEngine: @unchecked Sendable {
         expectedVolumeUUID: String?,
         fileManager: FileManager
     ) -> DestinationProbeResult {
-        guard customLocationIsUsable(
-            directory: directory,
-            expectedVolumeUUID: expectedVolumeUUID,
-            fileManager: fileManager
-        ) else { return .locationUnavailable }
+        guard
+            customLocationIsUsable(
+                directory: directory,
+                expectedVolumeUUID: expectedVolumeUUID,
+                fileManager: fileManager
+            )
+        else { return .locationUnavailable }
         return readCapacity(at: directory)
     }
 
@@ -443,11 +445,13 @@ private final class DestinationProbeEngine: @unchecked Sendable {
         expectedVolumeUUID: String?,
         fileManager: FileManager
     ) -> DestinationProbeResult {
-        guard customLocationIsUsable(
-            directory: directory,
-            expectedVolumeUUID: expectedVolumeUUID,
-            fileManager: fileManager
-        ) else { return .locationUnavailable }
+        guard
+            customLocationIsUsable(
+                directory: directory,
+                expectedVolumeUUID: expectedVolumeUUID,
+                fileManager: fileManager
+            )
+        else { return .locationUnavailable }
         return readCapacity(at: directory)
     }
 
@@ -459,7 +463,8 @@ private final class DestinationProbeEngine: @unchecked Sendable {
             return .locationUnavailable
         }
         guard let probed = nearestExistingDirectory(for: directory, fileManager: fileManager),
-              isWritableDirectory(probed, fileManager) else {
+            isWritableDirectory(probed, fileManager)
+        else {
             return .locationUnavailable
         }
         return readCapacity(at: probed)
@@ -488,7 +493,8 @@ private final class DestinationProbeEngine: @unchecked Sendable {
             return isWritableDirectory(directory, fileManager) ? .located : .locationUnavailable
         }
         guard let probed = nearestExistingDirectory(for: directory, fileManager: fileManager),
-              isWritableDirectory(probed, fileManager) else {
+            isWritableDirectory(probed, fileManager)
+        else {
             return .locationUnavailable
         }
         return .located
@@ -499,11 +505,13 @@ private final class DestinationProbeEngine: @unchecked Sendable {
         expectedVolumeUUID: String?,
         fileManager: FileManager
     ) -> DestinationProbeResult {
-        guard customLocationIsUsable(
-            directory: directory,
-            expectedVolumeUUID: expectedVolumeUUID,
-            fileManager: fileManager
-        ) else { return .locationUnavailable }
+        guard
+            customLocationIsUsable(
+                directory: directory,
+                expectedVolumeUUID: expectedVolumeUUID,
+                fileManager: fileManager
+            )
+        else { return .locationUnavailable }
         return readCapacity(at: directory)
     }
 
@@ -539,7 +547,8 @@ private final class DestinationProbeEngine: @unchecked Sendable {
     private static func readCapacity(at directory: URL) -> DestinationProbeResult {
         do {
             guard let snapshot = try URLVolumeCapacityProvider().volumeSnapshot(at: directory),
-                  snapshot.availableBytes >= 0 else {
+                snapshot.availableBytes >= 0
+            else {
                 return .capacityUnreadable
             }
             return .ready(
@@ -568,7 +577,8 @@ private final class DestinationProbeEngine: @unchecked Sendable {
         let homeComponents = home.pathComponents
 
         guard targetComponents.count > homeComponents.count,
-              Array(targetComponents.prefix(homeComponents.count)) == homeComponents else {
+            Array(targetComponents.prefix(homeComponents.count)) == homeComponents
+        else {
             return nil
         }
 
@@ -592,7 +602,8 @@ private final class DestinationProbeEngine: @unchecked Sendable {
 
         var isDirectory = ObjCBool(false)
         guard fileManager.fileExists(atPath: home.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+            isDirectory.boolValue
+        else {
             return nil
         }
         return home
@@ -607,17 +618,21 @@ private final class DestinationProbeEngine: @unchecked Sendable {
         let ancestorComponents = ancestor.pathComponents
         let targetComponents = target.pathComponents
         guard targetComponents.count >= ancestorComponents.count,
-              Array(targetComponents.prefix(ancestorComponents.count)) == ancestorComponents else {
+            Array(targetComponents.prefix(ancestorComponents.count)) == ancestorComponents
+        else {
             return true
         }
 
         var current = ancestor
-        for component in targetComponents
+        for component
+            in targetComponents
             .dropFirst(ancestorComponents.count)
-            .dropLast() {
+            .dropLast()
+        {
             current.appendPathComponent(component)
             if let values = try? current.resourceValues(forKeys: [.isVolumeKey]),
-               values.isVolume == true {
+                values.isVolume == true
+            {
                 return true
             }
         }
@@ -639,7 +654,8 @@ private final class DestinationProbeEngine: @unchecked Sendable {
     ) -> Bool {
         var isDirectory = ObjCBool(false)
         guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+            isDirectory.boolValue
+        else {
             return false
         }
         return fileManager.isWritableFile(atPath: url.path)

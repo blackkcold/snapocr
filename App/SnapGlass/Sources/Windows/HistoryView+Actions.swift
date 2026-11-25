@@ -61,7 +61,8 @@ extension HistoryView {
             action = { Task { await loadEntries() } }
         case .retryCopy:
             if let entryID = failure.entryID,
-               let entry = entries.first(where: { $0.id == entryID }) {
+                let entry = entries.first(where: { $0.id == entryID })
+            {
                 actionLabel = AppLocalization.string("Copy Again")
                 action = { Task { await copyPresentedImage(entry) } }
             } else {
@@ -177,11 +178,11 @@ extension HistoryView {
             raw = size
         } else {
             guard let history,
-                  let data = try? await history.thumbnailData(for: entry.id),
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-                  let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-                  let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
+                let data = try? await history.thumbnailData(for: entry.id),
+                let source = CGImageSourceCreateWithData(data as CFData, nil),
+                let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+                let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
             else { return nil }
             raw = CGSize(width: width.doubleValue, height: height.doubleValue)
         }
@@ -199,7 +200,8 @@ extension HistoryView {
             // Delete moves the original and the edited media into a transaction
             // folder that is removed immediately, so the undo payload must carry
             // both or "Restore Original Image" becomes a dead menu item.
-            let originalImageData = entry.canRestoreOriginal
+            let originalImageData =
+                entry.canRestoreOriginal
                 ? try? await history.originalImageData(for: entry.id)
                 : nil
             try await history.delete(id: entry.id)
@@ -251,7 +253,8 @@ extension HistoryView {
         defer { updatingFavourites.remove(entry.id) }
         do {
             if let updated = try await history.setFavourite(id: entry.id, isFavourite: !entry.isFavourite),
-               let index = entries.firstIndex(where: { $0.id == entry.id }) {
+                let index = entries.firstIndex(where: { $0.id == entry.id })
+            {
                 entries[index] = updated
             }
         } catch {
@@ -280,8 +283,8 @@ extension HistoryView {
         guard let history else { return }
         do {
             guard let data = try await history.imageData(for: entry.id),
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+                let source = CGImageSourceCreateWithData(data as CFData, nil),
+                let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
             else {
                 reportFailure(.copy, message: AppLocalization.string("Unable to copy image"), entryID: entry.id)
                 return
@@ -305,10 +308,12 @@ extension HistoryView {
     /// otherwise the raw capture.
     func copyPresentedImage(_ entry: HistoryEntry) async {
         guard let history else { return }
-        guard let image = await HistoryMockupPresenter.presentedImage(
-            for: entry,
-            history: history
-        ) else {
+        guard
+            let image = await HistoryMockupPresenter.presentedImage(
+                for: entry,
+                history: history
+            )
+        else {
             reportFailure(.copy, message: AppLocalization.string("Unable to copy image"), entryID: entry.id)
             return
         }
@@ -326,12 +331,14 @@ extension HistoryView {
 
     func presentMockupInspector(for entry: HistoryEntry) async {
         guard let history,
-              let raw = await HistoryMockupPresenter.rawImage(for: entry, history: history)
+            let raw = await HistoryMockupPresenter.rawImage(for: entry, history: history)
         else { return }
 
-        let presetID = UserDefaults.standard.string(forKey: PreferenceKeys.captureMockupPreset)
+        let presetID =
+            UserDefaults.standard.string(forKey: PreferenceKeys.captureMockupPreset)
             ?? PreferenceDefaults.captureMockupPreset
-        let style = HistoryMockupPresenter.style(from: entry)
+        let style =
+            HistoryMockupPresenter.style(from: entry)
             ?? MockupPolicy.style(for: presetID)
 
         MockupInspectorPanel.show(
@@ -370,7 +377,7 @@ extension HistoryView {
                 return
             }
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+                let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
             else {
                 reportFailure(
                     .storage,

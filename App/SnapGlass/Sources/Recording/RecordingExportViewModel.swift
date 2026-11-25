@@ -131,9 +131,10 @@ final class RecordingExportViewModel: ObservableObject {
 
     var canExport: Bool {
         guard !isLoading, !isOpeningSession, !isAssessing, !isExporting,
-              assessment?.disabledReason == nil,
-              validatedPlanGeneration == assessmentGeneration,
-              cachedPlan != nil else { return false }
+            assessment?.disabledReason == nil,
+            validatedPlanGeneration == assessmentGeneration,
+            cachedPlan != nil
+        else { return false }
         return true
     }
 
@@ -172,9 +173,11 @@ enum RecordingExportWork {
                 leases[segmentID] = lease
                 // Adopted segments reference the recorder's original media, which
                 // has no sealed-product metadata: read the file itself instead.
-                let isRecovered = session.segments
+                let isRecovered =
+                    session.segments
                     .first(where: { $0.id == segmentID })?.materialURL != nil
-                sources[segmentID] = isRecovered
+                sources[segmentID] =
+                    isRecovered
                     ? .recoveredMedia(lease.mediaURLs)
                     : .publishedMedia(lease.mediaURLs)
             } catch {

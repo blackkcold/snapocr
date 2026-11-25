@@ -69,12 +69,13 @@ extension RecordingSessionController {
         updateStatus(audioStateMachine.legacyStatus)
         if saved, result.segmentCount > 0, !panelHiddenByUser, !RecordingHUDPreferences.isHidden(in: defaults) {
             if controlPanel == nil { controlPanel = makeControlPanel(on: NSScreen.main) }
-            controlPanel?.present(state: .audioFinished(
-                savedSegments: result.segmentCount,
-                outputURL: outputURL,
-                previewReady: previewLease != nil,
-                previewPlaying: previewPlayer?.isPlaying ?? false
-            ))
+            controlPanel?.present(
+                state: .audioFinished(
+                    savedSegments: result.segmentCount,
+                    outputURL: outputURL,
+                    previewReady: previewLease != nil,
+                    previewPlaying: previewPlayer?.isPlaying ?? false
+                ))
         } else if !saved {
             presentAudioFailure(reason: result.failure ?? AppLocalization.string("Recording failed"))
         }

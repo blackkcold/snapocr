@@ -3,8 +3,8 @@ import AudioToolbox
 import CoreGraphics
 import CoreMedia
 import Foundation
-import SharedKit
 @preconcurrency import ScreenCaptureKit
+import SharedKit
 
 extension ScreenRecordingEngine {
     public func installSegmentedRetryHandler(
@@ -58,9 +58,10 @@ extension ScreenRecordingEngine {
                 excludedWindowIDs: initialExcludedWindowIDs
             )
             guard resolvedSource.dimensions.width.isFinite,
-                  resolvedSource.dimensions.height.isFinite,
-                  resolvedSource.dimensions.width > 0,
-                  resolvedSource.dimensions.height > 0 else {
+                resolvedSource.dimensions.height.isFinite,
+                resolvedSource.dimensions.width > 0,
+                resolvedSource.dimensions.height > 0
+            else {
                 throw ScreenRecordingEngineError.invalidSourceDimensions
             }
 

@@ -1,5 +1,5 @@
-import AppKit
 import AnnotationCore
+import AppKit
 import CaptureCore
 import HistoryCore
 import SharedKit
@@ -58,10 +58,11 @@ extension EditorViewModel {
             let image = try await Self.renderOffMain(doc)
             try await historySaver(image, mode, sourceEntryID, mockupStyle)
             lastCommittedMockupStyle = mockupStyle
-            let message: String = switch mode {
-            case .newRecord: AppLocalization.string("Saved to history")
-            case .overwriteOriginal: AppLocalization.string("History updated; original kept for restore")
-            }
+            let message: String =
+                switch mode {
+                case .newRecord: AppLocalization.string("Saved to history")
+                case .overwriteOriginal: AppLocalization.string("History updated; original kept for restore")
+                }
             showToast(message: message, type: .success)
             markSaved(document: doc)
             logger.info("Editor image saved to history (mode: \(mode))")
@@ -91,13 +92,15 @@ extension EditorViewModel {
             onCompleted?(false)
             return
         }
-        let configuredFormat = ImageFileFormat(
-            rawValue: UserDefaults.standard.string(forKey: PreferenceKeys.captureImageFormat)
-                ?? PreferenceDefaults.captureImageFormat
-        ) ?? .png
+        let configuredFormat =
+            ImageFileFormat(
+                rawValue: UserDefaults.standard.string(forKey: PreferenceKeys.captureImageFormat)
+                    ?? PreferenceDefaults.captureImageFormat
+            ) ?? .png
         let style = mockupStyle
         let hasTransparentBackground = style?.background.isTransparent == true
-        let format = (ImageEncoder.containsTransparency(doc.baseImage) || hasTransparentBackground)
+        let format =
+            (ImageEncoder.containsTransparency(doc.baseImage) || hasTransparentBackground)
             ? ImageFileFormat.png
             : configuredFormat
         let panel = NSSavePanel()
@@ -142,7 +145,8 @@ extension EditorViewModel {
         let extensionName = url.pathExtension.lowercased()
         let outputFormat: ImageFileFormat =
             (extensionName == "jpg" || extensionName == "jpeg") ? .jpeg : .png
-        let quality = UserDefaults.standard.object(forKey: PreferenceKeys.captureJPEGQuality) == nil
+        let quality =
+            UserDefaults.standard.object(forKey: PreferenceKeys.captureJPEGQuality) == nil
             ? PreferenceDefaults.captureJPEGQuality
             : UserDefaults.standard.double(forKey: PreferenceKeys.captureJPEGQuality)
 
@@ -157,7 +161,8 @@ extension EditorViewModel {
                 )
                 guard let self else { return }
                 self.isWritingImage = false
-                let savedMessage = (outputFormat == .jpeg && style?.isTransparent == true)
+                let savedMessage =
+                    (outputFormat == .jpeg && style?.isTransparent == true)
                     ? AppLocalization.string(
                         "JPEG cannot keep a transparent background; it will be filled with white"
                     )
@@ -195,15 +200,17 @@ extension EditorViewModel {
     /// turn into black fringes.
     nonisolated static func flattenedOnWhite(_ image: CGImage) -> CGImage {
         guard ImageEncoder.containsTransparency(image) else { return image }
-        guard let context = CGContext(
-            data: nil,
-            width: image.width,
-            height: image.height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
-        ) else { return image }
+        guard
+            let context = CGContext(
+                data: nil,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            )
+        else { return image }
         let rect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
         context.setFillColor(CGColor(gray: 1, alpha: 1))
         context.fill(rect)
@@ -286,7 +293,8 @@ extension EditorViewModel {
                 try await ClipboardWriter.write(image: presented)
                 guard let self else { return }
                 self.isWritingImage = false
-                let message = style == nil
+                let message =
+                    style == nil
                     ? AppLocalization.string("Copied to clipboard")
                     : AppLocalization.string("Copied share image")
                 self.showToast(message: message, type: .success)

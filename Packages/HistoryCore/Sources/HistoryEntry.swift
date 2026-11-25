@@ -99,7 +99,8 @@ public struct HistoryEntry: Sendable, Identifiable, Codable {
     /// Pixel size for layout, falling back to the preferred aspect when unknown.
     public var imagePixelSize: CGSize? {
         guard let pixelWidth, let pixelHeight,
-              pixelWidth > 0, pixelHeight > 0 else { return nil }
+            pixelWidth > 0, pixelHeight > 0
+        else { return nil }
         return CGSize(width: pixelWidth, height: pixelHeight)
     }
 

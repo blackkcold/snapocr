@@ -1,7 +1,7 @@
 {
   "version": 1,
   "lineLength": 120,
-  "indentation": { "spaces": 2 },
+  "indentation": { "spaces": 4 },
   "maximumBlankLines": 1,
   "respectsExistingLineBreaks": true,
   "indentConditionalCompilationBlocks": true,
@@ -9,7 +9,7 @@
     "AlwaysUseLowerCamelCase": true,
     "DoNotUseSemicolons": true,
     "NeverForceUnwrap": true,
-    "NeverForceTry": true,
+    "NeverUseForceTry": true,
     "NeverUseImplicitlyUnwrappedOptionals": true,
     "OrderedImports": true,
     "UseTripleSlashForDocumentationComments": true,

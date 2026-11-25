@@ -180,7 +180,10 @@ extension RecordingSessionLedger {
     private static func writeAll(_ lineData: Data, to fileDescriptor: Int32) -> Bool {
         var writeError = false
         lineData.withUnsafeBytes { rawBuffer in
-            guard let base = rawBuffer.baseAddress else { writeError = true; return }
+            guard let base = rawBuffer.baseAddress else {
+                writeError = true
+                return
+            }
             var remaining = rawBuffer.count
             var cursor = base
             while remaining > 0 {
@@ -190,7 +193,10 @@ extension RecordingSessionLedger {
                     writeError = true
                     break
                 }
-                guard written > 0 else { writeError = true; break }
+                guard written > 0 else {
+                    writeError = true
+                    break
+                }
                 remaining -= written
                 cursor = cursor.advanced(by: written)
             }
@@ -240,8 +246,8 @@ extension RecordingSessionLedger {
                 throw RecordingSessionLedgerError.journalCorrupt
             }
             guard line.core.sequence == loaded.sequence + 1,
-                  line.core.previousHash == loaded.lastHash,
-                  Self.hash(encodedCore) == line.hash
+                line.core.previousHash == loaded.lastHash,
+                Self.hash(encodedCore) == line.hash
             else { throw RecordingSessionLedgerError.journalCorrupt }
             try Self.apply(line.core.payload, to: &loaded, context: context)
             loaded.sequence = line.core.sequence
@@ -253,8 +259,8 @@ extension RecordingSessionLedger {
     private static func schemaVersion(of lineData: Data) throws -> Int {
         do {
             guard let object = try JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-                  let core = object["core"] as? [String: Any],
-                  let value = core["schemaVersion"] as? Int
+                let core = object["core"] as? [String: Any],
+                let value = core["schemaVersion"] as? Int
             else { throw RecordingSessionLedgerError.journalCorrupt }
             return value
         } catch { throw RecordingSessionLedgerError.journalCorrupt }
@@ -315,7 +321,7 @@ extension RecordingSessionLedger {
         sessionID: UUID
     ) throws {
         guard let record = payload.record, record.id == sessionID,
-              payload.checkpoint == nil, payload.intent == nil, payload.published == nil, payload.closed == nil
+            payload.checkpoint == nil, payload.intent == nil, payload.published == nil, payload.closed == nil
         else { throw RecordingSessionLedgerError.journalCorrupt }
         if let prior = state.record {
             guard prior.id == record.id, prior.kind == record.kind, prior.layout == record.layout else {
@@ -332,9 +338,9 @@ extension RecordingSessionLedger {
         root: URL
     ) throws {
         guard let checkpoint = payload.checkpoint, payload.record == nil, payload.intent == nil,
-              payload.published == nil, payload.closed == nil, checkpoint.segmentIndex >= 0,
-              checkpoint.range.startSample >= 0, checkpoint.range.sampleCount > 0,
-              !checkpoint.files.isEmpty
+            payload.published == nil, payload.closed == nil, checkpoint.segmentIndex >= 0,
+            checkpoint.range.startSample >= 0, checkpoint.range.sampleCount > 0,
+            !checkpoint.files.isEmpty
         else { throw RecordingSessionLedgerError.journalCorrupt }
         if let prior = state.checkpoints[checkpoint.checkpointID] {
             guard prior == checkpoint else { throw RecordingSessionLedgerError.journalCorrupt }
@@ -366,13 +372,13 @@ extension RecordingSessionLedger {
         context: LedgerApplyContext
     ) throws {
         guard let checkpoint = payload.screenCheckpoint,
-              payload.record == nil, payload.checkpoint == nil,
-              payload.intent == nil, payload.published == nil, payload.closed == nil,
-              checkpoint.segmentIndex >= 0, checkpoint.chunkIndex >= 0,
-              checkpoint.videoRange.startSample >= 0, checkpoint.videoRange.sampleCount > 0,
-              checkpoint.coverage.segmentIndex == checkpoint.segmentIndex,
-              checkpoint.coverage.segmentEndSample > checkpoint.coverage.segmentStartSample,
-              !checkpoint.contentHashes.isEmpty
+            payload.record == nil, payload.checkpoint == nil,
+            payload.intent == nil, payload.published == nil, payload.closed == nil,
+            checkpoint.segmentIndex >= 0, checkpoint.chunkIndex >= 0,
+            checkpoint.videoRange.startSample >= 0, checkpoint.videoRange.sampleCount > 0,
+            checkpoint.coverage.segmentIndex == checkpoint.segmentIndex,
+            checkpoint.coverage.segmentEndSample > checkpoint.coverage.segmentStartSample,
+            !checkpoint.contentHashes.isEmpty
         else { throw RecordingSessionLedgerError.journalCorrupt }
         try validateScreenCheckpoint(
             checkpoint, root: context.root, fileManager: context.fileManager, allowMissing: context.replay
@@ -391,7 +397,7 @@ extension RecordingSessionLedger {
         context: LedgerApplyContext
     ) throws {
         guard let intent = payload.intent, payload.record == nil, payload.checkpoint == nil,
-              payload.published == nil, payload.closed == nil
+            payload.published == nil, payload.closed == nil
         else { throw RecordingSessionLedgerError.journalCorrupt }
         try validateIntent(intent, fileManager: context.fileManager, replay: context.replay)
         if let prior = state.intents[intent.segmentID], prior != intent {
@@ -407,8 +413,8 @@ extension RecordingSessionLedger {
         replay: Bool
     ) throws {
         guard let segment = payload.published, payload.record == nil, payload.checkpoint == nil,
-              payload.intent == nil, payload.closed == nil,
-              let intent = state.intents[segment.id]
+            payload.intent == nil, payload.closed == nil,
+            let intent = state.intents[segment.id]
         else { throw RecordingSessionLedgerError.journalCorrupt }
         try validatePublishedSegment(
             segment, against: intent, verifyFiles: true, allowMissingFiles: replay
@@ -424,9 +430,9 @@ extension RecordingSessionLedger {
         to state: inout LedgerState
     ) throws {
         guard let closed = payload.closed, payload.record == nil, payload.checkpoint == nil,
-              payload.intent == nil, payload.published == nil,
-              closed.coverage.segmentIndex >= 0,
-              closed.coverage.segmentEndSample > closed.coverage.segmentStartSample
+            payload.intent == nil, payload.published == nil,
+            closed.coverage.segmentIndex >= 0,
+            closed.coverage.segmentEndSample > closed.coverage.segmentStartSample
         else { throw RecordingSessionLedgerError.journalCorrupt }
         let index = closed.coverage.segmentIndex
         if let prior = state.closed[index], prior != closed {
@@ -445,8 +451,8 @@ extension RecordingSessionLedger {
         root: URL
     ) throws {
         guard let segment = payload.adopted, payload.record == nil, payload.checkpoint == nil,
-              payload.screenCheckpoint == nil, payload.intent == nil, payload.published == nil,
-              payload.closed == nil
+            payload.screenCheckpoint == nil, payload.intent == nil, payload.published == nil,
+            payload.closed == nil
         else { throw RecordingSessionLedgerError.journalCorrupt }
         try validateAdoptedSegment(segment, sessionRoot: root)
         if let prior = state.adopted[segment.id] {

@@ -31,14 +31,15 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
     public func preflightStart() async throws -> SpaceBudgetDecision {
         let decision = try budget.preflight()
         let state: RecordingSpaceState = decision.allowed ? .ok : .blocked
-        publish(RecordingSpaceStatus(
-            state: state,
-            requiredBytes: decision.requiredBytes,
-            availableBytes: decision.availableBytes,
-            backlogBytes: 0,
-            checkpointAgeSeconds: checkpointAge,
-            reason: decision.reason
-        ))
+        publish(
+            RecordingSpaceStatus(
+                state: state,
+                requiredBytes: decision.requiredBytes,
+                availableBytes: decision.availableBytes,
+                backlogBytes: 0,
+                checkpointAgeSeconds: checkpointAge,
+                reason: decision.reason
+            ))
         return decision
     }
 
@@ -92,14 +93,15 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
         } else {
             reason = nil
         }
-        return publish(RecordingSpaceStatus(
-            state: backlogPressureActive || lowSpaceActive ? .low : .ok,
-            requiredBytes: required,
-            availableBytes: capacity.availableBytes,
-            backlogBytes: backlogBytes,
-            checkpointAgeSeconds: checkpointAge,
-            reason: reason
-        ))
+        return publish(
+            RecordingSpaceStatus(
+                state: backlogPressureActive || lowSpaceActive ? .low : .ok,
+                requiredBytes: required,
+                availableBytes: capacity.availableBytes,
+                backlogBytes: backlogBytes,
+                checkpointAgeSeconds: checkpointAge,
+                reason: reason
+            ))
     }
 
     /// Admits one seal only when the single-flight and volume headroom checks allow it.
@@ -151,14 +153,15 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
         }
         if backlogPressureActive && !activeSeals.isEmpty {
             let reason = "seal backlog is high; capture continues while the active seal drains"
-            publish(RecordingSpaceStatus(
-                state: .low,
-                requiredBytes: required,
-                availableBytes: capacity.availableBytes,
-                backlogBytes: backlogBytes,
-                checkpointAgeSeconds: checkpointAge,
-                reason: reason
-            ))
+            publish(
+                RecordingSpaceStatus(
+                    state: .low,
+                    requiredBytes: required,
+                    availableBytes: capacity.availableBytes,
+                    backlogBytes: backlogBytes,
+                    checkpointAgeSeconds: checkpointAge,
+                    reason: reason
+                ))
             return .defer(reason: reason)
         }
 
@@ -166,14 +169,15 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
         // admit one operation so pressure can make progress instead of deadlocking.
         activeSeals.insert(segmentIndex)
         updateLowSpace(slackBytes: capacity.availableBytes - required)
-        publish(RecordingSpaceStatus(
-            state: lowSpaceActive || backlogPressureActive ? .low : .ok,
-            requiredBytes: required,
-            availableBytes: capacity.availableBytes,
-            backlogBytes: backlogBytes,
-            checkpointAgeSeconds: checkpointAge,
-            reason: backlogPressureActive ? "seal backlog is draining" : nil
-        ))
+        publish(
+            RecordingSpaceStatus(
+                state: lowSpaceActive || backlogPressureActive ? .low : .ok,
+                requiredBytes: required,
+                availableBytes: capacity.availableBytes,
+                backlogBytes: backlogBytes,
+                checkpointAgeSeconds: checkpointAge,
+                reason: backlogPressureActive ? "seal backlog is draining" : nil
+            ))
         return .run
     }
 
@@ -264,14 +268,15 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
         backlogBytes: Int64,
         reason: String
     ) -> RecordingSpaceStatus {
-        publish(RecordingSpaceStatus(
-            state: .stopping,
-            requiredBytes: requiredBytes,
-            availableBytes: availableBytes,
-            backlogBytes: backlogBytes,
-            checkpointAgeSeconds: checkpointAge,
-            reason: reason
-        ))
+        publish(
+            RecordingSpaceStatus(
+                state: .stopping,
+                requiredBytes: requiredBytes,
+                availableBytes: availableBytes,
+                backlogBytes: backlogBytes,
+                checkpointAgeSeconds: checkpointAge,
+                reason: reason
+            ))
     }
 
     private func publishCurrentStatus(reason: String?) {
@@ -291,14 +296,15 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
             return
         }
         updateLowSpace(slackBytes: capacity.availableBytes - required)
-        publish(RecordingSpaceStatus(
-            state: lowSpaceActive || backlogPressureActive ? .low : .ok,
-            requiredBytes: required,
-            availableBytes: capacity.availableBytes,
-            backlogBytes: lastBacklogBytes,
-            checkpointAgeSeconds: checkpointAge,
-            reason: reason ?? (backlogPressureActive ? "seal backlog remains above its low watermark" : nil)
-        ))
+        publish(
+            RecordingSpaceStatus(
+                state: lowSpaceActive || backlogPressureActive ? .low : .ok,
+                requiredBytes: required,
+                availableBytes: capacity.availableBytes,
+                backlogBytes: lastBacklogBytes,
+                checkpointAgeSeconds: checkpointAge,
+                reason: reason ?? (backlogPressureActive ? "seal backlog remains above its low watermark" : nil)
+            ))
     }
 
     @discardableResult
@@ -309,10 +315,11 @@ public actor RecordingPipelineSpaceGate: RecordingSpaceGating {
 
     private static func isValid(_ commit: CheckpointCommit) -> Bool {
         guard commit.segmentIndex >= 0,
-              commit.range.startSample >= 0,
-              commit.range.sampleCount > 0,
-              !commit.trackURLs.isEmpty,
-              commit.trackURLs.values.allSatisfy(\.isFileURL) else { return false }
+            commit.range.startSample >= 0,
+            commit.range.sampleCount > 0,
+            !commit.trackURLs.isEmpty,
+            commit.trackURLs.values.allSatisfy(\.isFileURL)
+        else { return false }
         let (_, overflow) = commit.range.startSample.addingReportingOverflow(commit.range.sampleCount)
         return !overflow
     }

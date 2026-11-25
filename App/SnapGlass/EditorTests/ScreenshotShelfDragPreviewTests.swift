@@ -59,14 +59,15 @@ struct ScreenshotShelfDragPreviewTests {
         var received: [ScreenshotShelfDragPreview?] = []
         model.onDragPreviewChanged = { received.append($0) }
 
-        model.updateDrag(ScreenshotShelfDragPreview(
-            cardID: UUID(),
-            startIndex: 0,
-            startX: 0,
-            width: 80,
-            translation: .zero,
-            rotation: 0
-        ))
+        model.updateDrag(
+            ScreenshotShelfDragPreview(
+                cardID: UUID(),
+                startIndex: 0,
+                startX: 0,
+                width: 80,
+                translation: .zero,
+                rotation: 0
+            ))
         model.endDrag()
 
         #expect(model.dragPreview == nil)
@@ -262,7 +263,7 @@ struct ScreenshotShelfDragPreviewTests {
                 imagePixelSize: CGSize(width: 80, height: 60),
                 displayScale: 1,
                 scaleSourcePixelWidth: nil
-            ),
+            )
         ]
 
         model.beginDrag(cardID: cardID, startIndex: 0, startX: 16, width: 80)

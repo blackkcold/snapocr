@@ -76,7 +76,7 @@ struct BarcodeCoreTests {
 
     @Test func payloadFormatterClassifiesSingleWebLink() throws {
         let payloads = BarcodePayloadFormatter.payloads(from: [
-            makeResult("https://snapglass.example/a", type: .qr),
+            makeResult("https://snapglass.example/a", type: .qr)
         ])
 
         let payload = try #require(payloads.first)
@@ -109,7 +109,7 @@ struct BarcodeCoreTests {
     @Test func payloadFormatterKeepsMultilinePayloadIntact() throws {
         let multiline = "line one\nline two"
         let joined = BarcodePayloadFormatter.joinedText(from: [
-            makeResult(multiline, type: .qr),
+            makeResult(multiline, type: .qr)
         ])
 
         #expect(joined == multiline)
@@ -134,7 +134,7 @@ struct BarcodeCoreTests {
     @Test func payloadFormatterTreatsMailtoAsPlainText() throws {
         let payload = try #require(
             BarcodePayloadFormatter.payloads(from: [
-                makeResult("mailto:someone@example.com", type: .qr),
+                makeResult("mailto:someone@example.com", type: .qr)
             ]).first
         )
 

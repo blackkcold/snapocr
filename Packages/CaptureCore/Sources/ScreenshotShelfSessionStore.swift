@@ -38,14 +38,17 @@ public actor ScreenshotShelfSessionStore {
 
     /// Creates a store in the SnapGlass cache directory with the production byte budgets.
     public init() throws {
-        guard let cacheDirectory = FileManager.default.urls(
-            for: .cachesDirectory,
-            in: .userDomainMask
-        ).first else {
+        guard
+            let cacheDirectory = FileManager.default.urls(
+                for: .cachesDirectory,
+                in: .userDomainMask
+            ).first
+        else {
             throw ScreenshotShelfSessionStoreError.storageFailure
         }
 
-        let rootURL = cacheDirectory
+        let rootURL =
+            cacheDirectory
             .appendingPathComponent("SnapGlass", isDirectory: true)
             .appendingPathComponent("ScreenshotShelf", isDirectory: true)
         sessionDirectoryURL = try Self.makeSessionDirectory(under: rootURL)
@@ -102,13 +105,16 @@ public actor ScreenshotShelfSessionStore {
         var projectedThumbnailBytes = storedThumbnailBytes - (existingAsset?.thumbnailData.count ?? 0)
         var evictedIDs: [UUID] = []
 
-        let oldestCandidates = assets
+        let oldestCandidates =
+            assets
             .filter { $0.key != captureID }
             .sorted { $0.value.sequence < $1.value.sequence }
 
         for (candidateID, candidate) in oldestCandidates {
-            guard projectedOriginalBytes + sealedData.count > originalByteBudget
-                    || projectedThumbnailBytes + thumbnailData.count > thumbnailByteBudget else {
+            guard
+                projectedOriginalBytes + sealedData.count > originalByteBudget
+                    || projectedThumbnailBytes + thumbnailData.count > thumbnailByteBudget
+            else {
                 break
             }
             projectedOriginalBytes -= candidate.encryptedByteCount
@@ -117,11 +123,13 @@ public actor ScreenshotShelfSessionStore {
         }
 
         guard projectedOriginalBytes + sealedData.count <= originalByteBudget,
-              projectedThumbnailBytes + thumbnailData.count <= thumbnailByteBudget else {
+            projectedThumbnailBytes + thumbnailData.count <= thumbnailByteBudget
+        else {
             throw ScreenshotShelfSessionStoreError.originalExceedsBudget
         }
 
-        let newFileURL = sessionDirectoryURL
+        let newFileURL =
+            sessionDirectoryURL
             .appendingPathComponent("\(UUID().uuidString).sealed", isDirectory: false)
         do {
             try sealedData.write(to: newFileURL, options: .atomic)
@@ -205,7 +213,8 @@ public actor ScreenshotShelfSessionStore {
             // Treat an already-missing file as removed; anything else is a real failure.
             let nsError = error as NSError
             guard nsError.domain == NSCocoaErrorDomain,
-                  nsError.code == NSFileNoSuchFileError else {
+                nsError.code == NSFileNoSuchFileError
+            else {
                 throw ScreenshotShelfSessionStoreError.storageFailure
             }
         }
@@ -243,7 +252,8 @@ public actor ScreenshotShelfSessionStore {
 
     private func pruneMissingAssets() {
         let fileManager = FileManager.default
-        let missingIDs = assets
+        let missingIDs =
+            assets
             .filter { !fileManager.fileExists(atPath: $0.value.fileURL.path) }
             .map(\.key)
         for captureID in missingIDs {
@@ -268,13 +278,15 @@ public actor ScreenshotShelfSessionStore {
                     forKeys: [.contentModificationDateKey, .isDirectoryKey]
                 )
                 guard values?.isDirectory == true else { continue }
-                guard ScreenshotShelfSessionDirectoryPolicy.shouldSweep(
-                    directoryName: entry.lastPathComponent,
-                    modifiedAt: values?.contentModificationDate ?? .distantPast,
-                    now: now,
-                    grace: 60,
-                    legacyGrace: 24 * 60 * 60
-                ) else { continue }
+                guard
+                    ScreenshotShelfSessionDirectoryPolicy.shouldSweep(
+                        directoryName: entry.lastPathComponent,
+                        modifiedAt: values?.contentModificationDate ?? .distantPast,
+                        now: now,
+                        grace: 60,
+                        legacyGrace: 24 * 60 * 60
+                    )
+                else { continue }
                 try? fileManager.removeItem(at: entry)
             }
 

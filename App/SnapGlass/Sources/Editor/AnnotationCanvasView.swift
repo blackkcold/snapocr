@@ -1,6 +1,6 @@
-import SwiftUI
-import AppKit
 import AnnotationCore
+import AppKit
+import SwiftUI
 
 /// An `NSViewRepresentable` wrapping a custom `NSView` that renders annotation nodes
 /// and captures mouse input for creating new annotations.

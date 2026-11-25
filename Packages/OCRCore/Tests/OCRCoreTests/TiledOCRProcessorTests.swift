@@ -46,10 +46,11 @@ struct TiledOCRProcessorTests {
         #expect(tiles.count == 9)
         #expect(tiles.contains { $0.pixelRect.origin == .zero })
         #expect(tiles.contains { $0.pixelRect.maxX == 5000 && $0.pixelRect.maxY == 5000 })
-        #expect(tiles.allSatisfy {
-            $0.pixelRect.minX >= 0 && $0.pixelRect.minY >= 0
-                && $0.pixelRect.maxX <= 5000 && $0.pixelRect.maxY <= 5000
-        })
+        #expect(
+            tiles.allSatisfy {
+                $0.pixelRect.minX >= 0 && $0.pixelRect.minY >= 0
+                    && $0.pixelRect.maxX <= 5000 && $0.pixelRect.maxY <= 5000
+            })
     }
 
     @Test func remapConvertsTileLocalBoxToFullImageCoordinates() {
@@ -146,15 +147,17 @@ struct TiledOCRProcessorTests {
     }
 
     private func makeImage(width: Int, height: Int) throws -> CGImage {
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ), let image = context.makeImage() else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGImageAlphaInfo.none.rawValue
+            ), let image = context.makeImage()
+        else {
             throw OCRError.recognitionFailed(reason: "Unable to create test image")
         }
         return image

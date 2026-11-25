@@ -153,10 +153,11 @@ private struct SnapGlassMainScene: Scene {
                 .navigationTitle(Text("Recordings"))
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
-                .background(AppWindowRegistrationView(
-                    id: AppWindowPresenter.recordingsWindowID,
-                    appearanceMode: appearanceMode
-                ))
+                .background(
+                    AppWindowRegistrationView(
+                        id: AppWindowPresenter.recordingsWindowID,
+                        appearanceMode: appearanceMode
+                    ))
         }
         .defaultSize(width: PreferencesSpacing.idealWindowWidth, height: PreferencesSpacing.idealWindowHeight)
         .windowResizability(.contentMinSize)

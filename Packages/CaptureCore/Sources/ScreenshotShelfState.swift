@@ -76,7 +76,8 @@ public struct ScreenshotShelfState: Equatable, Sendable {
     ///   - destinationIndex: Final zero-based index after the move.
     public mutating func move(captureID: UUID, to destinationIndex: Int) {
         guard let sourceIndex = entries.firstIndex(where: { $0.captureID == captureID }),
-              !entries.isEmpty else { return }
+            !entries.isEmpty
+        else { return }
         let destination = min(max(destinationIndex, 0), entries.count - 1)
         guard sourceIndex != destination else { return }
         let entry = entries.remove(at: sourceIndex)
@@ -103,7 +104,8 @@ public struct ScreenshotShelfState: Equatable, Sendable {
     public mutating func reconcileHistory(existingHistoryIDs: Set<UUID>) -> [UUID] {
         let removedIDs = entries.compactMap { entry -> UUID? in
             guard let historyID = entry.historyID,
-                  !existingHistoryIDs.contains(historyID) else { return nil }
+                !existingHistoryIDs.contains(historyID)
+            else { return nil }
             return entry.captureID
         }
         let removedSet = Set(removedIDs)
@@ -130,9 +132,10 @@ public struct ScreenshotShelfState: Equatable, Sendable {
     private mutating func evictOldestUntilWithinLimit() -> [UUID] {
         var evicted: [UUID] = []
         while entries.count > limit,
-              let oldestIndex = entries.indices.min(by: {
-                  entries[$0].completionSequence < entries[$1].completionSequence
-              }) {
+            let oldestIndex = entries.indices.min(by: {
+                entries[$0].completionSequence < entries[$1].completionSequence
+            })
+        {
             evicted.append(entries.remove(at: oldestIndex).captureID)
         }
         return evicted

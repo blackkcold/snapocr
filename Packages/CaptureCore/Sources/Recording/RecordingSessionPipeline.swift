@@ -21,7 +21,10 @@ public struct LedgerPublicationHook: SegmentPublicationHooking {
     }
 }
 
-enum SealSignal: Sendable { case closed(Int); case retry }
+enum SealSignal: Sendable {
+    case closed(Int)
+    case retry
+}
 
 /// The production session composition root: real T5/T6 engine, T7 CAF writer, T8 seal, T9 journal.
 public actor RecordingSessionPipeline: AudioRecordingControlling {
@@ -31,11 +34,12 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
     let coordinator: SegmentedWriterCoordinator
     let sealService: RecordingSealService
     let spaceGate: (any RecordingSpaceGating)?
-    private let engineFactory: @Sendable (
-        AudioRecordingConfiguration,
-        any AudioCheckpointSink & Sendable,
-        AudioSampleClock
-    ) throws -> any AudioRecordingControlling & Sendable
+    private let engineFactory:
+        @Sendable (
+            AudioRecordingConfiguration,
+            any AudioCheckpointSink & Sendable,
+            AudioSampleClock
+        ) throws -> any AudioRecordingControlling & Sendable
     private let expectedConfiguration: AudioRecordingConfiguration?
     private let fileManager: RecordingSendableFileManager
     var activeConfiguration: AudioRecordingConfiguration?
@@ -71,14 +75,16 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         coordinator: SegmentedWriterCoordinator,
         sealService: RecordingSealService,
         spaceGate: (any RecordingSpaceGating)? = nil,
-        engineFactory: @escaping @Sendable (
-            AudioRecordingConfiguration,
-            any AudioCheckpointSink & Sendable,
-            AudioSampleClock
-        ) throws -> any AudioRecordingControlling & Sendable
+        engineFactory:
+            @escaping @Sendable (
+                AudioRecordingConfiguration,
+                any AudioCheckpointSink & Sendable,
+                AudioSampleClock
+            ) throws -> any AudioRecordingControlling & Sendable
     ) throws {
         guard roots.sessionRoot.isFileURL, roots.outputDirectory.isFileURL,
-              roots.indexURL.isFileURL else { throw RecordingPipelineError.invalidConfiguration }
+            roots.indexURL.isFileURL
+        else { throw RecordingPipelineError.invalidConfiguration }
         self.roots = roots
         self.ledger = ledger
         self.coordinator = coordinator
@@ -95,16 +101,18 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         coordinator: SegmentedWriterCoordinator,
         sealService: RecordingSealService,
         spaceGate: (any RecordingSpaceGating)?,
-        engineFactory: @escaping @Sendable (
-            AudioRecordingConfiguration,
-            any AudioCheckpointSink & Sendable,
-            AudioSampleClock
-        ) throws -> any AudioRecordingControlling & Sendable,
+        engineFactory:
+            @escaping @Sendable (
+                AudioRecordingConfiguration,
+                any AudioCheckpointSink & Sendable,
+                AudioSampleClock
+            ) throws -> any AudioRecordingControlling & Sendable,
         expectedConfiguration: AudioRecordingConfiguration?,
         fileManager: RecordingSendableFileManager
     ) throws {
         guard roots.sessionRoot.isFileURL, roots.outputDirectory.isFileURL,
-              roots.indexURL.isFileURL else { throw RecordingPipelineError.invalidConfiguration }
+            roots.indexURL.isFileURL
+        else { throw RecordingPipelineError.invalidConfiguration }
         self.roots = roots
         self.ledger = ledger
         self.coordinator = coordinator
@@ -118,8 +126,8 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
     public func start(_ configuration: AudioRecordingConfiguration) async throws {
         guard !started, stopTask == nil else { throw RecordingPipelineError.alreadyStarted }
         guard configuration.kind == .audio, configuration.sampleRate == 48_000,
-              configuration.mode != .none,
-              expectedConfiguration == nil || expectedConfiguration == configuration
+            configuration.mode != .none,
+            expectedConfiguration == nil || expectedConfiguration == configuration
         else { throw RecordingPipelineError.invalidConfiguration }
         if let spaceGate {
             let decision = try await spaceGate.preflightStart()
@@ -130,13 +138,14 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         try prepareSessionRoot()
         activeConfiguration = configuration
         let startDate = Date()
-        try await ledger.register(RecordingSessionRecord(
-            id: ledger.sessionID,
-            kind: configuration.kind,
-            layout: configuration.layout,
-            startedAt: startDate,
-            segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: ledger.sessionID,
+                kind: configuration.kind,
+                layout: configuration.layout,
+                startedAt: startDate,
+                segments: []
+            ))
         startedAt = startDate
         lastProgressPublishedAt = nil
         starting = true
@@ -261,10 +270,10 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
     /// Returns the most recent published audio file for the completion HUD.
     public func latestPublishedFileURL() async -> URL? {
         guard let record = try? await ledger.snapshot(),
-              let segment = record.segments
+            let segment = record.segments
                 .filter({ $0.state == .published })
                 .max(by: { $0.index < $1.index }),
-              let relativePath = segment.files.values.sorted().first
+            let relativePath = segment.files.values.sorted().first
         else { return nil }
         return try? RecordingLedgerFileSystem.resolve(relativePath, under: roots.outputDirectory)
     }
@@ -274,13 +283,15 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         let candidate = try await ledger.segmentPublicationCandidate(segmentID: segmentID)
         let result = try await sealService.publishPrepared(candidate)
         try await ledger.markPublished(try makePublishedRecord(result, intent: intent, coverage: candidate.coverage))
-        diagnosticBroadcaster.yield(.init(
-            phase: .recovered, sessionID: ledger.sessionID,
-            segmentIndex: result.index, range: RecordingSampleRange(
-                startSample: result.effectiveRange.startSample,
-                sampleCount: result.effectiveRange.sampleCount
-            )
-        ))
+        diagnosticBroadcaster.yield(
+            .init(
+                phase: .recovered, sessionID: ledger.sessionID,
+                segmentIndex: result.index,
+                range: RecordingSampleRange(
+                    startSample: result.effectiveRange.startSample,
+                    sampleCount: result.effectiveRange.sampleCount
+                )
+            ))
         await publishProgress()
         return result
     }
@@ -370,10 +381,11 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
     private func receiveSpaceStatus(_ status: RecordingSpaceStatus) {
         if lastSpaceState != status.state {
             lastSpaceState = status.state
-            diagnosticBroadcaster.yield(.init(
-                phase: .spaceStateChanged,
-                sessionID: ledger.sessionID
-            ))
+            diagnosticBroadcaster.yield(
+                .init(
+                    phase: .spaceStateChanged,
+                    sessionID: ledger.sessionID
+                ))
         }
         switch status.state {
         case .stopping:
@@ -425,15 +437,16 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         do {
             let commits = try await checkpointSink.commitReadyCheckpoints()
             for commit in commits {
-                diagnosticBroadcaster.yield(.init(
-                    phase: .checkpointCommitted,
-                    sessionID: ledger.sessionID,
-                    segmentIndex: commit.segmentIndex,
-                    range: RecordingSampleRange(
-                        startSample: commit.range.startSample,
-                        sampleCount: commit.range.sampleCount
-                    )
-                ))
+                diagnosticBroadcaster.yield(
+                    .init(
+                        phase: .checkpointCommitted,
+                        sessionID: ledger.sessionID,
+                        segmentIndex: commit.segmentIndex,
+                        range: RecordingSampleRange(
+                            startSample: commit.range.startSample,
+                            sampleCount: commit.range.sampleCount
+                        )
+                    ))
             }
             await publishProgress()
         } catch {
@@ -452,7 +465,8 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
         let facts = await ledger.progressFacts()
         let now = ContinuousClock.now
         if let last = lastProgressPublishedAt,
-           last.duration(to: now) < .milliseconds(100) {
+            last.duration(to: now) < .milliseconds(100)
+        {
             return
         }
         lastProgressPublishedAt = now
@@ -462,16 +476,17 @@ public actor RecordingSessionPipeline: AudioRecordingControlling {
             max(0, Date().timeIntervalSince(startDate))
         )
         let checkpointAge = facts.committedAt.map { max(0, Date().timeIntervalSince($0)) } ?? 0
-        progressBroadcaster.yield(RecordingProgress(
-            sessionID: ledger.sessionID,
-            elapsedSeconds: elapsed,
-            savedSegments: facts.publishedCount,
-            checkpointAgeSeconds: checkpointAge,
-            droppedSamples: engineProgress?.droppedSamples ?? 0,
-            systemLevel: engineProgress?.systemLevel ?? 0,
-            micLevel: engineProgress?.micLevel ?? 0,
-            capturedSamples: engineProgress?.capturedSamples ?? 0
-        ))
+        progressBroadcaster.yield(
+            RecordingProgress(
+                sessionID: ledger.sessionID,
+                elapsedSeconds: elapsed,
+                savedSegments: facts.publishedCount,
+                checkpointAgeSeconds: checkpointAge,
+                droppedSamples: engineProgress?.droppedSamples ?? 0,
+                systemLevel: engineProgress?.systemLevel ?? 0,
+                micLevel: engineProgress?.micLevel ?? 0,
+                capturedSamples: engineProgress?.capturedSamples ?? 0
+            ))
     }
 }
 

@@ -46,9 +46,11 @@ extension AgentRunner {
 
     /// Builds the isolated controller, wires the screen gates, and reserves the request.
     private func prepareScreenRun(scenario: AgentScenario) async -> ScreenRun? {
-        guard let agentDefaults = AgentPreferences(
-            storage: AgentMode.preferenceOverrides(for: configuration)
-        ) else {
+        guard
+            let agentDefaults = AgentPreferences(
+                storage: AgentMode.preferenceOverrides(for: configuration)
+            )
+        else {
             errors.append("preferences: cannot create the isolated in-memory store")
             await finish(sessionResult: nil, artifacts: [], screen: nil)
             return nil
@@ -56,7 +58,8 @@ extension AgentRunner {
         let recordingRoot = configuration.rootURL
         let roots = RecordingPipelineRoots(
             sessionRoot: recordingRoot,
-            indexURL: recordingRoot
+            indexURL:
+                recordingRoot
                 .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
                 .appendingPathComponent("recording-index.json"),
             outputDirectory: recordingRoot
@@ -90,7 +93,8 @@ extension AgentRunner {
         _ controller: RecordingSessionController,
         scenario: AgentScenario
     ) {
-        controller.screenPermissionGate = scenario.simulateScreenPermissionDenied
+        controller.screenPermissionGate =
+            scenario.simulateScreenPermissionDenied
             ? .denied
             : .system
         controller.screenAudioModeOverride =

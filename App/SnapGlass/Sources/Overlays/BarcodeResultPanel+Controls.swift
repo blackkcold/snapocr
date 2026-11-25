@@ -86,8 +86,9 @@ extension BarcodeResultPanel {
         let text = NSMutableAttributedString()
 
         if let url = payload.webLink,
-           let host = url.host,
-           let hostRange = payload.text.range(of: host) {
+            let host = url.host,
+            let hostRange = payload.text.range(of: host)
+        {
             text.append(
                 NSAttributedString(
                     string: String(payload.text[..<hostRange.lowerBound]),

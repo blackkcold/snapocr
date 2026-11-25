@@ -361,7 +361,8 @@ actor RecordingSettlementSupervisor {
     ///   - reason: The producer's description of the failure.
     private func readinessFailed(_ ticket: Ticket, reason: String) {
         guard var slot = active, slot.ticket == ticket, !slot.mediaStarted,
-              slot.settlement == nil, slot.settleTask == nil else { return }
+            slot.settlement == nil, slot.settleTask == nil
+        else { return }
         slot.readinessFailure = reason
         active = slot
         readinessFailure = reason
@@ -370,7 +371,8 @@ actor RecordingSettlementSupervisor {
 
     private func markMediaStarted(_ ticket: Ticket) {
         guard var slot = active, slot.ticket == ticket,
-              slot.settlement == nil, !slot.mediaStarted else { return }
+            slot.settlement == nil, !slot.mediaStarted
+        else { return }
         slot.mediaStarted = true
         // Cancel the deadline before announcing: a readiness observation and the
         // deadline can complete in either order, and readiness always wins.
@@ -409,9 +411,10 @@ actor RecordingSettlementSupervisor {
     /// - Parameter generation: The session generation whose promotion was presented.
     func acknowledgePresentation(generation: UUID) {
         guard var slot = active, slot.ticket.generation == generation,
-              slot.mediaStarted, slot.settlement == nil,
-              slot.settleTask == nil,
-              !slot.presentationAcknowledged else { return }
+            slot.mediaStarted, slot.settlement == nil,
+            slot.settleTask == nil,
+            !slot.presentationAcknowledged
+        else { return }
         slot.presentationAcknowledged = true
         slot.promotionDeadlineTask?.cancel()
         slot.promotionDeadlineTask = nil
@@ -435,12 +438,12 @@ actor RecordingSettlementSupervisor {
     /// - Parameter generation: The session whose main actor is still alive.
     func heartbeat(generation: UUID) {
         guard var slot = active,
-              slot.ticket.generation == generation,
-              slot.mediaStarted,
-              slot.presentationAcknowledged,
-              slot.settlement == nil,
-              slot.settleTask == nil,
-              let deadline = slot.livenessDeadline
+            slot.ticket.generation == generation,
+            slot.mediaStarted,
+            slot.presentationAcknowledged,
+            slot.settlement == nil,
+            slot.settleTask == nil,
+            let deadline = slot.livenessDeadline
         else { return }
         let ticket = slot.ticket
         armLiveness(slot: &slot, deadline: deadline, ticket: ticket)
@@ -451,7 +454,8 @@ actor RecordingSettlementSupervisor {
 
     private func deadlineReached(_ ticket: Ticket) {
         guard let slot = active, slot.ticket == ticket,
-              !slot.mediaStarted, slot.settlement == nil, slot.settleTask == nil else { return }
+            !slot.mediaStarted, slot.settlement == nil, slot.settleTask == nil
+        else { return }
         _ = beginSettlement(ticket: ticket, reason: .deadline)
     }
 
@@ -464,8 +468,9 @@ actor RecordingSettlementSupervisor {
     /// - Parameter ticket: The armed session whose promotion deadline expired.
     private func promotionDeadlineReached(_ ticket: Ticket) {
         guard let slot = active, slot.ticket == ticket,
-              slot.mediaStarted, !slot.presentationAcknowledged,
-              slot.settlement == nil, slot.settleTask == nil else { return }
+            slot.mediaStarted, !slot.presentationAcknowledged,
+            slot.settlement == nil, slot.settleTask == nil
+        else { return }
         _ = beginSettlement(ticket: ticket, reason: .promotionStalled)
     }
 
@@ -493,8 +498,9 @@ actor RecordingSettlementSupervisor {
     /// capture is real but nobody can operate the stop control anymore.
     private func livenessDeadlineReached(_ ticket: Ticket) {
         guard let slot = active, slot.ticket == ticket,
-              slot.mediaStarted, slot.presentationAcknowledged,
-              slot.settlement == nil, slot.settleTask == nil else { return }
+            slot.mediaStarted, slot.presentationAcknowledged,
+            slot.settlement == nil, slot.settleTask == nil
+        else { return }
         _ = beginSettlement(ticket: ticket, reason: .promotionStalled)
     }
 

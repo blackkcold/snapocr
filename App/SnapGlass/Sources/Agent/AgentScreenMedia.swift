@@ -27,10 +27,12 @@ enum AgentScreenMedia {
     /// - Returns: The chunk facts; empty when the session wrote nothing.
     static func chunkFacts(root: URL) -> AgentScreenChunkFacts {
         let sessions = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
-        guard let enumerator = FileManager.default.enumerator(
-            at: sessions,
-            includingPropertiesForKeys: [.isRegularFileKey]
-        ) else { return AgentScreenChunkFacts() }
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: sessions,
+                includingPropertiesForKeys: [.isRegularFileKey]
+            )
+        else { return AgentScreenChunkFacts() }
         var facts = AgentScreenChunkFacts()
         for case let url as URL in enumerator
         where url.lastPathComponent.hasPrefix("chunk-") && url.pathExtension.lowercased() == "mp4" {
@@ -50,11 +52,14 @@ enum AgentScreenMedia {
     /// - Parameter roots: The isolated pipeline roots.
     /// - Returns: Published URLs in index order, or `nil` when the ledger is unreadable.
     static func publishedVideoURLs(roots: RecordingPipelineRoots) async -> [URL]? {
-        guard let sessions = try? await RecordingSessionLedger.publishedSessions(
-            in: roots.sessionRoot,
-            indexURL: roots.indexURL
-        ) else { return nil }
-        return sessions
+        guard
+            let sessions = try? await RecordingSessionLedger.publishedSessions(
+                in: roots.sessionRoot,
+                indexURL: roots.indexURL
+            )
+        else { return nil }
+        return
+            sessions
             .filter { $0.kind == .screen }
             .flatMap { record in
                 record.segments.filter { $0.state == .published }.compactMap(\.videoURL)

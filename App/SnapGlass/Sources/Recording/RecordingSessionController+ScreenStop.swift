@@ -188,7 +188,8 @@ extension RecordingSessionController {
             )
         } catch {
             if let coordinatorError = error as? ScreenRecordingSessionCoordinatorError,
-               coordinatorError == .streamStopUnconfirmed {
+                coordinatorError == .streamStopUnconfirmed
+            {
                 _ = screenStartOwnership.stopUnconfirmed(generation: generation)
                 unconfirmedScreenStop = (adapter, materialRoot)
                 guard generation == sessionGeneration else { return false }
@@ -331,7 +332,8 @@ extension RecordingSessionController {
         } else if let adapter = screenPipelineAdapter {
             failure = await classifyScreenStartFailure(adapter: adapter)
         } else {
-            failure = context.reason == .deadline
+            failure =
+                context.reason == .deadline
                 ? RecordingReadinessError.noVideoFrames
                 : RecordingReadinessError.videoWriterFailed
         }
@@ -354,7 +356,8 @@ extension RecordingSessionController {
                 return await failScreenRecordingStop(outcome, context: context)
             }
             screenPipelineAdapter = nil
-            let stalledMessage = context.reason == .promotionStalled
+            let stalledMessage =
+                context.reason == .promotionStalled
                 ? AppLocalization.string(
                     "The screen recording stopped because the interface stopped responding. The video was saved: %@",
                     url.lastPathComponent
@@ -451,10 +454,11 @@ extension RecordingSessionController {
         canRetry: Bool = true
     ) -> RecordingControlPanelFailure {
         RecordingControlPanelFailure(
-            reason: reason ?? AppLocalization.string(
-                // swiftlint:disable:next line_length
-                "The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one."
-            ),
+            reason: reason
+                ?? AppLocalization.string(
+                    // swiftlint:disable:next line_length
+                    "The capture stream did not confirm it stopped. Your recording was kept; wait for it to stop before starting another one."
+                ),
             canRetry: canRetry,
             partialURL: materialRoot ?? unconfirmedScreenStop?.materialRoot
         )
@@ -489,9 +493,9 @@ extension RecordingSessionController {
     @discardableResult
     func retryUnconfirmedScreenStop() async -> Bool {
         guard let pending = unconfirmedScreenStop,
-              !isScreenStopInFlight,
-              let generation = screenStartOwnership.ownerGeneration,
-              screenStartOwnership.beginStopRetry(generation: generation)
+            !isScreenStopInFlight,
+            let generation = screenStartOwnership.ownerGeneration,
+            screenStartOwnership.beginStopRetry(generation: generation)
         else { return false }
         let task = Task { try await pending.adapter.stopAndSave() }
         screenStopTask = task
@@ -510,7 +514,8 @@ extension RecordingSessionController {
             controlPanel = nil
             onFailureChange?(nil)
             if outcome.isSaved, let url = outcome.latestPublishedURL {
-                let message = outcome.audioFailure == nil
+                let message =
+                    outcome.audioFailure == nil
                     ? AppLocalization.string("Recording saved: %@", url.lastPathComponent)
                     : AppLocalization.string(
                         "The system audio could not be recorded. The video was saved: %@",

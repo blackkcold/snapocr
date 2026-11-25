@@ -7,133 +7,133 @@ import Testing
 @testable import EditorInteractionTests
 
 final class HistoryRequestRecorder: @unchecked Sendable {
-  private let lock = NSLock()
-  private var entries: [(mode: EditorHistorySaveMode, source: UUID?)] = []
+    private let lock = NSLock()
+    private var entries: [(mode: EditorHistorySaveMode, source: UUID?)] = []
 
-  func append(_ mode: EditorHistorySaveMode, _ source: UUID?) {
-    lock.lock()
-    entries.append((mode, source))
-    lock.unlock()
-  }
+    func append(_ mode: EditorHistorySaveMode, _ source: UUID?) {
+        lock.lock()
+        entries.append((mode, source))
+        lock.unlock()
+    }
 
-  var all: [(mode: EditorHistorySaveMode, source: UUID?)] {
-    lock.lock()
-    defer { lock.unlock() }
-    return entries
-  }
+    var all: [(mode: EditorHistorySaveMode, source: UUID?)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries
+    }
 }
 
 final class StyleRecorder: @unchecked Sendable {
-  private let lock = NSLock()
-  private var styles: [MockupStyle?] = []
+    private let lock = NSLock()
+    private var styles: [MockupStyle?] = []
 
-  func append(_ style: MockupStyle?) {
-    lock.lock()
-    styles.append(style)
-    lock.unlock()
-  }
+    func append(_ style: MockupStyle?) {
+        lock.lock()
+        styles.append(style)
+        lock.unlock()
+    }
 
-  var all: [MockupStyle?] {
-    lock.lock()
-    defer { lock.unlock() }
-    return styles
-  }
+    var all: [MockupStyle?] {
+        lock.lock()
+        defer { lock.unlock() }
+        return styles
+    }
 }
 
 @MainActor
 struct EditorHistoryTests {
-  private func image(width: Int = 400, height: Int = 300) throws -> CGImage {
-    let context = try #require(
-      CGContext(
-        data: nil, width: width, height: height, bitsPerComponent: 8,
-        bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-    context.setFillColor(NSColor.white.cgColor)
-    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-    return try #require(context.makeImage())
-  }
+    private func image(width: Int = 400, height: Int = 300) throws -> CGImage {
+        let context = try #require(
+            CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return try #require(context.makeImage())
+    }
 
-  @Test func saveToHistoryReportsModeAndSource() async throws {
-    let sourceID = UUID()
-    let requests = HistoryRequestRecorder()
-    let model = EditorViewModel(
-      image: try image(),
-      context: EditorCaptureContext(
-        captureMode: "area", supportsVerticalTrim: false,
-        startsInVerticalTrim: false, sourceEntryID: sourceID
-      ),
-      historySaver: { image, mode, source, _ in
-        #expect(image.width == 400)
-        requests.append(mode, source)
-      }
-    )
-    await model.saveToHistory(mode: .overwriteOriginal)
-    let first = requests.all
-    #expect(first.count == 1)
-    #expect(first[0].mode == .overwriteOriginal)
-    #expect(first[0].source == sourceID)
+    @Test func saveToHistoryReportsModeAndSource() async throws {
+        let sourceID = UUID()
+        let requests = HistoryRequestRecorder()
+        let model = EditorViewModel(
+            image: try image(),
+            context: EditorCaptureContext(
+                captureMode: "area", supportsVerticalTrim: false,
+                startsInVerticalTrim: false, sourceEntryID: sourceID
+            ),
+            historySaver: { image, mode, source, _ in
+                #expect(image.width == 400)
+                requests.append(mode, source)
+            }
+        )
+        await model.saveToHistory(mode: .overwriteOriginal)
+        let first = requests.all
+        #expect(first.count == 1)
+        #expect(first[0].mode == .overwriteOriginal)
+        #expect(first[0].source == sourceID)
 
-    await model.saveToHistory(mode: .newRecord)
-    let all = requests.all
-    #expect(all.count == 2)
-    #expect(all[1].mode == .newRecord)
-    #expect(all[1].source == sourceID)
-  }
+        await model.saveToHistory(mode: .newRecord)
+        let all = requests.all
+        #expect(all.count == 2)
+        #expect(all[1].mode == .newRecord)
+        #expect(all[1].source == sourceID)
+    }
 
-  @Test func saveForwardsPresentationStyle() async throws {
-    let style = MockupPreset.dark.style
-    let recorder = StyleRecorder()
-    let model = EditorViewModel(
-      image: try image(),
-      context: EditorCaptureContext(
-        captureMode: "area",
-        supportsVerticalTrim: false,
-        startsInVerticalTrim: false,
-        sourceEntryID: UUID(),
-        mockupStyle: style
-      ),
-      historySaver: { _, _, _, received in recorder.append(received) }
-    )
-    await model.saveToHistory(mode: .newRecord)
-    #expect(recorder.all == [style])
-  }
+    @Test func saveForwardsPresentationStyle() async throws {
+        let style = MockupPreset.dark.style
+        let recorder = StyleRecorder()
+        let model = EditorViewModel(
+            image: try image(),
+            context: EditorCaptureContext(
+                captureMode: "area",
+                supportsVerticalTrim: false,
+                startsInVerticalTrim: false,
+                sourceEntryID: UUID(),
+                mockupStyle: style
+            ),
+            historySaver: { _, _, _, received in recorder.append(received) }
+        )
+        await model.saveToHistory(mode: .newRecord)
+        #expect(recorder.all == [style])
+    }
 
-  @Test func overwriteWithoutSourceIsRejected() async throws {
-    let requests = HistoryRequestRecorder()
-    let model = EditorViewModel(
-      image: try image(),
-      historySaver: { _, mode, source, _ in requests.append(mode, source) }
-    )
-    await model.saveToHistory(mode: .overwriteOriginal)
-    #expect(requests.all.isEmpty)
-    #expect(model.toastMessage?.type == .error)
-  }
+    @Test func overwriteWithoutSourceIsRejected() async throws {
+        let requests = HistoryRequestRecorder()
+        let model = EditorViewModel(
+            image: try image(),
+            historySaver: { _, mode, source, _ in requests.append(mode, source) }
+        )
+        await model.saveToHistory(mode: .overwriteOriginal)
+        #expect(requests.all.isEmpty)
+        #expect(model.toastMessage?.type == .error)
+    }
 
-  @Test func failedSaveSurfacesErrorToast() async throws {
-    let model = EditorViewModel(
-      image: try image(),
-      historySaver: { _, _, _, _ in throw HistoryError.entryNotFound(id: UUID()) }
-    )
-    await model.saveToHistory(mode: .newRecord)
-    #expect(model.toastMessage?.type == .error)
-  }
+    @Test func failedSaveSurfacesErrorToast() async throws {
+        let model = EditorViewModel(
+            image: try image(),
+            historySaver: { _, _, _, _ in throw HistoryError.entryNotFound(id: UUID()) }
+        )
+        await model.saveToHistory(mode: .newRecord)
+        #expect(model.toastMessage?.type == .error)
+    }
 
-  @Test func failedSaveKeepsAnnotationsDirty() async throws {
-    let model = EditorViewModel(
-      image: try image(),
-      historySaver: { _, _, _, _ in throw HistoryError.entryNotFound(id: UUID()) }
-    )
-    model.markSaved()
-    model.addNode(
-      AnnotationNode(
-        tool: .rect,
-        points: [CGPoint(x: 0.1, y: 0.1), CGPoint(x: 0.5, y: 0.5)]
-      ))
-    #expect(model.hasUnsavedChanges)
+    @Test func failedSaveKeepsAnnotationsDirty() async throws {
+        let model = EditorViewModel(
+            image: try image(),
+            historySaver: { _, _, _, _ in throw HistoryError.entryNotFound(id: UUID()) }
+        )
+        model.markSaved()
+        model.addNode(
+            AnnotationNode(
+                tool: .rect,
+                points: [CGPoint(x: 0.1, y: 0.1), CGPoint(x: 0.5, y: 0.5)]
+            ))
+        #expect(model.hasUnsavedChanges)
 
-    await model.saveToHistory(mode: .newRecord)
+        await model.saveToHistory(mode: .newRecord)
 
-    // The quit guard relies on this: a failed write must never look saved.
-    #expect(model.hasUnsavedChanges)
-  }
+        // The quit guard relies on this: a failed write must never look saved.
+        #expect(model.hasUnsavedChanges)
+    }
 }

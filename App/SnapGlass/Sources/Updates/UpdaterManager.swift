@@ -165,7 +165,8 @@ extension UpdaterManager: SPUUpdaterDelegate {
     }
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
-        var update = availableUpdate
+        var update =
+            availableUpdate
             ?? AvailableUpdate(
                 displayVersion: item.displayVersionString,
                 releaseNotesURL: item.releaseNotesURL
@@ -183,7 +184,8 @@ extension UpdaterManager: SPUUpdaterDelegate {
     /// `noUpdateError` means "already current", not a failure.
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
         let nsError = error as NSError
-        let isCurrent = nsError.domain == SUSparkleErrorDomain
+        let isCurrent =
+            nsError.domain == SUSparkleErrorDomain
             && nsError.code == Int(SUError.noUpdateError.rawValue)
         if isCurrent {
             state = userInitiatedCheck ? .upToDate(Self.currentVersion) : .idle

@@ -34,14 +34,16 @@ public struct Renderer: Sendable {
         let workingImage: CGImage
         let workingSize: CGSize
         if let maximumDimension,
-           maximumDimension > 0,
-           max(imageSize.width, imageSize.height) > maximumDimension {
+            maximumDimension > 0,
+            max(imageSize.width, imageSize.height) > maximumDimension
+        {
             if let suppliedBase,
-               Self.matchesDownsampleSize(
-                   suppliedBase,
-                   sourceSize: imageSize,
-                   maximumDimension: maximumDimension
-               ) {
+                Self.matchesDownsampleSize(
+                    suppliedBase,
+                    sourceSize: imageSize,
+                    maximumDimension: maximumDimension
+                )
+            {
                 workingImage = suppliedBase
                 workingSize = CGSize(width: suppliedBase.width, height: suppliedBase.height)
             } else {
@@ -58,15 +60,17 @@ public struct Renderer: Sendable {
         let styleScale = workingSize.width / max(imageSize.width, 1)
 
         // 创建位图上下文
-        guard let context = CGContext(
-            data: nil,
-            width: Int(workingSize.width),
-            height: Int(workingSize.height),
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: Int(workingSize.width),
+                height: Int(workingSize.height),
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+            )
+        else {
             throw AnnotationError.renderFailed(reason: "无法创建 CGContext")
         }
 
@@ -118,7 +122,8 @@ public struct Renderer: Sendable {
         originalImageSize: CGSize
     ) {
         guard canvasSize.width > 0, canvasSize.height > 0,
-              originalImageSize.width > 0, originalImageSize.height > 0 else { return }
+            originalImageSize.width > 0, originalImageSize.height > 0
+        else { return }
         let styleScale = canvasSize.width / max(originalImageSize.width, 1)
         renderNodes(
             nodes,
@@ -162,8 +167,9 @@ public struct Renderer: Sendable {
             // Layout in source pixels: scaling the font but not TextTool's padding
             // can leave too little height for even one Core Text line in previews.
             context.saveGState()
-            context.scaleBy(x: imageSize.width / originalSize.width,
-                            y: imageSize.height / originalSize.height)
+            context.scaleBy(
+                x: imageSize.width / originalSize.width,
+                y: imageSize.height / originalSize.height)
             TextTool().render(node: node, in: context, imageSize: originalSize)
             context.restoreGState()
             return
@@ -221,15 +227,17 @@ public struct Renderer: Sendable {
         let newWidth = Int(CGFloat(image.width) * scale)
         let newHeight = Int(CGFloat(image.height) * scale)
 
-        guard let context = CGContext(
-            data: nil,
-            width: newWidth,
-            height: newHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-        ) else {
+        guard
+            let context = CGContext(
+                data: nil,
+                width: newWidth,
+                height: newHeight,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+            )
+        else {
             return nil
         }
 

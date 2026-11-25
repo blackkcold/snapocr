@@ -45,9 +45,10 @@ extension AgentRunner {
             readiness: readiness,
             screen: screen,
             recovery: recovery,
-            journal: journal ?? sessionResult.flatMap {
-                Self.journalFacts(root: configuration.rootURL, sessionID: $0.sessionID)
-            },
+            journal: journal
+                ?? sessionResult.flatMap {
+                    Self.journalFacts(root: configuration.rootURL, sessionID: $0.sessionID)
+                },
             timeline: makeTimeline(hud: hud, settledAtMs: supervisor.settledAtMs),
             errors: errors
         )
@@ -96,8 +97,9 @@ extension AgentRunner {
         }
         let settlementDuringStall: Bool
         if let settled = diagnostics?.settledAt,
-           let stallStartedAt,
-           let stallEndedAt {
+            let stallStartedAt,
+            let stallEndedAt
+        {
             settlementDuringStall =
                 settled >= stallStartedAt && settled <= stallEndedAt
                 && diagnostics?.reason == .deadline
@@ -184,7 +186,8 @@ extension AgentRunner {
             }
         }
         if let expected = expect.sizeThatFitsBeforeFirstVisible,
-           report.hud.sizeThatFitsBeforeFirstVisible != expected {
+            report.hud.sizeThatFitsBeforeFirstVisible != expected
+        {
             failures.append(
                 "expectation: sizeThatFitsBeforeFirstVisible "
                     + "\(report.hud.sizeThatFitsBeforeFirstVisible) != \(expected)"
@@ -203,7 +206,8 @@ extension AgentRunner {
             failures.append("expectation: becameRecording != \(expected)")
         }
         if let minimum = expect.mainThreadMaxStallAtLeastMs,
-           report.mainThread.maxStallMs < minimum {
+            report.mainThread.maxStallMs < minimum
+        {
             failures.append(
                 "expectation: maxStallMs \(report.mainThread.maxStallMs) < \(minimum)"
             )
@@ -212,20 +216,23 @@ extension AgentRunner {
             failures.append("expectation: resizeCount \(report.hud.resizeCount) > \(maximum)")
         }
         if let maximum = expect.maxRecordingResizeCount,
-           report.hud.resizeCountRecordingPhase > maximum {
+            report.hud.resizeCountRecordingPhase > maximum
+        {
             failures.append(
                 "expectation: resizeCountRecordingPhase "
                     + "\(report.hud.resizeCountRecordingPhase) > \(maximum)"
             )
         }
         if let expected = expect.settlementDuringStall,
-           report.supervisor.settlementDuringStall != expected {
+            report.supervisor.settlementDuringStall != expected
+        {
             failures.append(
                 "expectation: settlementDuringStall \(report.supervisor.settlementDuringStall) != \(expected)"
             )
         }
         if let expected = expect.supervisorStopCalls,
-           report.supervisor.stopCalls != expected {
+            report.supervisor.stopCalls != expected
+        {
             failures.append(
                 "expectation: supervisorStopCalls \(report.supervisor.stopCalls) != \(expected)"
             )
@@ -335,16 +342,19 @@ extension AgentRunner {
         guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return "unknown" }
         var staticCode: SecStaticCode?
         guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess,
-              let staticCode else { return "unknown" }
+            let staticCode
+        else { return "unknown" }
         var information: CFDictionary?
         let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
         guard SecCodeCopySigningInformation(staticCode, flags, &information) == errSecSuccess,
-              let dictionary = information as? [String: Any],
-              let certificates = dictionary[kSecCodeInfoCertificates as String] as? [SecCertificate],
-              let leaf = certificates.first else { return "unknown" }
+            let dictionary = information as? [String: Any],
+            let certificates = dictionary[kSecCodeInfoCertificates as String] as? [SecCertificate],
+            let leaf = certificates.first
+        else { return "unknown" }
         var commonName: CFString?
         guard SecCertificateCopyCommonName(leaf, &commonName) == errSecSuccess,
-              let commonName else { return "unknown" }
+            let commonName
+        else { return "unknown" }
         return commonName as String
     }
 }

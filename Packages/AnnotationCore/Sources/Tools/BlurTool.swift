@@ -85,25 +85,34 @@ public struct BlurTool: Sendable {
         switch node.blurMode {
         case .gaussian:
             let radius = (2 + strength * 48) * scale
-            output = ciImage
+            output =
+                ciImage
                 .clampedToExtent()
                 .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius])
                 .cropped(to: ciImage.extent)
         case .pixelate:
             let blockSize = (3 + strength * 45) * scale
-            output = ciImage
-                .applyingFilter("CIPixellate", parameters: [
-                    kCIInputScaleKey: max(blockSize, 1),
-                    kCIInputCenterKey: CIVector(x: ciImage.extent.midX, y: ciImage.extent.midY),
-                ])
+            output =
+                ciImage
+                .applyingFilter(
+                    "CIPixellate",
+                    parameters: [
+                        kCIInputScaleKey: max(blockSize, 1),
+                        kCIInputCenterKey: CIVector(x: ciImage.extent.midX, y: ciImage.extent.midY),
+                    ]
+                )
                 .cropped(to: ciImage.extent)
         case .mosaic:
             let cellSize = (4 + strength * 42) * scale
-            output = ciImage
-                .applyingFilter("CICrystallize", parameters: [
-                    kCIInputRadiusKey: max(cellSize, 1),
-                    kCIInputCenterKey: CIVector(x: ciImage.extent.midX, y: ciImage.extent.midY),
-                ])
+            output =
+                ciImage
+                .applyingFilter(
+                    "CICrystallize",
+                    parameters: [
+                        kCIInputRadiusKey: max(cellSize, 1),
+                        kCIInputCenterKey: CIVector(x: ciImage.extent.midX, y: ciImage.extent.midY),
+                    ]
+                )
                 .cropped(to: ciImage.extent)
         }
 

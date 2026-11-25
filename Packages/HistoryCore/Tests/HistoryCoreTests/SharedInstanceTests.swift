@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+
 @testable import HistoryCore
 
 /// 锁定「同一进程只持有一个 HistoryActor」这一不变量。
@@ -78,15 +79,16 @@ struct SharedInstanceTests {
     }
 
     private func image(_ width: Int) throws -> CGImage {
-        let context = try #require(CGContext(
-            data: nil,
-            width: width,
-            height: 80,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: width,
+                height: 80,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.setFillColor(CGColor(gray: 0.5, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: 80))
         return try #require(context.makeImage())

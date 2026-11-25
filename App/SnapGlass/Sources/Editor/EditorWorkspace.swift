@@ -55,7 +55,8 @@ public final class EditorWorkspace: ObservableObject {
     @discardableResult
     public func open(image: CGImage, context: EditorCaptureContext) -> Tab? {
         if let entryID = context.sourceEntryID,
-            let index = tabs.firstIndex(where: { $0.context.sourceEntryID == entryID }) {
+            let index = tabs.firstIndex(where: { $0.context.sourceEntryID == entryID })
+        {
             // Reusing the tab must still adopt the latest presentation style;
             // otherwise an inspector change made after the tab opened would be
             // overwritten with the stale style on "Overwrite Original".

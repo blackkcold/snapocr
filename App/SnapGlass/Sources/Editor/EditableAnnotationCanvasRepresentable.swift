@@ -93,8 +93,9 @@ struct EditableAnnotationCanvasView: NSViewRepresentable {
         view.onDeleteSelection = onDeleteSelection
         view.onTextRequested = onTextRequested
         view.onTextEditRequested = onTextEditRequested
-        view.updateTextEntry(id: textEntryID, node: textEntryNode,
-                             onCommit: onTextCommit, onCancel: onTextCancel)
+        view.updateTextEntry(
+            id: textEntryID, node: textEntryNode,
+            onCommit: onTextCommit, onCancel: onTextCancel)
         view.onTextDraftChanged = onTextDraftChanged
         view.onOCRLinesCopied = onOCRLinesCopied
         view.onOCRTextCopied = onOCRTextCopied

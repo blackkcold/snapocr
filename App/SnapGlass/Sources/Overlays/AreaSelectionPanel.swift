@@ -1,9 +1,8 @@
 import AppKit
 import CaptureCore
+@preconcurrency import ScreenCaptureKit
 import SharedKit
 import SwiftUI
-
-@preconcurrency import ScreenCaptureKit
 
 // MARK: - WindowSelectionPanel
 
@@ -121,9 +120,11 @@ final class WindowSelectionPanel: NSPanel {
             height: min(680, max(420, windows.count * 96 + 190))
         )
         let mouseLocation = NSEvent.mouseLocation
-        let targetScreen = NSScreen.screens.first { $0.frame.contains(mouseLocation) }
+        let targetScreen =
+            NSScreen.screens.first { $0.frame.contains(mouseLocation) }
             ?? NSScreen.main
-        let screenFrame = targetScreen?.visibleFrame
+        let screenFrame =
+            targetScreen?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 800, height: 600)
         let panelOrigin = NSPoint(
             x: screenFrame.midX - panelSize.width / 2,
@@ -342,7 +343,8 @@ final class WindowSelectionPanel: NSPanel {
         emptyStateView.isHidden = !visible
         listScrollView?.isHidden = visible
         if visible {
-            emptyStateLabel.stringValue = loadError
+            emptyStateLabel.stringValue =
+                loadError
                 ?? AppLocalization.string("No capturable windows found")
         }
     }

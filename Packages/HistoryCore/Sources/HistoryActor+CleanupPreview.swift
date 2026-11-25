@@ -31,7 +31,8 @@ extension HistoryActor {
             }
         }
 
-        var survivors = persisted
+        var survivors =
+            persisted
             .filter { !doomed.contains($0.id) }
             .sorted { $0.timestamp > $1.timestamp }
         let overflow = max(0, survivors.count - maxItems)
@@ -63,12 +64,15 @@ extension HistoryActor {
     private func directoryTotalSize() -> UInt64 {
         var totalSize: UInt64 = 0
         for directory in [entriesDir, imagesDir, thumbsDir] {
-            guard let files = try? FileManager.default.contentsOfDirectory(
-                at: directory, includingPropertiesForKeys: [.fileSizeKey]
-            ) else { continue }
+            guard
+                let files = try? FileManager.default.contentsOfDirectory(
+                    at: directory, includingPropertiesForKeys: [.fileSizeKey]
+                )
+            else { continue }
             for file in files {
                 if let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
-                   size > 0 {
+                    size > 0
+                {
                     totalSize += UInt64(size)
                 }
             }

@@ -33,9 +33,10 @@ public enum RecordingCaptureFrameGeometry {
         appKitScreenFrame: CGRect
     ) -> CGRect? {
         guard displayFrame.width > 0,
-              displayFrame.height > 0,
-              appKitScreenFrame.width > 0,
-              appKitScreenFrame.height > 0 else {
+            displayFrame.height > 0,
+            appKitScreenFrame.width > 0,
+            appKitScreenFrame.height > 0
+        else {
             return nil
         }
         let rect = localRect.standardized

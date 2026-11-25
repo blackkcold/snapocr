@@ -102,13 +102,14 @@ extension CaptureViewModel {
     private func inspectScreenshotShelfMockup(captureID: UUID) {
         Task { [weak self] in
             guard let self,
-                  let image = await loadScreenshotShelfImage(captureID: captureID),
-                  let card = screenshotShelfManager.card(for: captureID)
+                let image = await loadScreenshotShelfImage(captureID: captureID),
+                let card = screenshotShelfManager.card(for: captureID)
             else { return }
 
-            let presetID = UserDefaults.standard.string(
-                forKey: PreferenceKeys.captureMockupPreset
-            ) ?? PreferenceDefaults.captureMockupPreset
+            let presetID =
+                UserDefaults.standard.string(
+                    forKey: PreferenceKeys.captureMockupPreset
+                ) ?? PreferenceDefaults.captureMockupPreset
             let style = card.mockupStyle ?? MockupPolicy.style(for: presetID)
             let historyID = screenshotShelfManager.historyID(for: captureID)
 
@@ -133,7 +134,7 @@ extension CaptureViewModel {
     private func copyScreenshotShelfItem(captureID: UUID) {
         Task { [weak self] in
             guard let self,
-                  let image = await loadScreenshotShelfPresentedImage(captureID: captureID)
+                let image = await loadScreenshotShelfPresentedImage(captureID: captureID)
             else { return }
             if await writeImageToClipboard(image) {
                 reportScreenshotShelfFeedback(
@@ -154,9 +155,10 @@ extension CaptureViewModel {
     private func pinScreenshotShelfItem(captureID: UUID) {
         Task { [weak self] in
             guard let self,
-                  let image = await loadScreenshotShelfImage(captureID: captureID),
-                  let screen = screenshotShelfManager.displayScreen,
-                  let card = screenshotShelfManager.card(for: captureID) else { return }
+                let image = await loadScreenshotShelfImage(captureID: captureID),
+                let screen = screenshotShelfManager.displayScreen,
+                let card = screenshotShelfManager.card(for: captureID)
+            else { return }
             let displayScale = ScreenshotShelfManager.displayScaleForPinning(
                 displayScale: card.displayScale,
                 scaleSourcePixelWidth: card.scaleSourcePixelWidth,
@@ -223,8 +225,9 @@ extension CaptureViewModel {
     private func loadScreenshotShelfPresentedImage(captureID: UUID) async -> CGImage? {
         do {
             guard let data = try await screenshotShelfManager.presentedData(for: captureID),
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                let source = CGImageSourceCreateWithData(data as CFData, nil),
+                let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else {
                 return await loadScreenshotShelfImage(captureID: captureID)
             }
             return image
@@ -236,8 +239,9 @@ extension CaptureViewModel {
     private func loadScreenshotShelfImage(captureID: UUID) async -> CGImage? {
         do {
             guard let data = try await screenshotShelfManager.originalData(for: captureID),
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                let source = CGImageSourceCreateWithData(data as CFData, nil),
+                let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else {
                 reportScreenshotShelfFeedback(
                     captureID: captureID,
                     message: .localizedKey("Unable to load screenshot"),

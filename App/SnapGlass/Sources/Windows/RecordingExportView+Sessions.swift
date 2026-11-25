@@ -109,10 +109,12 @@ extension RecordingExportView {
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(recording.kind == .audio
-                        ? LocalizedStringKey("Incomplete audio recording")
-                        : LocalizedStringKey("Incomplete screen recording"))
-                        .font(.callout.weight(.medium))
+                    Text(
+                        recording.kind == .audio
+                            ? LocalizedStringKey("Incomplete audio recording")
+                            : LocalizedStringKey("Incomplete screen recording")
+                    )
+                    .font(.callout.weight(.medium))
                     HStack(spacing: 6) {
                         if recording.duration > 0 {
                             Text(Self.duration(recording.duration))
@@ -162,9 +164,10 @@ extension RecordingExportView {
 
     func sessionButton(_ record: RecordingSessionRecord) -> some View {
         let selected = viewModel.selectedSessionID == record.id
-        let duration = Self.duration(record.segments
-            .filter { $0.state == .published }
-            .reduce(0.0) { $0 + Double($1.sampleCount) / 48_000 })
+        let duration = Self.duration(
+            record.segments
+                .filter { $0.state == .published }
+                .reduce(0.0) { $0 + Double($1.sampleCount) / 48_000 })
         return Button {
             Task { await viewModel.selectSession(record.id) }
         } label: {
@@ -190,11 +193,14 @@ extension RecordingExportView {
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(AppLocalization.string(
-            "Recording session %@, %@",
-            record.startedAt.formatted(date: .abbreviated, time: .shortened),
-            duration
-        )))
+        .accessibilityLabel(
+            Text(
+                AppLocalization.string(
+                    "Recording session %@, %@",
+                    record.startedAt.formatted(date: .abbreviated, time: .shortened),
+                    duration
+                ))
+        )
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

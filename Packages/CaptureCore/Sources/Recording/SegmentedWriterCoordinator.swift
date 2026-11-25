@@ -98,7 +98,8 @@ public actor SegmentedWriterCoordinator: AudioCheckpointSink {
                 throw RecordingCheckpointError.segmentClosed
             }
             try await destination.sink.append(destination.part.block)
-            let partEnd = destination.part.block.range.startSample
+            let partEnd =
+                destination.part.block.range.startSample
                 + destination.part.block.range.sampleCount
             expectedEndByIndex[destination.part.boundary.index] = max(
                 expectedEndByIndex[destination.part.boundary.index] ?? destination.part.boundary.startSample,
@@ -153,7 +154,8 @@ public actor SegmentedWriterCoordinator: AudioCheckpointSink {
             do {
                 let commit = try await sink.commitCheckpoint()
                 if !deliveredCheckpointIDs.contains(commit.checkpointID),
-                   !commits.contains(where: { $0.checkpointID == commit.checkpointID }) {
+                    !commits.contains(where: { $0.checkpointID == commit.checkpointID })
+                {
                     commits.append(commit)
                 }
             } catch let error as RecordingCheckpointError {
@@ -264,11 +266,11 @@ public actor SegmentedWriterCoordinator: AudioCheckpointSink {
 
     private func validate(_ block: AudioPCMBlock) throws {
         guard block.frameCount > 0,
-              Int64(block.frameCount) == block.range.sampleCount,
-              block.sampleRate > 0,
-              block.channelCount > 0,
-              block.channelCount == block.channels.count,
-              block.channels.allSatisfy({ $0.count == block.frameCount })
+            Int64(block.frameCount) == block.range.sampleCount,
+            block.sampleRate > 0,
+            block.channelCount > 0,
+            block.channelCount == block.channels.count,
+            block.channels.allSatisfy({ $0.count == block.frameCount })
         else {
             throw RecordingCheckpointError.incompatibleFormat(role: block.role)
         }
@@ -349,7 +351,7 @@ public actor SegmentedWriterCoordinator: AudioCheckpointSink {
     private func boundary(after current: SegmentBoundary) throws -> SegmentBoundary {
         if let table {
             guard let offset = table.firstIndex(where: { $0.index == current.index }),
-                  offset + 1 < table.count
+                offset + 1 < table.count
             else {
                 throw RecordingCheckpointError.blockOutsideSegment
             }
@@ -408,14 +410,14 @@ public actor SegmentedWriterCoordinator: AudioCheckpointSink {
         var seen: Set<Int> = []
         for (offset, boundary) in sorted.enumerated() {
             guard boundary.index >= 0,
-                  boundary.endSample > boundary.startSample,
-                  seen.insert(boundary.index).inserted
+                boundary.endSample > boundary.startSample,
+                seen.insert(boundary.index).inserted
             else {
                 throw RecordingCheckpointError.invalidConfiguration
             }
             if offset > 0 {
                 guard sorted[offset - 1].endSample == boundary.startSample,
-                      sorted[offset - 1].index < boundary.index
+                    sorted[offset - 1].index < boundary.index
                 else {
                     throw RecordingCheckpointError.invalidConfiguration
                 }

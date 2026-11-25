@@ -47,9 +47,9 @@ actor LazyMicrophoneSource: AudioFrameSource, AudioSourceReconfigurationCancelli
         }
         let capture = AVAudioEngineMicrophoneCaptureEngine()
         guard let format = capture.currentFormat,
-              format.commonFormat == .pcmFormatFloat32,
-              format.channelCount == 1 || format.channelCount == 2,
-              format.sampleRate > 0
+            format.commonFormat == .pcmFormatFloat32,
+            format.channelCount == 1 || format.channelCount == 2,
+            format.sampleRate > 0
         else { throw AudioSourceError.invalidFormat }
         let sourceFormat = AudioSourceFormat(
             sampleRate: Int(format.sampleRate.rounded()),

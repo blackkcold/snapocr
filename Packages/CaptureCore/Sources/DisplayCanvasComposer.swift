@@ -21,15 +21,15 @@ public enum DisplayCanvasComposer {
         let width = max(1, Int(plan.outputPixelSize.width))
         let height = max(1, Int(plan.outputPixelSize.height))
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
         else { return nil }
 
         context.interpolationQuality = .high

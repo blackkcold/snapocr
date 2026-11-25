@@ -299,7 +299,8 @@ struct AgentScenario: Codable, Equatable, Sendable {
             try values.decodeIfPresent(Bool.self, forKey: .simulateScreenPermissionDenied) ?? false
         simulateScreenAudioFailure =
             try values.decodeIfPresent(Bool.self, forKey: .simulateScreenAudioFailure) ?? false
-        mode = try values.decodeIfPresent(String.self, forKey: .mode)
+        mode =
+            try values.decodeIfPresent(String.self, forKey: .mode)
             ?? AgentScenarioMode.record.rawValue
         recoveryExpect = try values.decodeIfPresent(AgentRecoveryExpect.self, forKey: .recoveryExpect)
         screenExpect = try values.decodeIfPresent(AgentScreenExpect.self, forKey: .screenExpect)
@@ -350,7 +351,8 @@ struct AgentScenario: Codable, Equatable, Sendable {
             throw ValidationError.invalidScreenSeconds(screenSeconds)
         }
         if let tolerance = screenExpect?.durationToleranceSeconds,
-           !tolerance.isFinite || tolerance <= 0 {
+            !tolerance.isFinite || tolerance <= 0
+        {
             throw ValidationError.invalidExpectation("durationToleranceSeconds must be positive")
         }
         if let minimum = screenExpect?.minChunkBytes, minimum < 0 {
@@ -366,7 +368,8 @@ struct AgentScenario: Codable, Equatable, Sendable {
             throw ValidationError.invalidAudioSeconds(audioSeconds)
         }
         guard firstSampleDeadlineSeconds.isFinite, firstSampleDeadlineSeconds > 0,
-              firstSampleDeadlineSeconds <= 600 else {
+            firstSampleDeadlineSeconds <= 600
+        else {
             throw ValidationError.invalidDeadline(firstSampleDeadlineSeconds)
         }
         guard simulateMainStallMs >= 0, simulateMainStallMs <= 60_000 else {

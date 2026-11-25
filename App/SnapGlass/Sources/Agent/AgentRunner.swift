@@ -208,7 +208,8 @@ final class AgentRunner {
         }
 
         guard let controller = await startSession(scenario: scenario),
-              let roots = self.roots else {
+            let roots = self.roots
+        else {
             await finish(sessionResult: nil, artifacts: [])
             return
         }

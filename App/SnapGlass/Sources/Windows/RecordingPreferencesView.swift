@@ -334,7 +334,8 @@ struct RecordingPreferencesView: View {
 
     private var directoryIsAvailable: Bool {
         guard let destinationDirectory,
-              let capacity = destinationCapacity else { return false }
+            let capacity = destinationCapacity
+        else { return false }
         guard case let .available(_, probedDirectory, _) = capacity else { return false }
         return probedDirectory.standardizedFileURL == destinationDirectory.standardizedFileURL
     }
@@ -359,9 +360,10 @@ struct RecordingPreferencesView: View {
     }
 
     private var estimatedScreenSize: String {
-        let mode = RecordingAudioPreferenceMigration.mode(
-            fromPreferenceValue: screenAudioModeBinding.wrappedValue
-        ) ?? .system
+        let mode =
+            RecordingAudioPreferenceMigration.mode(
+                fromPreferenceValue: screenAudioModeBinding.wrappedValue
+            ) ?? .system
         let audioTrackCount: Int
         switch mode {
         case .none:
@@ -371,7 +373,8 @@ struct RecordingPreferencesView: View {
         case .systemAndMicrophone:
             audioTrackCount = 2
         }
-        let encodedBitsPerSecond = averageVideoBitrate
+        let encodedBitsPerSecond =
+            averageVideoBitrate
             + (screenBitRateBinding.wrappedValue * audioTrackCount)
         return RecordingStorage.formattedBytes(Int64(encodedBitsPerSecond) * 60 / 8)
     }
@@ -418,7 +421,8 @@ struct RecordingPreferencesView: View {
             return
         }
         let isCustom = hasCustomDestination
-        let expectedVolumeUUID = isCustom
+        let expectedVolumeUUID =
+            isCustom
             ? RecordingDestinationPreferences.customDirectoryVolumeUUID(for: .screen)
             : nil
         capacityTask = Task { @MainActor in

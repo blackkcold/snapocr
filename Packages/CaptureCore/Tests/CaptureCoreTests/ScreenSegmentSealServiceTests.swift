@@ -199,9 +199,10 @@ struct ScreenSegmentSealServiceTests {
         #expect(coverage.segmentEndSample == 48_000)
         let track = try #require(coverage.tracks.first { $0.role == "system" })
         #expect(track.lastSample == 47_040)
-        #expect(track.missingRanges == [
-            RecordingSampleRange(startSample: 47_040, sampleCount: 960)
-        ])
+        #expect(
+            track.missingRanges == [
+                RecordingSampleRange(startSample: 47_040, sampleCount: 960)
+            ])
     }
 
     @Test func zeroVideoCheckpointsFailWithoutPublishingAnEmptyMP4() async throws {
@@ -244,19 +245,20 @@ struct ScreenSegmentSealServiceTests {
         while written < totalFrames {
             let count = Int(min(480, totalFrames - written))
             let start = written
-            try await audioWriter.append(AudioPCMBlock(
-                role: .system,
-                range: SampleRange(startSample: start, sampleCount: Int64(count)),
-                sampleRate: 48_000,
-                channelCount: 2,
-                frameCount: count,
-                hostTime: UInt64(written) * 10_000,
-                channels: [
-                    [Float](repeating: 0.1, count: count),
-                    [Float](repeating: 0.1, count: count),
-                ],
-                isSilence: false
-            ))
+            try await audioWriter.append(
+                AudioPCMBlock(
+                    role: .system,
+                    range: SampleRange(startSample: start, sampleCount: Int64(count)),
+                    sampleRate: 48_000,
+                    channelCount: 2,
+                    frameCount: count,
+                    hostTime: UInt64(written) * 10_000,
+                    channels: [
+                        [Float](repeating: 0.1, count: count),
+                        [Float](repeating: 0.1, count: count),
+                    ],
+                    isSilence: false
+                ))
             written += Int64(count)
         }
         return try await audioWriter.finishSegmentBundle()
@@ -264,7 +266,7 @@ struct ScreenSegmentSealServiceTests {
 
     private func makeVideoSample(dimensions: CGSize, index: Int) throws -> CMSampleBuffer {
         let attributes: [CFString: Any] = [
-            kCVPixelBufferIOSurfacePropertiesKey: [CFString: Any](),
+            kCVPixelBufferIOSurfacePropertiesKey: [CFString: Any]()
         ]
         var pixelBuffer: CVPixelBuffer?
         let status = CVPixelBufferCreate(

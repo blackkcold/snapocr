@@ -165,16 +165,18 @@ public enum PinnedImageGeometry {
         smallPanelThreshold: CGFloat = smallPanelResizeThreshold
     ) -> PinnedImageResizeDirection? {
         guard frame.width > 0, frame.height > 0,
-              frame.width.isFinite, frame.height.isFinite,
-              frame.minX.isFinite, frame.minY.isFinite,
-              point.x.isFinite, point.y.isFinite else { return nil }
+            frame.width.isFinite, frame.height.isFinite,
+            frame.minX.isFinite, frame.minY.isFinite,
+            point.x.isFinite, point.y.isFinite
+        else { return nil }
 
         let distanceFromLeft = point.x - frame.minX
         let distanceFromRight = frame.maxX - point.x
         let distanceFromBottom = point.y - frame.minY
         let distanceFromTop = frame.maxY - point.y
         guard distanceFromLeft >= 0, distanceFromRight >= 0,
-              distanceFromBottom >= 0, distanceFromTop >= 0 else { return nil }
+            distanceFromBottom >= 0, distanceFromTop >= 0
+        else { return nil }
 
         let cornerSize = max(0, cornerHitSize)
         if min(frame.width, frame.height) < max(0, smallPanelThreshold) {
@@ -233,8 +235,9 @@ public enum PinnedImageGeometry {
         alphaThreshold: CGFloat = 0.05
     ) -> PinnedImageInteraction {
         guard frame.width > 0, frame.height > 0,
-              point.x >= frame.minX, point.x <= frame.maxX,
-              point.y >= frame.minY, point.y <= frame.maxY else { return .passThrough }
+            point.x >= frame.minX, point.x <= frame.maxX,
+            point.y >= frame.minY, point.y <= frame.maxY
+        else { return .passThrough }
         if ellipseContains(point, in: closeButtonFrame) { return .close }
         if let direction = resizeDirection(at: point, in: frame) { return .resize(direction) }
         return alpha.isFinite && alpha > alphaThreshold ? .move : .passThrough
@@ -258,10 +261,11 @@ public enum PinnedImageGeometry {
         minimumSize: CGSize
     ) -> CGRect {
         guard frame.width > 0, frame.height > 0,
-              frame.width.isFinite, frame.height.isFinite,
-              frame.minX.isFinite, frame.minY.isFinite,
-              translation.x.isFinite, translation.y.isFinite,
-              minimumSize.width.isFinite, minimumSize.height.isFinite else { return frame }
+            frame.width.isFinite, frame.height.isFinite,
+            frame.minX.isFinite, frame.minY.isFinite,
+            translation.x.isFinite, translation.y.isFinite,
+            minimumSize.width.isFinite, minimumSize.height.isFinite
+        else { return frame }
 
         let aspectRatio = frame.width / frame.height
         let movement = direction.expansionVector
@@ -272,7 +276,8 @@ public enum PinnedImageGeometry {
         case .top, .bottom:
             widthDelta = translation.y * movement.y * aspectRatio
         case .topLeft, .topRight, .bottomLeft, .bottomRight:
-            widthDelta = (translation.x * movement.x + translation.y * movement.y / aspectRatio)
+            widthDelta =
+                (translation.x * movement.x + translation.y * movement.y / aspectRatio)
                 / (1 + 1 / (aspectRatio * aspectRatio))
         }
 
@@ -345,7 +350,8 @@ public enum PinnedImageGeometry {
     /// - Returns: 适配后的 frame。
     public static func fitToScreen(_ frame: CGRect, screenFrame: CGRect) -> CGRect {
         guard screenFrame.width > 0, screenFrame.height > 0,
-               frame.width > 0, frame.height > 0 else { return frame }
+            frame.width > 0, frame.height > 0
+        else { return frame }
 
         let maxWidth = screenFrame.width * 0.9
         let maxHeight = screenFrame.height * 0.9
@@ -364,7 +370,8 @@ public enum PinnedImageGeometry {
     /// - Returns: 仅平移后的 frame；任一输入尺寸无效时返回原 frame。
     public static func clampFrameToVisibleBounds(_ frame: CGRect, screenFrame: CGRect) -> CGRect {
         guard frame.width > 0, frame.height > 0,
-              screenFrame.width > 0, screenFrame.height > 0 else { return frame }
+            screenFrame.width > 0, screenFrame.height > 0
+        else { return frame }
         return clamped(frame, to: screenFrame)
     }
 
@@ -455,9 +462,10 @@ public enum PinnedImageGeometry {
     /// - Returns: 关闭按钮的局部矩形；输入尺寸无效或非有限时返回零矩形。
     public static func closeButtonFrame(in frame: CGRect) -> CGRect {
         guard frame.width > 0, frame.height > 0,
-              frame.width.isFinite, frame.height.isFinite,
-              frame.minX.isFinite, frame.minY.isFinite,
-              frame.maxX.isFinite, frame.maxY.isFinite else { return .zero }
+            frame.width.isFinite, frame.height.isFinite,
+            frame.minX.isFinite, frame.minY.isFinite,
+            frame.maxX.isFinite, frame.maxY.isFinite
+        else { return .zero }
         let size = min(20, min(frame.width, frame.height) * 0.4)
         let inset = min(6, size * 0.3)
         return CGRect(
@@ -641,8 +649,9 @@ public enum PinnedImageGeometry {
 
     private static func ellipseContains(_ point: CGPoint, in rect: CGRect) -> Bool {
         guard rect.width > 0, rect.height > 0,
-              rect.width.isFinite, rect.height.isFinite,
-              rect.minX.isFinite, rect.minY.isFinite else { return false }
+            rect.width.isFinite, rect.height.isFinite,
+            rect.minX.isFinite, rect.minY.isFinite
+        else { return false }
         let normalizedX = (point.x - rect.midX) / (rect.width / 2)
         let normalizedY = (point.y - rect.midY) / (rect.height / 2)
         let normalizedDistance = normalizedX * normalizedX + normalizedY * normalizedY

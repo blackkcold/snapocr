@@ -76,9 +76,11 @@ extension AgentRunner {
             idempotent: false
         )
 
-        guard let target = scanned
-            .filter({ $0.kind == .audio })
-            .max(by: { $0.duration < $1.duration })
+        guard
+            let target =
+                scanned
+                .filter({ $0.kind == .audio })
+                .max(by: { $0.duration < $1.duration })
         else {
             errors.append("recovery: no recoverable audio session found")
             await finish(sessionResult: nil, artifacts: [], recovery: recovery)
@@ -118,7 +120,8 @@ extension AgentRunner {
             )
             let journalAfter = try? Data(contentsOf: journalURL)
             recovery.publishedAfterRecovery = afterSecond.count
-            recovery.idempotent = afterSecond.count == 1
+            recovery.idempotent =
+                afterSecond.count == 1
                 && afterFirst.count == afterSecond.count
                 && journalBefore == journalAfter
             return (recovery, true)
@@ -167,9 +170,11 @@ extension AgentRunner {
     /// Session directories whose media is entirely zero bytes.
     private static func zeroByteSessionIDs(root: URL) -> Set<UUID> {
         let sessions = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
-        guard let children = try? FileManager.default.contentsOfDirectory(
-            at: sessions, includingPropertiesForKeys: nil
-        ) else { return [] }
+        guard
+            let children = try? FileManager.default.contentsOfDirectory(
+                at: sessions, includingPropertiesForKeys: nil
+            )
+        else { return [] }
         let mediaExtensions: Set<String> = ["caf", "wav", "aif", "aiff", "m4a", "mp4", "mov"]
         var ids: Set<UUID> = []
         for child in children {
@@ -203,9 +208,9 @@ extension AgentRunner {
         var count = 0
         for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
             guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
-                  let core = object["core"] as? [String: Any],
-                  let payload = core["payload"] as? [String: Any],
-                  let kind = payload["kind"] as? String
+                let core = object["core"] as? [String: Any],
+                let payload = core["payload"] as? [String: Any],
+                let kind = payload["kind"] as? String
             else { continue }
             if kind == "checkpoint" { count += 1 }
         }

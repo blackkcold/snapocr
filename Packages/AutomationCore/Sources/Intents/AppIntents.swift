@@ -1,13 +1,12 @@
 import AppIntents
-import CoreGraphics
-import Foundation
-import ImageIO
-import UniformTypeIdentifiers
-
 import BarcodeCore
 import CaptureCore
+import CoreGraphics
+import Foundation
 import HistoryCore
+import ImageIO
 import OCRCore
+import UniformTypeIdentifiers
 
 // MARK: - App Intents for Shortcuts Integration
 //
@@ -23,9 +22,11 @@ private func saveCGImageToTempPNG(_ image: CGImage, label: String) throws -> Str
     let filename = "snapglass-\(label)-\(UUID().uuidString).png"
     let fileURL = tempDir.appendingPathComponent(filename)
 
-    guard let destination = CGImageDestinationCreateWithURL(
-        fileURL as CFURL, UTType.png.identifier as CFString, 1, nil
-    ) else {
+    guard
+        let destination = CGImageDestinationCreateWithURL(
+            fileURL as CFURL, UTType.png.identifier as CFString, 1, nil
+        )
+    else {
         throw AppIntentsError(
             message: "无法创建图片写入目标: \(fileURL.path)"
         )
@@ -276,7 +277,8 @@ public struct SearchHistoryIntent: AppIntent {
             return .result(value: "历史记录暂不可用")
         }
         let entries = try await history.search(query: query)
-        let summary = entries.isEmpty
+        let summary =
+            entries.isEmpty
             ? "未找到匹配的历史记录"
             : entries.map { entry in
                 let preview = entry.textContent.replacingOccurrences(of: "\n", with: " ")

@@ -3,7 +3,7 @@ import Foundation
 import ScreenCaptureKit
 
 #if canImport(OSLog)
-import OSLog
+    import OSLog
 #endif
 
 /// 屏幕录制权限服务
@@ -133,9 +133,11 @@ public struct PermissionService: Sendable {
     ///
     /// 跳转到: 系统设置 → 隐私与安全性 → 屏幕录制
     public func openScreenCaptureSettings() {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-        ) else {
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            )
+        else {
             logger.error("Failed to create system preferences URL")
             return
         }

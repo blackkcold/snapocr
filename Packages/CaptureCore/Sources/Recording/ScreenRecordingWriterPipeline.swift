@@ -1,8 +1,8 @@
 import AVFoundation
 import CoreMedia
 import Foundation
-import SharedKit
 @preconcurrency import ScreenCaptureKit
+import SharedKit
 
 enum RecordingWriterFinalizationDecision: Equatable {
     case discardPartial(reason: String)
@@ -125,8 +125,9 @@ final class RecordingWriterPipeline: @unchecked Sendable {
     func append(_ sampleBuffer: CMSampleBuffer, type: SCStreamOutputType) {
         dispatchPrecondition(condition: .onQueue(sampleQueue))
         guard acceptsSamples,
-              CMSampleBufferIsValid(sampleBuffer),
-              CMSampleBufferDataIsReady(sampleBuffer) else {
+            CMSampleBufferIsValid(sampleBuffer),
+            CMSampleBufferDataIsReady(sampleBuffer)
+        else {
             return
         }
 
@@ -172,25 +173,28 @@ final class RecordingWriterPipeline: @unchecked Sendable {
                     self.logger.error("recording: discarding partial — \(reason)")
                     do {
                         try self.discardUnpublishedOutput()
-                        continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
-                            reason,
-                            partialURL: nil
-                        ))
+                        continuation.resume(
+                            throwing: ScreenRecordingEngineError.recordingFailed(
+                                reason,
+                                partialURL: nil
+                            ))
                     } catch {
-                        continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
-                            reason,
-                            partialURL: self.existingPartialURL
-                        ))
+                        continuation.resume(
+                            throwing: ScreenRecordingEngineError.recordingFailed(
+                                reason,
+                                partialURL: self.existingPartialURL
+                            ))
                     }
                 case .retainPartial(let reason):
                     self.logger.error("recording: retaining partial — \(reason)")
                     if self.writer.status == .writing {
                         self.writer.cancelWriting()
                     }
-                    continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
-                        reason,
-                        partialURL: self.existingPartialURL
-                    ))
+                    continuation.resume(
+                        throwing: ScreenRecordingEngineError.finalizationFailed(
+                            reason,
+                            partialURL: self.existingPartialURL
+                        ))
                 case .finishWriting:
                     self.logger.info("recording: finishing writer")
                     self.videoInput.markAsFinished()
@@ -250,15 +254,17 @@ final class RecordingWriterPipeline: @unchecked Sendable {
 
     private func appendAudio(_ sampleBuffer: CMSampleBuffer) {
         guard hasStartedWriting,
-              let audioInput,
-              audioInput.isReadyForMoreMediaData else {
+            let audioInput,
+            audioInput.isReadyForMoreMediaData
+        else {
             return
         }
         let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         guard presentationTime.isValid,
-              presentationTime.isNumeric,
-              let sessionStartTime,
-              CMTimeCompare(presentationTime, sessionStartTime) >= 0 else {
+            presentationTime.isNumeric,
+            let sessionStartTime,
+            CMTimeCompare(presentationTime, sessionStartTime) >= 0
+        else {
             return
         }
         guard audioInput.append(sampleBuffer) else {
@@ -280,10 +286,11 @@ final class RecordingWriterPipeline: @unchecked Sendable {
                 try discardUnpublishedOutput()
                 continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(reason, partialURL: nil))
             } catch {
-                continuation.resume(throwing: ScreenRecordingEngineError.recordingFailed(
-                    reason,
-                    partialURL: existingPartialURL
-                ))
+                continuation.resume(
+                    throwing: ScreenRecordingEngineError.recordingFailed(
+                        reason,
+                        partialURL: existingPartialURL
+                    ))
             }
         case .retainPartial(let reason):
             let error: ScreenRecordingEngineError
@@ -301,10 +308,11 @@ final class RecordingWriterPipeline: @unchecked Sendable {
                 let finalURL = try transaction.publish()
                 continuation.resume(returning: finalURL)
             } catch {
-                continuation.resume(throwing: ScreenRecordingEngineError.finalizationFailed(
-                    error.localizedDescription,
-                    partialURL: existingPartialURL
-                ))
+                continuation.resume(
+                    throwing: ScreenRecordingEngineError.finalizationFailed(
+                        error.localizedDescription,
+                        partialURL: existingPartialURL
+                    ))
             }
         }
     }

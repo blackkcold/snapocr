@@ -59,7 +59,7 @@ enum RecordingLedgerFileError: Error, Equatable {
 enum RecordingLedgerFileSystem {
     static func canonicalDirectory(_ url: URL, create: Bool) throws -> URL {
         guard url.isFileURL, !url.path.isEmpty, !url.path.contains("\0"),
-              url.standardizedFileURL.path == url.path
+            url.standardizedFileURL.path == url.path
         else { throw RecordingLedgerFileError.invalidPath }
         if create, !FileManager.default.fileExists(atPath: url.path) {
             do {
@@ -77,8 +77,8 @@ enum RecordingLedgerFileSystem {
 
     static func canonicalFileURL(_ url: URL) throws -> URL {
         guard url.isFileURL, !url.path.isEmpty, !url.path.contains("\0"),
-              url.standardizedFileURL.path == url.path,
-              !url.lastPathComponent.isEmpty, url.lastPathComponent != ".", url.lastPathComponent != ".."
+            url.standardizedFileURL.path == url.path,
+            !url.lastPathComponent.isEmpty, url.lastPathComponent != ".", url.lastPathComponent != ".."
         else { throw RecordingLedgerFileError.invalidPath }
         return url.standardizedFileURL
     }
@@ -91,7 +91,10 @@ enum RecordingLedgerFileSystem {
             candidate.appendPathComponent(component)
             if missing { continue }
             guard let mode = mode(at: candidate) else {
-                if allowingMissing { missing = true; continue }
+                if allowingMissing {
+                    missing = true
+                    continue
+                }
                 throw RecordingLedgerFileError.ioFailure
             }
             if mode & S_IFMT == S_IFLNK { throw RecordingLedgerFileError.symbolicLink }
@@ -118,7 +121,7 @@ enum RecordingLedgerFileSystem {
 
     static func validateRelativePath(_ path: String) throws {
         guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("\0"),
-              !path.contains("\\")
+            !path.contains("\\")
         else { throw RecordingLedgerFileError.invalidPath }
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
         guard components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {

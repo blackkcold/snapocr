@@ -9,18 +9,18 @@ extension RecordingSealService {
         let final = candidate.reservedFinalURL.standardizedFileURL
         var isDirectory: ObjCBool = false
         guard candidate.effectiveRange.sampleCount > 0, !candidate.contentHashes.isEmpty,
-              !candidate.stagedFileURLs.isEmpty,
-              candidate.isDirectory == (candidate.manifestURL != nil),
-              staging.path != final.path,
-              staging.deletingLastPathComponent().path == final.deletingLastPathComponent().path,
-              fileManager.fileExists(
-                  atPath: final.deletingLastPathComponent().path, isDirectory: &isDirectory
-              ), isDirectory.boolValue
+            !candidate.stagedFileURLs.isEmpty,
+            candidate.isDirectory == (candidate.manifestURL != nil),
+            staging.path != final.path,
+            staging.deletingLastPathComponent().path == final.deletingLastPathComponent().path,
+            fileManager.fileExists(
+                atPath: final.deletingLastPathComponent().path, isDirectory: &isDirectory
+            ), isDirectory.boolValue
         else { throw RecordingSealError.invalidCandidate }
         if candidate.isDirectory {
             guard Set(candidate.stagedFileURLs.keys).isSubset(of: [.system, .microphone]),
-                  let manifest = candidate.manifestURL?.standardizedFileURL,
-                  manifest.deletingLastPathComponent().path == staging.path
+                let manifest = candidate.manifestURL?.standardizedFileURL,
+                manifest.deletingLastPathComponent().path == staging.path
             else { throw RecordingSealError.invalidCandidate }
             for url in candidate.stagedFileURLs.values {
                 guard url.standardizedFileURL.deletingLastPathComponent().path == staging.path else {
@@ -100,7 +100,7 @@ extension RecordingSealService {
             throw isFinal ? RecordingSealError.existingFinalMismatch : RecordingSealError.metadataInvalid
         }
         guard let hashValue = candidate.contentHashes[expectedName],
-              try hash(of: productURL) == hashValue
+            try hash(of: productURL) == hashValue
         else { throw RecordingSealError.hashMismatch }
         return record
     }
@@ -108,17 +108,17 @@ extension RecordingSealService {
         _ record: SegmentPortableRecord, candidate: SegmentPublicationCandidate
     ) throws {
         guard record.schemaVersion == SegmentPortableRecord.currentSchemaVersion,
-              record.segmentID == candidate.segmentID,
-              record.segmentIndex == candidate.segmentIndex, record.kind == "audio",
-              record.startSample == candidate.effectiveRange.startSample,
-              record.sampleCount == candidate.effectiveRange.sampleCount,
-              record.sampleCount > 0
+            record.segmentID == candidate.segmentID,
+            record.segmentIndex == candidate.segmentIndex, record.kind == "audio",
+            record.startSample == candidate.effectiveRange.startSample,
+            record.sampleCount == candidate.effectiveRange.sampleCount,
+            record.sampleCount > 0
         else { throw RecordingSealError.metadataInvalid }
         let coverage = candidate.coverage
         guard coverage.segmentIndex == candidate.segmentIndex,
-              coverage.segmentStartSample == record.startSample,
-              coverage.segmentEndSample == record.startSample + record.sampleCount,
-              Set(coverage.tracks.map(\.role)).count == coverage.tracks.count
+            coverage.segmentStartSample == record.startSample,
+            coverage.segmentEndSample == record.startSample + record.sampleCount,
+            Set(coverage.tracks.map(\.role)).count == coverage.tracks.count
         else { throw RecordingSealError.coverageMismatch }
         var coverageByRole: [RecordingTrackRole: RecordingTrackCoverage] = [:]
         for track in coverage.tracks { coverageByRole[try audioRole(from: track.role)] = track }
@@ -130,19 +130,20 @@ extension RecordingSealService {
         for track in record.tracks {
             let role = try audioRole(from: track.role)
             guard recordRoles.insert(role).inserted, let roleCoverage = coverageByRole[role],
-                  roleCoverage.wasActive, roleCoverage.channelCount == track.channelCount,
-                  roleCoverage.sampleRate == record.sampleRate,
-                  track.validRange == RecordingSampleRange(
-                      startSample: record.startSample, sampleCount: record.sampleCount
-                  ),
-                  track.primingFrames >= 0, track.remainderFrames >= 0,
-                  track.insertedSilenceFrames >= 0, track.encodedPacketCount > 0,
-                  track.decodedFrameCount == record.sampleCount
+                roleCoverage.wasActive, roleCoverage.channelCount == track.channelCount,
+                roleCoverage.sampleRate == record.sampleRate,
+                track.validRange
+                    == RecordingSampleRange(
+                        startSample: record.startSample, sampleCount: record.sampleCount
+                    ),
+                track.primingFrames >= 0, track.remainderFrames >= 0,
+                track.insertedSilenceFrames >= 0, track.encodedPacketCount > 0,
+                track.decodedFrameCount == record.sampleCount
             else { throw RecordingSealError.metadataInvalid }
         }
         guard recordRoles == Set(candidate.stagedFileURLs.keys),
-              Set(record.missingRanges) == Set(active.flatMap(\.missingRanges)),
-              record.videoURL == nil, record.videoTrackIndex == nil
+            Set(record.missingRanges) == Set(active.flatMap(\.missingRanges)),
+            record.videoURL == nil, record.videoTrackIndex == nil
         else { throw RecordingSealError.metadataInvalid }
         switch record.layout {
         case "mixed":

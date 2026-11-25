@@ -95,9 +95,14 @@ final class MockupInspectorModel: ObservableObject {
         let raw = rawImage
         let style = style
         Task {
-            guard let image = await Task.detached(priority: .userInitiated, operation: {
-                MockupRenderer.render(raw, style: style)
-            }).value else { return }
+            guard
+                let image = await Task.detached(
+                    priority: .userInitiated,
+                    operation: {
+                        MockupRenderer.render(raw, style: style)
+                    }
+                ).value
+            else { return }
             let nsImage = NSImage(
                 cgImage: image,
                 size: NSSize(width: image.width, height: image.height)
@@ -121,9 +126,12 @@ final class MockupInspectorModel: ObservableObject {
         panel.nameFieldStringValue = "Snapshot-mockup.png"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
-            let image = await Task.detached(priority: .userInitiated, operation: {
-                MockupRenderer.render(raw, style: style)
-            }).value
+            let image = await Task.detached(
+                priority: .userInitiated,
+                operation: {
+                    MockupRenderer.render(raw, style: style)
+                }
+            ).value
             guard let image else { return }
             do {
                 try await Task.detached {

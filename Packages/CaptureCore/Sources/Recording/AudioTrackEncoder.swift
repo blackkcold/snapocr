@@ -2,6 +2,7 @@ import AVFoundation
 import AudioToolbox
 import CoreMedia
 import Foundation
+
 /// The sealed result of encoding one track role for one segment.
 public struct AudioSealResult: Sendable, Hashable {
     /// The role that was encoded.
@@ -153,9 +154,11 @@ public enum SegmentPortableMetadata {
         let tempURL = destinationURL.deletingLastPathComponent()
             .appendingPathComponent(".SnapGlass-\(UUID().uuidString)-embed.m4a")
         defer { try? fileManager.removeItem(at: tempURL) }
-        guard let session = AVAssetExportSession(
-            asset: AVURLAsset(url: sourceURL), presetName: AVAssetExportPresetPassthrough
-        ) else { throw RecordingSealError.metadataExportFailed }
+        guard
+            let session = AVAssetExportSession(
+                asset: AVURLAsset(url: sourceURL), presetName: AVAssetExportPresetPassthrough
+            )
+        else { throw RecordingSealError.metadataExportFailed }
         session.outputURL = tempURL
         session.outputFileType = .m4a
         session.metadata = [item]
@@ -186,7 +189,7 @@ public enum SegmentPortableMetadata {
         }
         for item in items {
             guard let value = try? await item.load(.value),
-                  let string = value as? String, string.hasPrefix(marker)
+                let string = value as? String, string.hasPrefix(marker)
             else { continue }
             let json = String(string.dropFirst(marker.count))
             guard let data = json.data(using: .utf8) else {
@@ -296,9 +299,9 @@ public actor AudioTrackEncoder {
         bitRate: Int, outputURL: URL
     ) throws {
         guard outputURL.isFileURL, outputURL.pathExtension.lowercased() == "m4a",
-              !outputURL.lastPathComponent.isEmpty,
-              (8_000...192_000).contains(sampleRate), (1...2).contains(channelCount),
-              (16_000...512_000).contains(bitRate)
+            !outputURL.lastPathComponent.isEmpty,
+            (8_000...192_000).contains(sampleRate), (1...2).contains(channelCount),
+            (16_000...512_000).contains(bitRate)
         else { throw AudioTrackEncoderError.invalidFormat }
         self.role = role
         self.sampleRate = sampleRate
@@ -472,8 +475,8 @@ public final class AudioAACStreamSink: @unchecked Sendable {
         bitRate: Int
     ) throws {
         guard (8_000...192_000).contains(sampleRate),
-              (1...2).contains(channelCount),
-              (16_000...512_000).contains(bitRate)
+            (1...2).contains(channelCount),
+            (16_000...512_000).contains(bitRate)
         else { throw AudioAACStreamSinkError.invalidFormat }
 
         let input = AVAssetWriterInput(
@@ -508,15 +511,15 @@ public final class AudioAACStreamSink: @unchecked Sendable {
     ) async throws {
         guard !isFinished else { throw AudioAACStreamSinkError.finished }
         guard block.role == role,
-              block.sampleRate == sampleRate,
-              block.channelCount == channelCount,
-              block.frameCount > 0,
-              block.range.sampleCount == Int64(block.frameCount),
-              block.range.startSample >= segmentStartSample,
-              block.channels.count == channelCount,
-              block.channels.allSatisfy({ $0.count == block.frameCount }),
-              mediaOrigin.isValid,
-              mediaOrigin.isNumeric
+            block.sampleRate == sampleRate,
+            block.channelCount == channelCount,
+            block.frameCount > 0,
+            block.range.sampleCount == Int64(block.frameCount),
+            block.range.startSample >= segmentStartSample,
+            block.channels.count == channelCount,
+            block.channels.allSatisfy({ $0.count == block.frameCount }),
+            mediaOrigin.isValid,
+            mediaOrigin.isNumeric
         else { throw AudioAACStreamSinkError.invalidFormat }
 
         let offset = block.range.startSample - segmentStartSample
@@ -525,14 +528,14 @@ public final class AudioAACStreamSink: @unchecked Sendable {
             CMTime(value: offset, timescale: CMTimeScale(sampleRate))
         )
         guard presentationTime.isValid, presentationTime.isNumeric,
-              let pcm = try? AudioSampleBufferFactory.makePCMBuffer(
-                  channels: block.channels,
-                  sampleRate: sampleRate
-              ),
-              let sampleBuffer = try? AudioSampleBufferFactory.makeSampleBuffer(
-                  from: pcm,
-                  presentationTime: presentationTime
-              )
+            let pcm = try? AudioSampleBufferFactory.makePCMBuffer(
+                channels: block.channels,
+                sampleRate: sampleRate
+            ),
+            let sampleBuffer = try? AudioSampleBufferFactory.makeSampleBuffer(
+                from: pcm,
+                presentationTime: presentationTime
+            )
         else { throw AudioAACStreamSinkError.invalidFormat }
 
         while !input.isReadyForMoreMediaData {
@@ -574,7 +577,7 @@ extension AudioTrackEncoder {
         }
         let format = file.processingFormat
         guard Int(format.sampleRate.rounded()) == sampleRate,
-              Int(format.channelCount) == channelCount, !format.isInterleaved
+            Int(format.channelCount) == channelCount, !format.isInterleaved
         else { throw AudioTrackEncoderError.sourceFormatMismatch }
         guard file.length >= frameCount else {
             throw AudioTrackEncoderError.sourceFrameCountMismatch
@@ -583,9 +586,11 @@ extension AudioTrackEncoder {
         while remaining > 0 {
             try Task.checkCancellation()
             let chunkFrames = Int(min(Int64(4_096), remaining))
-            guard let buffer = AVAudioPCMBuffer(
-                pcmFormat: format, frameCapacity: AVAudioFrameCount(chunkFrames)
-            ) else { throw AudioTrackEncoderError.writerFailed }
+            guard
+                let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format, frameCapacity: AVAudioFrameCount(chunkFrames)
+                )
+            else { throw AudioTrackEncoderError.writerFailed }
             do {
                 try file.read(into: buffer, frameCount: AVAudioFrameCount(chunkFrames))
             } catch { throw AudioTrackEncoderError.sourceUnreadable }
@@ -598,16 +603,20 @@ extension AudioTrackEncoder {
     }
     private func appendSilenceFrames(_ frames: Int64) async throws {
         var remaining = frames
-        guard let format = AVAudioFormat(
-            standardFormatWithSampleRate: Double(sampleRate),
-            channels: AVAudioChannelCount(channelCount)
-        ) else { throw AudioTrackEncoderError.invalidFormat }
+        guard
+            let format = AVAudioFormat(
+                standardFormatWithSampleRate: Double(sampleRate),
+                channels: AVAudioChannelCount(channelCount)
+            )
+        else { throw AudioTrackEncoderError.invalidFormat }
         while remaining > 0 {
             try Task.checkCancellation()
             let chunkFrames = Int(min(Int64(4_096), remaining))
-            guard let buffer = AVAudioPCMBuffer(
-                pcmFormat: format, frameCapacity: AVAudioFrameCount(chunkFrames)
-            ) else { throw AudioTrackEncoderError.writerFailed }
+            guard
+                let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format, frameCapacity: AVAudioFrameCount(chunkFrames)
+                )
+            else { throw AudioTrackEncoderError.writerFailed }
             buffer.frameLength = AVAudioFrameCount(chunkFrames)
             for channel in 0..<channelCount {
                 guard let data = buffer.floatChannelData?[channel] else {
@@ -680,7 +689,7 @@ extension AudioTrackEncoder {
             fileID, kAudioFilePropertyAudioDataPacketCount, &packetSize, &packetCount
         )
         guard packetStatus == noErr, packetCount > 0, packetCount <= UInt64(Int.max),
-              info.mNumberValidFrames > 0, info.mPrimingFrames >= 0, info.mRemainderFrames >= 0
+            info.mNumberValidFrames > 0, info.mPrimingFrames >= 0, info.mRemainderFrames >= 0
         else { throw AudioTrackEncoderError.encodingVerificationFailed }
         return PacketTableInfo(
             validFrameCount: info.mNumberValidFrames,

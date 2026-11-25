@@ -97,7 +97,8 @@ extension PinnedToolbarLayout {
     /// - regular：`14 + 14 + 1 + 38 + 34 + 34 = 135`，间隙 `7 × 6 = 42`，边距 `2 × 10 = 20` → 197
     /// - compact：`1 + 32 + 28 + 28 = 89`，间隙 `5 × 4 = 20`，边距 `2 × 8 = 16` → 125
     public var fixedWidth: CGFloat {
-        let controls = (showsLeadingIcons ? 2 * Self.leadingIconWidth : 0)
+        let controls =
+            (showsLeadingIcons ? 2 * Self.leadingIconWidth : 0)
             + Self.separatorWidth
             + percentLabelWidth
             + 2 * buttonWidth

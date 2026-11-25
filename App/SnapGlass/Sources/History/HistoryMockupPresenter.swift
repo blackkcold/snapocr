@@ -10,7 +10,7 @@ import ImageIO
 enum HistoryMockupPresenter {
     static func style(from entry: HistoryEntry) -> MockupStyle? {
         guard let json = entry.mockupStyleJSON,
-              let data = json.data(using: .utf8)
+            let data = json.data(using: .utf8)
         else { return nil }
         return try? JSONDecoder().decode(MockupStyle.self, from: data)
     }
@@ -22,8 +22,8 @@ enum HistoryMockupPresenter {
 
     static func rawImage(for entry: HistoryEntry, history: HistoryActor) async -> CGImage? {
         guard let data = try? await history.imageData(for: entry.id),
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else { return nil }
         return image
     }

@@ -99,10 +99,12 @@ struct ShareAppearanceInspectorView: View {
             ZStack {
                 CheckerboardBackground(square: 8)
                 if let preview = viewModel.sharePreview {
-                    Image(nsImage: NSImage(
-                        cgImage: preview,
-                        size: NSSize(width: preview.width, height: preview.height)
-                    ))
+                    Image(
+                        nsImage: NSImage(
+                            cgImage: preview,
+                            size: NSSize(width: preview.width, height: preview.height)
+                        )
+                    )
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
@@ -468,20 +470,22 @@ private func presetBackgroundStyle(_ background: MockupStyle.Background) -> AnyS
     case .transparent:
         return AnyShapeStyle(Color.clear)
     case .solid(let red, let green, let blue):
-        return AnyShapeStyle(Color(
-            red: Double(red),
-            green: Double(green),
-            blue: Double(blue)
-        ))
+        return AnyShapeStyle(
+            Color(
+                red: Double(red),
+                green: Double(green),
+                blue: Double(blue)
+            ))
     case .linear(let stops, let angle):
         let colors = stops.map {
             Color(red: Double($0.red), green: Double($0.green), blue: Double($0.blue))
         }
-        return AnyShapeStyle(LinearGradient(
-            colors: colors,
-            startPoint: angle >= 90 ? .bottomLeading : .topLeading,
-            endPoint: angle >= 90 ? .topTrailing : .bottomTrailing
-        ))
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: colors,
+                startPoint: angle >= 90 ? .bottomLeading : .topLeading,
+                endPoint: angle >= 90 ? .topTrailing : .bottomTrailing
+            ))
     }
 }
 

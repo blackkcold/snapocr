@@ -1,9 +1,8 @@
 import AppKit
 import CaptureCore
+@preconcurrency import ScreenCaptureKit
 import SharedKit
 import SwiftUI
-
-@preconcurrency import ScreenCaptureKit
 
 /// Loads window-picker thumbnails with a small concurrency pool.
 /// The pool bounds simultaneous SCStreams, which would stall the picker if unbounded.
@@ -47,7 +46,8 @@ actor WindowThumbnailLoader {
                 content: content
             )
             store(image, for: windowID)
-            result = image        } catch {
+            result = image
+        } catch {
             result = nil
         }
 

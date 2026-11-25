@@ -12,9 +12,10 @@ extension ScreenshotShelfManager {
                 ScreenshotShelfAssetEncoder.previewImage(from: image)
             }.value
             guard let self, let preview,
-                  self.state.entries.contains(where: { $0.captureID == captureID }),
-                  var card = self.cardsByID[captureID],
-                  card.decodedThumbnail == nil else { return }
+                self.state.entries.contains(where: { $0.captureID == captureID }),
+                var card = self.cardsByID[captureID],
+                card.decodedThumbnail == nil
+            else { return }
             card.decodedThumbnail = preview
             self.cardsByID[captureID] = card
             self.synchronizeCards()
@@ -43,7 +44,8 @@ extension ScreenshotShelfManager {
     func storeAssets(original: CGImage, presented: CGImage, captureID: UUID) async {
         defer { pendingAssetWrites -= 1 }
         guard state.entries.contains(where: { $0.captureID == captureID }),
-              let sessionStore else { return }
+            let sessionStore
+        else { return }
         let assets = await Task.detached(priority: .utility) {
             (
                 original: ScreenshotShelfAssetEncoder.encode(original),
@@ -52,7 +54,8 @@ extension ScreenshotShelfManager {
         }.value
         guard state.entries.contains(where: { $0.captureID == captureID }) else { return }
         guard let originalAssets = assets.original,
-              let presentedAssets = assets.presented else {
+            let presentedAssets = assets.presented
+        else {
             cacheFailed(captureID: captureID)
             return
         }
@@ -97,7 +100,8 @@ extension ScreenshotShelfManager {
 
     func setThumbnail(_ data: Data, for captureID: UUID) async {
         guard data.count <= Self.maximumThumbnailBytes,
-              cardsByID[captureID] != nil else {
+            cardsByID[captureID] != nil
+        else {
             cacheFailed(captureID: captureID)
             return
         }
@@ -121,8 +125,9 @@ extension ScreenshotShelfManager {
 
         for entry in state.entries.reversed() where cachedThumbnailBytes + data.count > Self.maximumThumbnailBytes {
             guard entry.captureID != captureID,
-                  var otherCard = cardsByID[entry.captureID],
-                  let oldThumbnail = otherCard.thumbnailData else { continue }
+                var otherCard = cardsByID[entry.captureID],
+                let oldThumbnail = otherCard.thumbnailData
+            else { continue }
             cachedThumbnailBytes = max(0, cachedThumbnailBytes - oldThumbnail.count)
             otherCard.thumbnailData = nil
             otherCard.decodedThumbnail = nil

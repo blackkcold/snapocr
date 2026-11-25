@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+
 @testable import CaptureCore
 
 struct WindowCapturePlanTests {
@@ -94,12 +95,13 @@ struct WindowCapturePlanTests {
     }
 
     @Test func thumbnailPlanScalesSegmentsWithoutCroppingContent() throws {
-        let plan = try #require(WindowCapturePlan.make(
-            windowID: 42,
-            windowFrame: CGRect(x: 1200, y: 100, width: 1600, height: 700),
-            displays: [mainDisplay, secondaryDisplay],
-            usesDesktopIndependentWindow: false
-        ))
+        let plan = try #require(
+            WindowCapturePlan.make(
+                windowID: 42,
+                windowFrame: CGRect(x: 1200, y: 100, width: 1600, height: 700),
+                displays: [mainDisplay, secondaryDisplay],
+                usesDesktopIndependentWindow: false
+            ))
         let thumbnail = plan.scaledForThumbnail(
             maxPixelSize: CGSize(width: 760, height: 380)
         )

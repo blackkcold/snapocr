@@ -100,17 +100,17 @@ public enum RecordingRecoveryCatalog {
         }
         let sessionsDirectory = root.appendingPathComponent(".SnapGlassSessions", isDirectory: true)
         guard RecordingLedgerFileSystem.isDirectory(sessionsDirectory),
-              (try? RecordingLedgerFileSystem.validateNoSymlink(sessionsDirectory)) != nil,
-              let children = try? fileManager.contentsOfDirectory(
-                  at: sessionsDirectory, includingPropertiesForKeys: [.creationDateKey]
-              )
+            (try? RecordingLedgerFileSystem.validateNoSymlink(sessionsDirectory)) != nil,
+            let children = try? fileManager.contentsOfDirectory(
+                at: sessionsDirectory, includingPropertiesForKeys: [.creationDateKey]
+            )
         else { return [] }
 
         var recordings: [RecoverableRecording] = []
         for child in children.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             guard RecordingLedgerFileSystem.isDirectory(child),
-                  (try? RecordingLedgerFileSystem.validateNoSymlink(child)) != nil,
-                  let sessionID = UUID(uuidString: child.lastPathComponent)
+                (try? RecordingLedgerFileSystem.validateNoSymlink(child)) != nil,
+                let sessionID = UUID(uuidString: child.lastPathComponent)
             else { continue }
             if let recording = await inspect(
                 sessionID: sessionID,
@@ -151,7 +151,8 @@ public enum RecordingRecoveryCatalog {
 
         let kind = journal.kind ?? inferredKind(from: materials)
         let duration = await longestDuration(of: materials)
-        let createdAt = journal.startedAt
+        let createdAt =
+            journal.startedAt
             ?? creationDate(of: sessionRoot, fileManager: fileManager)
         return RecoverableRecording(
             id: sessionID,
@@ -179,8 +180,8 @@ public enum RecordingRecoveryCatalog {
             return JournalSummary(kind: nil, startedAt: nil, hasProgress: false, hasPublication: false)
         }
         guard (try? RecordingLedgerFileSystem.validateNoSymlink(journalURL)) != nil,
-              let data = try? Data(contentsOf: journalURL),
-              data.isEmpty || data.last == 0x0A
+            let data = try? Data(contentsOf: journalURL),
+            data.isEmpty || data.last == 0x0A
         else { return nil }
 
         var kind: RecoverableRecording.Kind?
@@ -225,9 +226,9 @@ public enum RecordingRecoveryCatalog {
         discardedByteCount: inout Int64
     ) {
         guard depth <= 3,
-              let children = try? fileManager.contentsOfDirectory(
-                  at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey]
-              )
+            let children = try? fileManager.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey]
+            )
         else { return }
         for child in children.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             let name = child.lastPathComponent
@@ -245,9 +246,10 @@ public enum RecordingRecoveryCatalog {
             }
             let ext = child.pathExtension.lowercased()
             guard audioExtensions.contains(ext) || videoExtensions.contains(ext),
-                  RecordingLedgerFileSystem.isRegularFile(child)
+                RecordingLedgerFileSystem.isRegularFile(child)
             else { continue }
-            let size = (try? fileManager.attributesOfItem(atPath: child.path)[.size] as? NSNumber)?
+            let size =
+                (try? fileManager.attributesOfItem(atPath: child.path)[.size] as? NSNumber)?
                 .int64Value ?? 0
             // Zero-byte media is recorded as discarded (0 bytes of nothing to
             // save) and never offered as recoverable material.

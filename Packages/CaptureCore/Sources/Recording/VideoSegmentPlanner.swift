@@ -113,16 +113,17 @@ public final class VideoSegmentPlanner {
         hostTicksPerSecond: UInt64 = AudioSourceTimestampMapper.nativeHostTicksPerSecond()
     ) throws {
         guard maximumSegmentDuration.isFinite,
-              maximumSegmentDuration > 0,
-              maximumSegmentDuration <= Self.hardMaximumSegmentDuration,
-              checkpointTarget.isFinite,
-              checkpointTarget > 0,
-              checkpointTarget <= Self.hardCheckpointTarget,
-              checkpointTarget <= maximumSegmentDuration,
-              frameRate > 0,
-              frameRate <= Int(Int32.max),
-              hostTicksPerSecond > 0,
-              hostTicksPerSecond <= UInt64(Int32.max) else {
+            maximumSegmentDuration > 0,
+            maximumSegmentDuration <= Self.hardMaximumSegmentDuration,
+            checkpointTarget.isFinite,
+            checkpointTarget > 0,
+            checkpointTarget <= Self.hardCheckpointTarget,
+            checkpointTarget <= maximumSegmentDuration,
+            frameRate > 0,
+            frameRate <= Int(Int32.max),
+            hostTicksPerSecond > 0,
+            hostTicksPerSecond <= UInt64(Int32.max)
+        else {
             throw VideoSegmentPlannerError.invalidConfiguration
         }
         self.maximumSegmentDuration = maximumSegmentDuration
@@ -137,12 +138,13 @@ public final class VideoSegmentPlanner {
     /// - Returns: The boundary to close before this frame, or `.keepCurrent`.
     public func append(_ frame: VideoFrameSample) -> ScreenBoundaryDecision {
         guard frame.index >= 0,
-              frame.presentationTime.isValid,
-              frame.presentationTime.isNumeric,
-              frame.duration.isValid,
-              frame.duration.isNumeric,
-              CMTimeCompare(frame.duration, .zero) > 0,
-              frame.index > lastFrameIndex else {
+            frame.presentationTime.isValid,
+            frame.presentationTime.isNumeric,
+            frame.duration.isValid,
+            frame.duration.isNumeric,
+            CMTimeCompare(frame.duration, .zero) > 0,
+            frame.index > lastFrameIndex
+        else {
             return .keepCurrent
         }
         if let decision = startEpochIfNeeded(frame) {
@@ -150,8 +152,9 @@ public final class VideoSegmentPlanner {
         }
 
         guard let chunkStart = nextChunkStartTime,
-              let segmentStartTime,
-              let lastFrameEndTime else {
+            let segmentStartTime,
+            let lastFrameEndTime
+        else {
             return .keepCurrent
         }
 
@@ -166,7 +169,8 @@ public final class VideoSegmentPlanner {
         }
         let observedTime = frame.presentationTime
         let currentChunkStart = nextChunkStartTime ?? chunkStart
-        let currentLastFrameEnd = hasOpenFrame
+        let currentLastFrameEnd =
+            hasOpenFrame
             ? lastFrameEndTime
             : CMTimeAdd(frame.presentationTime, frame.duration)
         let elapsedSegment = CMTimeGetSeconds(CMTimeSubtract(observedTime, segmentStartTime))
@@ -277,11 +281,12 @@ public final class VideoSegmentPlanner {
         }
         defer { lastHostTime = hostTime }
         guard let epochTime,
-              let epochHostTime = self.epochHostTime,
-              let chunkStart = nextChunkStartTime,
-              let segmentStartTime,
-              hasOpenFrame,
-              let lastFrameEndTime else {
+            let epochHostTime = self.epochHostTime,
+            let chunkStart = nextChunkStartTime,
+            let segmentStartTime,
+            hasOpenFrame,
+            let lastFrameEndTime
+        else {
             return .keepCurrent
         }
         let (delta, overflow) = hostTime.subtractingReportingOverflow(epochHostTime)
@@ -338,7 +343,8 @@ public final class VideoSegmentPlanner {
     /// Maps a host tick onto the planner's media timeline after an epoch exists.
     func mediaTime(for hostTime: UInt64) -> CMTime? {
         guard let epochTime, let epochHostTime,
-              hostTime >= epochHostTime else { return nil }
+            hostTime >= epochHostTime
+        else { return nil }
         let delta = hostTime - epochHostTime
         guard delta <= UInt64(Int64.max) else { return nil }
         let time = CMTimeAdd(
@@ -364,8 +370,9 @@ public final class VideoSegmentPlanner {
 
     private func record(_ boundary: ScreenBoundary) {
         guard boundary.endTime.isValid,
-              CMTimeCompare(boundary.endTime, boundary.startTime) > 0,
-              boundary.endFrameIndex > boundary.startFrameIndex else {
+            CMTimeCompare(boundary.endTime, boundary.startTime) > 0,
+            boundary.endFrameIndex > boundary.startFrameIndex
+        else {
             return
         }
         boundaries.append(boundary)

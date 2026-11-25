@@ -76,7 +76,7 @@ extension RecordingExportPlanner {
     private static func validateSelection(_ selection: ExportSelection) throws {
         guard !selection.segmentIDs.isEmpty else { throw ExportError.emptySelection }
         guard selection.audioGainDB.isFinite,
-              isExistingDirectory(selection.destination.directory), validStem(selection.destination.stem)
+            isExistingDirectory(selection.destination.directory), validStem(selection.destination.stem)
         else { throw ExportError.destinationUnavailable }
     }
 
@@ -91,10 +91,11 @@ extension RecordingExportPlanner {
         let segments = foundSegments.sorted {
             $0.index == $1.index ? $0.startSample < $1.startSample : $0.index < $1.index
         }
-        guard segments.allSatisfy({
-            $0.state == .published && $0.index >= 0
-                && $0.startSample >= 0 && $0.sampleCount > 0
-        })
+        guard
+            segments.allSatisfy({
+                $0.state == .published && $0.index >= 0
+                    && $0.startSample >= 0 && $0.sampleCount > 0
+            })
         else { throw ExportError.missingSource }
         return (segments, selectedIDs)
     }

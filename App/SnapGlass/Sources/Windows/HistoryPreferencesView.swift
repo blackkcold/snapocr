@@ -53,7 +53,8 @@ struct HistoryPreferencesView: View {
         }
         .onAppear {
             keepIndefinitely = storedRetentionDays == 0
-            lastFiniteRetentionDays = storedRetentionDays == 0
+            lastFiniteRetentionDays =
+                storedRetentionDays == 0
                 ? PreferenceDefaults.historyRetentionDays
                 : storedRetentionDays
             retentionDays = lastFiniteRetentionDays
@@ -274,7 +275,8 @@ struct HistoryPreferencesView: View {
     private func revertPendingPolicyChange() {
         policyRequestGeneration &+= 1
         keepIndefinitely = storedRetentionDays == 0
-        retentionDays = storedRetentionDays == 0
+        retentionDays =
+            storedRetentionDays == 0
             ? lastFiniteRetentionDays
             : storedRetentionDays
         maxItems = storedMaxItems

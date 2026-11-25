@@ -35,15 +35,15 @@ public enum MockupRenderer {
         let height = max(1, Int(layout.canvasSize.height))
 
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
         else { return nil }
 
         context.interpolationQuality = .high
@@ -104,7 +104,8 @@ public enum MockupRenderer {
             transform: nil
         )
 
-        let castsShadow = layout.shadow.opacity > 0
+        let castsShadow =
+            layout.shadow.opacity > 0
             && (layout.shadow.blur > 0 || layout.shadow.offsetY > 0)
         if castsShadow {
             context.saveGState()
@@ -150,7 +151,7 @@ public enum MockupRenderer {
         in context: CGContext
     ) {
         guard layout.borderWidth > 0,
-              let color = resolvedBorderColor(for: style, layout: layout)
+            let color = resolvedBorderColor(for: style, layout: layout)
         else { return }
 
         let inset = layout.borderWidth / 2
@@ -217,15 +218,15 @@ public enum MockupRenderer {
         let width = max(1, Int((CGFloat(image.width) * scale).rounded()))
         let height = max(1, Int((CGFloat(image.height) * scale).rounded()))
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
         else { return nil }
         context.interpolationQuality = .high
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
@@ -246,13 +247,13 @@ public enum MockupRenderer {
             context.fill(rect)
         case .linear(let stops, let angle):
             guard stops.count >= 2,
-                  let gradient = CGGradient(
-                      colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                      colors: stops.map {
-                          CGColor(red: $0.red, green: $0.green, blue: $0.blue, alpha: 1)
-                      } as CFArray,
-                      locations: stops.map(\.location)
-                  )
+                let gradient = CGGradient(
+                    colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                    colors: stops.map {
+                        CGColor(red: $0.red, green: $0.green, blue: $0.blue, alpha: 1)
+                    } as CFArray,
+                    locations: stops.map(\.location)
+                )
             else { return }
 
             let radians = angle * .pi / 180

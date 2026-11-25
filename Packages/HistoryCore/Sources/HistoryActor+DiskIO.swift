@@ -191,8 +191,8 @@ extension HistoryActor {
         let files = [entryFileURL(for: id)] + ((try? mediaFiles(for: id)) ?? [])
         return files.reduce(into: 0) { total, file in
             guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
-                  let size = values.fileSize,
-                  size > 0
+                let size = values.fileSize,
+                size > 0
             else { return }
             total += UInt64(size)
         }

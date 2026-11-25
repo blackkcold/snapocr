@@ -1,5 +1,5 @@
-import SwiftUI
 import SharedKit
+import SwiftUI
 
 /// 屏幕录制权限引导视图
 ///
@@ -120,21 +120,27 @@ struct PermissionGuideView: View {
     /// 操作按钮组
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            Button(action: {
-                requestPermission()
-            }, label: {
-                Text("Open System Settings")
-                    .frame(maxWidth: .infinity)
-            })
+            Button(
+                action: {
+                    requestPermission()
+                },
+                label: {
+                    Text("Open System Settings")
+                        .frame(maxWidth: .infinity)
+                }
+            )
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
 
-            Button(action: {
-                closeGuide()
-            }, label: {
-                Text("Remind Later")
-                    .frame(maxWidth: .infinity)
-            })
+            Button(
+                action: {
+                    closeGuide()
+                },
+                label: {
+                    Text("Remind Later")
+                        .frame(maxWidth: .infinity)
+                }
+            )
             .buttonStyle(.bordered)
             .controlSize(.large)
         }
@@ -162,21 +168,27 @@ struct PermissionGuideView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
 
-            Button(action: {
-                permissionService.openScreenCaptureSettings()
-            }, label: {
-                Text("Open System Settings")
-                    .frame(maxWidth: .infinity)
-            })
+            Button(
+                action: {
+                    permissionService.openScreenCaptureSettings()
+                },
+                label: {
+                    Text("Open System Settings")
+                        .frame(maxWidth: .infinity)
+                }
+            )
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .frame(maxWidth: 260)
 
-            Button(action: {
-                closeGuide()
-            }, label: {
-                Text("Remind Later")
-            })
+            Button(
+                action: {
+                    closeGuide()
+                },
+                label: {
+                    Text("Remind Later")
+                }
+            )
             .buttonStyle(.borderless)
             .foregroundColor(.secondary)
         }

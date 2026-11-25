@@ -11,10 +11,12 @@ extension RecordingSessionLedger {
         return indexes.sorted().compactMap { index in
             let segment = record.segments.first(where: { $0.index == index })
             guard segment?.state != .published else { return nil }
-            let count = state.checkpoints.values
+            let count =
+                state.checkpoints.values
                 .filter { $0.segmentIndex == index }
                 .map(\.range.endSample).max() ?? 0
-            let start = state.checkpoints.values
+            let start =
+                state.checkpoints.values
                 .filter { $0.segmentIndex == index }
                 .map(\.range.startSample).min() ?? 0
             let seconds = max(0, Double(count - start) / 48_000)
@@ -33,8 +35,8 @@ extension RecordingSessionLedger {
         try ensureWritable()
         let index = bundle.checkpoints.segmentIndex
         guard index >= 0, bundle.coverage.segmentIndex == index,
-              bundle.coverage.segmentEndSample > bundle.coverage.segmentStartSample,
-              bundle.checkpoints.checkpoints.allSatisfy({ $0.segmentIndex == index })
+            bundle.coverage.segmentEndSample > bundle.coverage.segmentStartSample,
+            bundle.checkpoints.checkpoints.allSatisfy({ $0.segmentIndex == index })
         else { throw RecordingSessionLedgerError.invalidCheckpoint }
         let segmentID = state.segmentIDs[index] ?? UUID()
         let closed = LedgerClosedSegment(segmentID: segmentID, coverage: bundle.coverage)
@@ -71,12 +73,12 @@ extension RecordingSessionLedger {
 
     private func checkpointPreviewURLs(_ checkpointID: UUID) throws -> (UUID, [URL]) {
         guard let checkpoint = state.checkpoints[checkpointID],
-              state.closed[checkpoint.segmentIndex] != nil
+            state.closed[checkpoint.segmentIndex] != nil
         else { throw RecordingPreviewError.notPreviewable }
         let urls = try checkpoint.files.values.map { item -> URL in
             let url = try RecordingLedgerFileSystem.resolve(item.relativePath, under: sessionRoot)
             guard RecordingLedgerFileSystem.isRegularFile(url),
-                  try RecordingLedgerFileSystem.sha256(of: url) == item.sha256
+                try RecordingLedgerFileSystem.sha256(of: url) == item.sha256
             else { throw RecordingPreviewError.materialUnavailable }
             return url
         }
@@ -90,7 +92,7 @@ extension RecordingSessionLedger {
             return (segmentID, urls)
         }
         guard let segment = state.published[segmentID],
-              let intent = state.intents[segmentID]
+            let intent = state.intents[segmentID]
         else { throw RecordingPreviewError.notPreviewable }
         let outputRoot = intent.reservedFinalURL.deletingLastPathComponent()
         let urls = try segment.files.values.map { relative -> URL in
@@ -124,8 +126,8 @@ extension RecordingSessionLedger {
                     throw Self.mapPathError(error)
                 }
                 guard !leasedPaths.contains(url.standardizedFileURL.path),
-                      RecordingLedgerFileSystem.isRegularFile(url),
-                      (try? RecordingLedgerFileSystem.sha256(of: url)) == item.sha256
+                    RecordingLedgerFileSystem.isRegularFile(url),
+                    (try? RecordingLedgerFileSystem.sha256(of: url)) == item.sha256
                 else { continue }
                 removed.append(contentsOf: try removeCollectedCheckpoint(url, checkpointID: checkpoint.checkpointID))
             }

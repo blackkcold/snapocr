@@ -1,8 +1,8 @@
-import SwiftUI
-import KeyboardShortcuts
-import SharedKit
 import HistoryCore
+import KeyboardShortcuts
 import ServiceManagement
+import SharedKit
+import SwiftUI
 
 struct PreferencesView: View {
     @EnvironmentObject private var router: PreferencesRouter
@@ -170,7 +170,7 @@ struct GeneralPreferencesView: View {
     @State private var launchError: String?
     @AppStorage(PreferenceKeys.appLanguage)
     private var appLanguage = PreferenceDefaults.appLanguage
-    
+
     var body: some View {
         ScrollView {
             PreferencesCardGrid {
@@ -258,9 +258,10 @@ struct OCRPreferencesView: View {
             }
         }
         .onAppear {
-            enabledLanguages = UserDefaults.standard.stringArray(
-                forKey: PreferenceKeys.ocrEnabledLanguages
-            ) ?? PreferenceDefaults.ocrEnabledLanguages
+            enabledLanguages =
+                UserDefaults.standard.stringArray(
+                    forKey: PreferenceKeys.ocrEnabledLanguages
+                ) ?? PreferenceDefaults.ocrEnabledLanguages
         }
     }
 
@@ -287,10 +288,11 @@ struct OCRPreferencesView: View {
                     Toggle(option.displayName, isOn: enabledBinding(for: option.code))
                 }
 
-                PreferencesCardCaption(text: LocalizedStringKey(
-                    "Disable languages you rarely use to prevent visually similar characters "
-                        + "(such as Japanese kanji and Chinese hanzi) from being misrecognized."
-                ))
+                PreferencesCardCaption(
+                    text: LocalizedStringKey(
+                        "Disable languages you rarely use to prevent visually similar characters "
+                            + "(such as Japanese kanji and Chinese hanzi) from being misrecognized."
+                    ))
             }
 
             Picker("OCR Engine:", selection: $engine) {

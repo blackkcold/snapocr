@@ -23,7 +23,8 @@ enum RecordingRecoveryFixtures {
 
     /// Creates the session directory for `sessionID` under `root`.
     static func makeSessionDirectory(root: URL, sessionID: UUID) throws -> URL {
-        let directory = root
+        let directory =
+            root
             .appendingPathComponent(".SnapGlassSessions", isDirectory: true)
             .appendingPathComponent(sessionID.uuidString.lowercased(), isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -33,10 +34,12 @@ enum RecordingRecoveryFixtures {
     /// Writes a real, decodable 48 kHz / 2-channel CAF of `seconds` length.
     @discardableResult
     static func writeSilentCAF(at url: URL, seconds: Double = 1) throws -> URL {
-        guard let format = AVAudioFormat(
-            standardFormatWithSampleRate: 48_000,
-            channels: 2
-        ) else {
+        guard
+            let format = AVAudioFormat(
+                standardFormatWithSampleRate: 48_000,
+                channels: 2
+            )
+        else {
             throw FixtureError.audioFormatUnavailable
         }
         let file = try AVAudioFile(forWriting: url, settings: format.settings)
@@ -69,13 +72,14 @@ enum RecordingRecoveryFixtures {
             indexURL: indexURL(root: root),
             sessionID: sessionID
         )
-        try await ledger.register(RecordingSessionRecord(
-            id: sessionID,
-            kind: kind,
-            layout: layout,
-            startedAt: Date(timeIntervalSince1970: 1_800_000_000),
-            segments: []
-        ))
+        try await ledger.register(
+            RecordingSessionRecord(
+                id: sessionID,
+                kind: kind,
+                layout: layout,
+                startedAt: Date(timeIntervalSince1970: 1_800_000_000),
+                segments: []
+            ))
         return sessionRoot
     }
 

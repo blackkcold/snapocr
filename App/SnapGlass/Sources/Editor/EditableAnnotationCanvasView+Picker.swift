@@ -1,6 +1,6 @@
 import AnnotationCore
-import CaptureCore
 import AppKit
+import CaptureCore
 import CoreText
 import OCRCore
 import SharedKit
@@ -88,9 +88,10 @@ extension EditableAnnotationCanvasNSView {
     /// 光标所在的原图像素坐标；同一像素内不重复取色。
     private func pickerSampleKey(at point: CGPoint) -> String {
         guard let image,
-              imageDisplayRect.contains(point),
-              imageDisplayRect.width > 0,
-              imageDisplayRect.height > 0 else {
+            imageDisplayRect.contains(point),
+            imageDisplayRect.width > 0,
+            imageDisplayRect.height > 0
+        else {
             return ""
         }
         let normalized = normalizedPoint(point)

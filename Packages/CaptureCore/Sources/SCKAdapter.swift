@@ -3,7 +3,6 @@ import CoreGraphics
 import CoreImage
 import CoreMedia
 import Foundation
-
 @preconcurrency import ScreenCaptureKit
 import SharedKit
 
@@ -39,9 +38,11 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
     // MARK: - Settings
 
     private func openScreenCaptureSettings() {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-        ) else {
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            )
+        else {
             logger.error("Failed to create system preferences URL")
             return
         }
@@ -225,7 +226,7 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         }
 
         guard let segment = plan.segments.first,
-              let display = displayByID[segment.displayID]
+            let display = displayByID[segment.displayID]
         else {
             throw CaptureError.displayUnavailable
         }
@@ -291,7 +292,7 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
         maximumPixelSize: CGSize
     ) -> CGSize {
         guard contentPixelSize.width > 0, contentPixelSize.height > 0,
-              maximumPixelSize.width > 0, maximumPixelSize.height > 0
+            maximumPixelSize.width > 0, maximumPixelSize.height > 0
         else { return .zero }
 
         let scale = min(
@@ -321,9 +322,11 @@ final class SCKAdapter: CaptureProtocol, @unchecked Sendable {
     /// matching `NSScreen` for the real Retina scale and only fall back to 1x.
     static func nativeScale(for display: SCDisplay) -> CGFloat {
         if let screen = NSScreen.screens.first(where: { screen in
-            guard let number = screen.deviceDescription[
-                NSDeviceDescriptionKey("NSScreenNumber")
-            ] as? UInt32 else { return false }
+            guard
+                let number = screen.deviceDescription[
+                    NSDeviceDescriptionKey("NSScreenNumber")
+                ] as? UInt32
+            else { return false }
             return number == display.displayID
         }) {
             return max(1, screen.backingScaleFactor)
@@ -345,8 +348,10 @@ extension SCKAdapter {
         timestamp: Date
     ) async throws -> CaptureResult {
         let mainDisplayID = CGMainDisplayID()
-        guard let display = content.displays.first(where: { $0.displayID == mainDisplayID })
-                ?? content.displays.first else {
+        guard
+            let display = content.displays.first(where: { $0.displayID == mainDisplayID })
+                ?? content.displays.first
+        else {
             throw CaptureError.displayUnavailable
         }
 
@@ -436,11 +441,13 @@ extension SCKAdapter {
 
         let fullImage = try await captureDisplayImage(display, options: options)
 
-        guard let cropRect = Self.pixelCropRect(
-            areaRect: areaRect,
-            displayFrame: display.frame,
-            imageSize: CGSize(width: fullImage.width, height: fullImage.height)
-        ) else {
+        guard
+            let cropRect = Self.pixelCropRect(
+                areaRect: areaRect,
+                displayFrame: display.frame,
+                imageSize: CGSize(width: fullImage.width, height: fullImage.height)
+            )
+        else {
             throw CaptureError.invalidRegion
         }
 
@@ -528,7 +535,8 @@ extension SCKAdapter {
             throw CaptureError.captureFailed(reason: "Window has no capturable content")
         }
 
-        let pointScale = options.highResolution
+        let pointScale =
+            options.highResolution
             ? max(CGFloat(filter.pointPixelScale), 1)
             : 1
         let expectedSize = WindowCapturePlan.desktopIndependentOutputSize(
@@ -550,7 +558,8 @@ extension SCKAdapter {
 
         let image = try await captureStillImage(filter: filter, configuration: configuration)
         if abs(image.width - Int(expectedSize.width)) > 2
-            || abs(image.height - Int(expectedSize.height)) > 2 {
+            || abs(image.height - Int(expectedSize.height)) > 2
+        {
             logger.warning(
                 "Window \(window.windowID) produced \(image.width)x\(image.height), "
                     + "expected \(Int(expectedSize.width))x\(Int(expectedSize.height))"
@@ -572,13 +581,15 @@ extension SCKAdapter {
         descriptors: [WindowCaptureDisplay],
         options: CaptureOptions
     ) async throws -> WindowCaptureOutcome {
-        guard let plan = WindowCapturePlan.make(
-            windowID: window.windowID,
-            windowFrame: window.frame,
-            displays: descriptors,
-            usesDesktopIndependentWindow: false,
-            highResolution: options.highResolution
-        ) else {
+        guard
+            let plan = WindowCapturePlan.make(
+                windowID: window.windowID,
+                windowFrame: window.frame,
+                displays: descriptors,
+                usesDesktopIndependentWindow: false,
+                highResolution: options.highResolution
+            )
+        else {
             throw CaptureError.displayUnavailable
         }
 
@@ -665,15 +676,15 @@ extension SCKAdapter {
         let width = max(1, Int(plan.outputPixelSize.width))
         let height = max(1, Int(plan.outputPixelSize.height))
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil,
-                  width: width,
-                  height: height,
-                  bitsPerComponent: 8,
-                  bytesPerRow: 0,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
         else {
             throw CaptureError.captureFailed(reason: "Unable to create window stitch canvas")
         }

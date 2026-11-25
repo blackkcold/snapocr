@@ -66,13 +66,14 @@ public struct RecordingConfiguration: Equatable, Sendable {
     /// Invalid or non-finite dimensions return `.zero`.
     public func outputDimensions(for sourceDimensions: CGSize) -> CGSize {
         guard sourceDimensions.width.isFinite,
-              sourceDimensions.height.isFinite,
-              resolutionLimit.width.isFinite,
-              resolutionLimit.height.isFinite,
-              sourceDimensions.width > 0,
-              sourceDimensions.height > 0,
-              resolutionLimit.width > 0,
-              resolutionLimit.height > 0 else {
+            sourceDimensions.height.isFinite,
+            resolutionLimit.width.isFinite,
+            resolutionLimit.height.isFinite,
+            sourceDimensions.width > 0,
+            sourceDimensions.height > 0,
+            resolutionLimit.width > 0,
+            resolutionLimit.height > 0
+        else {
             return .zero
         }
 
@@ -93,17 +94,18 @@ public struct RecordingConfiguration: Equatable, Sendable {
         let height = (fittedDimensions.height / 2).rounded(.down) * 2
 
         guard fittedDimensions.width.isFinite,
-              fittedDimensions.height.isFinite,
-              width.isFinite,
-              height.isFinite,
-              width >= 2,
-              height >= 2,
-              width < CGFloat(Int.max),
-              height < CGFloat(Int.max),
-              width <= sourceDimensions.width,
-              height <= sourceDimensions.height,
-              width <= resolutionLimit.width,
-              height <= resolutionLimit.height else {
+            fittedDimensions.height.isFinite,
+            width.isFinite,
+            height.isFinite,
+            width >= 2,
+            height >= 2,
+            width < CGFloat(Int.max),
+            height < CGFloat(Int.max),
+            width <= sourceDimensions.width,
+            height <= sourceDimensions.height,
+            width <= resolutionLimit.width,
+            height <= resolutionLimit.height
+        else {
             return nil
         }
 
@@ -132,14 +134,15 @@ public struct RecordingConfiguration: Equatable, Sendable {
     /// - Throws: `RecordingConfigurationError` when the settings are invalid or unsupported.
     public func validate(supportsAACSystemAudio: Bool = true) throws {
         guard resolutionLimit.width.isFinite,
-              resolutionLimit.height.isFinite,
-              resolutionLimit.width > 0,
-              resolutionLimit.height > 0,
-              frameRateLimit > 0,
-              frameRateLimit <= Int(Int32.max),
-              maximumKeyFrameIntervalSeconds.isFinite,
-              maximumKeyFrameIntervalSeconds > 0,
-              averageVideoBitrate > 0 else {
+            resolutionLimit.height.isFinite,
+            resolutionLimit.width > 0,
+            resolutionLimit.height > 0,
+            frameRateLimit > 0,
+            frameRateLimit <= Int(Int32.max),
+            maximumKeyFrameIntervalSeconds.isFinite,
+            maximumKeyFrameIntervalSeconds > 0,
+            averageVideoBitrate > 0
+        else {
             throw RecordingConfigurationError.invalidConfiguration
         }
         guard !capturesSystemAudio || supportsAACSystemAudio else {
@@ -157,10 +160,11 @@ public struct RecordingConfiguration: Equatable, Sendable {
         frameRate: Int
     ) -> Int {
         guard sourceDimensions.width.isFinite,
-              sourceDimensions.height.isFinite,
-              sourceDimensions.width > 0,
-              sourceDimensions.height > 0,
-              frameRate > 0 else {
+            sourceDimensions.height.isFinite,
+            sourceDimensions.width > 0,
+            sourceDimensions.height > 0,
+            frameRate > 0
+        else {
             return 0
         }
 
@@ -200,10 +204,11 @@ public enum RecordingSource: Equatable, Sendable {
         let region = quartzRect.standardized
         let display = displayFrame.standardized
         guard region.width > 0,
-              region.height > 0,
-              display.width > 0,
-              display.height > 0,
-              display.contains(region) else {
+            region.height > 0,
+            display.width > 0,
+            display.height > 0,
+            display.contains(region)
+        else {
             return nil
         }
 
@@ -229,14 +234,15 @@ enum RecordingWriterSettings {
         dimensions: CGSize,
         canApply: ([String: Any]) -> Bool
     ) -> Set<RecordingVideoCodec> {
-        Set(RecordingVideoCodec.allCases.filter { codec in
-            let settings = videoOutputSettings(
-                configuration: configuration,
-                dimensions: dimensions,
-                codec: codec
-            )
-            return canApply(settings)
-        })
+        Set(
+            RecordingVideoCodec.allCases.filter { codec in
+                let settings = videoOutputSettings(
+                    configuration: configuration,
+                    dimensions: dimensions,
+                    codec: codec
+                )
+                return canApply(settings)
+            })
     }
 
     static func videoOutputSettings(

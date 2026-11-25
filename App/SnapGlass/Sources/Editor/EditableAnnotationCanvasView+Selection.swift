@@ -124,7 +124,8 @@ extension EditableAnnotationCanvasNSView {
         if node.tool == .arrow, node.points.count >= 2 {
             return viewPoint(from: handle == .start ? node.points[0] : node.points[1])
         }
-        let rect = node.tool == .text
+        let rect =
+            node.tool == .text
             ? selectionFrameRect(for: node)
             : viewRect(from: normalizedBounds(for: node))
         return handlePoint(handle, in: rect)
@@ -174,13 +175,21 @@ extension EditableAnnotationCanvasNSView {
         var minY = bounds.minY
         var maxY = bounds.maxY
         switch handle {
-        case .bottomLeft: minX = point.x; minY = point.y
+        case .bottomLeft:
+            minX = point.x
+            minY = point.y
         case .bottom: minY = point.y
-        case .bottomRight: maxX = point.x; minY = point.y
+        case .bottomRight:
+            maxX = point.x
+            minY = point.y
         case .right: maxX = point.x
-        case .topRight: maxX = point.x; maxY = point.y
+        case .topRight:
+            maxX = point.x
+            maxY = point.y
         case .top: maxY = point.y
-        case .topLeft: minX = point.x; maxY = point.y
+        case .topLeft:
+            minX = point.x
+            maxY = point.y
         case .left: minX = point.x
         case .start, .end: break
         }
@@ -207,12 +216,13 @@ extension EditableAnnotationCanvasNSView {
         guard var node = selectedNode, let image else { return }
         let deltaX = multiplier / CGFloat(max(image.width, 1))
         let deltaY = multiplier / CGFloat(max(image.height, 1))
-        let offset: CGPoint = switch keyCode {
-        case 123: CGPoint(x: -deltaX, y: 0)
-        case 124: CGPoint(x: deltaX, y: 0)
-        case 125: CGPoint(x: 0, y: -deltaY)
-        default: CGPoint(x: 0, y: deltaY)
-        }
+        let offset: CGPoint =
+            switch keyCode {
+            case 123: CGPoint(x: -deltaX, y: 0)
+            case 124: CGPoint(x: deltaX, y: 0)
+            case 125: CGPoint(x: 0, y: -deltaY)
+            default: CGPoint(x: 0, y: deltaY)
+            }
         node.points = node.points.map {
             CGPoint(x: min(max($0.x + offset.x, 0), 1), y: min(max($0.y + offset.y, 0), 1))
         }
@@ -275,8 +285,9 @@ extension EditableAnnotationCanvasNSView {
             previewNodes.removeAll { $0.id == interactiveNode.id }
         }
         if let liveStyleNodeID,
-           let liveStyleNode = nodes.first(where: { $0.id == liveStyleNodeID }),
-           liveStyleNode.tool != .blur {
+            let liveStyleNode = nodes.first(where: { $0.id == liveStyleNodeID }),
+            liveStyleNode.tool != .blur
+        {
             previewNodes.removeAll { $0.id == liveStyleNodeID }
         }
         guard !previewNodes.isEmpty else {
@@ -288,10 +299,11 @@ extension EditableAnnotationCanvasNSView {
         }
 
         if let renderedPreview,
-           renderedPreviewNodes == previewNodes,
-           renderedPreviewSource === image,
-           renderedPreviewBase === baseImage,
-           abs(renderedPreviewMaxDimension - maximumDimension) <= 1 {
+            renderedPreviewNodes == previewNodes,
+            renderedPreviewSource === image,
+            renderedPreviewBase === baseImage,
+            abs(renderedPreviewMaxDimension - maximumDimension) <= 1
+        {
             return renderedPreview
         }
 
@@ -316,8 +328,9 @@ extension EditableAnnotationCanvasNSView {
     /// even when there is nothing to annotate and nothing on screen changed.
     func baseDisplayImage(for image: CGImage, targetMaxDimension: CGFloat) -> CGImage {
         if let baseDisplayCache,
-           baseDisplayCache.source === image,
-           abs(baseDisplayCache.maxDimension - targetMaxDimension) <= 1 {
+            baseDisplayCache.source === image,
+            abs(baseDisplayCache.maxDimension - targetMaxDimension) <= 1
+        {
             return baseDisplayCache.image
         }
 

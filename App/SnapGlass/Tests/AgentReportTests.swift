@@ -24,7 +24,7 @@ struct AgentReportTests {
                     path: "/tmp/root/Recording.caf",
                     bytes: 1_024,
                     duration: 3.01
-                ),
+                )
             ],
             hud: AgentReport.HUDFacts(
                 firstVisibleMs: 42,
@@ -39,7 +39,7 @@ struct AgentReportTests {
                         from: AgentSize(width: 320, height: 54),
                         to: AgentSize(width: 340, height: 54),
                         recordingPhase: true
-                    ),
+                    )
                 ],
                 warmedUp: false
             ),

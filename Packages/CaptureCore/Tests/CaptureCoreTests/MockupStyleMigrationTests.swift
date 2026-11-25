@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+
 @testable import CaptureCore
 
 struct MockupStyleMigrationTests {

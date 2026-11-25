@@ -238,10 +238,12 @@ struct ScreenVideoWriterBridgeTests {
             throw ScreenVideoWriterBridgeTestError.sampleBufferFailed(bufferStatus)
         }
         if notSync {
-            guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
-                sampleBuffer,
-                createIfNecessary: true
-            ), CFArrayGetCount(attachments) > 0 else {
+            guard
+                let attachments = CMSampleBufferGetSampleAttachmentsArray(
+                    sampleBuffer,
+                    createIfNecessary: true
+                ), CFArrayGetCount(attachments) > 0
+            else {
                 throw ScreenVideoWriterBridgeTestError.sampleBufferFailed(bufferStatus)
             }
             let entry = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)

@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import SharedKit
+import SwiftUI
 
 // MARK: - About
 
@@ -32,10 +32,10 @@ struct AboutPreferencesView: View {
                                 """
                             )
                         )
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
                         Divider()
 

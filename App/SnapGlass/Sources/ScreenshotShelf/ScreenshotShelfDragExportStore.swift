@@ -20,7 +20,6 @@ enum ScreenshotShelfImageTypeIdentifier {
     }
 }
 
-
 /// Keeps a plaintext copy of each shelf screenshot so a card can be dragged out
 /// as a real file without waiting for a decrypt-and-encode step.
 ///
@@ -227,13 +226,15 @@ final class ScreenshotShelfDragExportStore {
                 forKeys: [.contentModificationDateKey, .isDirectoryKey]
             )
             guard values?.isDirectory == true else { continue }
-            guard ScreenshotShelfSessionDirectoryPolicy.shouldSweep(
-                directoryName: entry.lastPathComponent,
-                modifiedAt: values?.contentModificationDate ?? .distantPast,
-                now: now,
-                grace: maxAge,
-                legacyGrace: 24 * 60 * 60
-            ) else { continue }
+            guard
+                ScreenshotShelfSessionDirectoryPolicy.shouldSweep(
+                    directoryName: entry.lastPathComponent,
+                    modifiedAt: values?.contentModificationDate ?? .distantPast,
+                    now: now,
+                    grace: maxAge,
+                    legacyGrace: 24 * 60 * 60
+                )
+            else { continue }
             do {
                 try fileManager.removeItem(at: entry)
                 removedCount += 1

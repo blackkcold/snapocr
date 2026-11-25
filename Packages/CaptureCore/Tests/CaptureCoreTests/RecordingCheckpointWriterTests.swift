@@ -1,7 +1,9 @@
 import AVFoundation
 import Foundation
 import Testing
+
 @testable import CaptureCore
+
 /// Shared fixtures for the Task 7 checkpoint writer and coordinator tests.
 enum T7TestSupport {
     static func makeRoot() throws -> URL {
@@ -40,7 +42,8 @@ enum T7TestSupport {
     }
     static func sidecarURLs(in directory: URL) throws -> [URL] {
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-        return names
+        return
+            names
             .filter { $0.hasPrefix("checkpoint-") && $0.hasSuffix(".json") }
             .sorted()
             .map { directory.appendingPathComponent($0) }
@@ -226,12 +229,13 @@ struct RecordingCheckpointWriterTests {
         let retryCommit = try await retryWriter.commitCheckpoint()
         #expect(retryCommit.range == SampleRange(startSample: 480, sampleCount: 480))
         #expect(try T7TestSupport.sha256(of: retainedURL) == retainedHash)
-        #expect(try T7TestSupport.cafNames(in: staging) == [
-            "mic-0003.caf",
-            "system-0001.caf",
-            "system-0002.caf",
-            "system-0003.caf",
-        ])
+        #expect(
+            try T7TestSupport.cafNames(in: staging) == [
+                "mic-0003.caf",
+                "system-0001.caf",
+                "system-0002.caf",
+                "system-0003.caf",
+            ])
         let retryRecord = try T7TestSupport.record(for: retryCommit, in: staging)
         #expect(!retryRecord.tracks.contains { $0.fileName == "system-0002.caf" })
     }

@@ -1,5 +1,5 @@
-import SwiftUI
 import AnnotationCore
+import SwiftUI
 
 struct ToolPickerView: View {
     @Binding var selectedTool: EditorTool
@@ -21,10 +21,13 @@ struct ToolPickerView: View {
     var body: some View {
         // Narrow windows drop the secondary actions into an overflow menu
         // instead of squeezing (or clipping) the tool group.
-        ViewThatFits(in: .horizontal, content: {
-            fullControls
-            compactControls
-        })
+        ViewThatFits(
+            in: .horizontal,
+            content: {
+                fullControls
+                compactControls
+            }
+        )
         .padding(.horizontal, DS.Space.s14)
         .padding(.vertical, DS.Space.s7)
         .glassSurface(Capsule(), elevation: .raised)
@@ -166,13 +169,16 @@ struct ToolPickerView: View {
     }
 
     private var presetPicker: some View {
-        Picker("Preset", selection: Binding(
-            get: { selectedPreset },
-            set: { preset in
-                selectedPreset = preset
-                onPresetSelected(preset)
-            }
-        )) {
+        Picker(
+            "Preset",
+            selection: Binding(
+                get: { selectedPreset },
+                set: { preset in
+                    selectedPreset = preset
+                    onPresetSelected(preset)
+                }
+            )
+        ) {
             ForEach(AnnotationStylePreset.allCases) { preset in
                 Text(preset.displayName).tag(preset)
             }
@@ -225,9 +231,10 @@ struct ToolPickerView: View {
             .buttonStyle(.plain)
             .disabled(ocrLineCount == 0)
             .help("Copy all recognized text")
-            .accessibilityLabel(ocrLineCount == 0
-                                ? Text("Copy all recognized text")
-                                : Text("Copy \(ocrLineCount) recognized lines"))
+            .accessibilityLabel(
+                ocrLineCount == 0
+                    ? Text("Copy all recognized text")
+                    : Text("Copy \(ocrLineCount) recognized lines"))
         }
     }
 
