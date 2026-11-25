@@ -19,11 +19,11 @@
 
 ### lint
 - 下载 `.swiftlint-version` 固定的 `portable_swiftlint.zip`，并用 `scripts/check-swiftlint-version.sh` 校验版本
-- 运行 `scripts/check-swift-format.sh`：先校验 `.swift-format-version`，再以 `--strict` 全仓 lint 并核对诊断预算
+- 运行 `scripts/check-swift-format.sh`：先校验 `.swift-format-version`，再以 `--strict` 全仓 lint；`.swift-format-budget` 必须保持 0
 - 运行 `swiftlint lint --strict`
 - 运行 `scripts/check-localization.sh`
 
-`swift-format lint`（非 strict）即使有诊断也返回 0，不能作为闸门。包装脚本用 `--strict` 把每条诊断变成 error，并核对诊断数：`.swift-format-budget` 是当前唯一允许的诊断上限（Phase 2 从 698 逐步降到 0），新增诊断或超出预算都会失败；给脚本传路径时是零容忍模式，用于逐批验收。`swift-format` 不通过 Homebrew 安装：runner 镜像自带的 Xcode 工具链就是本地使用的同一二进制，版本不符时失败而不是静默重排。SwiftLint 同理按 `.swiftlint-version` 固定，CI 不再使用 `brew install swiftlint`，避免 runner 解析到不同版本导致同一份代码忽红忽绿。
+`swift-format lint`（非 strict）即使有诊断也返回 0，不能作为闸门。包装脚本用 `--strict` 把每条诊断变成 error，并核对诊断数：Phase 2 已把公开 API 文档债务从 698 清到 0，`.swift-format-budget` 锁定 0，任何诊断都会失败；给脚本传路径时同样是零容忍，用于本地迭代。`swift-format` 不通过 Homebrew 安装：runner 镜像自带的 Xcode 工具链就是本地使用的同一二进制，版本不符时失败而不是静默重排。SwiftLint 同理按 `.swiftlint-version` 固定，CI 不再使用 `brew install swiftlint`，避免 runner 解析到不同版本导致同一份代码忽红忽绿。
 
 ### build
 - `xcodegen generate`

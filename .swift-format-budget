@@ -1,9 +1,8 @@
 # Maximum number of swift-format diagnostics allowed by the repository gate.
 #
-# Phase 2 ratchet: this number may only decrease. Each documentation batch
-# lowers it by the diagnostics it fixed, and the final value is 0, which makes
-# `scripts/check-swift-format.sh` a zero-tolerance hard gate.
+# This must stay 0. The Phase 2 public-API documentation cleanup reduced the
+# repository from 698 diagnostics to 0 on 2026-11-25; any diagnostic is now a
+# hard failure, and the budget must never be raised to make a branch pass.
 #
-# A focused run (paths passed on the command line) is already zero-tolerance,
-# so a batch must be clean before this budget is lowered.
+# A focused run (paths passed on the command line) is zero-tolerance too.
 0

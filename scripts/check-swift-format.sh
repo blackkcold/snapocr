@@ -1,16 +1,15 @@
 #!/bin/bash
-# Hard gate for swift-format, with a ratcheting diagnostic budget.
+# Hard gate for swift-format.
 #
 # `swift-format lint` exits 0 even when it reports warnings, so the raw command
 # can never be a gate. `--strict` promotes every finding to error severity and
 # makes the exit status non-zero, and the diagnostic count is checked on top so
 # a future change in that contract fails loudly instead of silently passing.
 #
-# The repository is still paying down its public-API documentation debt.
-# `.swift-format-budget` holds the only accepted diagnostic count for a
-# whole-repository run and may only decrease (it reaches 0 at the end of
-# Phase 2). A focused run (paths given) is zero-tolerance, so a batch can be
-# verified clean before the budget is lowered.
+# `.swift-format-budget` must remain 0: the Phase 2 public-API documentation
+# cleanup reduced the repository to zero diagnostics, so every diagnostic is a
+# failure. A focused run (paths given) is zero-tolerance too, which makes it
+# usable for local iteration.
 #
 # Usage:
 #   bash scripts/check-swift-format.sh                           # whole repo, budget
@@ -74,7 +73,7 @@ if [[ "$COUNT" -gt "$BUDGET" ]]; then
     {
         echo "✗ swift-format: $COUNT diagnostic(s), budget $BUDGET"
         if [[ ${#TARGETS[@]} -eq 1 && "${TARGETS[0]}" == "$PROJECT_ROOT" ]]; then
-            echo "  The repository budget may only decrease: $BUDGET_FILE"
+            echo "  The repository budget must remain 0: $BUDGET_FILE"
         else
             echo "  Focused runs must be clean: fix the diagnostics below."
         fi
