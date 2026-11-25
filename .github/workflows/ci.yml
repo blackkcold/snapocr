@@ -53,6 +53,10 @@ jobs:
               swift test --package-path "Packages/$pkg" \
                 --skip VisionIntegrationTests \
                 --skip pipelineFallsBackToVisionWhenTesseractDataIsMissing || exit 1
+            elif [ "$pkg" = "CaptureCore" ]; then
+              # CaptureCore 的音频/环形缓冲测试使用私有 dispatch queue；
+              # 在 3-core runner 上与 687 个测试并行时可能死锁。串行运行保持确定性。
+              swift test --package-path "Packages/$pkg" --no-parallel || exit 1
             else
               swift test --package-path "Packages/$pkg" || exit 1
             fi
