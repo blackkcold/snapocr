@@ -16,10 +16,14 @@ public struct RecordingIndexRecord: Codable, Sendable, Hashable {
 
     /// One session entry whose root is relative to the supplied recording root.
     public struct Entry: Codable, Sendable, Hashable {
+        /// Identity of the indexed session.
         public let sessionID: UUID
+        /// Session root relative to the recording root, so the entry survives a root move.
         public let sessionRootRelativePath: String
+        /// Cached session record; the session journal remains authoritative.
         public let record: RecordingSessionRecord
 
+        /// Creates an index entry.
         public init(
             sessionID: UUID,
             sessionRootRelativePath: String,
@@ -31,10 +35,19 @@ public struct RecordingIndexRecord: Codable, Sendable, Hashable {
         }
     }
 
+    /// Schema version this cache was written with; a mismatched cache is rebuilt.
     public let schemaVersion: Int
+    /// One entry per discovered session.
     public let entries: [Entry]
+    /// Wall-clock time at which the cache was last written.
     public let updatedAt: Date
 
+    /// Creates an index record.
+    ///
+    /// - Parameters:
+    ///   - schemaVersion: Cache schema to write.
+    ///   - entries: Session entries to store.
+    ///   - updatedAt: Wall-clock write time.
     public init(
         schemaVersion: Int = RecordingIndexRecord.currentSchemaVersion,
         entries: [Entry],

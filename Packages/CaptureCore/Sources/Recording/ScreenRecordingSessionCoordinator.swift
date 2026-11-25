@@ -37,6 +37,7 @@ public struct ScreenRecordingStartConfiguration: Sendable, Hashable {
         self.sourceDimensions = sourceDimensions
     }
 
+    /// Compares every field that affects capture output.
     public static func == (
         lhs: ScreenRecordingStartConfiguration,
         rhs: ScreenRecordingStartConfiguration
@@ -49,6 +50,7 @@ public struct ScreenRecordingStartConfiguration: Sendable, Hashable {
             && lhs.sourceDimensions == rhs.sourceDimensions
     }
 
+    /// Hashes the source, video, audio, destination, exclusion, and dimension fields.
     public func hash(into hasher: inout Hasher) {
         switch source {
         case .display(let displayID):
@@ -174,6 +176,7 @@ public enum ScreenRecordingSessionCoordinatorError: LocalizedError, Equatable, S
     /// The capture stream could not be confirmed stopped, so files were left unfinalized.
     case streamStopUnconfirmed
 
+    /// A user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
         case .alreadyStarted:

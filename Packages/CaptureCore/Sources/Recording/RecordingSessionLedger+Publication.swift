@@ -3,6 +3,19 @@ import Foundation
 extension RecordingSessionLedger {
     // MARK: Publishing
 
+    /// Journals the intent to publish one segment, before its product is moved.
+    ///
+    /// The intent is validated for usable locations, sample bounds, and content
+    /// hashes. Recording the same intent again is idempotent; a different intent
+    /// for the same segment, or a second segment claiming an index that is already
+    /// taken, is rejected.
+    ///
+    /// - Parameter intent: The reserved destination, staging location, hashes, and
+    ///   coverage the product promises.
+    /// - Throws: `RecordingSessionLedgerError.missingSession` when no session is
+    ///   registered, `.invalidPublication` when the intent is malformed,
+    ///   `.idempotencyConflict` for conflicting identity, `.readOnly` when the
+    ///   ledger cannot write, and path or I/O errors for unusable locations.
     public func recordPublishIntent(_ intent: RecordingPublishIntent) async throws {
         try ensureWritable()
         guard state.record != nil else { throw RecordingSessionLedgerError.missingSession }
@@ -21,6 +34,17 @@ extension RecordingSessionLedger {
         try persistIndex()
     }
 
+    /// Journals a segment whose product now exists at its reserved destination.
+    ///
+    /// The segment must match the intent recorded for its identity: same index,
+    /// effective range, track files, and video. Publishing the same segment again
+    /// is idempotent; a different record for the same identity is rejected.
+    ///
+    /// - Parameter segment: The published segment to journal.
+    /// - Throws: `RecordingSessionLedgerError.missingPublishIntent` when no intent
+    ///   exists, `.invalidPublication` when the segment disagrees with its intent,
+    ///   `.idempotencyConflict` for a conflicting record, `.readOnly` when the
+    ///   ledger cannot write, and path or I/O errors while persisting the index.
     public func markPublished(_ segment: PublishedSegment) async throws {
         try ensureWritable()
         guard let intent = state.intents[segment.id] else {
