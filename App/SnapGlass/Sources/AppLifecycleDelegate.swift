@@ -21,6 +21,12 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
             ShowcaseImageExporter.runIfConfigured()
         #endif
+        // Warm the HUD path after launch so a first recording does not pay the
+        // process's one-time SwiftUI/AppKit setup inside its first-visible window.
+        // The prewarm is skipped if a recording is already preparing.
+        RecordingHUDPrewarm.schedule { [weak self] in
+            self?.viewModel?.isRecordingBusy != true
+        }
     }
 
     /// Re-opens the recording controls when the app is launched again from Finder or Spotlight.

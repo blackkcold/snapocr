@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 本地 `scripts/test.sh` 对 CaptureCore 串行运行，与 CI 对齐，避免并行音频/写入器抖动。
 
 ### Fixed
+- 冷启动首次录制的 HUD 首现不再付一次性 SwiftUI/AppKit 初始化成本：启动约 2 秒后用真实控制面板预热并立即释放，新增 `hud-first-use` agent 场景（100ms 闸门）；稳态 300ms 阈值不变。
 - 修复 `check-localization.sh` 在并行运行时共用固定 `/tmp` 文件、互相截断导致误报本地化失败；改用进程替换。
 - 录制直通导出遇到非预期格式时改为 CF 类型校验 + `unsafeDowncast`，不再强转崩溃；权限文案的行长 disable 移到长字面量上。
 
