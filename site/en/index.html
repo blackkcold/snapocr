@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SnapGlass — Screenshot, Scrolling Capture, OCR &amp; Screen Recording for macOS</title>
+  <meta name="description" content="SnapGlass is an open-source, offline-first screenshot tool for macOS: a shelf that drags out as files, scrolling capture, on-device Apple Vision OCR with next-step actions, share-ready styling, screen and audio recording. No telemetry, MIT licensed.">
+  <meta name="keywords" content="macOS screenshot, scrolling capture, OCR, screen recording, audio recording, barcode scanner, screenshot tool, offline, privacy, open source, SnapGlass">
+  <meta name="author" content="SnapGlass Contributors">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#08080a" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://blackkcold.github.io/snapocr/en/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://blackkcold.github.io/snapocr/">
+  <link rel="alternate" hreflang="en" href="https://blackkcold.github.io/snapocr/en/">
+  <link rel="alternate" hreflang="x-default" href="https://blackkcold.github.io/snapocr/">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/styles.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SnapGlass">
+  <meta property="og:title" content="SnapGlass — Screenshots that go somewhere.">
+  <meta property="og:description" content="Open-source, offline-first screenshot, scrolling capture, OCR, and screen recording for macOS. A shelf, smart actions, and share-ready styling in one app.">
+  <meta property="og:url" content="https://blackkcold.github.io/snapocr/en/">
+  <meta property="og:image" content="https://blackkcold.github.io/snapocr/assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SnapGlass — Screenshots that go somewhere.">
+  <meta name="twitter:description" content="Open-source, offline-first screenshot, OCR, and screen recording for macOS.">
+  <meta name="twitter:image" content="https://blackkcold.github.io/snapocr/assets/og.png">
+
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("snapglass-theme");
+        var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = saved || (dark ? "dark" : "light");
+      } catch (error) {}
+    }());
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "SnapGlass",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "macOS 13.0 or later",
+    "softwareVersion": "1.7.2",
+    "description": "Open-source, offline-first screenshot, scrolling capture, OCR, barcode, screen and audio recording for macOS. Apple Vision runs on-device; no telemetry.",
+    "url": "https://blackkcold.github.io/snapocr/en/",
+    "downloadUrl": "https://github.com/blackkcold/snapocr/releases/latest",
+    "license": "https://github.com/blackkcold/snapocr/blob/main/LICENSE",
+    "inLanguage": ["en", "zh-Hans", "ja", "ko"],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "SnapGlass Contributors",
+      "url": "https://github.com/blackkcold/snapocr"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" focusable="false">
+    <symbol id="icon-github" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.17c-3.2.7-3.88-1.36-3.88-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.41-5.25 5.69.41.35.78 1.05.78 2.12v3.14c0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"/>
+    </symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/>
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m5 12 4.5 4.5L19 7"/>
+    </symbol>
+    <symbol id="icon-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4.5 8.5h3l1.4-2h6.2l1.4 2h3a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1Z"/>
+      <circle cx="12" cy="14" r="4"/>
+    </symbol>
+    <symbol id="icon-shelf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="5" width="7" height="14" rx="2"/>
+      <rect x="14" y="5" width="7" height="9" rx="2"/>
+      <path d="M14 18h7"/>
+    </symbol>
+    <symbol id="icon-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 6V4h14v2M12 4v16M8 20h8"/>
+    </symbol>
+    <symbol id="icon-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m12 3 1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3Z"/>
+      <path d="M19 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/>
+    </symbol>
+    <symbol id="icon-barcode" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+      <path d="M4 5v14M7.5 5v14M11 5v14M14.5 5v14M18 5v14M20.5 5v14"/>
+    </symbol>
+    <symbol id="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m9 4 6 6M14 5l5 5-2.8.9-4.3 4.3-.9 2.8-5-5 2.8-.9 4.3-4.3L14 5Z"/>
+      <path d="m8 16-4 4"/>
+    </symbol>
+    <symbol id="icon-record" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8"/>
+      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4.5" y="10" width="15" height="10.5" rx="2"/>
+      <path d="M8 10V7.5a4 4 0 0 1 8 0V10"/>
+      <path d="M12 14v2.5"/>
+    </symbol>
+    <symbol id="icon-window" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2"/>
+      <path d="M3 9h18M7 6.5h.01M10 6.5h.01"/>
+    </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2"/>
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>
+    </symbol>
+    <symbol id="icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20h9"/>
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+    </symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 3h7l5 5v13H6z"/>
+      <path d="M13 3v5h5"/>
+    </symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>
+    </symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/>
+    </symbol>
+  </svg>
+
+  <header class="nav" id="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="../" aria-label="SnapGlass home">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4.2"/>
+            <path d="M12 3.5v2.1M12 18.4v2.1M3.5 12h2.1M18.4 12h2.1M5.9 5.9l1.5 1.5M16.6 16.6l1.5 1.5M18.1 5.9l-1.5 1.5M7.4 16.6l-1.5 1.5"/>
+          </svg>
+        </span>
+        <span>SnapGlass</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#workflow">Workflow</a>
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a class="ghost-button" href="https://github.com/blackkcold/snapocr" target="_blank" rel="noopener">
+          <svg width="16" height="16" aria-hidden="true"><use href="#icon-github"/></svg>
+          GitHub
+        </a>
+        <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch to dark mode" data-label-dark="Switch to light mode" data-label-light="Switch to dark mode">
+          <svg class="theme-sun" aria-hidden="true"><use href="#icon-sun"/></svg>
+          <svg class="theme-moon" aria-hidden="true"><use href="#icon-moon"/></svg>
+        </button>
+        <a class="lang-switch" href="../" hreflang="zh-Hans" lang="zh-Hans">中文</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="dot"></span>macOS 13+ · Universal · MIT</span>
+          <h1>Screenshots that<br><span class="gradient-text">go somewhere.</span></h1>
+          <p class="hero-lead">SnapGlass turns capture, scrolling long shots, OCR, barcodes, screen recording, and audio recording into one workflow. Recognition happens on your Mac — no telemetry, no background uploads.</p>
+
+          <div class="hero-cta">
+            <a class="primary-button" href="https://github.com/blackkcold/snapocr/releases/latest">
+              <svg aria-hidden="true"><use href="#icon-download"/></svg>
+              Download latest
+            </a>
+            <a class="secondary-button" href="https://github.com/blackkcold/snapocr" target="_blank" rel="noopener">
+              <svg aria-hidden="true"><use href="#icon-github"/></svg>
+              View on GitHub
+            </a>
+          </div>
+
+          <div class="hero-meta">
+            <span>v1.7.2</span><span class="sep"></span>
+            <span>16.6 MB</span><span class="sep"></span>
+            <span>Apple Silicon / Intel</span><span class="sep"></span>
+            <span>No telemetry</span>
+          </div>
+          <p class="hero-note">On first launch, allow it in System Settings → Privacy &amp; Security.</p>
+        </div>
+
+        <div class="hero-visual">
+          <div class="shelf-stage">
+            <div class="shelf">
+              <div class="shelf-handle"></div>
+              <div class="shelf-cards" aria-hidden="true">
+                <div class="shot shot-a"></div>
+                <div class="shot shot-b is-dragging"></div>
+                <div class="shot shot-c"></div>
+              </div>
+            </div>
+
+            <div class="action-bar" aria-label="Selection action bar example">
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-copy"/></svg><span>Copy</span><kbd>↵</kbd></span>
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-barcode"/></svg><span>Barcode</span><kbd>S</kbd></span>
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-edit"/></svg><span>Edit</span><kbd>E</kbd></span>
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-pin"/></svg><span>Pin</span><kbd>⌘P</kbd></span>
+            </div>
+
+            <svg class="drag-cursor" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M5 3l14 8-6 1.4L10 19 5 3Z"/>
+            </svg>
+          </div>
+          <p class="visual-caption">Shelf + selection action bar · drag out as a real file</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="container">
+      <div class="trust">
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>On-device OCR</strong>Apple Vision runs locally</div>
+        </div>
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>No telemetry</strong>fully usable offline</div>
+        </div>
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>AES-256-GCM</strong>encrypted local history</div>
+        </div>
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>MIT licensed</strong>auditable source and data paths</div>
+        </div>
+      </div>
+    </div>
+
+    <section class="section" id="workflow">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">Workflow</p>
+          <h2>Capture is just the start.<br>The next step is the point.</h2>
+          <p>The system tool leaves the image on your Desktop. SnapGlass puts it into the next step: shelf it, read it, mark it up, or drag it into the window you are already using.</p>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <span class="step-number">1</span>
+            <h3>Capture</h3>
+            <p>Region, window, full screen, all displays, or a scrolling long shot. On mouse-up, the action bar is right there.</p>
+          </div>
+          <div class="step">
+            <span class="step-number">2</span>
+            <h3>Shelf it</h3>
+            <p>Recent shots wait at the screen edge in order. Reorder, use the keyboard, follow across displays, or collapse to a slim handle.</p>
+          </div>
+          <div class="step">
+            <span class="step-number">3</span>
+            <h3>Drag it out</h3>
+            <p>Drag a card out and it becomes a real file. Drop it into Finder, an upload area, WeChat, Feishu, or Slack.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">Features</p>
+          <h2>Everything it needs.<br>Nothing it doesn't.</h2>
+          <p>No account, no cloud sync, no subscription. Every feature starts from the question: what happens after this screenshot?</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-camera"/></svg></div>
+            <h3>Capture &amp; scrolling capture</h3>
+            <p>Region, freeform lasso, window, full screen, all displays; scrolling shots are captured frame by frame and stitched. Built on ScreenCaptureKit, with mixed scaling and Retina pixels.</p>
+            <span class="mini-tag">PNG / JPEG · 1x / 2x</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-shelf"/></svg></div>
+            <h3>The shelf</h3>
+            <p>Recent shots wait at the screen edge. Reorder them, drag one out as a file, use keyboard mode, follow across displays, adjust count and opacity.</p>
+            <span class="mini-tag">Drag out as a file</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-text"/></svg></div>
+            <h3>OCR &amp; smart actions</h3>
+            <p>Apple Vision runs locally; huge images are tiled automatically. When it finds a code, link, or email, it offers copy, open, or compose.</p>
+            <span class="mini-tag">Fully offline</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-sparkles"/></svg></div>
+            <h3>Annotation &amp; share appearance</h3>
+            <p>Eight tools with full undo/redo. Background, padding, radius, shadow, and stroke preview live on the canvas; copy and post.</p>
+            <span class="mini-tag">New in 1.7</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-barcode"/></svg></div>
+            <h3>Barcodes &amp; QR</h3>
+            <p>QR, Code128, EAN, PDF417, Aztec, DataMatrix. Press S in the action bar, R to recapture animated codes, then copy or open.</p>
+            <span class="mini-tag">No editor needed</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-pin"/></svg></div>
+            <h3>Pin</h3>
+            <p>⌘P pins the selection to your screen. Move, zoom, change opacity, right-click to copy image or text; pinned content stays out of recordings and later captures.</p>
+            <span class="mini-tag">10%–800%</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-record"/></svg></div>
+            <h3>Screen &amp; audio recording</h3>
+            <p>Display, window, or region; system audio, microphone, or both. Atomic publish, 10-second checkpoints, 59-minute segments, and automatic save if the UI freezes.</p>
+            <span class="mini-tag">MP4 / M4A</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-lock"/></svg></div>
+            <h3>History &amp; privacy</h3>
+            <p>History is encrypted locally with AES-256-GCM; the key stays on this Mac. Full OCR text is off by default, and exports can redact.</p>
+            <span class="mini-tag">No telemetry</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-window"/></svg></div>
+            <h3>Native &amp; four languages</h3>
+            <p>SwiftUI interface; Liquid Glass on macOS 26 with graceful fallback. Simplified Chinese, English, Japanese, and Korean.</p>
+            <span class="mini-tag">Universal</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="interface">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">Interface</p>
+          <h2>Real macOS interaction.<br>No web wrapper.</h2>
+          <p>The action bar appears next to the selection; OCR results offer the next step. Chinese UI shown.</p>
+        </div>
+
+        <div class="gallery-grid">
+          <figure class="shot-card">
+            <img src="../assets/images/action-bar.png" alt="SnapGlass selection action bar: copy image, recognize barcode, edit screenshot, pin image" width="1090" height="120" loading="lazy">
+            <figcaption><strong>Selection action bar</strong><span>Four destinations after mouse-up</span></figcaption>
+          </figure>
+          <figure class="shot-card">
+            <img src="../assets/images/ocr-actions.png" alt="SnapGlass OCR banner offering to copy a verification code" width="1090" height="120" loading="lazy">
+            <figcaption><strong>OCR smart actions</strong><span>Copy the code directly</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="new-band">
+          <div>
+            <p class="kicker">v1.7</p>
+            <h2>The update that closes<br>the last gaps.</h2>
+            <p>Share appearance went from “looks fine” to “ready to post”; recording went from “it records” to “it saves even when the UI freezes”.</p>
+          </div>
+          <div class="new-list">
+            <div class="new-item">
+              <span class="badge">1.7.0</span>
+              <div>
+                <h3>Share appearance in the editor</h3>
+                <p>Background templates, padding, radius, shadow, and stroke preview live; copy as a share image or the original.</p>
+              </div>
+            </div>
+            <div class="new-item">
+              <span class="badge">1.7.2</span>
+              <div>
+                <h3>Recording stability</h3>
+                <p>Fixed a stuck countdown, leftover HUD panels, a system-audio tail that blocked publishing, and a first-second freeze; added liveness watchdogs.</p>
+              </div>
+            </div>
+            <div class="new-item">
+              <span class="badge">1.7</span>
+              <div>
+                <h3>Four languages</h3>
+                <p>Simplified Chinese, English, Japanese, and Korean. Follows the system language.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="download">
+      <div class="container">
+        <div class="download-card">
+          <div>
+            <p class="kicker" style="color:#8ec5ff">Download</p>
+            <h2>Put the workflow<br>on your Mac.</h2>
+            <p>SnapGlass v1.7.2 · Universal · 16.6 MB. macOS 13.0 or later. On first launch, allow it in System Settings → Privacy &amp; Security.</p>
+            <div class="download-note">Fixed self-signed certificate · Sparkle in-place updates · SHA-256 checksum in the release · MIT license</div>
+          </div>
+          <div class="download-actions">
+            <a class="primary-button" href="https://github.com/blackkcold/snapocr/releases/latest">
+              <svg aria-hidden="true"><use href="#icon-download"/></svg>
+              Download DMG
+            </a>
+            <div class="download-links">
+              <a href="https://github.com/blackkcold/snapocr/releases/download/v1.7.2/SnapGlass-v1.7.2.dmg.sha256" target="_blank" rel="noopener">SHA-256</a>
+              <a href="https://github.com/blackkcold/snapocr/releases/latest/download/appcast.xml" target="_blank" rel="noopener">appcast</a>
+              <a href="https://github.com/blackkcold/snapocr/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section faq" id="faq">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">FAQ</p>
+          <h2>Before you install.</h2>
+        </div>
+
+        <details>
+          <summary>macOS says it cannot verify the developer. What do I do?</summary>
+          <p>Open System Settings → Privacy &amp; Security, click “Open Anyway” in the security section, and confirm. SnapGlass has no Apple Developer ID; this is the normal first-run flow for a self-signed app. The fixed certificate means later automatic updates do not repeat it.</p>
+        </details>
+
+        <details>
+          <summary>Which permissions does it need?</summary>
+          <p>Screen Recording covers screenshots, scrolling capture, screen recording, and system audio. Microphone is needed only when the microphone is selected as an audio source. Denying one permission disables only that feature.</p>
+        </details>
+
+        <details>
+          <summary>Are my screenshots or text uploaded?</summary>
+          <p>No. Capture uses ScreenCaptureKit locally, OCR uses Apple Vision on-device, and barcodes use the local Vision barcode framework. There is no telemetry and no background upload. SnapGlass connects only when you check for updates, download a Tesseract language pack, or explicitly enable automatic update checks (at most once a day).</p>
+        </details>
+
+        <details>
+          <summary>Does it run on Intel Macs, and which languages are supported?</summary>
+          <p>Releases are Universal binaries (arm64 + x86_64) and require macOS 13.0 or later. The UI supports Simplified Chinese, English, Japanese, and Korean, and follows the system language.</p>
+        </details>
+
+        <details>
+          <summary>Where are history and recordings stored?</summary>
+          <p>Screenshots and OCR text live in <code>~/Library/Application Support/SnapGlass/History/v2/</code> and are encrypted with AES-256-GCM; thumbnails are not encrypted. Screen and audio recordings live in the folder you choose and are not encrypted. See the <a href="https://github.com/blackkcold/snapocr/blob/main/Docs/PRIVACY.md" target="_blank" rel="noopener">Privacy Statement</a>.</p>
+        </details>
+
+        <details>
+          <summary>Why is there no audio in my screen recording?</summary>
+          <p>Check that the source is a display, window, or region and that system audio is enabled; system audio needs Screen Recording permission. If system audio fails to start, SnapGlass keeps recording video and tells you after saving that the video was saved without system audio, rather than discarding the whole recording.</p>
+        </details>
+
+        <details>
+          <summary>How is this different from the system screenshot tool?</summary>
+          <p>If you only need capture-and-copy, the system tool is enough. Use SnapGlass for the shelf workflow, scrolling capture, OCR with next-step actions, share appearance, or screen and audio recording. They coexist without shortcut conflicts.</p>
+        </details>
+
+        <details>
+          <summary>How do I uninstall it completely?</summary>
+          <p>Quit SnapGlass and move the app to the Trash. To remove local data, also delete <code>~/Library/Application Support/SnapGlass/</code>, <code>~/Library/Preferences/com.snapglass.app.plist</code>, and <code>~/Library/Logs/SnapGlass/</code>. Screen and audio recordings live in the folder you chose and must be deleted separately.</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="../">
+            <span class="logo-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <circle cx="12" cy="12" r="4.2"/>
+                <path d="M12 3.5v2.1M12 18.4v2.1M3.5 12h2.1M18.4 12h2.1M5.9 5.9l1.5 1.5M16.6 16.6l1.5 1.5M18.1 5.9l-1.5 1.5M7.4 16.6l-1.5 1.5"/>
+              </svg>
+            </span>
+            <span>SnapGlass</span>
+          </a>
+          <p>Offline-first screenshot, OCR, screen and audio recording for macOS. Open source, no telemetry, data stays on your Mac.</p>
+        </div>
+
+        <nav class="footer-links" aria-label="Footer">
+          <a href="https://github.com/blackkcold/snapocr" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/blackkcold/snapocr/releases" target="_blank" rel="noopener">Releases</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/Docs/PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/Docs/SECURITY.md" target="_blank" rel="noopener">Security</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        </nav>
+      </div>
+
+      <div class="footer-bottom">
+        <span>© 2026 SnapGlass Contributors · MIT License</span>
+        <span>Made with SwiftUI · Not affiliated with Apple</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/app.js" defer></script>
+</body>
+</html>

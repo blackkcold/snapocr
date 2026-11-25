@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- 新增中英双语 GitHub Pages 官网（功能、下载、FAQ 与 SEO）与英文 README。
+- App 的「关于」页新增官网入口，并更新四语言简介文案。
+
+### Changed
+- README 重构为用户导向：首屏工作流、1.7 更新、功能、下载校验与常见问题；开发构建细节收进折叠区。
+
 ## [1.7.2] - 2026-11-24
 
 > 录制稳定性收尾：卡死、音频落盘、HUD 与录屏音频。

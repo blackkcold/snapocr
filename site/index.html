@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-Hans" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SnapGlass — macOS 截图、滚动截图、OCR 与录屏｜离线优先</title>
+  <meta name="description" content="SnapGlass 是一款开源、离线优先的 macOS 截图工具：截图架拖出即文件、滚动长图、Apple Vision OCR 智能动作、分享外观、录屏与录音。无遥测，MIT 许可。">
+  <meta name="keywords" content="macOS 截图, 滚动截图, OCR, 屏幕录制, 录音, 二维码识别, 截图工具, 离线, 隐私, 开源, SnapGlass">
+  <meta name="author" content="SnapGlass Contributors">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#08080a" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://blackkcold.github.io/snapocr/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://blackkcold.github.io/snapocr/">
+  <link rel="alternate" hreflang="en" href="https://blackkcold.github.io/snapocr/en/">
+  <link rel="alternate" hreflang="x-default" href="https://blackkcold.github.io/snapocr/">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/styles.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SnapGlass">
+  <meta property="og:title" content="SnapGlass — 截图之后，不用再找文件。">
+  <meta property="og:description" content="开源、离线优先的 macOS 截图 / 滚动截图 / OCR / 录屏与录音工具。截图架、智能动作、分享外观，一次装好。">
+  <meta property="og:url" content="https://blackkcold.github.io/snapocr/">
+  <meta property="og:image" content="https://blackkcold.github.io/snapocr/assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SnapGlass — 截图之后，不用再找文件。">
+  <meta name="twitter:description" content="开源、离线优先的 macOS 截图 / OCR / 录屏工具。">
+  <meta name="twitter:image" content="https://blackkcold.github.io/snapocr/assets/og.png">
+
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("snapglass-theme");
+        var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = saved || (dark ? "dark" : "light");
+      } catch (error) {}
+    }());
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "SnapGlass",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "macOS 13.0 or later",
+    "softwareVersion": "1.7.2",
+    "description": "开源、离线优先的 macOS 截图、滚动截图、OCR、条码、录屏与录音工具。Apple Vision 本地识别，无遥测。",
+    "url": "https://blackkcold.github.io/snapocr/",
+    "downloadUrl": "https://github.com/blackkcold/snapocr/releases/latest",
+    "license": "https://github.com/blackkcold/snapocr/blob/main/LICENSE",
+    "inLanguage": ["zh-Hans", "en", "ja", "ko"],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "SnapGlass Contributors",
+      "url": "https://github.com/blackkcold/snapocr"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">跳到主要内容</a>
+
+  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" focusable="false">
+    <symbol id="icon-github" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.17c-3.2.7-3.88-1.36-3.88-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.41-5.25 5.69.41.35.78 1.05.78 2.12v3.14c0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"/>
+    </symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/>
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m5 12 4.5 4.5L19 7"/>
+    </symbol>
+    <symbol id="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12h14m0 0-5-5m5 5-5 5"/>
+    </symbol>
+    <symbol id="icon-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4.5 8.5h3l1.4-2h6.2l1.4 2h3a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1Z"/>
+      <circle cx="12" cy="14" r="4"/>
+    </symbol>
+    <symbol id="icon-shelf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="5" width="7" height="14" rx="2"/>
+      <rect x="14" y="5" width="7" height="9" rx="2"/>
+      <path d="M14 18h7"/>
+    </symbol>
+    <symbol id="icon-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 6V4h14v2M12 4v16M8 20h8"/>
+    </symbol>
+    <symbol id="icon-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m12 3 1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3Z"/>
+      <path d="M19 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/>
+    </symbol>
+    <symbol id="icon-barcode" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+      <path d="M4 5v14M7.5 5v14M11 5v14M14.5 5v14M18 5v14M20.5 5v14"/>
+    </symbol>
+    <symbol id="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m9 4 6 6M14 5l5 5-2.8.9-4.3 4.3-.9 2.8-5-5 2.8-.9 4.3-4.3L14 5Z"/>
+      <path d="m8 16-4 4"/>
+    </symbol>
+    <symbol id="icon-record" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8"/>
+      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4.5" y="10" width="15" height="10.5" rx="2"/>
+      <path d="M8 10V7.5a4 4 0 0 1 8 0V10"/>
+      <path d="M12 14v2.5"/>
+    </symbol>
+    <symbol id="icon-window" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2"/>
+      <path d="M3 9h18M7 6.5h.01M10 6.5h.01"/>
+    </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2"/>
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>
+    </symbol>
+    <symbol id="icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20h9"/>
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+    </symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 3h7l5 5v13H6z"/>
+      <path d="M13 3v5h5"/>
+    </symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3 20 6v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3Z"/>
+      <path d="m9 12 2 2 4-4"/>
+    </symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>
+    </symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/>
+    </symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 4h6v6M20 4l-9 9"/>
+      <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/>
+    </symbol>
+  </svg>
+
+  <header class="nav" id="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="./" aria-label="SnapGlass 首页">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4.2"/>
+            <path d="M12 3.5v2.1M12 18.4v2.1M3.5 12h2.1M18.4 12h2.1M5.9 5.9l1.5 1.5M16.6 16.6l1.5 1.5M18.1 5.9l-1.5 1.5M7.4 16.6l-1.5 1.5"/>
+          </svg>
+        </span>
+        <span>SnapGlass</span>
+      </a>
+
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#workflow">工作流</a>
+        <a href="#features">功能</a>
+        <a href="#download">下载</a>
+        <a href="#faq">常见问题</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a class="ghost-button" href="https://github.com/blackkcold/snapocr" target="_blank" rel="noopener">
+          <svg width="16" height="16" aria-hidden="true"><use href="#icon-github"/></svg>
+          GitHub
+        </a>
+        <button class="icon-button" id="theme-toggle" type="button" aria-label="切换深色模式" data-label-dark="切换到浅色模式" data-label-light="切换到深色模式">
+          <svg class="theme-sun" aria-hidden="true"><use href="#icon-sun"/></svg>
+          <svg class="theme-moon" aria-hidden="true"><use href="#icon-moon"/></svg>
+        </button>
+        <a class="lang-switch" href="en/" hreflang="en" lang="en">EN</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="dot"></span>macOS 13+ · Universal · MIT</span>
+          <h1>截图之后，<br><span class="gradient-text">不用再找文件。</span></h1>
+          <p class="hero-lead">SnapGlass 把截图、滚动长图、OCR、条码、录屏与录音放进一条工作流。识别在本机完成，没有遥测，也没有后台上传。</p>
+
+          <div class="hero-cta">
+            <a class="primary-button" href="https://github.com/blackkcold/snapocr/releases/latest">
+              <svg aria-hidden="true"><use href="#icon-download"/></svg>
+              下载最新版
+            </a>
+            <a class="secondary-button" href="https://github.com/blackkcold/snapocr" target="_blank" rel="noopener">
+              <svg aria-hidden="true"><use href="#icon-github"/></svg>
+              查看 GitHub
+            </a>
+          </div>
+
+          <div class="hero-meta">
+            <span>v1.7.2</span><span class="sep"></span>
+            <span>16.6 MB</span><span class="sep"></span>
+            <span>Apple Silicon / Intel</span><span class="sep"></span>
+            <span>无遥测</span>
+          </div>
+          <p class="hero-note">首次打开需在「系统设置 → 隐私与安全性」中允许运行。</p>
+        </div>
+
+        <div class="hero-visual">
+          <div class="shelf-stage">
+            <div class="shelf">
+              <div class="shelf-handle"></div>
+              <div class="shelf-cards" aria-hidden="true">
+                <div class="shot shot-a"></div>
+                <div class="shot shot-b is-dragging"></div>
+                <div class="shot shot-c"></div>
+              </div>
+            </div>
+
+            <div class="action-bar" aria-label="选区动作栏示例">
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-copy"/></svg><span>复制图片</span><kbd>↵</kbd></span>
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-barcode"/></svg><span>识别条码</span><kbd>S</kbd></span>
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-edit"/></svg><span>编辑截图</span><kbd>E</kbd></span>
+              <span class="action-item"><svg aria-hidden="true"><use href="#icon-pin"/></svg><span>置顶图片</span><kbd>⌘P</kbd></span>
+            </div>
+
+            <svg class="drag-cursor" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M5 3l14 8-6 1.4L10 19 5 3Z"/>
+            </svg>
+          </div>
+          <p class="visual-caption">截图架 + 选区动作栏 · 拖出即成为系统文件</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="container">
+      <div class="trust">
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>离线 OCR</strong>Apple Vision 在本机识别</div>
+        </div>
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>无遥测</strong>不联网也能完整使用</div>
+        </div>
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>AES-256-GCM</strong>历史记录本地加密</div>
+        </div>
+        <div class="trust-item">
+          <svg aria-hidden="true"><use href="#icon-check"/></svg>
+          <div><strong>MIT 开源</strong>代码与数据路径可审计</div>
+        </div>
+      </div>
+    </div>
+
+    <section class="section" id="workflow">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">工作流</p>
+          <h2>截图只是开始。<br>接下来才是重点。</h2>
+          <p>系统截图把图片放在桌面，SnapGlass 把它放进下一步：挂上架、识别、标注，或者直接拖进正在用的窗口。</p>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <span class="step-number">1</span>
+            <h3>截下来</h3>
+            <p>区域、窗口、全屏、所有显示器或滚动长图。松开鼠标，动作栏就在选区旁边。</p>
+          </div>
+          <div class="step">
+            <span class="step-number">2</span>
+            <h3>挂上架</h3>
+            <p>最近几张截图按顺序挂在屏幕边缘。拖动排序，键盘选图，跨屏跟随，空闲时收成细把手。</p>
+          </div>
+          <div class="step">
+            <span class="step-number">3</span>
+            <h3>拖出去</h3>
+            <p>把卡片拖出架体，它就是一个真实文件。落进 Finder、浏览器上传区、微信、飞书或 Slack。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">功能</p>
+          <h2>该有的都有，<br>不该有的没有。</h2>
+          <p>没有账号，没有云同步，没有订阅。每一个功能都围绕“截完这张图之后要做什么”设计。</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-camera"/></svg></div>
+            <h3>截图与滚动截图</h3>
+            <p>区域、自由圈选、窗口、全屏、所有显示器；滚动长图逐帧采集并拼接。基于 ScreenCaptureKit，支持混合缩放与 Retina 像素。</p>
+            <span class="mini-tag">PNG / JPEG · 1x / 2x</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-shelf"/></svg></div>
+            <h3>截图架</h3>
+            <p>最近截图挂在屏幕边缘，拖动排序，拖出即文件。支持键盘模式、跨屏跟随、卡片数量与透明度调整。</p>
+            <span class="mini-tag">拖出即文件</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-text"/></svg></div>
+            <h3>OCR 与智能动作</h3>
+            <p>Apple Vision 本地识别，超大图自动分块。识别到验证码、链接或邮箱时，直接给出复制、打开或发邮件。</p>
+            <span class="mini-tag">完全离线</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-sparkles"/></svg></div>
+            <h3>标注与分享外观</h3>
+            <p>8 种标注工具，完整撤销重做。背景、留白、圆角、投影、描边在画布上实时预览，复制出去就能发。</p>
+            <span class="mini-tag">v1.7 分享外观</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-barcode"/></svg></div>
+            <h3>条码与二维码</h3>
+            <p>QR、Code128、EAN、PDF417、Aztec、DataMatrix。动作栏按 S 直接识别，R 重截动画码，结果一键复制或打开。</p>
+            <span class="mini-tag">不进编辑器</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-pin"/></svg></div>
+            <h3>置顶</h3>
+            <p>⌘P 把选区钉在屏幕上。拖动、缩放、调透明度，右键复制图片或文字；置顶内容不会进入录屏或后续截图。</p>
+            <span class="mini-tag">10%–800%</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-record"/></svg></div>
+            <h3>录屏与录音</h3>
+            <p>显示器、窗口或区域；系统声音、麦克风或两者。原子发布、10 秒 checkpoint、59 分钟分段，界面卡死也会自动保存。</p>
+            <span class="mini-tag">MP4 / M4A</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-lock"/></svg></div>
+            <h3>历史与隐私</h3>
+            <p>历史记录 AES-256-GCM 本地加密，密钥只在本机。完整 OCR 文字默认不保存；导出时支持脱敏。</p>
+            <span class="mini-tag">无遥测</span>
+          </article>
+
+          <article class="feature">
+            <div class="feature-icon"><svg aria-hidden="true"><use href="#icon-window"/></svg></div>
+            <h3>原生与四语言</h3>
+            <p>SwiftUI 原生界面，macOS 26 自动启用 Liquid Glass，低版本自动降级。简体中文、English、日本語、한국어。</p>
+            <span class="mini-tag">Universal</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="interface">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">界面</p>
+          <h2>真实的 macOS 交互，<br>不套壳。</h2>
+          <p>动作栏出现在选区旁边，OCR 结果直接给出下一步。下面是中文界面实拍。</p>
+        </div>
+
+        <div class="gallery-grid">
+          <figure class="shot-card">
+            <img src="assets/images/action-bar.png" alt="SnapGlass 选区动作栏：复制图片、识别条码、编辑截图、置顶图片" width="1090" height="120" loading="lazy">
+            <figcaption><strong>选区动作栏</strong><span>松手之后，四个去向</span></figcaption>
+          </figure>
+          <figure class="shot-card">
+            <img src="assets/images/ocr-actions.png" alt="SnapGlass OCR 识别到验证码后直接显示复制验证码按钮" width="1090" height="120" loading="lazy">
+            <figcaption><strong>OCR 智能动作</strong><span>验证码直接复制</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="new-band">
+          <div>
+            <p class="kicker">v1.7</p>
+            <h2>这次更新，<br>把“差一点”补上。</h2>
+            <p>分享外观从“能看”变成“能直接发”；录制从“能录”变成“卡住也能保存”。</p>
+          </div>
+          <div class="new-list">
+            <div class="new-item">
+              <span class="badge">1.7.0</span>
+              <div>
+                <h3>编辑器的分享外观</h3>
+                <p>背景模板、留白、圆角、投影、描边实时预览；复制时可选分享图或原图。</p>
+              </div>
+            </div>
+            <div class="new-item">
+              <span class="badge">1.7.2</span>
+              <div>
+                <h3>录制稳定性收尾</h3>
+                <p>倒计时卡住、HUD 残留、系统音频短尾导致整段无法发布、首秒卡死都已修复；新增存活看门狗。</p>
+              </div>
+            </div>
+            <div class="new-item">
+              <span class="badge">1.7</span>
+              <div>
+                <h3>四语言界面</h3>
+                <p>简体中文、English、日本語、한국어。界面跟随系统语言。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="download">
+      <div class="container">
+        <div class="download-card">
+          <div>
+            <p class="kicker" style="color:#8ec5ff">下载</p>
+            <h2>把截图工作流<br>装进 Mac。</h2>
+            <p>SnapGlass v1.7.2 · Universal · 16.6 MB。最低 macOS 13.0。首次打开需在「系统设置 → 隐私与安全性」中允许运行。</p>
+            <div class="download-note">固定自签名证书 · Sparkle 原地更新 · SHA-256 校验文件随 Release 提供 · MIT 许可</div>
+          </div>
+          <div class="download-actions">
+            <a class="primary-button" href="https://github.com/blackkcold/snapocr/releases/latest">
+              <svg aria-hidden="true"><use href="#icon-download"/></svg>
+              下载 DMG
+            </a>
+            <div class="download-links">
+              <a href="https://github.com/blackkcold/snapocr/releases/download/v1.7.2/SnapGlass-v1.7.2.dmg.sha256" target="_blank" rel="noopener">SHA-256</a>
+              <a href="https://github.com/blackkcold/snapocr/releases/latest/download/appcast.xml" target="_blank" rel="noopener">appcast</a>
+              <a href="https://github.com/blackkcold/snapocr/blob/main/CHANGELOG.md" target="_blank" rel="noopener">更新日志</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section faq" id="faq">
+      <div class="container">
+        <div class="section-head">
+          <p class="kicker">常见问题</p>
+          <h2>装之前，<br>你可能想知道。</h2>
+        </div>
+
+        <details>
+          <summary>首次打开提示「无法验证开发者」怎么办？</summary>
+          <p>打开「系统设置 → 隐私与安全性」，在安全性区域点「仍要打开」，然后再次确认。SnapGlass 没有 Apple Developer ID，这是自签名应用的正常首次流程；固定证书让后续自动更新不再重复授权。</p>
+        </details>
+
+        <details>
+          <summary>需要哪些系统权限？</summary>
+          <p>「屏幕录制」用于截图、滚动截图、录屏与系统声音；「麦克风」仅在选择麦克风作为录音来源时需要。拒绝某一项只会禁用对应功能。</p>
+        </details>
+
+        <details>
+          <summary>截图或文字会被上传吗？</summary>
+          <p>不会。截图由 ScreenCaptureKit 在本机捕获，OCR 使用 Apple Vision 本地框架，条码使用本地 Vision barcode。没有遥测，没有后台上传。只有你主动检查更新、主动下载 Tesseract 语言包，或明确开启自动检查更新（每天最多一次）时才会联网。</p>
+        </details>
+
+        <details>
+          <summary>支持 Intel Mac 和哪些语言？</summary>
+          <p>Release 提供 Universal 二进制（arm64 + x86_64），最低 macOS 13.0。界面支持简体中文、English、日本語、한국어，并跟随系统语言。</p>
+        </details>
+
+        <details>
+          <summary>历史记录和录屏文件存在哪里？</summary>
+          <p>截图与 OCR 文本在 <code>~/Library/Application Support/SnapGlass/History/v2/</code>，使用 AES-256-GCM 加密；缩略图未加密。录屏 / 录音成品在你选择的录制目录中，未加密。详见 <a href="https://github.com/blackkcold/snapocr/blob/main/Docs/PRIVACY.md" target="_blank" rel="noopener">隐私声明</a>。</p>
+        </details>
+
+        <details>
+          <summary>录屏没有声音？</summary>
+          <p>先确认录制来源是显示器、窗口或区域，并开启了系统音频；系统音频需要「屏幕录制」权限。若系统音频启动失败，SnapGlass 会继续录视频，并在保存后提示「系统音频未能录制，视频已保存」，不会让整段录制作废。</p>
+        </details>
+
+        <details>
+          <summary>和系统截图怎么选？</summary>
+          <p>只需要「截完即复制」时，系统截图足够。需要截图架取用、滚动长图、识别后直接办事、分享外观或录屏录音时，用 SnapGlass。两者可以共存，快捷键不冲突。</p>
+        </details>
+
+        <details>
+          <summary>如何彻底卸载？</summary>
+          <p>退出 SnapGlass，把应用拖进废纸篓；如需删除本地数据，再删除 <code>~/Library/Application Support/SnapGlass/</code>、<code>~/Library/Preferences/com.snapglass.app.plist</code> 与 <code>~/Library/Logs/SnapGlass/</code>。录屏 / 录音成品在你选择的录制目录中，需要单独删除。</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="./">
+            <span class="logo-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <circle cx="12" cy="12" r="4.2"/>
+                <path d="M12 3.5v2.1M12 18.4v2.1M3.5 12h2.1M18.4 12h2.1M5.9 5.9l1.5 1.5M16.6 16.6l1.5 1.5M18.1 5.9l-1.5 1.5M7.4 16.6l-1.5 1.5"/>
+              </svg>
+            </span>
+            <span>SnapGlass</span>
+          </a>
+          <p>离线优先的 macOS 截图、OCR、录屏与录音工具。开源、无遥测、数据留在本机。</p>
+        </div>
+
+        <nav class="footer-links" aria-label="页脚导航">
+          <a href="https://github.com/blackkcold/snapocr" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/blackkcold/snapocr/releases" target="_blank" rel="noopener">Releases</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/CHANGELOG.md" target="_blank" rel="noopener">更新日志</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/Docs/PRIVACY.md" target="_blank" rel="noopener">隐私</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/Docs/SECURITY.md" target="_blank" rel="noopener">安全</a>
+          <a href="https://github.com/blackkcold/snapocr/blob/main/LICENSE" target="_blank" rel="noopener">MIT 许可</a>
+        </nav>
+      </div>
+
+      <div class="footer-bottom">
+        <span>© 2026 SnapGlass Contributors · MIT License</span>
+        <span>Made with SwiftUI · 与 Apple 无隶属关系</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/app.js" defer></script>
+</body>
+</html>
