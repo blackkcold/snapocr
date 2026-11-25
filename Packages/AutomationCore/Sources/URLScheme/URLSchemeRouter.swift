@@ -9,6 +9,11 @@ public struct URLRouteResult: Sendable {
     /// 截图后是否自动执行 OCR（仅 capture 命令时有效）
     public let ocrAfterCapture: Bool
 
+    /// Creates a routing result.
+    ///
+    /// - Parameters:
+    ///   - command: The command parsed from the URL.
+    ///   - ocrAfterCapture: Whether to OCR the screenshot; only `capture` URLs set it.
     public init(command: AutomationCommand, ocrAfterCapture: Bool = false) {
         self.command = command
         self.ocrAfterCapture = ocrAfterCapture
@@ -32,6 +37,7 @@ public struct URLRouteResult: Sendable {
 public struct URLSchemeRouter: Sendable {
     private let scheme = "snapglass"
 
+    /// Creates a router for URLs that use the `snapglass://` scheme.
     public init() {}
 
     // MARK: - 路由分发
