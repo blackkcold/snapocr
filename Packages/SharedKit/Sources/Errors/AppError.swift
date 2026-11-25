@@ -71,6 +71,7 @@ public enum AppError: LocalizedError, Sendable {
 
     // MARK: - LocalizedError
 
+    /// Localized, user-facing message for each error case, including any associated detail.
     public var errorDescription: String? {
         switch self {
         case .notImplemented(let feature):
@@ -116,6 +117,7 @@ public enum AppError: LocalizedError, Sendable {
         }
     }
 
+    /// Localized hint telling the user how to recover from each error case.
     public var recoverySuggestion: String? {
         switch self {
         case .notImplemented:

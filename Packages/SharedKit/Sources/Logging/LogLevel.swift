@@ -9,6 +9,7 @@ public enum LogLevel: String, Sendable, Comparable {
     /// 错误，功能可能出现异常
     case error
 
+    /// Compares severities in the order `debug` < `info` < `warning` < `error`.
     public static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
         let order: [LogLevel: Int] = [.debug: 0, .info: 1, .warning: 2, .error: 3]
         return order[lhs, default: 0] < order[rhs, default: 0]

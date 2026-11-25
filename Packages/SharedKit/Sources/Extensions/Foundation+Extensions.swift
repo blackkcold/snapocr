@@ -20,17 +20,30 @@ extension Data {
 
 // MARK: - UserDefaults 扩展
 
-/// 属性包装器，简化 UserDefaults 读写
+/// Property wrapper that reads and writes a value in `UserDefaults.standard`.
+///
+/// Reading returns the stored value when present and the declared default otherwise, so a wrapper
+/// can be used as a plain property without a separate lookup.
 @propertyWrapper
 public struct UserDefault<T: Sendable>: Sendable {
+    /// `UserDefaults` key the wrapper reads and writes.
     public let key: String
+    /// Value returned while the key has no stored object.
     public let defaultValue: T
 
+    /// Creates a wrapper for `key` that falls back to `defaultValue`.
+    ///
+    /// - Parameters:
+    ///   - key: The `UserDefaults` key to read and write.
+    ///   - defaultValue: The value returned while the key is unset.
     public init(_ key: String, defaultValue: T) {
         self.key = key
         self.defaultValue = defaultValue
     }
 
+    /// The stored value, or `defaultValue` while the key is unset.
+    ///
+    /// Assigning writes the new value to `UserDefaults.standard`.
     public var wrappedValue: T {
         get {
             UserDefaults.standard.object(forKey: key) as? T ?? defaultValue
