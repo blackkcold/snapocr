@@ -9,13 +9,17 @@ SwiftUI macOS 应用，最低部署 macOS 13，使用 Swift 6 和 Swift Testing�
 ## Commands
 
 ```bash
-# 格式化
-swift-format lint -p Packages/OCRCore/Sources/OCRPipeline.swift --configuration .swift-format
+# 首次克隆后一次性设置（git blame ignore、格式器版本校验、生成工程）
+scripts/setup-dev.sh
+
+# 格式化（与 CI 同一工具链；版本契约见 .swift-format-version）
+xcrun swift-format lint -p Packages/OCRCore/Sources/OCRPipeline.swift --configuration .swift-format
+bash scripts/check-swift-format-version.sh
 
 # Lint
-swiftlint lint --config .swiftlint.yml
+swiftlint lint --strict --config .swiftlint.yml
 
-# 让 git blame 跳过纯格式化提交（一次性）
+# 让 git blame 跳过纯格式化提交（setup-dev.sh 已包含，可单独重跑）
 git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 # 生成工程
@@ -46,7 +50,8 @@ scripts/agent-test.sh scripts/agent-scenarios/audio-smoke.json
 
 ## Code Style
 
-- 遵循 `.swift-format`（格式）和 `.swiftlint.yml`（质量）配置
+- 遵循 `.swift-format`（格式）和 `.swiftlint.yml`（质量）配置；两者是唯一事实来源，文档不复制配置内容
+- 格式化必须用 `xcrun swift-format`（工具链版本由 `.swift-format-version` 固定），不要依赖 Homebrew 的 `swift-format`
 - 所有 `public` API 必须有 DocC 注释（`///`）
 - ViewModel 使用 `@MainActor` 隔离 UI 状态
 - 后台工作使用 Swift concurrency（`async/await`, `Task`, `actor`）

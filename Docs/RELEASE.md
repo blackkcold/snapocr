@@ -179,6 +179,7 @@ plutil -extract SGBuildTimestamp raw release/exp-v1.4.3-*/SnapGlass.app/Contents
    - 生成签名 `appcast.xml`，并用 App 内置公钥验证 DMG 的 EdDSA 签名
    - 创建 GitHub Release 并上传产物
 6. CI 同时生成并上传固定名称的 `SnapGlass-update.json`，供 1.4.x 客户端过渡使用
+7. 更新仓库 Social Preview 并校验（见下节）
 
 ### 方式二：本地构建 + 手动上传
 
@@ -187,6 +188,29 @@ plutil -extract SGBuildTimestamp raw release/exp-v1.4.3-*/SnapGlass.app/Contents
 3. 打包 `.dmg`：`DMGBUILD_PYTHON=.build/dmg-tools/bin/python bash scripts/package-dmg.sh --app release/vX.Y.Z/SnapGlass.app --version X.Y.Z --output-dir release/vX.Y.Z`
 4. 打 tag 并推送
 5. `gh release create vX.Y.Z release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg release/vX.Y.Z/SnapGlass-vX.Y.Z.dmg.sha256 --title "vX.Y.Z" --notes-file <release-note.md>`
+6. 更新仓库 Social Preview 并校验（见下节）
+
+### 仓库 Social Preview（发版后）
+
+GitHub 仓库卡片使用专用社交卡片 `Docs/images/social-preview.png`（1280×640）；站点 Open Graph 使用 `site/assets/og.png`（1200×630）。两者设计同源但文件不同，任一素材更新后都要分别重新上传/部署。GitHub 未提供 Social Preview 上传 API，因此这是发版清单里的人工步骤。
+
+1. **素材**：`Docs/images/social-preview.png`（1280×640）。仓库卡片是独立设置，不会随 `site/assets/og.png` 自动更新。
+2. **上传**：仓库 → Settings → Social preview → Edit → 选择 `Docs/images/social-preview.png` → Save。
+3. **校验**（约 1 分钟内生效）：
+
+   ```bash
+   # 1) 卡片图应指向自定义预览（repository-images.githubusercontent.com），而不是默认卡片
+   curl -s -H "Accept: text/html" https://github.com/blackkcold/snapocr \
+     | grep -o 'og:image" content="[^"]*"'
+
+   # 2) 下载该图并核对：仓库卡片应为 1280×640
+   curl -sL "<上一步输出的 URL>" -o /tmp/social-preview.png
+   sips -g pixelWidth -g pixelHeight /tmp/social-preview.png
+   ```
+
+4. **站点 OG 单独校验**：`site/index.html` / `site/en/index.html` 的 `og:image` 指向
+   `https://blackkcold.github.io/snapocr/assets/og.png`（1200×630）。仓库卡片与站点 OG 可以共用设计，
+   但不是同一个文件，必须分别更新和校验。
 
 ---
 
@@ -232,4 +256,4 @@ App 检查更新的流程（不调用受匿名 IP 配额限制的 GitHub REST AP
 
 ---
 
-*最后更新: 2026-11-18*
+*最后更新: 2026-11-25*

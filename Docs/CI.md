@@ -19,8 +19,15 @@
 
 ### lint
 - 安装 SwiftLint
-- 运行 `swift-format lint --recursive .`
+- 校验 `swift-format` 版本：`xcrun swift-format --version` 必须命中 `.swift-format-version`，
+  否则 job 失败并提示升级 runner 或改用已验证等价的构建（`scripts/check-swift-format-version.sh`）
+- 运行 `xcrun swift-format lint --recursive .`
 - 运行 `swiftlint lint --strict`
+
+`swift-format` 不再由 Homebrew 安装：runner 镜像自带的 Xcode 工具链就是本地使用的同一二进制，
+版本不符时失败而不是静默重排。`swift-format lint` 目前只报告警告、退出码为 0，
+存量 698 条 DocC 警告（`AllPublicDeclarationsHaveDocumentation` / `ValidateDocumentationComments`）
+留待单独重构；CI 失败与否由退出码与 SwiftLint 决定。
 
 ### build
 - `xcodegen generate`
@@ -98,13 +105,19 @@ shasum -a 256 SnapGlass-vX.Y.Z.dmg
 | lint / build / unit-test | `macos-latest` | GitHub 托管的 macOS runner |
 | release | `macos-latest` | GitHub 托管 |
 
+`macos-latest` 当前解析到 `macos-26-arm64`（Xcode 26.6）。镜像升级会同时改变工具链里的 `swift-format`，
+届时 lint job 会因版本不符而失败——这是预期行为：先确认新版输出差异，再一次全量格式化并更新
+`.swift-format-version`，不要直接放宽校验。若镜像不再提供该 Xcode 版本，可用 Homebrew 的等价构建：
+`brew install swift-format` + `SNAPGLASS_SWIFT_FORMAT_BIN="$(brew --prefix)/bin/swift-format"`。
+
 ---
 
 ## 本地复现 CI
 
 ```bash
-# 等效 lint
-swift-format lint --recursive . --configuration .swift-format
+# 等效 lint（先确认格式器版本，再跑两条 lint）
+bash scripts/check-swift-format-version.sh
+xcrun swift-format lint --recursive . --configuration .swift-format
 swiftlint lint --strict --config .swiftlint.yml
 
 # 等效 build
@@ -119,4 +132,4 @@ xcodebuild -project SnapGlass.xcodeproj -scheme SnapGlass -configuration Release
 
 ---
 
-*最后更新: 2026-09-03*
+*最后更新: 2026-11-25*
