@@ -145,6 +145,8 @@ public enum PreferenceKeys {
     public static let colorHistoryEnabled = "history_colorHistoryEnabled"
     /// Maximum number of colors kept in the color history.
     public static let colorHistoryMaxItems = "history_colorHistoryMaxItems"
+    /// Whether the unified History library is enabled.
+    public static let libraryUnifiedEnabled = "library_unified_enabled"
 
     /// Whether developer-only settings and diagnostics are visible.
     public static let developerMode = "dev_devMode"
@@ -277,6 +279,8 @@ public enum PreferenceDefaults {
     public static let colorHistoryEnabled = true
     /// Keep up to 100 colors in the color history by default.
     public static let colorHistoryMaxItems = 100
+    /// Whether the unified History library is enabled by default.
+    public static let libraryUnifiedEnabled = true
 
     /// Hide developer settings by default.
     public static let developerMode = false

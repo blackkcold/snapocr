@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-PACKAGES=(SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore AutomationCore)
+PACKAGES=(SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore LibraryCore AutomationCore)
 ERRORS=0
 
 for pkg in "${PACKAGES[@]}"; do
@@ -67,9 +67,17 @@ if command -v xcodebuild >/dev/null 2>&1; then
     done
 fi
 
-# Static checks that protect against regressions the compiler cannot see. The
-# format gate holds the Phase 2 ratcheting budget, so it fails when a new
-# diagnostic appears (or when a batch leaves diagnostics behind).
+echo ""
+echo "=== Library CLI contract tests ==="
+if bash scripts/test-library-cli.sh; then
+    echo "  ✅ SnapGlassLibraryCLI"
+else
+    echo "  ❌ SnapGlassLibraryCLI"
+    ERRORS=$((ERRORS + 1))
+fi
+
+# Static checks that protect against regressions the compiler cannot see.
+# The format budget is 0 after the Phase 2 cleanup, so any diagnostic fails.
 echo ""
 echo "=== Static checks ==="
 if bash scripts/check-swift-format.sh; then

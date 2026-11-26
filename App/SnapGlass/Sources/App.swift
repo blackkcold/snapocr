@@ -138,15 +138,23 @@ private struct SnapGlassMainScene: Scene {
         }
 
         Window("History", id: "history") {
-            HistoryView()
-                .navigationTitle(Text("History"))
-                .environmentObject(viewModel)
-                // 历史窗口自己的 toast 在底部；截图级提示放顶部，两者不重叠。
-                .toast(message: $viewModel.toastMessage, edge: .top)
-                .environment(\.locale, locale)
-                .preferredColorScheme(preferredColorScheme)
-                .background(AppWindowRegistrationView(id: "history", appearanceMode: appearanceMode))
+            Group {
+                if LibraryFeature.isEnabled {
+                    LibraryView()
+                } else {
+                    HistoryView()
+                }
+            }
+            .navigationTitle(Text("History"))
+            .environmentObject(viewModel)
+            // 历史窗口自己的 toast 在底部；截图级提示放顶部，两者不重叠。
+            .toast(message: $viewModel.toastMessage, edge: .top)
+            .environment(\.locale, locale)
+            .preferredColorScheme(preferredColorScheme)
+            .background(AppWindowRegistrationView(id: "history", appearanceMode: appearanceMode))
         }
+        .defaultSize(width: 1_040, height: 720)
+        .windowResizability(.contentMinSize)
 
         Window("Recordings", id: AppWindowPresenter.recordingsWindowID) {
             RecordingsWindow()
