@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-26
+
+> 统一历史资料库：截图、音频、视频、颜色与未完成录制终于在同一处收拢。
+
 ### Added
 - 统一历史资料库：截图、音频、视频、颜色与未完成录制共用侧边栏、时间线、网格/列表、搜索、筛选、排序和检查器。
 - `LibraryCore`：录制元数据、扫描快照、缩略图、删除、批量导出、保留策略、手动归组投影、跨会话合并和统一媒体解析。
@@ -664,7 +668,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/blackkcold/snapocr/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/blackkcold/snapocr/compare/v1.7.0...v1.7.2
 [1.7.0]: https://github.com/blackkcold/snapocr/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/blackkcold/snapocr/compare/v1.6.0...v1.6.1

@@ -80,11 +80,12 @@
 
 ## 这次更新了什么
 
-### v1.7 · 分享外观，录制更稳
+### v1.8 · 一个资料库，装下所有素材
 
-- **编辑器的「分享外观」**：背景模板、留白、圆角、投影、描边都能调；画布实时预览，复制时可选「分享图」或「原图」。窗口截图继续使用圆角浮窗。
-- **录屏稳定性收尾**：修复倒计时卡住、HUD 面板残留、带系统音频时整段无法发布、首秒卡死等问题；新增界面存活看门狗，主线程停响应时会自动停止并保存。
-- **四语言界面**：简体中文、English、日本語、한국어。
+- **统一历史资料库**：截图、录音、录屏、取色历史和未完成录制进同一个窗口——侧边栏分类、时间线与网格切换、搜索、筛选、排序，右侧检查器看元数据。
+- **录制真正可管理**：标签与备注、同类型跨会话合并导出、Live 录制条、保留策略与存储面板、空格 Quick Look、直接拖到 Finder 或聊天窗口。
+- **持久的「最近删除」**：删除不再只发生在内存里。移到废纸篓后可以恢复，也可以直接永久删除，30 天后自动清理。
+- **无界面 `snapglass-library`**：扫描、导出、合并、删除、自检与基准全部可在不启动 App 的情况下运行，每次都必须指定隔离根目录。
 
 完整修复列表见 [CHANGELOG](CHANGELOG.md)。
 
@@ -257,13 +258,13 @@
 
 | 文件 | 用途 |
 |------|------|
-| `SnapGlass-vX.Y.Z.dmg` | 安装包（Universal：Apple Silicon + Intel，约 16.6 MB） |
+| `SnapGlass-vX.Y.Z.dmg` | 安装包（Universal：Apple Silicon + Intel，约 20.2 MB） |
 | `SnapGlass-vX.Y.Z.dmg.sha256` | SHA-256 校验文件 |
 | `appcast.xml` | Sparkle 自动更新源，应用自行读取，无需手动下载 |
 
 ```bash
 # 校验下载的 DMG
-shasum -a 256 -c SnapGlass-v1.7.2.dmg.sha256
+shasum -a 256 -c SnapGlass-v1.8.0.dmg.sha256
 ```
 
 > [!WARNING]
@@ -384,7 +385,7 @@ brew install xcodegen
 xcodegen generate
 
 # 构建 Release 产物（用固定证书签名）
-./scripts/build.sh --version 1.7.2 --sign
+./scripts/build.sh --version 1.8.0 --sign
 
 # 只做本地调试构建（ad-hoc，无法自动更新）
 ./scripts/build.sh --no-sign

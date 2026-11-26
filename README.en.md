@@ -78,13 +78,14 @@ The system screenshot gives you an image. SnapGlass gives you a finished workflo
 
 ---
 
-## What's new in v1.7
+## What's new in v1.8
 
-### Share appearance, steadier recording
+### One library for everything you capture
 
-- **Share appearance in the editor**: background templates, padding, corner radius, shadow, and stroke; live canvas preview; copy as a share-ready image or the original.
-- **Recording stability**: fixed a stuck countdown, leftover HUD panels, unreadable recordings when system audio ended a few milliseconds early, and a first-second freeze. Watchdogs now stop and save when the UI stops responding.
-- **Four languages**: Simplified Chinese, English, Japanese, Korean.
+- **A unified History library**: screenshots, audio, screen recordings, colour history and unfinished recordings in one window — sidebar categories, timeline and grid views, search, filters, sorting, and an inspector for metadata.
+- **Recordings you can actually manage**: tags and notes, merging sessions of the same media type, a live recording banner, retention and storage panels, Space Quick Look, and dragging straight out to Finder or a chat window.
+- **A Recent Deleted that survives relaunch**: deletion is no longer memory-only. Move to Trash, restore, or delete permanently, with automatic cleanup after 30 days.
+- **`snapglass-library`, a headless CLI**: scan, export, merge, delete, selftest and benchmarks all run without launching the app, and every run requires an explicit isolated root.
 
 See the [CHANGELOG](CHANGELOG.md) for the full list.
 
@@ -256,13 +257,13 @@ Get the latest build from [Releases](https://github.com/blackkcold/snapocr/relea
 
 | File | Purpose |
 |------|---------|
-| `SnapGlass-vX.Y.Z.dmg` | Installer (Universal: Apple Silicon + Intel, about 16.6 MB) |
+| `SnapGlass-vX.Y.Z.dmg` | Installer (Universal: Apple Silicon + Intel, about 20.2 MB) |
 | `SnapGlass-vX.Y.Z.dmg.sha256` | SHA-256 checksum |
 | `appcast.xml` | Sparkle update feed; the app reads it automatically |
 
 ```bash
 # Verify the downloaded DMG
-shasum -a 256 -c SnapGlass-v1.7.2.dmg.sha256
+shasum -a 256 -c SnapGlass-v1.8.0.dmg.sha256
 ```
 
 > [!WARNING]
@@ -383,7 +384,7 @@ brew install xcodegen swiftlint
 xcodegen generate
 
 # Release build signed with the fixed certificate
-./scripts/build.sh --version 1.7.2 --sign
+./scripts/build.sh --version 1.8.0 --sign
 
 # Local debug build (ad-hoc, no auto-update)
 ./scripts/build.sh --no-sign
