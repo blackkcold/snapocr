@@ -34,7 +34,7 @@ fi
 
 # App-level tests (Swift Testing) live in their own Xcode schemes and were
 # previously unreachable from this script.
-APP_SCHEMES=(EditorInteractionTests WindowLifecycleStateTests BarcodePanelTests)
+APP_SCHEMES=(EditorInteractionTests WindowLifecycleStateTests BarcodePanelTests MenuBarCoachPanelTests)
 if command -v xcodebuild >/dev/null 2>&1; then
     if [ ! -d "$PROJECT_ROOT/SnapGlass.xcodeproj" ]; then
         echo "=== Generating Xcode project ==="

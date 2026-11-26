@@ -1,0 +1,75 @@
+import AppKit
+import SharedKit
+import SwiftUI
+import Testing
+
+/// The menu-bar coach panel's sizing contract.
+///
+/// The panel used to grow from 288×96 to 288×888 the moment it was ordered
+/// front: `NSHostingView`'s default `sizingOptions` publishes the content's
+/// minimum size as `contentMinSize`, and that minimum is computed at a proposed
+/// width of zero, where every `.fixedSize(horizontal: false, vertical: true)`
+/// text reports one line per character. These tests lock down three things:
+/// content cannot resize the window, the tutorial row is not clipped, and the
+/// panel stays inside the usable area.
+@Suite("Menu bar coach panel")
+@MainActor
+struct MenuBarCoachPanelTests {
+    @Test func contentNeverResizesThePanel() throws {
+        let panel = MenuBarCoachPanel(content: .location, layout: .full)
+        let hosting = try #require(panel.contentView as? NSHostingView<MenuBarCoachView>)
+
+        #expect(hosting.sizingOptions.isEmpty)
+        #expect(panel.contentMinSize == .zero)
+        #expect(panel.frame.size == CoachLayout.full.designSize)
+    }
+
+    @Test func orderingFrontDoesNotStretchThePanel() {
+        // The regression itself: with the default `sizingOptions`, ordering the
+        // panel front stretched it from 288×96 to 288×888 in the same call.
+        let design = CoachLayout.full.designSize
+        let panel = MenuBarCoachPanel(content: .location, layout: .full)
+        panel.setFrame(CGRect(origin: CGPoint(x: 40, y: 40), size: design), display: false)
+        panel.orderFrontRegardless()
+        defer { panel.orderOut(nil) }
+
+        #expect(panel.frame.size == design)
+    }
+
+    @Test func tutorialFormIsTallerThanLocationForm() {
+        let available = CGSize(width: 1512, height: 957)
+        let location = MenuBarCoachPanel.size(
+            for: .full,
+            content: .location,
+            available: available
+        )
+        let tutorial = MenuBarCoachPanel.size(
+            for: .full,
+            content: .tutorial(shortcut: "⌘⇧1"),
+            available: available
+        )
+
+        // The location form is the design height; the tutorial adds a "Try it"
+        // row, and a fixed height used to clip it.
+        #expect(location.height == CoachLayout.full.designSize.height)
+        #expect(tutorial.height > location.height)
+        #expect(tutorial.height <= available.height)
+    }
+
+    @Test func sizeNeverExceedsASmallScreen() {
+        // 1280×800 with the menu bar removed: the broken panel asked for 888 and
+        // hung below the bottom edge.
+        let available = CGSize(width: 1280, height: 715)
+        let size = MenuBarCoachPanel.size(
+            for: .full,
+            content: .tutorial(shortcut: "⌘⇧1"),
+            available: available
+        )
+        let ceiling =
+            available.height - CoachLayoutResolver.panelTopInset
+            - CoachLayoutResolver.panelBottomInset
+
+        #expect(size.width <= available.width)
+        #expect(size.height <= ceiling)
+    }
+}

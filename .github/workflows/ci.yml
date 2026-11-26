@@ -140,6 +140,9 @@ jobs:
           xcodebuild test -project SnapGlass.xcodeproj -scheme WindowLifecycleStateTests \
             -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          xcodebuild test -project SnapGlass.xcodeproj -scheme MenuBarCoachPanelTests \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
   # The required check keeps the name `unit-test`, because branch protection is
   # keyed on it and a matrix renames its jobs to `packages (SharedKit)` etc.

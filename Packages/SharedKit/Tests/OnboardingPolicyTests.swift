@@ -218,6 +218,101 @@ struct CoachLayoutResolverTests {
         #expect(CoachLayoutResolver.resolve(width: 200, height: 60) == .announcement)
     }
 
+    @Test func panelSizeNeverExceedsASmallScreen() {
+        // A 1280×800 display with the menu bar taken out leaves 775pt. The broken
+        // panel asked for 888 and hung 121pt below the bottom edge.
+        let size = CoachLayoutResolver.panelSize(
+            design: CoachLayout.full.designSize,
+            measuredHeight: 888,
+            available: CGSize(width: 1280, height: 775)
+        )
+        #expect(size.width == 288)
+        #expect(size.height == 755)
+    }
+
+    @Test func panelSizeShrinksTheCardToANarrowVisibleFrame() {
+        // A 300pt-wide usable area resolves to `.centeredCard`, whose design width
+        // is 320: without clamping it used to start 10pt off the left edge.
+        let size = CoachLayoutResolver.panelSize(
+            design: CoachLayout.centeredCard.designSize,
+            measuredHeight: 96,
+            available: CGSize(width: 300, height: 100)
+        )
+        #expect(size.width == 276)
+        #expect(size.height == 80)
+    }
+
+    @Test func panelSizeGrowsForTheTutorialRow() {
+        // The tutorial variant adds a "Try it" button; a fixed 96pt clipped it.
+        let size = CoachLayoutResolver.panelSize(
+            design: CoachLayout.full.designSize,
+            measuredHeight: 120,
+            available: CGSize(width: 1512, height: 957)
+        )
+        #expect(size == CGSize(width: 288, height: 120))
+    }
+
+    @Test func panelSizeKeepsTheDesignFloorWhenContentIsShorter() {
+        // The zh-Hans subtitle needs only 78pt; the floor keeps the panel from
+        // visibly changing height between content variants.
+        let size = CoachLayoutResolver.panelSize(
+            design: CoachLayout.full.designSize,
+            measuredHeight: 78,
+            available: CGSize(width: 1512, height: 957)
+        )
+        #expect(size.height == 96)
+    }
+
+    @Test func panelSizeRejectsDegenerateInput() {
+        let zeroSpace = CoachLayoutResolver.panelSize(
+            design: CoachLayout.full.designSize,
+            measuredHeight: 96,
+            available: .zero
+        )
+        #expect(zeroSpace == CGSize(width: 1, height: 1))
+        let noMeasurement = CoachLayoutResolver.panelSize(
+            design: CoachLayout.full.designSize,
+            measuredHeight: .nan,
+            available: CGSize(width: 1512, height: 957)
+        )
+        #expect(noMeasurement == CGSize(width: 1, height: 1))
+    }
+
+    @Test func rightAlignedFrameStaysInsideANarrowVisibleFrame() {
+        let visible = CGRect(x: 0, y: 60, width: 300, height: 100)
+        let frame = CoachLayoutResolver.panelFrame(
+            layout: .full,
+            size: CGSize(width: 276, height: 80),
+            visible: visible
+        )
+        #expect(frame.minX >= visible.minX)
+        #expect(frame.maxX <= visible.maxX)
+        #expect(frame.maxY <= visible.maxY)
+        #expect(frame.minY >= visible.minY)
+    }
+
+    @Test func centeredCardNeverStartsAtANegativeX() {
+        // Regression: a 320pt card in a 300pt visible area started at x = -10.
+        let visible = CGRect(x: 0, y: 60, width: 300, height: 100)
+        let frame = CoachLayoutResolver.panelFrame(
+            layout: .centeredCard,
+            size: CGSize(width: 276, height: 80),
+            visible: visible
+        )
+        #expect(frame.minX == 12)
+        #expect(frame.minY >= visible.minY)
+    }
+
+    @Test func announcementHasNoFrame() {
+        let visible = CGRect(x: 0, y: 60, width: 1512, height: 900)
+        let frame = CoachLayoutResolver.panelFrame(
+            layout: .announcement,
+            size: CGSize(width: 1, height: 1),
+            visible: visible
+        )
+        #expect(frame == .zero)
+    }
+
     @Test func cardMinimumStaysBelowCompactMinimum() {
         // The card is the fallback when the compact strip does not fit. If its
         // minimum were larger, L2 would be unreachable and a small screen would

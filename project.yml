@@ -243,6 +243,28 @@ targets:
         PRODUCT_NAME: BarcodePanelTests
         PRODUCT_MODULE_NAME: BarcodePanelTests
         GENERATE_INFOPLIST_FILE: YES
+  # The coach panel owns its own size; this target pins that contract so the
+  # panel cannot be stretched by its content again.
+  MenuBarCoachPanelTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: App/SnapGlass/Tests/MenuBarCoach
+      - path: App/SnapGlass/Sources/Windows/MenuBarCoachPanel.swift
+      - path: App/SnapGlass/Sources/Windows/GuidePages/WelcomeGuideGraphics.swift
+      - path: App/SnapGlass/Sources/DesignSystem
+      - path: App/SnapGlass/Sources/AppLocalization.swift
+      - path: App/SnapGlass/Sources/AppLanguage.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingStorage.swift
+      - path: App/SnapGlass/Sources/Recording/RecordingWindowExclusionRegistry.swift
+    dependencies:
+      - package: SharedKit
+      - package: CaptureCore
+    settings:
+      base:
+        PRODUCT_NAME: MenuBarCoachPanelTests
+        PRODUCT_MODULE_NAME: MenuBarCoachPanelTests
+        GENERATE_INFOPLIST_FILE: YES
   SnapGlassLibraryCLI:
     type: tool
     platform: macOS
