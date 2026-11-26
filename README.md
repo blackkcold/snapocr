@@ -258,7 +258,7 @@
 
 | 文件 | 用途 |
 |------|------|
-| `SnapGlass-vX.Y.Z.dmg` | 安装包（Universal：Apple Silicon + Intel，约 20.2 MB） |
+| `SnapGlass-vX.Y.Z.dmg` | 安装包（Universal：Apple Silicon + Intel，约 18.5 MB） |
 | `SnapGlass-vX.Y.Z.dmg.sha256` | SHA-256 校验文件 |
 | `appcast.xml` | Sparkle 自动更新源，应用自行读取，无需手动下载 |
 
