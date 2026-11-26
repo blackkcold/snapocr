@@ -248,7 +248,7 @@
 "Screen Recording" = "画面収録";
 "Screen Recording permission allows screenshots, OCR, and screen recording." = "「画面収録」権限でスクリーンショット、OCR、画面収録を利用できます。";
 "Screen Capture Access Unavailable" = "画面キャプチャを利用できません";
-"Screen capture access is currently unavailable. Check System Settings or try again later." = "現在、画面キャプチャを利用できません。システム設定を確認するか、後でもう一度お試しください。";
+"Screen capture access is unavailable. Allow SnapGlass to record the screen in System Settings, then quit and reopen SnapGlass." = "画面キャプチャを利用できません。システム設定で SnapGlass に画面収録を許可してから、SnapGlass を終了して再度開いてください。";
 "Open System Settings" = "システム設定を開く";
 "Remind Later" = "後で通知";
 "Requesting permission..." = "権限をリクエスト中…";

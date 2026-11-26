@@ -248,7 +248,7 @@
 "Screen Recording" = "Screen Recording";
 "Screen Recording permission allows screenshots, OCR, and screen recording." = "Screen Recording permission allows screenshots, OCR, and screen recording.";
 "Screen Capture Access Unavailable" = "Screen Capture Access Unavailable";
-"Screen capture access is currently unavailable. Check System Settings or try again later." = "Screen capture access is currently unavailable. Check System Settings or try again later.";
+"Screen capture access is unavailable. Allow SnapGlass to record the screen in System Settings, then quit and reopen SnapGlass." = "Screen capture access is unavailable. Allow SnapGlass to record the screen in System Settings, then quit and reopen SnapGlass.";
 "Open System Settings" = "Open System Settings";
 "Remind Later" = "Remind Later";
 "Requesting permission..." = "Requesting permission...";

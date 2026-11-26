@@ -165,10 +165,15 @@ struct PermissionGuideView: View {
             Label("Screen Capture Access Unavailable", systemImage: "xmark.circle.fill")
                 .foregroundColor(.red)
 
-            Text("Screen capture access is currently unavailable. Check System Settings or try again later.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            Text(
+                LocalizedStringKey(
+                    "Screen capture access is unavailable. Allow SnapGlass to record the screen "
+                        + "in System Settings, then quit and reopen SnapGlass."
+                )
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
 
             Button(
                 action: {
