@@ -226,13 +226,17 @@ jobs:
         run: |
           # Used only as a delta baseline. The previous tag and build come from the
           # published release, not from local git tags: the checkout may not carry
-          # them, and a silently empty baseline would ship a full-package-only feed.
-          # Skip this tag itself so a workflow re-run does not diff against its own
-          # release.
-          PREV_TAG="$(gh release list --limit 5 --json tagName \
-            --jq "[.[] | select(.tagName != \"$TAG\")][0].tagName" 2>/dev/null || true)"
+          # them. Resolving it must be loud — an empty baseline silently ships a feed
+          # with no delta, which is the exact failure this job exists to prevent.
+          RELEASES="$(gh release list --limit 20 --json tagName --jq '.[].tagName')"
+          OTHERS="$(printf '%s\n' "$RELEASES" | grep -vx "$TAG" || true)"
+          PREV_TAG="$(printf '%s\n' "$OTHERS" | head -1)"
           echo "PREV_TAG=$PREV_TAG" >> "$GITHUB_ENV"
           if [ -z "$PREV_TAG" ]; then
+            if [ -n "$RELEASES" ]; then
+              echo "Only $TAG is published (workflow re-run): skipping the delta baseline."
+              exit 0
+            fi
             echo "No previous release: first release, shipping a full package only."
             exit 0
           fi
