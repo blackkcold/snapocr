@@ -257,7 +257,7 @@ Get the latest build from [Releases](https://github.com/blackkcold/snapocr/relea
 
 | File | Purpose |
 |------|---------|
-| `SnapGlass-vX.Y.Z.dmg` | Installer (Universal: Apple Silicon + Intel, about 20.2 MB) |
+| `SnapGlass-vX.Y.Z.dmg` | Installer (Universal: Apple Silicon + Intel, about 18.5 MB) |
 | `SnapGlass-vX.Y.Z.dmg.sha256` | SHA-256 checksum |
 | `appcast.xml` | Sparkle update feed; the app reads it automatically |
 
