@@ -1223,5 +1223,5 @@
 "Always" = "常に";
 "Never" = "表示しない";
 "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running." = "SnapGlass はメニューバーアプリです。Dock アイコンが起動中の最も分かりやすい目印になります。";
-""While windows are open" keeps the Dock clean until a window appears." = "「ウインドウを開いている間」なら、必要なときだけ Dock に表示されます。";
+"The Dock icon can follow windows, stay, or never appear." = "Dock アイコンはウインドウに合わせる、常に表示する、表示しないから選べます。";
 "your shortcut" = "設定したショートカット";

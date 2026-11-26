@@ -234,8 +234,11 @@ struct GeneralPreferencesView: View {
                 text: "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running."
             )
 
+            // Quote-free key on purpose: a catalog key containing a double quote
+            // broke the whole table's parse once, which silently sent every language
+            // back to English.
             PreferencesCardCaption(
-                text: "\"While windows are open\" keeps the Dock clean until a window appears."
+                text: "The Dock icon can follow windows, stay, or never appear."
             )
         }
     }

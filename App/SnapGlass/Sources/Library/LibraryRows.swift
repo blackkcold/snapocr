@@ -334,69 +334,22 @@ private struct LibraryGridCard: View {
 
     var body: some View {
         let selected = viewModel.selectedItemID == item.id
-        let checked = viewModel.selection.contains(item.id)
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                cover
-                    .frame(height: 108)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-
-                HStack(spacing: 4) {
-                    Text(typeLabel(item.mediaKind))
-                        .font(DS.Typography.caption)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(typeColor(item.mediaKind), in: Capsule())
-                    if let group = item.recordingGroup, group.isGrouped {
-                        Text("\(group.segmentCount) segments")
-                            .font(DS.Typography.caption)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.48), in: Capsule())
-                    }
-                    Spacer()
-                    Button {
-                        Task { await viewModel.toggleFavourite(item) }
-                    } label: {
-                        Image(systemName: item.isFavourite ? "star.fill" : "star")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(item.isFavourite ? Color.orange : Color.white)
-                            .frame(width: 22, height: 22)
-                            .background(.black.opacity(0.32), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(6)
-
-                if let duration = item.duration {
-                    Text(libraryDuration(duration))
-                        .font(DS.Typography.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.black.opacity(0.48), in: Capsule())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                        .padding(6)
-                }
-
-                if viewModel.isSelecting {
-                    Button {
-                        viewModel.toggleSelection(item.id)
-                    } label: {
-                        Image(systemName: checked ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(checked ? Color.accentColor : .white)
-                            .background(.black.opacity(0.28), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(6)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                }
-            }
+            // Badges are overlays on the cover, not ZStack children.
+            //
+            // As ZStack children they needed `maxHeight: .infinity` to sit at the
+            // bottom edge, which made the card's *ideal* height unbounded. A
+            // LazyVGrid sizes each row from its items, so that ambiguity let a row
+            // collapse to the cover and clip the caption block — the cramped,
+            // overlapping grid users saw. Anchoring to the cover keeps the card
+            // height exactly 108 + text.
+            cover
+                .frame(height: 108)
+                .frame(maxWidth: .infinity)
+                .clipped()
+                .overlay(alignment: .topLeading) { badgeRow }
+                .overlay(alignment: .bottomTrailing) { durationBadge }
+                .overlay(alignment: .bottomLeading) { selectionToggle }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(itemTitle(item))
@@ -478,6 +431,71 @@ private struct LibraryGridCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(libraryAccessibilityLabel(item)))
+    }
+
+    /// Media-type badge, group count, and the favourite toggle across the top edge.
+    private var badgeRow: some View {
+        HStack(spacing: 4) {
+            Text(typeLabel(item.mediaKind))
+                .font(DS.Typography.caption)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(typeColor(item.mediaKind), in: Capsule())
+            if let group = item.recordingGroup, group.isGrouped {
+                Text("\(group.segmentCount) segments")
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.black.opacity(0.48), in: Capsule())
+            }
+            Spacer(minLength: 0)
+            Button {
+                Task { await viewModel.toggleFavourite(item) }
+            } label: {
+                Image(systemName: item.isFavourite ? "star.fill" : "star")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(item.isFavourite ? Color.orange : Color.white)
+                    .frame(width: 22, height: 22)
+                    .background(.black.opacity(0.32), in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(6)
+    }
+
+    /// Duration pill in the bottom-trailing corner, when the item has one.
+    @ViewBuilder
+    private var durationBadge: some View {
+        if let duration = item.duration {
+            Text(libraryDuration(duration))
+                .font(DS.Typography.caption)
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.black.opacity(0.48), in: Capsule())
+                .padding(6)
+        }
+    }
+
+    /// Selection checkbox in the bottom-leading corner, only while selecting.
+    @ViewBuilder
+    private var selectionToggle: some View {
+        if viewModel.isSelecting {
+            let checked = viewModel.selection.contains(item.id)
+            Button {
+                viewModel.toggleSelection(item.id)
+            } label: {
+                Image(systemName: checked ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(checked ? Color.accentColor : .white)
+                    .background(.black.opacity(0.28), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(6)
+        }
     }
 
     @ViewBuilder

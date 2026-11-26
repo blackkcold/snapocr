@@ -1223,5 +1223,5 @@
 "Always" = "始终";
 "Never" = "从不";
 "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running." = "SnapGlass 是菜单栏应用，程序坞图标是它正在运行最直观的迹象。";
-""While windows are open" keeps the Dock clean until a window appears." = "「有窗口打开时」只在需要时占用程序坞，平时保持干净。";
+"The Dock icon can follow windows, stay, or never appear." = "程序坞图标可以跟随窗口、始终显示，或从不出现。";
 "your shortcut" = "你设置的快捷键";

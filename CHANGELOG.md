@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-11-26
+
+> 修掉 v1.9.0 的两处回归，以及资料库网格一直存在的布局缺陷。
+
+### Fixed
+- 非英文界面全部回退为英文：本地化表里的一个键含未转义的双引号，整张 `.strings` 因此无法解析，所有查表都回退到开发语言。该键已改写为不含引号的文案。
+- 关闭资料库窗口时崩溃（`EXC_BREAKPOINT` / `dispatch_assert_queue_fail`）：文件监听的 GCD 回调在 `@MainActor` 方法内创建，继承了主线程隔离，取消时触发 Swift 6 执行器断言。回调改为在 `nonisolated` 上下文创建。
+- 资料库网格标题行被裁、行间拥挤：卡片用 `maxHeight: .infinity` 的 ZStack 子视图定位徽标，理想高度因此无界，`LazyVGrid` 的行高退化成封面高度。徽标改为封面图层叠加，卡片高度回到「封面 + 文字」。
+
+### Changed
+- `check-localization.sh` 新增 `plutil` 语法门槛：本地化表无法解析时直接失败。此前只比对键集，而一个坏行在四种语言里坏得一模一样，比对永远通过。
+- 新增 `LibraryRootWatcher` 启停回归测试；把回调换回旧写法时，该测试会让测试进程崩溃。
+- 仓库社交卡片不再烘焙版本号，只在设计变更时需要重新导出与上传。
+
 ## [1.9.0] - 2026-11-26
 
 > 首启体验：双击之后不再是「什么都没发生」。
@@ -691,7 +705,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/blackkcold/snapocr/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/blackkcold/snapocr/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/blackkcold/snapocr/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/blackkcold/snapocr/compare/v1.7.0...v1.7.2
