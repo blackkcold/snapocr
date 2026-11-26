@@ -194,7 +194,7 @@ plutil -extract SGBuildTimestamp raw release/exp-v1.4.3-*/SnapGlass.app/Contents
 
 GitHub 仓库卡片使用专用社交卡片 `Docs/images/social-preview.png`（1280×640）；站点 Open Graph 使用 `site/assets/og.png`（1200×630）。两者设计同源但文件不同，任一素材更新后都要分别重新上传/部署。GitHub 未提供 Social Preview 上传 API，因此这是发版清单里的人工步骤。
 
-1. **素材**：`Docs/images/social-preview.png`（1280×640）。仓库卡片是独立设置，不会随 `site/assets/og.png` 自动更新。图片内烘焙了当前版本号；版本号变更也视为素材变更，必须重新导出并上传。
+1. **素材**：`Docs/images/social-preview.png`（1280×640）。仓库卡片是独立设置，不会随 `site/assets/og.png` 自动更新。图片刻意**不烘焙版本号**：版本号变更是发版常态，而卡片只承担仓库的第一印象；把版本写进图里，等于每次发版都多一步人工重传，还会在忘传时留下一个过期的版本号。只有设计变更（文案、配色、版式）才需要重新导出并上传。
 2. **上传**：仓库 → Settings → Social preview → Edit → 选择 `Docs/images/social-preview.png` → Save。
 3. **校验**（约 1 分钟内生效）：
 
