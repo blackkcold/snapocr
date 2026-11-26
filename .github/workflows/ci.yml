@@ -1,5 +1,12 @@
 name: CI
 
+# A `push` to main runs only `build` (see the `if` on each job below).
+# Branch protection requires the PR branch to be up to date before merging
+# (strict), and merges are squash-only with linear history, so main's tree is
+# identical to the PR head that already ran every job. Re-running the matrix
+# on main duplicated roughly 30 runner-minutes per merge and queued 13 jobs
+# against the same pool. The one job kept is a post-merge smoke: it catches a
+# main that does not compile.
 on:
   push:
     branches: [main]
@@ -8,6 +15,8 @@ on:
 
 jobs:
   lint:
+    # PR-only; see the header comment.
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +69,7 @@ jobs:
   # core; the packages do not depend on each other.
   packages:
     name: packages (${{ matrix.package }})
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     strategy:
       # Every shard must report, otherwise the aggregating `unit-test` job cannot
@@ -100,6 +110,7 @@ jobs:
   # sitting at the end of the old loop added ~1.6 minutes of pure serial wait.
   library-cli:
     name: library-cli
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +125,7 @@ jobs:
   # 本地全绿（32 tests / 7.7s），但无头 runner 上偶发在 EditorHistoryTests 挂起。
   app-tests:
     name: app-tests
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     continue-on-error: true
     steps:
@@ -137,7 +149,7 @@ jobs:
     name: unit-test
     runs-on: macos-latest
     needs: [packages, library-cli]
-    if: always()
+    if: always() && github.event_name == 'pull_request'
     steps:
       - name: Require every shard to pass
         run: |
