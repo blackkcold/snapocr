@@ -17,6 +17,10 @@ jobs:
           # Full history so the build-number check can read the previous tag,
           # and so release notes can compute the previous tag.
           fetch-depth: 0
+          # A checkout without tags has no `refs/tags/<tag>`: the annotated tag's
+          # subject is what carries the release subtitle, and `git describe` cannot
+          # find the previous tag either. Both failed silently for v1.9.0 and v1.9.1.
+          fetch-tags: true
 
       - name: Extract version from tag
         id: version
@@ -109,16 +113,45 @@ jobs:
 
           version, tag, notes_file = sys.argv[1], sys.argv[2], sys.argv[3]
 
-          # 副标题取自 annotated tag 注释首行（格式 "vX.Y.Z — 描述"），去掉版本前缀
-          try:
-              subject = subprocess.check_output(
-                  ["git", "for-each-ref", f"refs/tags/{tag}",
-                   "--format=%(contents:subject)"],
-                  text=True, stderr=subprocess.DEVNULL).strip()
-              m = re.match(r"^v?[\d.]+\s*[—-]\s*(.+)$", subject)
-              subtitle = m.group(1).strip() if m else ""
-          except Exception:
-              subtitle = ""
+          # 副标题优先取 annotated tag 注释首行（格式 "vX.Y.Z — 描述"）。
+          # 但检出里没有 tag 时 `for-each-ref refs/tags/<tag>` 输出为空，副标题会
+          # 静默消失 —— v1.9.0 与 v1.9.1 的 Release 正文就是这样少了副标题，而构建
+          # 与所有校验都不报错。回退到 CHANGELOG 里该版本标题下的引用行，并把最终
+          # 来源打印出来，下一次能直接看出取的是哪一条。
+          def tag_subtitle():
+              try:
+                  subject = subprocess.check_output(
+                      ["git", "for-each-ref", f"refs/tags/{tag}",
+                       "--format=%(contents:subject)"],
+                      text=True, stderr=subprocess.DEVNULL).strip()
+              except Exception:
+                  return ""
+              match = re.match(r"^v?[\d.]+\s*[—-]\s*(.+)$", subject)
+              return match.group(1).strip() if match else ""
+
+          def changelog_subtitle():
+              with open("CHANGELOG.md", encoding="utf-8") as handle:
+                  lines_in_changelog = handle.read().splitlines()
+              in_section = False
+              for line in lines_in_changelog:
+                  if re.match(r"^## \[\s*" + re.escape(version) + r"\s*\]", line):
+                      in_section = True
+                      continue
+                  if not in_section:
+                      continue
+                  if line.startswith("## ["):
+                      break
+                  stripped = line.strip()
+                  if stripped.startswith(">"):
+                      return stripped.lstrip(">").strip()
+              return ""
+
+          subtitle = tag_subtitle()
+          subtitle_source = "tag"
+          if not subtitle:
+              subtitle = changelog_subtitle()
+              subtitle_source = "changelog" if subtitle else "none"
+          print(f"release subtitle source={subtitle_source} value={subtitle!r}")
 
           # 分组标题映射：CHANGELOG 的 ### X → emoji 分组标题
           section_map = {
