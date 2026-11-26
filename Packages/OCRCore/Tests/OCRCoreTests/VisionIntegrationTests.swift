@@ -63,6 +63,52 @@ struct VisionIntegrationTests {
         #expect(result.observations.contains { $0.text.uppercased().contains("BOTTOM") && $0.boundingBox.minY < 0.3 })
     }
 
+    /// 中文锚点必须真的被识别出来，行数不作为判据。
+    ///
+    /// `.fast` 级别不支持中日韩：这里同时锁住默认 `.accurate` 与默认中文优先。
+    @Test func accurateRecognitionReadsChineseAnchors() async throws {
+        let image = try makeTextImage(
+            width: 1600,
+            height: 900,
+            entries: [
+                ("截图工具栏", CGPoint(x: 80, y: 520)),
+                ("识别文字", CGPoint(x: 80, y: 300)),
+            ],
+            fontSize: 96,
+            fontName: "PingFangSC-Regular"
+        )
+        let result = try await OCRPipeline().recognize(
+            image,
+            options: OCROptions(languages: ["zh-Hans", "en-US"], minConfidence: 0.1)
+        )
+
+        #expect(result.text.contains("截图"))
+        #expect(result.text.contains("识别"))
+    }
+
+    /// 4K 画布是 `.accurate` 静默返回 0 条的高发组合。
+    ///
+    /// 这条用锚点命中数断言，确认回退保护之后大画布上的中文仍然可识别。
+    @Test func accurateRecognitionReadsChineseAnchorsOnAFourKCanvas() async throws {
+        let image = try makeTextImage(
+            width: 3840,
+            height: 2160,
+            entries: [
+                ("截图工具栏", CGPoint(x: 120, y: 1400)),
+                ("识别文字", CGPoint(x: 120, y: 900)),
+            ],
+            fontSize: 220,
+            fontName: "PingFangSC-Regular"
+        )
+        let result = try await OCRPipeline().recognize(
+            image,
+            options: OCROptions(languages: ["zh-Hans", "en-US"], minConfidence: 0.1)
+        )
+
+        #expect(result.text.contains("截图"))
+        #expect(result.text.contains("识别"))
+    }
+
     private func makeTextImage(_ text: String) throws -> CGImage {
         try makeTextImage(
             width: 900,
@@ -76,7 +122,8 @@ struct VisionIntegrationTests {
         width: Int,
         height: Int,
         entries: [(String, CGPoint)],
-        fontSize: CGFloat = 72
+        fontSize: CGFloat = 72,
+        fontName: String = "Helvetica-Bold"
     ) throws -> CGImage {
         guard
             let context = CGContext(
@@ -98,7 +145,7 @@ struct VisionIntegrationTests {
             let attributed = NSAttributedString(
                 string: text,
                 attributes: [
-                    .font: CTFontCreateWithName("Helvetica-Bold" as CFString, fontSize, nil),
+                    .font: CTFontCreateWithName(fontName as CFString, fontSize, nil),
                     .foregroundColor: CGColor(gray: 0, alpha: 1),
                 ]
             )

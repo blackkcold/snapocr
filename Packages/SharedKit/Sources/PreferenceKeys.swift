@@ -256,8 +256,13 @@ public enum PreferenceDefaults {
 
     /// Choose the OCR priority language automatically by default.
     public static let ocrLanguagePriority = "auto"
-    /// Enable English, Simplified and Traditional Chinese, Japanese and Korean by default.
-    public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]
+    /// Enable Simplified Chinese first, then English, Traditional Chinese,
+    /// Japanese and Korean by default.
+    ///
+    /// The first enabled language selects the Vision model under `.accurate`;
+    /// putting English first made Chinese screenshots resolve to the Latin
+    /// model. Chinese is the primary audience, so it leads by default.
+    public static let ocrEnabledLanguages = ["zh-Hans", "en", "zh-Hant", "ja", "ko"]
     /// Accept OCR text at 80% confidence or higher by default.
     public static let ocrConfidenceThreshold = 0.8
     /// Use the Vision framework for OCR by default.

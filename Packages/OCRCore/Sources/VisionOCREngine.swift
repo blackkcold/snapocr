@@ -29,6 +29,9 @@ import Vision
 final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
     typealias PlatformImageType = CGImage
 
+    /// 执行一次 Vision 文本请求。测试可注入假实现，验证回退编排。
+    typealias LineRecognizer = (CGImage, [String], OCROptions, OCRRecognitionLevel) async throws -> [OCRLine]
+
     // MARK: - 协议属性
 
     let engineType: OCREngineType = .vision
@@ -52,7 +55,12 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
 
     // MARK: - 初始化
 
-    init() {}
+    /// 单次 Vision 请求的执行器；测试可注入假实现，验证回退编排。
+    private let lineRecognizer: LineRecognizer
+
+    init(lineRecognizer: @escaping LineRecognizer = VisionOCREngine.performVisionRequest) {
+        self.lineRecognizer = lineRecognizer
+    }
 
     // MARK: - 识别
 
@@ -69,7 +77,7 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         // `VNImageRequestHandler.perform` 是同步阻塞调用。直接放在 async 上下文里
         // 会占住 Swift 并发的协作线程；低核机器上同时打开多个编辑器就能把线程池
         // 耗尽，其余异步任务永远拿不到线程（CI 的 app-tests 正是这样挂住的）。
-        let lines = try await Self.recognizeLines(
+        let lines = try await resolvedLines(
             image: image,
             languages: languages,
             options: options
@@ -116,20 +124,57 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         attributes: .concurrent
     )
 
-    /// 在 `recognitionQueue` 上执行 Vision 请求，返回已过滤的文本行。
+    /// 先跑脚本要求的级别，再按策略决定是否需要 `.fast` 安全网。
     ///
-    /// 阻塞的 `perform` 留在这个队列上，协作线程池只负责等待，不会被一次 OCR
-    /// 长期占用。
-    private static func recognizeLines(
+    /// Vision 的 `.accurate` 在「特定内容 × 大画布」组合下会静默返回 0 条，
+    /// 这时用 `.fast` 确认一次，避免把「模型没输出」当成「图上没有文字」。
+    /// `.fast` 只在找回严格更多文字时才替换 `.accurate`，绝不按置信度筛字。
+    private func resolvedLines(
         image: CGImage,
         languages: [String],
         options: OCROptions
+    ) async throws -> [OCRLine] {
+        let primaryLevel = options.recognitionLevel
+        let primary = try await lineRecognizer(image, languages, options, primaryLevel)
+
+        guard
+            primaryLevel == .accurate,
+            VisionRecognitionPolicy.shouldRetryWithFast(
+                lineCount: primary.count,
+                imagePixelCount: image.width * image.height
+            )
+        else {
+            return try Self.validated(primary)
+        }
+
+        try Task.checkCancellation()
+        do {
+            let fallback = try await lineRecognizer(image, languages, options, .fast)
+            if VisionRecognitionPolicy.prefersFastResult(accurate: primary, fast: fallback) {
+                return try Self.validated(fallback)
+            }
+        } catch {
+            // 安全网本身失败时，不能把已经可用的 `.accurate` 结果一起丢掉。
+            if primary.isEmpty { throw error }
+        }
+        return try Self.validated(primary)
+    }
+
+    /// 在 `recognitionQueue` 上执行一次 Vision 请求，返回已过滤的文本行。
+    ///
+    /// 阻塞的 `perform` 留在这个队列上，协作线程池只负责等待，不会被一次 OCR
+    /// 长期占用。
+    private static func performVisionRequest(
+        image: CGImage,
+        languages: [String],
+        options: OCROptions,
+        level: OCRRecognitionLevel
     ) async throws -> [OCRLine] {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[OCRLine], Error>) in
             recognitionQueue.async {
                 let request = VNRecognizeTextRequest()
                 request.recognitionLanguages = languages
-                request.recognitionLevel = options.preserveLayout ? .accurate : .fast
+                request.recognitionLevel = level == .fast ? .fast : .accurate
                 request.usesLanguageCorrection = !options.preserveLayout
 
                 // 布局模式下检测更小尺寸的文本
@@ -149,25 +194,19 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
                     return
                 }
 
-                guard let observations = request.results else {
-                    continuation.resume(
-                        throwing: OCRError.recognitionFailed(reason: "Vision 未返回识别结果")
-                    )
-                    return
-                }
-
-                let lines = Self.mapObservations(observations)
-                guard !lines.isEmpty else {
-                    continuation.resume(
-                        throwing: OCRError.recognitionFailed(
-                            reason: "未识别到任何有效文本（所有候选置信度均低于 0.1）"
-                        )
-                    )
-                    return
-                }
-                continuation.resume(returning: lines)
+                continuation.resume(returning: Self.mapObservations(request.results ?? []))
             }
         }
+    }
+
+    /// 把空结果统一成可识别的「没有文字」错误，供分块路径当作空白块处理。
+    private static func validated(_ lines: [OCRLine]) throws -> [OCRLine] {
+        guard !lines.isEmpty else {
+            throw OCRError.recognitionFailed(
+                reason: "未识别到任何有效文本（所有候选置信度均低于 0.1）"
+            )
+        }
+        return lines
     }
 
     // MARK: - 支持的语言

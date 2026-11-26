@@ -1,5 +1,18 @@
 import Foundation
 
+// MARK: - OCR 识别级别
+
+/// Vision 文本识别的精度级别。
+///
+/// Vision 的 `.fast` 级别不支持中日韩文字：把 `zh-Hans` 排在首位也只会返回
+/// 英文片段。需要识别中日韩时必须使用 `.accurate`。
+public enum OCRRecognitionLevel: String, Sendable, CaseIterable {
+    /// 高精度识别，支持中日韩文字，速度较慢。
+    case accurate
+    /// 快速识别，只支持拉丁文字，速度较快。
+    case fast
+}
+
 // MARK: - OCR 识别选项
 
 /// OCR 识别选项配置
@@ -43,9 +56,14 @@ public struct OCROptions: Sendable {
 
     /// 是否保留原始布局
     ///
-    /// `true` 时使用 `.accurate` 识别级别以更精确地保留文本布局，
-    /// `false` 时使用 `.fast` 级别优先速度。
+    /// `true` 时关闭语言校正并检测更小的文本高度，让文本行顺序和位置更贴近原图。
+    /// 识别级别由 `recognitionLevel` 决定，默认 `.accurate`。
     public let preserveLayout: Bool
+
+    /// Vision 文本识别的精度级别，默认 `.accurate`
+    ///
+    /// `.fast` 不支持中日韩文字，只有显式要求速度时才应使用。
+    public let recognitionLevel: OCRRecognitionLevel
 
     /// 是否自动检测文本中的 URL 链接
     ///
@@ -99,6 +117,7 @@ public struct OCROptions: Sendable {
     ///   - languages: 语言偏好列表，按优先级排序，默认 `["zh-Hans", "en"]`
     ///   - minConfidence: 最低置信度阈值。传 `nil` 时根据语言自动选择最严格阈值。
     ///   - preserveLayout: 是否保留原始布局，默认 `false`
+    ///   - recognitionLevel: Vision 识别级别，默认 `.accurate`（支持中日韩）
     ///   - detectURLs: 是否自动检测 URL，默认 `true`
     ///   - imagePreprocessing: 是否启用图像预处理，默认 `true`
     ///   - engineSelection: OCR 引擎选择，默认 `.vision`
@@ -106,6 +125,7 @@ public struct OCROptions: Sendable {
         languages: [String] = ["zh-Hans", "en"],
         minConfidence: Float? = nil,
         preserveLayout: Bool = false,
+        recognitionLevel: OCRRecognitionLevel = .accurate,
         detectURLs: Bool = true,
         imagePreprocessing: Bool = true,
         engineSelection: OCREngineType = .vision
@@ -118,6 +138,7 @@ public struct OCROptions: Sendable {
             self.minConfidence = languages.map { Self.defaultThreshold(for: $0) }.max() ?? 0.7
         }
         self.preserveLayout = preserveLayout
+        self.recognitionLevel = recognitionLevel
         self.detectURLs = detectURLs
         self.imagePreprocessing = imagePreprocessing
         self.engineSelection = engineSelection
@@ -150,6 +171,7 @@ extension OCROptions {
         languages: ["en"],
         minConfidence: 0.8,
         preserveLayout: false,
+        recognitionLevel: .fast,
         imagePreprocessing: false
     )
 }

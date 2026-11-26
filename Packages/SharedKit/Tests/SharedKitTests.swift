@@ -51,6 +51,13 @@ struct PreferenceKeysTests {
         #expect(PreferenceDefaults.historyMaxItems >= 10)
     }
 
+    @Test func chineseLeadsTheDefaultOCRLanguages() {
+        // `.accurate` 用首位语言选模型；英文排第一会让中文截图落到拉丁模型上。
+        #expect(PreferenceDefaults.ocrLanguagePriority == "auto")
+        #expect(PreferenceDefaults.ocrEnabledLanguages.first == "zh-Hans")
+        #expect(PreferenceDefaults.ocrEnabledLanguages.contains("en"))
+    }
+
     @Test func appearanceModesHaveStablePersistedValues() {
         #expect(AppearanceMode.allCases.map(\.rawValue) == ["system", "light", "dark"])
         for mode in AppearanceMode.allCases {
