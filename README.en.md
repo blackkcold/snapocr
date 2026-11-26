@@ -265,7 +265,7 @@ Get the latest build from [Releases](https://github.com/blackkcold/snapocr/relea
 
 ```bash
 # Verify the downloaded DMG
-shasum -a 256 -c SnapGlass-v1.9.0.dmg.sha256
+shasum -a 256 -c SnapGlass-v1.9.1.dmg.sha256
 ```
 
 > [!WARNING]
@@ -386,7 +386,7 @@ brew install xcodegen swiftlint
 xcodegen generate
 
 # Release build signed with the fixed certificate
-./scripts/build.sh --version 1.9.0 --sign
+./scripts/build.sh --version 1.9.1 --sign
 
 # Local debug build (ad-hoc, no auto-update)
 ./scripts/build.sh --no-sign

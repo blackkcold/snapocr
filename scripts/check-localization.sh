@@ -14,6 +14,22 @@ keys_of() {
     grep -oE '^"[^"]+"' "$1" | sort
 }
 
+# A malformed table loads as nothing, and every lookup then falls back to the
+# development language — the whole app silently renders in English with no build
+# error. The key-parity checks below cannot see this: they compare key *sets*, and
+# a bad line yields an empty key that matches in all four files. Only a real parse
+# catches it, so this runs first and is fatal.
+echo "=== Table syntax (plutil) ==="
+for lang in "${LANGS[@]}"; do
+    file="$RESOURCES/$lang.lproj/Localizable.strings"
+    if ! plutil -lint "$file" >/dev/null 2>&1; then
+        echo "  ❌ $lang: Localizable.strings does not parse"
+        plutil -lint "$file" 2>&1 | sed 's/^/     /'
+        FAILED=1
+    fi
+done
+[ "$FAILED" -eq 0 ] && echo "  ✅ all four tables parse"
+
 echo "=== Duplicate keys (values must be identical) ==="
 for lang in "${LANGS[@]}"; do
     file="$RESOURCES/$lang.lproj/Localizable.strings"

@@ -15,8 +15,8 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "1.9.0"
-    CURRENT_PROJECT_VERSION: "11"
+    MARKETING_VERSION: "1.9.1"
+    CURRENT_PROJECT_VERSION: "12"
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
@@ -212,6 +212,9 @@ targets:
       - path: App/SnapGlass/Sources/Agent/AgentMode.swift
       - path: App/SnapGlass/Sources/Agent/AgentScenario.swift
       - path: App/SnapGlass/Sources/Agent/AgentReport.swift
+      # The watcher's dispatch handlers run on a background queue; the test target
+      # compiles it so a start/stop regression traps in CI rather than in the app.
+      - path: App/SnapGlass/Sources/Library/LibraryRootWatcher.swift
     dependencies:
       - package: SharedKit
       - package: CaptureCore

@@ -266,7 +266,7 @@
 
 ```bash
 # 校验下载的 DMG
-shasum -a 256 -c SnapGlass-v1.9.0.dmg.sha256
+shasum -a 256 -c SnapGlass-v1.9.1.dmg.sha256
 ```
 
 > [!WARNING]
@@ -387,7 +387,7 @@ brew install xcodegen
 xcodegen generate
 
 # 构建 Release 产物（用固定证书签名）
-./scripts/build.sh --version 1.9.0 --sign
+./scripts/build.sh --version 1.9.1 --sign
 
 # 只做本地调试构建（ad-hoc，无法自动更新）
 ./scripts/build.sh --no-sign

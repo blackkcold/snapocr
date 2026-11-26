@@ -53,21 +53,43 @@ final class LibraryRootWatcher: ObservableObject {
             return
         }
 
+        let source = Self.makeSource(
+            descriptor: descriptor,
+            queue: queue,
+            target: self
+        )
+        source.resume()
+        sources.append(source)
+    }
+
+    /// Creates a file-system source whose handlers stay **off** the main actor.
+    ///
+    /// Both handlers are invoked by libdispatch on `queue`, a background queue.
+    /// Created inside a `@MainActor` method they inherit main-actor isolation, and
+    /// Swift 6's executor assertion then traps the process (`dispatch_assert_queue_fail`)
+    /// the moment a source is cancelled — which is what crashed the app when the
+    /// library window closed and its `@StateObject` deallocated. Building the source
+    /// in a `nonisolated` function keeps the closures unisolated, so the main-actor
+    /// hop happens explicitly, inside the handler, where it is safe.
+    private nonisolated static func makeSource(
+        descriptor: Int32,
+        queue: DispatchQueue,
+        target: LibraryRootWatcher
+    ) -> DispatchSourceFileSystemObject {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor,
             eventMask: [.write, .rename, .delete, .extend, .attrib],
             queue: queue
         )
-        source.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.scheduleRefresh()
+        source.setEventHandler { [weak target] in
+            Task { @MainActor in
+                target?.scheduleRefresh()
             }
         }
         source.setCancelHandler {
             close(descriptor)
         }
-        source.resume()
-        sources.append(source)
+        return source
     }
 
     private func scheduleRefresh() {
