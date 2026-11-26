@@ -174,8 +174,11 @@ final class WindowPresentationCoordinator {
     /// the existing two decisions rather than a third code path: with a window open
     /// the question is "promote or refuse" (`.never` refuses inside
     /// `ensureRegularPolicy`), and with no window the question is "demote".
+    ///
+    /// `.always` is promoted even with no visible window: that is what the mode
+    /// promises, and `reevaluateActivationPolicy` returns early for it by design.
     func refreshDockIconPolicy() {
-        if activationController.hasVisibleUserFacingWindow {
+        if dockIconPolicy.mode == .always || activationController.hasVisibleUserFacingWindow {
             _ = ensureRegularPolicy()
         } else {
             reevaluateActivationPolicy()
