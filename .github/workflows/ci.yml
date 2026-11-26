@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          for pkg in SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore AutomationCore; do
+          for pkg in SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore LibraryCore AutomationCore; do
             echo "=== $pkg ==="
             if [ "$pkg" = "OCRCore" ]; then
               # 跳过依赖真实 Vision OCR 的集成测试：无头 CI runner 上 Vision 首次初始化可能挂起。
@@ -79,6 +79,9 @@ jobs:
           done
         timeout-minutes: 25
       - run: brew install xcodegen && xcodegen generate
+      - name: Library CLI contract tests
+        timeout-minutes: 8
+        run: bash scripts/test-library-cli.sh
       # 本地全绿（32 tests / 7.7s），但无头 runner 上偶发在 EditorHistoryTests 挂起。
       # 包测试仍是硬闸门；App scheme 测试先作为非阻断信号，待定位 CI 环境问题。
       - name: App scheme tests

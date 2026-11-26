@@ -257,6 +257,11 @@ final class RecordingSessionController {
     var audioConfiguration: AudioRecordingConfiguration?
     var audioCurrentMode: AudioSourceMode?
     var audioSessionID: UUID?
+    /// Session identity for the most recently saved screen recording.
+    ///
+    /// Screen outcomes carry the session ID only at settlement time, so the HUD
+    /// keeps it here for the "Open Recordings"/"Combine & Export" deep link.
+    var screenSessionID: UUID?
     var audioStartTask: Task<Void, any Error>?
     var audioStopJoinTask: Task<AudioRecordingResult, Never>?
     var audioStopRequested = false

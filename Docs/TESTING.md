@@ -9,8 +9,18 @@
 | Package 测试 | 图像、OCR、标注、历史、录制管线等纯逻辑 | `swift test --package-path Packages/<Name>` | 不需要 App |
 | App Scheme 测试 | 编辑器状态、画布几何、离屏渲染、窗口生命周期、条码面板 | `xcodebuild test -project SnapGlass.xcodeproj -scheme <Scheme> -destination 'platform=macOS'` | 测试进程内，不触碰运行中的 App |
 | 离屏画布渲染 | 真实 `EditableAnnotationCanvasNSView` 绘制、画布与导出对齐、透明棋盘格、描边 | `EditorInteractionTests/CanvasShareRenderTests` | 不启动 App、不需要屏幕/麦克风权限 |
+| CLI 合同 | `snapglass-library` 的 scan/export/merge/delete/selftest/bench/l10n-check，JSON 契约与隔离根 | `bash scripts/test-library-cli.sh` | 不启动 App |
+| 键盘命令矩阵 | `LibraryCommandRouter` 的按键映射与可用性；真实按键投递仍由人工验收 | `swift test --package-path Packages/LibraryCore --filter LibraryCommandRouterTests` | 不启动 App |
+| 基准（nightly） | 1000 截图 / 200 录制会话 / 真实媒体合并、RSS 与预算闸门 | `snapglass-library bench --root <tmp> --assert --json` | 不启动 App、不触碰用户库 |
 | Showcase 图片导出 | 真实 SwiftUI/AppKit 视图离屏托管：截图架、编辑器分享外观、录制 HUD、窗口美化 | `scripts/export-showcase.sh` | DEBUG 独立进程，不截图屏幕 |
 | Agent 场景 | 真实录制/录屏/恢复/卡死路径，独立进程与独立数据根 | `scripts/agent-test.sh <scenario>` | `open -n` 第二实例，不触碰用户库 |
+
+## 自动化边界（CUA）
+
+- **默认拒绝**任何接管电脑的自动化：鼠标/键盘注入、操作其他 App、桌面截图、XCUITest、AppleScript/System Events、未经明确授权的 cua-driver。
+- 允许：CLI、Shell 脚本、隔离根、单元/集成测试、测试进程内的离屏渲染（`ImageRenderer` / `NSHostingView`）。
+- 项目测试永久禁止 GUI 自动化；真实屏幕/麦克风权限、外置盘、长录制、VoiceOver、母语语气、真实窗口材质/FPS 由用户人工验收。
+- 详见 [AUTOMATION_POLICY.md](./AUTOMATION_POLICY.md)。
 
 ## 全量自动化
 

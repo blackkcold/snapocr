@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- 统一历史资料库：截图、音频、视频、颜色与未完成录制共用侧边栏、时间线、网格/列表、搜索、筛选、排序和检查器。
+- `LibraryCore`：录制元数据、扫描快照、缩略图、删除、批量导出、保留策略、手动归组投影、跨会话合并和统一媒体解析。
+- Headless `snapglass-library` CLI：`scan/export/merge/delete/selftest/bench/l10n-check`，支持 `--json` 与隔离 `--root`；`selftest --media` 跑真实 CAF 合并。
+- 截图持久化 Recently Deleted：移到废纸篓、恢复、永久删除、清空与 30 天清理。
+- 录制标签/备注、Live 录制条、保留策略/存储面板、Space Quick Look、拖拽导出、同类型跨会话合并、手动 Group/Ungroup。
+- 截图分页与 Load More、缩略图 30 天/500MB 清理、录制目录 FSEvents 监听。
 - 新增中英双语 GitHub Pages 官网（功能、下载、FAQ 与 SEO）与英文 README。
 - App 的「关于」页新增官网入口，并更新四语言简介文案。
 - 新增 DEBUG-only Showcase 离屏导出器与 `scripts/export-showcase.sh`，生成截图架、分享外观、录制 HUD 与窗口美化的文档图。
@@ -15,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 发版清单新增 GitHub Social Preview 与站点 OG 的分离校验。
 
 ### Changed
+- History 窗口默认使用统一资料库；`SNAPGLASS_LEGACY_HISTORY=1` 可回退旧 History，`library_unified_enabled` 默认开启。
+- 录制导出优先经 `RecordingSessionLedger` + `RecordingPreviewService` 解析媒体；旧路径仅作兼容回退并给出 warning。
+- 屏幕录制 HUD 也携带 sessionID 深链；导出回退 warning、重复根/离线根在资料库中可见。
 - 新增 `scripts/check-swift-format.sh`：以 `--strict` + 诊断预算把 `swift-format` 变成真正的闸门，`.swift-format-budget` 随文档清理逐批下调至 0；CI 与 `scripts/test.sh` 均接入。
 - SwiftLint 固定到 `.swiftlint-version`（0.65.1），CI 改用对应 release 的 portable 构建并由 `scripts/check-swiftlint-version.sh` 校验，避免 `brew install swiftlint` 随 runner 漂移。
 - 公开 API DocC 清零：`swift-format` 诊断 698 → 0（626 条 `AllPublicDeclarationsHaveDocumentation` + 72 条 `ValidateDocumentationComments`），`.swift-format-budget` 锁定 0，CI 与 `scripts/test.sh` 成为零容忍硬闸门。
@@ -26,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 本地 `scripts/test.sh` 对 CaptureCore 串行运行，与 CI 对齐，避免并行音频/写入器抖动。
 
 ### Fixed
+- 修复批量导出/合并的媒体路径依赖文件名猜测的问题。
+- 修复截图批量撤销只在内存、退出即丢的问题。
+- 修复缩略图缓存无限增长与 720px 窄窗检查器挤压问题。
 - 冷启动首次录制的 HUD 首现不再付一次性 SwiftUI/AppKit 初始化成本：启动约 2 秒后用真实控制面板预热并立即释放，新增 `hud-first-use` agent 场景（100ms 闸门）；稳态 300ms 阈值不变。
 - 修复 `check-localization.sh` 在并行运行时共用固定 `/tmp` 文件、互相截断导致误报本地化失败；改用进程替换。
 - 录制直通导出遇到非预期格式时改为 CF 类型校验 + `unsafeDowncast`，不再强转崩溃；权限文案的行长 disable 移到长字面量上。

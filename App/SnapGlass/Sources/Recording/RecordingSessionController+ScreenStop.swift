@@ -354,6 +354,9 @@ extension RecordingSessionController {
     ) async -> Bool {
         switch settlement {
         case let .screen(outcome):
+            if outcome.isSaved {
+                screenSessionID = outcome.sessionID
+            }
             guard outcome.isSaved, let url = outcome.latestPublishedURL else {
                 return await failScreenRecordingStop(outcome, context: context)
             }

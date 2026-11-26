@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "AnnotationCore", targets: ["AnnotationCore"]),
         .library(name: "ScrollCore", targets: ["ScrollCore"]),
         .library(name: "HistoryCore", targets: ["HistoryCore"]),
+        .library(name: "LibraryCore", targets: ["LibraryCore"]),
         .library(name: "AutomationCore", targets: ["AutomationCore"]),
     ],
     dependencies: [
@@ -100,6 +101,17 @@ let package = Package(
             name: "HistoryCore",
             dependencies: ["SharedKit"],
             path: "Packages/HistoryCore/Sources",
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+                .enableUpcomingFeature("ExistentialAny"),
+            ]
+        ),
+
+        // MARK: - LibraryCore
+        .target(
+            name: "LibraryCore",
+            dependencies: ["SharedKit", "CaptureCore", "HistoryCore"],
+            path: "Packages/LibraryCore/Sources",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
                 .enableUpcomingFeature("ExistentialAny"),

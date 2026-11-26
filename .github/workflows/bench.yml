@@ -1,0 +1,47 @@
+name: Library Bench
+
+# Nightly headless benchmark for the unified library. It never drives the GUI:
+# the harness writes fixtures into a temporary root and measures CLI/package
+# code paths only. Budget failures are a signal, not a PR gate.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Build library CLI
+        run: |
+          xcodebuild \
+            -project SnapGlass.xcodeproj \
+            -scheme SnapGlassLibraryCLI \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR="$PWD/.build/library-cli"
+      - name: Benchmark 1000 screenshots / 200 recordings / real media
+        run: |
+          root="$(mktemp -d "${RUNNER_TEMP}/snapglass-bench.XXXXXX")"
+          .build/library-cli/SnapGlassLibraryCLI bench \
+            --root "$root" \
+            --screenshots 1000 \
+            --recordings 200 \
+            --media-count 10 \
+            --assert \
+            --json | tee "$RUNNER_TEMP/library-bench.json"
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-bench
+          path: ${{ runner.temp }}/library-bench.json
+          if-no-files-found: warn
+      - name: Localization consistency
+        run: .build/library-cli/SnapGlassLibraryCLI l10n-check --root "$PWD" --json

@@ -606,8 +606,22 @@ extension RecordingSessionController {
                 onPreview: { [weak self] in self?.playAudioPreview() },
                 onStopPreview: { [weak self] in self?.stopAudioPreview() },
                 onOpenLatest: { [weak self] url in self?.openRecording(url) },
-                onOpenRecordings: { [weak self] in self?.onOpenRecordings?() },
-                onJoinExport: { [weak self] in self?.onOpenRecordings?() }
+                onOpenRecordings: { [weak self] in
+                    guard let self else { return }
+                    LibraryDeepLink.shared.send(
+                        sessionID: self.audioSessionID ?? self.screenSessionID,
+                        action: .select
+                    )
+                    self.onOpenRecordings?()
+                },
+                onJoinExport: { [weak self] in
+                    guard let self else { return }
+                    LibraryDeepLink.shared.send(
+                        sessionID: self.audioSessionID ?? self.screenSessionID,
+                        action: .merge
+                    )
+                    self.onOpenRecordings?()
+                }
             )
         )
     }
