@@ -13,7 +13,7 @@ Checks, in order:
 usage:
   verify-appcast.py APPCAST --version X.Y.Z --build N --asset PATH \
       --prefix https://.../download/vX.Y.Z/ \
-      [--public-key FILE] [--require-signed-feed]
+      [--public-key FILE] [--require-signed-feed] [--require-delta-from BUILD]
 
 Verifying the signature needs the `cryptography` package.
 """
@@ -46,6 +46,12 @@ def main():
         help="base64 EdDSA public key (default: scripts/signing/sparkle_ed25519.pub)",
     )
     parser.add_argument("--require-signed-feed", action="store_true")
+    parser.add_argument(
+        "--require-delta-from",
+        default=None,
+        metavar="BUILD",
+        help="fail unless the item offers a delta from this build",
+    )
     args = parser.parse_args()
 
     text = Path(args.appcast).read_text(encoding="utf-8")
@@ -109,6 +115,35 @@ def main():
             "the enclosure signature does not verify against the app's SUPublicEDKey; "
             "this build would never accept an update"
         )
+
+    # A feed without deltas still works, but every update then downloads the whole
+    # package. When the caller knows a delta was produced, insist on seeing it: a
+    # silently missing delta is invisible in the app and only shows up as slow,
+    # repeated full downloads.
+    if args.require_delta_from:
+        deltas = item.find("sparkle:deltas", namespaces=NS)
+        if deltas is None:
+            fail(
+                "item offers no delta, so every update downloads the full package "
+                f"(expected a delta from build {args.require_delta_from})"
+            )
+        wanted = None
+        for candidate in deltas.findall("enclosure", namespaces=NS):
+            if candidate.get(f"{{{SPARKLE_NS}}}deltaFrom") == args.require_delta_from:
+                wanted = candidate
+                break
+        if wanted is None:
+            offered = [
+                candidate.get(f"{{{SPARKLE_NS}}}deltaFrom")
+                for candidate in deltas.findall("enclosure", namespaces=NS)
+            ]
+            fail(f"no delta from build {args.require_delta_from}; feed offers {offered}")
+
+        delta_url = wanted.get("url", "")
+        if not delta_url.startswith(args.prefix) or not delta_url.endswith(".delta"):
+            fail(f"delta url is {delta_url!r}, expected {args.prefix}*.delta")
+        if not wanted.get(f"{{{SPARKLE_NS}}}edSignature"):
+            fail("delta enclosure is missing sparkle:edSignature")
 
     print(f"ok: v{args.version} (build {args.build}), signed feed and verified package")
 
