@@ -176,8 +176,9 @@ plutil -extract SGBuildTimestamp raw release/exp-v1.4.3-*/SnapGlass.app/Contents
    - 导入签名证书与 EdDSA 私钥，构建并签名 Release
    - 校验签名身份、构建号递增、`CFBundleVersion`
    - 生成 `.dmg` + `.sha256`
-   - 生成签名 `appcast.xml`，并用 App 内置公钥验证 DMG 的 EdDSA 签名
-   - 创建 GitHub Release 并上传产物
+   - 下载上一版 DMG 作为差分基准，生成相对上一版的差分包（`.delta`）
+   - 生成签名 `appcast.xml`（含 `<sparkle:deltas>`），并用 App 内置公钥验证 DMG 的 EdDSA 签名
+   - 创建 GitHub Release 并上传产物（含差分包）
 6. CI 同时生成并上传固定名称的 `SnapGlass-update.json`，供 1.4.x 客户端过渡使用
 7. 更新仓库 Social Preview 并校验（见下节）
 
@@ -214,7 +215,21 @@ GitHub 仓库卡片使用专用社交卡片 `Docs/images/social-preview.png`（1
 
 ---
 
-## Release Note 格式
+## 更新包与差分
+
+**对外文档不记录安装包体积。** README、站点与发布说明都不写 MB 数字：体积随工具链与内嵌资源波动，写死之后每次发版都要重新核对，而用户真正关心的是「这次更新要下多少」——那由差分决定，不由完整包决定。已经写在别处的数字如有残留，直接删掉，不要更新。
+
+**差分是发版的硬契约。** 每次发版都必须产出相对上一版的差分包；只有完整包视为发版失败（首个版本、或上一版资产确实取不到时除外，且必须在报告里写明原因）。
+
+- 差分由 `generate_appcast` 在**同目录存在旧归档**时自动生成，文件名形如 `SnapGlass<新build>-<旧build>.delta`。
+- `scripts/make-appcast.sh` 通过 `--previous-dmg` 接收旧包；不传就不会有差分。
+- appcast 里必须出现 `<sparkle:deltas>`，且 `sparkle:deltaFrom` 等于上一版的 build。`scripts/verify-appcast.py --require-delta-from <build>` 会把这条变成硬校验。
+- 差分包必须作为 Release 资产上传，否则 appcast 里的链接会 404，客户端静默退回完整包。
+
+实测参考：v1.9.0 → v1.9.1 的差分约 1.1 MB，完整包 18.9 MB，约 5.9%。
+
+---
+
 
 本项目使用 **structured-cn**（结构化中文 emoji 分组）格式：
 

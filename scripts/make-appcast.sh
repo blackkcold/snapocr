@@ -8,7 +8,12 @@
 # Usage:
 #   make-appcast.sh --version X.Y.Z --build N --dmg PATH --notes PATH \
 #     --output-dir DIR --download-prefix URL --key-file PATH \
+#     [--previous-dmg PATH ...] [--require-delta-from BUILD] \
 #     [--require-signed-feed]
+#
+# --previous-dmg seeds the archives directory with an older build so that
+# generate_appcast can emit a signed delta against it. Without it the feed only
+# offers the full package, and every update costs a full download.
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -22,6 +27,8 @@ OUTPUT_DIR=""
 DOWNLOAD_PREFIX=""
 KEY_FILE=""
 REQUIRE_SIGNED_FEED=false
+PREVIOUS_DMGS=()
+REQUIRE_DELTA_FROM=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -32,9 +39,11 @@ while [[ $# -gt 0 ]]; do
         --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
         --download-prefix) DOWNLOAD_PREFIX="$2"; shift 2 ;;
         --key-file) KEY_FILE="$2"; shift 2 ;;
+        --previous-dmg) PREVIOUS_DMGS+=("$2"); shift 2 ;;
+        --require-delta-from) REQUIRE_DELTA_FROM="$2"; shift 2 ;;
         --require-signed-feed) REQUIRE_SIGNED_FEED=true; shift ;;
         -h|--help)
-            sed -n '2,13p' "$0"
+            sed -n '2,18p' "$0"
             exit 0
             ;;
         *)
@@ -51,7 +60,7 @@ for required in VERSION BUILD DMG NOTES OUTPUT_DIR DOWNLOAD_PREFIX KEY_FILE; do
     fi
 done
 
-for file in "$DMG" "$NOTES" "$KEY_FILE"; do
+for file in "$DMG" "$NOTES" "$KEY_FILE" ${PREVIOUS_DMGS[@]+"${PREVIOUS_DMGS[@]}"}; do
     [[ -f "$file" ]] || { echo "Missing file: $file" >&2; exit 1; }
 done
 
@@ -90,14 +99,42 @@ DMG_NAME="$(basename "$DMG")"
 ditto "$DMG" "$STAGING/$DMG_NAME"
 cp "$NOTES" "$STAGING/${DMG_NAME%.*}.md"
 
+# Older archives are delta sources, not feed entries: `--maximum-versions 1` keeps
+# a single item in the feed, while generate_appcast diffs the new archive against
+# these to produce `.delta` files. Skipping them means every update ships the full
+# package.
+for previous in ${PREVIOUS_DMGS[@]+"${PREVIOUS_DMGS[@]}"}; do
+    previous_name="$(basename "$previous")"
+    [[ "$previous_name" == "$DMG_NAME" ]] && continue
+    echo "▸ Delta seed: $previous_name"
+    ditto "$previous" "$STAGING/$previous_name"
+done
+
 echo "▸ Generating signed appcast for v$VERSION (build $BUILD)"
 cat "$KEY_FILE" | "$GENERATE_APPCAST" \
     --ed-key-file - \
     --download-url-prefix "$DOWNLOAD_PREFIX" \
     --maximum-versions 1 \
+    --maximum-deltas 1 \
     --embed-release-notes \
     -o "$OUTPUT_DIR/appcast.xml" \
     "$STAGING"
+
+# generate_appcast writes deltas next to the archives. They have to be published
+# alongside the DMG, otherwise the feed links to files that do not exist and
+# clients silently fall back to the full download.
+shopt -s nullglob
+DELTAS=("$STAGING"/*.delta)
+if (( ${#DELTAS[@]} > 0 )); then
+    echo "▸ Deltas:"
+    for delta in "${DELTAS[@]}"; do
+        cp "$delta" "$OUTPUT_DIR/$(basename "$delta")"
+        printf '  %s (%s bytes)\n' "$(basename "$delta")" "$(stat -f%z "$delta")"
+    done
+else
+    echo "▸ Deltas: none"
+fi
+shopt -u nullglob
 
 VERIFY_ARGS=(
     "$OUTPUT_DIR/appcast.xml"
@@ -108,6 +145,9 @@ VERIFY_ARGS=(
 )
 if [[ "$REQUIRE_SIGNED_FEED" == true ]]; then
     VERIFY_ARGS+=(--require-signed-feed)
+fi
+if [[ -n "$REQUIRE_DELTA_FROM" ]]; then
+    VERIFY_ARGS+=(--require-delta-from "$REQUIRE_DELTA_FROM")
 fi
 python3 "$PROJECT_DIR/scripts/verify-appcast.py" "${VERIFY_ARGS[@]}"
 

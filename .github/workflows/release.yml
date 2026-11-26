@@ -187,10 +187,44 @@ jobs:
 
           echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
+      - name: Seed previous release for delta updates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Used only as a delta baseline. The previous tag and build come from the
+          # published release, not from local git tags: the checkout may not carry
+          # them, and a silently empty baseline would ship a full-package-only feed.
+          # Skip this tag itself so a workflow re-run does not diff against its own
+          # release.
+          PREV_TAG="$(gh release list --limit 5 --json tagName \
+            --jq "[.[] | select(.tagName != \"$TAG\")][0].tagName" 2>/dev/null || true)"
+          echo "PREV_TAG=$PREV_TAG" >> "$GITHUB_ENV"
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous release: first release, shipping a full package only."
+            exit 0
+          fi
+          mkdir -p .build/appcast-seed
+          gh release download "$PREV_TAG" --pattern 'SnapGlass-*.dmg' --dir .build/appcast-seed
+          gh release download "$PREV_TAG" --pattern 'appcast.xml' --dir .build/appcast-seed
+          PREV_BUILD="$(grep -o '<sparkle:version>[0-9]*' .build/appcast-seed/appcast.xml | head -1 | tr -dc '0-9')"
+          if [ -z "$PREV_BUILD" ]; then
+            echo "Cannot read the previous build number from $PREV_TAG's appcast" >&2
+            exit 1
+          fi
+          echo "PREV_BUILD=$PREV_BUILD" >> "$GITHUB_ENV"
+          ls -la .build/appcast-seed
+
       - name: Generate signed appcast
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUILD="$(tr -d '[:space:]' < build.txt)"
+          DELTA_ARGS=()
+          if [ -n "${PREV_TAG:-}" ] && [ -n "${PREV_BUILD:-}" ]; then
+            for dmg in .build/appcast-seed/*.dmg; do
+              DELTA_ARGS+=(--previous-dmg "$dmg")
+            done
+            DELTA_ARGS+=(--require-delta-from "$PREV_BUILD")
+          fi
           bash scripts/make-appcast.sh \
             --version "$VERSION" \
             --build "$BUILD" \
@@ -199,6 +233,7 @@ jobs:
             --output-dir . \
             --download-prefix "https://github.com/blackkcold/snapocr/releases/download/${{ steps.version.outputs.tag }}/" \
             --key-file "$SPARKLE_ED_KEY" \
+            ${DELTA_ARGS[@]+"${DELTA_ARGS[@]}"} \
             --require-signed-feed
           echo "APPCAST_PATH=appcast.xml" >> "$GITHUB_ENV"
           echo "NOTES_PATH=${{ steps.notes.outputs.notes_file }}" >> "$GITHUB_ENV"
@@ -220,6 +255,13 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           TAG="${{ steps.version.outputs.tag }}"
 
+          # Deltas are written next to the appcast by make-appcast.sh. They must be
+          # published too: the feed links to them, and a missing delta file makes
+          # clients fall back to the full download without any error.
+          shopt -s nullglob
+          DELTAS=(*.delta)
+          shopt -u nullglob
+
           gh release create "$TAG" \
             --title "$TAG" \
              --notes-file "${{ steps.notes.outputs.notes_file }}" \
@@ -227,7 +269,8 @@ jobs:
              "$SHA_PATH" \
              "$UPDATE_MANIFEST_PATH" \
              "$APPCAST_PATH" \
-             "$NOTES_PATH"
+             "$NOTES_PATH" \
+             ${DELTAS[@]+"${DELTAS[@]}"}
 
       - name: Verify release assets
         env:
@@ -241,3 +284,11 @@ jobs:
               exit 1
             fi
           done
+          if [ -n "${PREV_TAG:-}" ]; then
+            if ! grep -q '\.delta$' <<< "$ASSETS"; then
+              echo "No delta asset published for $PREV_TAG -> $TAG; every update would download the full package" >&2
+              exit 1
+            fi
+            echo "Delta assets:"
+            grep '\.delta$' <<< "$ASSETS"
+          fi
