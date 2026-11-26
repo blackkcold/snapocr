@@ -17,10 +17,13 @@ public enum OnboardingPolicy {
     /// Order is priority:
     /// 1. Never interrupt a capture or recording.
     /// 2. Unfinished onboarding always wins, so a new user is never left with
-    ///    nothing on screen.
-    /// 3. Only after step 2: a new content version re-shows the guide. Reversing
-    ///    these would report a fresh install as `.contentUpdate`, because a new
-    ///    install also has `contentVersion == 0`.
+    ///    nothing on screen — unless the user closed the guide in this process;
+    ///    it then stays closed until the next launch instead of reopening in a
+    ///    loop.
+    /// 3. Only after step 2: a new content version re-shows the guide, with the
+    ///    same dismissal exception. Reversing these would report a fresh install
+    ///    as `.contentUpdate`, because a new install also has
+    ///    `contentVersion == 0`.
     /// 4. The coach follows any guide dismissal, including the red close button.
     ///    A user who closed the window is exactly the user who now wonders where
     ///    the app went.
@@ -37,17 +40,30 @@ public enum OnboardingPolicy {
             return .none
         }
 
+        // A guide the user closed during this process stays closed: reopening it
+        // in the same session is a visible loop, and `dismissGuideWithoutCompleting`
+        // promises the guide resumes on the next launch. The coach still follows
+        // the dismissal, because the window is gone and the icon is the only clue.
         if state.welcomeCompletedAt == nil {
-            let reason: WelcomeReason = context.isTranslocated ? .translocated : .firstRun
-            return .showGuide(reason, resumeAt: GuidePage.clamped(state.guidePage.rawValue))
-        }
-
-        if state.contentVersion < currentContentVersion {
-            return .showGuide(.contentUpdate, resumeAt: .location)
+            if !context.welcomeJustDismissed {
+                let reason: WelcomeReason = context.isTranslocated ? .translocated : .firstRun
+                return .showGuide(reason, resumeAt: GuidePage.clamped(state.guidePage.rawValue))
+            }
+        } else if state.contentVersion < currentContentVersion {
+            if !context.welcomeJustDismissed {
+                return .showGuide(.contentUpdate, resumeAt: .location)
+            }
         }
 
         if context.welcomeJustDismissed, !state.menubarCoachShown {
             return .showMenuBarCoach
+        }
+
+        if context.welcomeJustDismissed, state.welcomeCompletedAt == nil {
+            // Unfinished onboarding that the user closed this launch: stop here
+            // rather than start a tutorial the guide never introduced. The guide
+            // resumes next launch.
+            return .none
         }
 
         if let step = activeTutorialStep(for: state, context: context) {
