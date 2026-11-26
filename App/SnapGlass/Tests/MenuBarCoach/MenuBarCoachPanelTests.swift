@@ -77,4 +77,15 @@ struct MenuBarCoachPanelTests {
         #expect(size.width == 288)
         #expect(size.height <= 695)
     }
+
+    @Test func picksTheScreenUnderThePointer() {
+        let frames = [
+            CGRect(x: 0, y: 0, width: 1440, height: 900),
+            CGRect(x: 1440, y: 0, width: 1920, height: 1080),
+        ]
+
+        #expect(CoachScreenSelector.index(containing: CGPoint(x: 200, y: 500), in: frames) == 0)
+        #expect(CoachScreenSelector.index(containing: CGPoint(x: 2000, y: 500), in: frames) == 1)
+        #expect(CoachScreenSelector.index(containing: CGPoint(x: 5000, y: 500), in: frames) == nil)
+    }
 }

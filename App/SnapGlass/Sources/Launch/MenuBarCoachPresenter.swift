@@ -88,7 +88,7 @@ final class MenuBarCoachPresenter {
     }
 
     private func show(_ content: MenuBarCoachContent, recordsShown: Bool) {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        guard let screen = Self.presentationScreen() else { return }
 
         let layout = Self.resolveLayout(on: screen)
         if layout == .announcement {
@@ -122,6 +122,23 @@ final class MenuBarCoachPresenter {
         if recordsShown {
             onShown()
         }
+    }
+
+    /// The display the user is looking at.
+    ///
+    /// The pointer is the only reliable signal for a menu-bar app: it usually
+    /// has no key window, so `NSScreen.main` can point at the menu-bar display
+    /// while the user works on another one.
+    static func presentationScreen(
+        mouseLocation: CGPoint = NSEvent.mouseLocation,
+        screens: [NSScreen] = NSScreen.screens,
+        main: NSScreen? = NSScreen.main
+    ) -> NSScreen? {
+        let frames = screens.map(\.frame)
+        if let index = CoachScreenSelector.index(containing: mouseLocation, in: frames) {
+            return screens[index]
+        }
+        return main ?? screens.first
     }
 
     /// Chooses the coach form for a screen.
