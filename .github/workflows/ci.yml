@@ -55,38 +55,72 @@ jobs:
           path: .build/DerivedData-release/Build/Products/Release/SnapGlass.app
           if-no-files-found: error
 
-  unit-test:
+  # One job per package instead of one job running nine `swift test` calls in a
+  # row. The loop cost ~12 minutes of wall clock, all of it waiting on a single
+  # core; the packages do not depend on each other.
+  packages:
+    name: packages (${{ matrix.package }})
     runs-on: macos-latest
-    timeout-minutes: 60
+    strategy:
+      # Every shard must report, otherwise the aggregating `unit-test` job cannot
+      # tell a real failure from a cancelled sibling.
+      fail-fast: false
+      matrix:
+        package:
+          - SharedKit
+          - CaptureCore
+          - OCRCore
+          - BarcodeCore
+          - AnnotationCore
+          - ScrollCore
+          - HistoryCore
+          - LibraryCore
+          - AutomationCore
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          for pkg in SharedKit CaptureCore OCRCore BarcodeCore AnnotationCore ScrollCore HistoryCore LibraryCore AutomationCore; do
-            echo "=== $pkg ==="
-            if [ "$pkg" = "OCRCore" ]; then
-              # 跳过依赖真实 Vision OCR 的集成测试：无头 CI runner 上 Vision 首次初始化可能挂起。
-              # 本地仍完整运行这些测试（见 scripts/test.sh）。详见 Docs/CI.md。
-              swift test --package-path "Packages/$pkg" \
-                --skip VisionIntegrationTests \
-                --skip pipelineFallsBackToVisionWhenTesseractDataIsMissing || exit 1
-            elif [ "$pkg" = "CaptureCore" ]; then
-              # CaptureCore 的音频/环形缓冲测试使用私有 dispatch queue；
-              # 在 3-core runner 上与 687 个测试并行时可能死锁。串行运行保持确定性。
-              swift test --package-path "Packages/$pkg" --no-parallel || exit 1
-            else
-              swift test --package-path "Packages/$pkg" || exit 1
-            fi
-          done
+      - name: swift test
         timeout-minutes: 25
+        run: |
+          pkg="${{ matrix.package }}"
+          if [ "$pkg" = "OCRCore" ]; then
+            # 跳过依赖真实 Vision OCR 的集成测试：无头 CI runner 上 Vision 首次初始化可能挂起。
+            # 本地仍完整运行这些测试（见 scripts/test.sh）。详见 Docs/CI.md。
+            swift test --package-path "Packages/$pkg" \
+              --skip VisionIntegrationTests \
+              --skip pipelineFallsBackToVisionWhenTesseractDataIsMissing
+          elif [ "$pkg" = "CaptureCore" ]; then
+            # CaptureCore 的音频/环形缓冲测试使用私有 dispatch queue；
+            # 在 3-core runner 上与 687 个测试并行时可能死锁。串行运行保持确定性。
+            swift test --package-path "Packages/$pkg" --no-parallel
+          else
+            swift test --package-path "Packages/$pkg"
+          fi
+
+  # Runs alongside `packages` instead of after it: it only needs xcodegen, and
+  # sitting at the end of the old loop added ~1.6 minutes of pure serial wait.
+  library-cli:
+    name: library-cli
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
       - run: brew install xcodegen && xcodegen generate
       - name: Library CLI contract tests
         timeout-minutes: 8
         run: bash scripts/test-library-cli.sh
-      # 本地全绿（32 tests / 7.7s），但无头 runner 上偶发在 EditorHistoryTests 挂起。
-      # 包测试仍是硬闸门；App scheme 测试先作为非阻断信号，待定位 CI 环境问题。
+
+  # Kept out of the required path, exactly as before: it was already
+  # `continue-on-error` inside `unit-test`, so it never gated a merge — it only
+  # made every PR wait ~15 minutes for a signal that could not block anything.
+  # 本地全绿（32 tests / 7.7s），但无头 runner 上偶发在 EditorHistoryTests 挂起。
+  app-tests:
+    name: app-tests
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen && xcodegen generate
       - name: App scheme tests
         timeout-minutes: 15
-        continue-on-error: true
         run: |
           xcodebuild test -project SnapGlass.xcodeproj -scheme EditorInteractionTests \
             -destination 'platform=macOS' \
@@ -94,3 +128,20 @@ jobs:
           xcodebuild test -project SnapGlass.xcodeproj -scheme WindowLifecycleStateTests \
             -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+
+  # The required check keeps the name `unit-test`, because branch protection is
+  # keyed on it and a matrix renames its jobs to `packages (SharedKit)` etc.
+  # This job does not run tests; it only turns the shards' results into the one
+  # verdict the branch protection rule knows how to read.
+  unit-test:
+    name: unit-test
+    runs-on: macos-latest
+    needs: [packages, library-cli]
+    if: always()
+    steps:
+      - name: Require every shard to pass
+        run: |
+          echo "packages:    ${{ needs.packages.result }}"
+          echo "library-cli: ${{ needs.library-cli.result }}"
+          test "${{ needs.packages.result }}" = "success"
+          test "${{ needs.library-cli.result }}" = "success"
