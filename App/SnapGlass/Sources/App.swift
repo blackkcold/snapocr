@@ -49,6 +49,8 @@ private struct SnapGlassMainScene: Scene {
     @StateObject private var router = PreferencesRouter()
     /// Owns Sparkle and the install-deferral state.
     @StateObject private var updater = UpdaterManager()
+    /// Owns the onboarding state machine and its windows.
+    @StateObject private var onboarding = OnboardingRuntime()
     @AppStorage(PreferenceKeys.appLanguage)
     private var appLanguage = PreferenceDefaults.appLanguage
     @AppStorage(PreferenceKeys.appearanceMode)
@@ -74,6 +76,7 @@ private struct SnapGlassMainScene: Scene {
                 .environmentObject(viewModel)
                 .environmentObject(router)
                 .environmentObject(updater)
+                .environmentObject(onboarding)
                 .environment(\.locale, locale)
                 .preferredColorScheme(preferredColorScheme)
         } label: {
@@ -90,6 +93,7 @@ private struct SnapGlassMainScene: Scene {
                     viewModel: viewModel,
                     router: router,
                     updater: updater,
+                    onboarding: onboarding,
                     applicationDelegate: applicationDelegate
                 )
             }
@@ -190,6 +194,41 @@ private struct SnapGlassMainScene: Scene {
                 .background(AppWindowRegistrationView(id: "permission", appearanceMode: appearanceMode))
         }
         .windowResizability(.contentSize)
+
+        // The guide is a `Window`, not a `WindowGroup`: it is a one-off, and a group
+        // would let the app menu open a second copy. It must also stay an `NSWindow` —
+        // `hasVisibleUserFacingWindow` ignores every `NSPanel`, so a panel-backed guide
+        // would demote the app to `.accessory` and never show the Dock icon it exists
+        // to advertise.
+        Window("Welcome to SnapGlass", id: WelcomeWindowPresenter.windowID) {
+            WelcomeView(
+                page: onboarding.savedGuidePage,
+                onFinish: { page in
+                    onboarding.finishGuide(at: page)
+                    Task { await onboarding.evaluate(welcomeJustDismissed: true) }
+                },
+                onDismiss: { page in
+                    onboarding.dismissGuideWithoutCompleting(at: page)
+                    Task { await onboarding.evaluate(welcomeJustDismissed: true) }
+                },
+                onTryCapture: { [viewModel] in
+                    // Close the guide, then start the capture immediately. Evaluating
+                    // onboarding first would let the coach panel and the selection
+                    // overlay compete for the same frame: the overlay sits at
+                    // `.screenSaver` level, so the coach would be invisible while
+                    // still counting as shown. The capture marks itself as started,
+                    // so the later evaluation returns no action until it finishes.
+                    onboarding.finishGuide(at: .capture)
+                    viewModel.captureArea()
+                }
+            )
+            .navigationTitle(Text("Welcome to SnapGlass"))
+            .environment(\.locale, locale)
+            .preferredColorScheme(preferredColorScheme)
+            .background(AppWindowRegistrationView(id: WelcomeWindowPresenter.windowID, appearanceMode: appearanceMode))
+        }
+        .defaultSize(width: WelcomeMetrics.width, height: WelcomeMetrics.height)
+        .windowResizability(.contentSize)
     }
 }
 
@@ -200,6 +239,8 @@ private struct AppLifecycleBridge: View {
     @ObservedObject var viewModel: CaptureViewModel
     @ObservedObject var router: PreferencesRouter
     @ObservedObject var updater: UpdaterManager
+    /// Onboarding state machine and its guide window.
+    @ObservedObject var onboarding: OnboardingRuntime
     /// The application delegate that owns quit and reopen routing.
     let applicationDelegate: SnapGlassApplicationDelegate
     @State private var didInitialize = false
@@ -210,6 +251,7 @@ private struct AppLifecycleBridge: View {
             .onAppear {
                 applicationDelegate.viewModel = viewModel
                 applicationDelegate.updater = updater
+                applicationDelegate.onboarding = onboarding
                 updater.attach(to: viewModel)
                 updater.onInstallPostponed = { [weak viewModel] blocker in
                     viewModel?.showToast(
@@ -223,13 +265,64 @@ private struct AppLifecycleBridge: View {
                     }
                 }
                 router.openWindow = viewModel.openWindow
+                // The guide window opens through the same router so it goes through
+                // the presentation coordinator and promotes the app to `.regular`.
+                onboarding.presenter.openWindow = viewModel.openWindow
                 guard !didInitialize else { return }
                 didInitialize = true
                 updater.start()
-                viewModel.checkPermissionsOnLaunch()
+                // A first run must not open the permission window: the guide has a page
+                // for it, and two windows appearing at once on launch is exactly the
+                // "what is happening" confusion this work exists to remove. Returning
+                // users keep the automatic prompt.
+                if !onboarding.isFirstRun {
+                    viewModel.checkPermissionsOnLaunch()
+                }
+                wireOnboardingProbes()
                 // Interrupted recordings are discovered once, off the main actor,
                 // right after launch. Failure only logs; it never blocks startup.
                 Task { await viewModel.scanRecoverableRecordingsAtLaunch() }
+                // Runs after the menu-bar label exists, so opening the guide here
+                // cannot race the routing installation above.
+                Task { await onboarding.start() }
             }
+    }
+
+    /// Installs the facts the onboarding policy reads.
+    ///
+    /// Each probe is a closure rather than a stored copy so it always reflects the
+    /// current moment; a snapshot taken here would be stale by the next evaluation.
+    private func wireOnboardingProbes() {
+        onboarding.permissionProbe = {
+            await PermissionService().checkScreenCapturePermission()
+        }
+        onboarding.captureStateProbe = { [weak viewModel] in
+            guard let viewModel else { return true }
+            return viewModel.isCapturing || viewModel.isRecordingBusy
+        }
+        onboarding.shelfStateProbe = { [weak viewModel] in
+            viewModel?.isScreenshotShelfVisible ?? false
+        }
+        // The coach must not appear over the area-selection overlay: that overlay sits
+        // at `.screenSaver` level, so the panel would be invisible while the "shown"
+        // flag was already written — permanently lost.
+        onboarding.coach.isCapturing = { [weak viewModel] in
+            guard let viewModel else { return true }
+            return viewModel.isCapturing || viewModel.isRecordingBusy
+        }
+        onboarding.coach.onShown = { [weak onboarding] in
+            onboarding?.recordCoachShown()
+        }
+        onboarding.coach.onTryIt = { [weak viewModel] in
+            viewModel?.captureArea()
+        }
+        // The tutorial is chained: the editor banner waits for a capture, and the
+        // shelf hint waits for the shelf. Nothing else reports the first fact, so
+        // without this hook the chain stops at "press the shortcut" forever.
+        viewModel.onCapturePublished = { [weak onboarding] openedEditor in
+            Task { @MainActor in
+                await onboarding?.noteCapturePublished(openedEditor: openedEditor)
+            }
+        }
     }
 }

@@ -81,6 +81,16 @@ public final class CaptureViewModel: ObservableObject {
     /// Closure to open a specific window by ID
     public var openWindow: ((String) -> Void)?
 
+    /// Called once a capture has been published to the shelf.
+    ///
+    /// Onboarding uses it to advance the post-permission tutorial, which is chained:
+    /// the editor banner appears only after the first capture, and the shelf hint only
+    /// after that. Without this signal the chain would stall forever at "press the
+    /// shortcut", leaving the later hints as dead code.
+    ///
+    /// - Parameter openedEditor: Whether an annotation editor window opened for it.
+    public var onCapturePublished: ((Bool) -> Void)?
+
     var scrollSession: ScrollSession?
     /// 采帧不再在 VM 里堆全分辨率数组：首帧进引擎画布后就地释放，
     /// 之后每帧追加完即丢，稳态内存 = 画布 + 1 帧。

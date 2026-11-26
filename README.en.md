@@ -78,14 +78,16 @@ The system screenshot gives you an image. SnapGlass gives you a finished workflo
 
 ---
 
-## What's new in v1.8
+## What's new in v1.9
 
-### One library for everything you capture
+### A double-click that no longer does nothing
 
-- **A unified History library**: screenshots, audio, screen recordings, colour history and unfinished recordings in one window — sidebar categories, timeline and grid views, search, filters, sorting, and an inspector for metadata.
-- **Recordings you can actually manage**: tags and notes, merging sessions of the same media type, a live recording banner, retention and storage panels, Space Quick Look, and dragging straight out to Finder or a chat window.
-- **A Recent Deleted that survives relaunch**: deletion is no longer memory-only. Move to Trash, restore, or delete permanently, with automatic cleanup after 30 days.
-- **`snapglass-library`, a headless CLI**: scan, export, merge, delete, selftest and benchmarks all run without launching the app, and every run requires an explicit isolated root.
+- **A four-page welcome guide** on first launch: where the icon lives, shortcuts you can record right there, what happens after a capture, and which permission recording needs. Jump by page dot, switch with `←`/`→`, advance with `Return`; closing with `Esc` or the red button is not "done", so the next launch resumes on the same page.
+- **Three Dock modes**: while windows are open, always, or never. Changeable from the guide's checkbox and from Settings → General → Dock, and applied immediately.
+- **A menu-bar coach** that points at the icon after the guide closes. When the screen has no room it degrades — full panel, single-line strip, centred card, and finally an accessibility announcement — instead of silently disappearing.
+- **Shortcut conflict detection** across three sources: duplicates inside the app, combinations macOS reserves, and one real Carbon registration attempt. A conflict shows a badge and an explanation, rather than letting you record a shortcut that never fires.
+- **Relaunching no longer does nothing**: it restores recording controls, reopens an unfinished guide, brings an existing window forward, or opens Settings, depending on state.
+- **A three-step tutorial after permission is granted**: the menu bar names the shortcut, the editor shows a bottom banner, then the shelf shows its drag hint — one step at a time.
 
 See the [CHANGELOG](CHANGELOG.md) for the full list.
 
@@ -257,13 +259,13 @@ Get the latest build from [Releases](https://github.com/blackkcold/snapocr/relea
 
 | File | Purpose |
 |------|---------|
-| `SnapGlass-vX.Y.Z.dmg` | Installer (Universal: Apple Silicon + Intel, about 18.5 MB) |
+| `SnapGlass-vX.Y.Z.dmg` | Installer (Universal: Apple Silicon + Intel) |
 | `SnapGlass-vX.Y.Z.dmg.sha256` | SHA-256 checksum |
 | `appcast.xml` | Sparkle update feed; the app reads it automatically |
 
 ```bash
 # Verify the downloaded DMG
-shasum -a 256 -c SnapGlass-v1.8.0.dmg.sha256
+shasum -a 256 -c SnapGlass-v1.9.0.dmg.sha256
 ```
 
 > [!WARNING]
@@ -384,7 +386,7 @@ brew install xcodegen swiftlint
 xcodegen generate
 
 # Release build signed with the fixed certificate
-./scripts/build.sh --version 1.8.0 --sign
+./scripts/build.sh --version 1.9.0 --sign
 
 # Local debug build (ad-hoc, no auto-update)
 ./scripts/build.sh --no-sign

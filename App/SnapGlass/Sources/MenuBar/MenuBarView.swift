@@ -9,6 +9,7 @@ struct MenuBarView: View {
     @EnvironmentObject private var viewModel: CaptureViewModel
     @EnvironmentObject private var router: PreferencesRouter
     @EnvironmentObject private var updater: UpdaterManager
+    @EnvironmentObject private var onboarding: OnboardingRuntime
 
     var body: some View {
         if let update = updater.availableUpdate {
@@ -107,6 +108,37 @@ struct MenuBarView: View {
             }
         }
         .keyboardShortcut(",", modifiers: .command)
+
+        // "Where is it?" is a question about location, not a request to re-read the
+        // guide: the coach answers it without claiming onboarding is unfinished.
+        Button("Where is SnapGlass?") {
+            onboarding.showCoach()
+        }
+
+        Divider()
+
+        MenuBarTipsSection(
+            tip: onboarding.menuTip,
+            argument: onboarding.areaShortcutLabel,
+            onAct: { tip in
+                perform(tip)
+            },
+            onShowGuide: {
+                // A replay, not a reset: the completion marker stays so the next launch
+                // still treats this user as onboarded.
+                onboarding.replayGuide()
+            }
+        )
+
+        Divider()
+
+        // On a first run the permission window is suppressed so it cannot appear on
+        // top of the guide; this row is how the user grants later.
+        Button("Screen Recording Permission…") {
+            AppWindowPresenter.present(id: "permission") {
+                openWindow(id: "permission")
+            }
+        }
 
         Button("Check for Updates...") {
             updater.presentUpdate()
@@ -225,6 +257,26 @@ struct MenuBarView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Runs a tip's action and records it as shown.
+    ///
+    /// The shelf tip must call `showScreenshotShelf()`, not `toggleScreenshotShelf()`:
+    /// the toggle shows "Close the editor to show the screenshot shelf" while the
+    /// editor is open, so the button would answer a promise with a refusal.
+    ///
+    /// - Parameter tip: The tip the user acted on.
+    private func perform(_ tip: OnboardingTip) {
+        onboarding.recordTipShown(tip.id)
+        switch tip.id {
+        case OnboardingTips.area.id:
+            viewModel.captureArea()
+        case OnboardingTips.shelf.id:
+            viewModel.showScreenshotShelf()
+        default:
+            // Not actionable; nothing to run.
+            break
         }
     }
 

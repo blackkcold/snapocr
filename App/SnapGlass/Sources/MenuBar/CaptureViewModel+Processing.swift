@@ -32,6 +32,10 @@ extension CaptureViewModel {
         )
         let modeDescription = historyModeOverride ?? Self.historyModeDescription(for: captureMode)
         let (shouldOpenEditor, shouldCopyImage) = resolveDestination(destination)
+        // Report before the editor opens: the tutorial's next step is the editor
+        // banner, and it has to be allowed to appear on the very frame the editor
+        // shows, not one evaluation later.
+        onCapturePublished?(shouldOpenEditor)
         let mockupStyleJSON = mockupStyle.flatMap { style in
             try? JSONEncoder().encode(style)
         }.flatMap { data in

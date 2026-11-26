@@ -15,8 +15,8 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     ALWAYS_SEARCH_USER_PATHS: NO
-    MARKETING_VERSION: "1.8.0"
-    CURRENT_PROJECT_VERSION: "10"
+    MARKETING_VERSION: "1.9.0"
+    CURRENT_PROJECT_VERSION: "11"
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
@@ -162,6 +162,9 @@ targets:
           - EditorWorkspaceView.swift
       - path: App/SnapGlass/Sources/MenuBar/ToastMessage.swift
       - path: App/SnapGlass/Sources/MenuBar/OCRSettings.swift
+      # `ScreenshotShelfView` reads the tutorial hint, so the hint type must be in
+      # this target's module; it lives under `Launch/` which is otherwise excluded.
+      - path: App/SnapGlass/Sources/Launch/TutorialHints.swift
     dependencies:
       - package: SharedKit
       - package: CaptureCore
@@ -185,6 +188,7 @@ targets:
       - path: App/SnapGlass/Sources/Windows/HistoryFailure.swift
       - path: App/SnapGlass/Sources/AppWindowPresenter.swift
       - path: App/SnapGlass/Sources/WindowPresentationCoordinator.swift
+      - path: App/SnapGlass/Sources/Launch/DockIconPolicyProvider.swift
       - path: App/SnapGlass/Sources/AppWindowFocusing.swift
       - path: App/SnapGlass/Sources/Recording/RecordingQuitFlow.swift
       - path: App/SnapGlass/Sources/Recording/RecordingPermissionDecision.swift

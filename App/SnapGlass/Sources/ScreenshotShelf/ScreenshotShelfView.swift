@@ -6,6 +6,10 @@ import SwiftUI
 /// Chromeless shelf content: a thin rail, hanging thumbnails, and a hover-only action menu.
 struct ScreenshotShelfView: View {
     @ObservedObject var model: ScreenshotShelfViewModel
+    /// In-place tutorial hint published by onboarding progress.
+    @StateObject private var tutorialHints = TutorialHints.shared
+    /// Set when the strip should stop drawing for this appearance.
+    @State private var isTutorialStripHidden = false
 
     private static let coordinateSpaceName = "screenshot-shelf"
 
@@ -26,6 +30,39 @@ struct ScreenshotShelfView: View {
         .environment(\.locale, layout.locale)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Recent Screenshots"))
+        // T3: drawn as an overlay, not as part of the stack. The panel frame is
+        // computed by `ScreenshotShelfGeometry` and asserted in tests; inserting a row
+        // into the layout would invalidate those measurements and clip the cards.
+        .overlay(alignment: .top) {
+            if tutorialHints.activeHint == .shelf, !isTutorialStripHidden, layout.mode != .collapsed {
+                ScreenshotShelfTutorialStrip {
+                    finishTutorialStrip()
+                }
+                .transition(.opacity)
+                .task {
+                    // The strip covers the top edge of the first card, so it must not
+                    // stay: six seconds is the plan's budget for noticing it.
+                    try? await Task.sleep(for: .seconds(6))
+                    guard !Task.isCancelled else { return }
+                    finishTutorialStrip()
+                }
+            }
+        }
+        .onChange(of: tutorialHints.activeHint) { hint in
+            if hint != .shelf {
+                isTutorialStripHidden = false
+            }
+        }
+    }
+
+    /// Ends the shelf hint for good.
+    ///
+    /// All three exits — the close button, the timeout, and a drop — complete the
+    /// step: the hint had its chance to be read, and re-showing it on every shelf
+    /// opening would turn a one-time explanation into a permanent obstruction.
+    private func finishTutorialStrip() {
+        isTutorialStripHidden = true
+        tutorialHints.completeShelfHint()
     }
 
     private var expandedView: some View {
