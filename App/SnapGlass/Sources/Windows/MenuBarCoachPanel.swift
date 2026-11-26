@@ -23,6 +23,8 @@ final class MenuBarCoachPanel: NSPanel {
 
     private var dismissTask: Task<Void, Never>?
     private var onDismiss: (() -> Void)?
+    /// What the panel says. The text decides how tall the panel has to be.
+    private let content: MenuBarCoachContent
 
     /// Creates a coach panel.
     ///
@@ -39,7 +41,8 @@ final class MenuBarCoachPanel: NSPanel {
         onOpenControlCenter: (() -> Void)? = nil,
         onDismiss: (() -> Void)? = nil
     ) {
-        let size = Self.size(for: layout)
+        let size = layout.designSize
+        self.content = content
         super.init(
             contentRect: CGRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -72,33 +75,72 @@ final class MenuBarCoachPanel: NSPanel {
         )
         let hosting = NSHostingView(rootView: view)
         hosting.focusRingType = .none
+        // The panel owns its size. The default `sizingOptions` publishes the
+        // content's minimum size as the window's `contentMinSize`, and that
+        // minimum is computed at width zero — where each `.fixedSize(horizontal:
+        // false, vertical: true)` text reports one line per character. The
+        // 49-character subtitle measured 574pt, and AppKit stretched this 288×96
+        // panel to 288×888 the first time it was ordered front.
+        hosting.sizingOptions = []
         contentView = hosting
     }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// Panel size for a layout, in points.
-    ///
-    /// - Parameter layout: The chosen form.
-    /// - Returns: The content size that form needs.
-    static func size(for layout: CoachLayout) -> CGSize {
-        switch layout {
-        case .full: CGSize(width: 288, height: 96)
-        case .compact: CGSize(width: 240, height: 64)
-        case .centeredCard: CGSize(width: 320, height: 120)
-        case .announcement: CGSize(width: 1, height: 1)
-        }
-    }
-
-    /// Places the panel on `screen` for its layout.
+    /// The size this panel should take on a screen.
     ///
     /// - Parameters:
     ///   - layout: The chosen form.
-    ///   - screen: The display to use.
-    /// - Returns: The panel frame in screen coordinates.
-    static func frame(for layout: CoachLayout, on screen: NSScreen) -> CGRect {
-        let size = size(for: layout)
+    ///   - content: What the panel says; the rendered text sets the height.
+    ///   - available: The screen's usable area below the menu bar.
+    /// - Returns: A size that fits `available`.
+    static func size(
+        for layout: CoachLayout,
+        content: MenuBarCoachContent,
+        available: CGSize
+    ) -> CGSize {
+        guard layout != .announcement else { return layout.designSize }
+        let design = layout.designSize
+        // Measure at the width the panel will actually take. A centered card
+        // shrinks to as little as 248pt on a narrow screen; measuring at the
+        // 320pt design width wraps the text less, so the height came out short
+        // and the bottom row was clipped.
+        let width = CoachLayoutResolver.panelWidth(design: design, available: available)
+        return CoachLayoutResolver.panelSize(
+            design: design,
+            measuredHeight: measuredHeight(content: content, layout: layout, width: width),
+            available: available
+        )
+    }
+
+    /// Renders the content once, outside any window, to learn its height.
+    ///
+    /// `sizeThatFits` is the same technique the recording HUD uses for its cached
+    /// layout: it lays out the real view without creating a window, touching the
+    /// material, or running an implicit animation. The extra `.fixedSize` is a
+    /// probe only: the view fills its window vertically, so without it the
+    /// measurement just returns the proposed height instead of the content's.
+    private static func measuredHeight(
+        content: MenuBarCoachContent,
+        layout: CoachLayout,
+        width: CGFloat
+    ) -> CGFloat {
+        let probe = MenuBarCoachView(
+            content: content,
+            layout: layout,
+            onTryIt: nil,
+            onOpenControlCenter: nil,
+            onDismiss: {}
+        )
+        .frame(width: width)
+        .fixedSize(horizontal: false, vertical: true)
+        let controller = NSHostingController(rootView: probe)
+        return controller.sizeThatFits(in: CGSize(width: width, height: 10_000)).height
+    }
+
+    /// Shows the panel and schedules its automatic dismissal.
+    func present(on screen: NSScreen, layout: CoachLayout) {
         // `effectiveVisibleFrame` reserves the menu bar even when it is set to
         // auto-hide, where `visibleFrame` reports the full display and the panel
         // would slide under the bar as soon as the pointer reached the top edge.
@@ -106,31 +148,11 @@ final class MenuBarCoachPanel: NSPanel {
             visibleFrame: screen.visibleFrame,
             screenFrame: screen.frame
         )
-
-        switch layout {
-        case .full, .compact:
-            // Right-aligned: new menu-bar items land near the right end, so that is
-            // where the pointer and the copy both point.
-            let originX = visible.maxX - size.width - Self.trailingInset
-            let originY = visible.maxY - size.height - Self.topInset
-            return CGRect(x: originX, y: originY, width: size.width, height: size.height)
-        case .centeredCard:
-            let originX = visible.midX - size.width / 2
-            let originY = visible.midY - size.height / 2
-            return CGRect(x: originX, y: originY, width: size.width, height: size.height)
-        case .announcement:
-            return .zero
-        }
-    }
-
-    /// Gap between the panel and the right screen edge.
-    static let trailingInset: CGFloat = 12
-    /// Gap between the panel and the menu bar.
-    static let topInset: CGFloat = 8
-
-    /// Shows the panel and schedules its automatic dismissal.
-    func present(on screen: NSScreen, layout: CoachLayout) {
-        setFrame(Self.frame(for: layout, on: screen), display: false)
+        let size = Self.size(for: layout, content: content, available: visible.size)
+        setFrame(
+            CoachLayoutResolver.panelFrame(layout: layout, size: size, visible: visible),
+            display: false
+        )
         orderFrontRegardless()
         sharingType = ShowcaseMode.isEnabled ? .readOnly : .none
         RecordingWindowExclusionRegistry.shared.register(self)
