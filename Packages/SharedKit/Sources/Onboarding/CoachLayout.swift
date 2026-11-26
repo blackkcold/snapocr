@@ -87,6 +87,25 @@ public enum CoachLayoutResolver {
     /// Gap between the panel and the bottom of the usable area.
     public static let panelBottomInset = 12.0
 
+    /// The width a panel takes on a screen.
+    ///
+    /// The panel hugs the right edge, so only the trailing inset is reserved;
+    /// the leading side is clamped by `panelFrame`. The minimum widths above
+    /// already include that margin, which is why subtracting it twice made a
+    /// narrow card 12pt narrower than it needed to be.
+    ///
+    /// - Parameters:
+    ///   - design: The form's nominal width.
+    ///   - available: The screen's usable area below the menu bar.
+    /// - Returns: The final width, rounded up to a whole point.
+    public static func panelWidth(design: CGSize, available: CGSize) -> Double {
+        guard
+            design.width.isFinite, design.width > 0,
+            available.width.isFinite, available.width > 0
+        else { return 1 }
+        return min(design.width, max(1, available.width - panelTrailingInset)).rounded(.up)
+    }
+
     /// Fits the panel to the space a screen can actually give it.
     ///
     /// Without an upper bound the panel's height came from SwiftUI's minimum
@@ -115,10 +134,15 @@ public enum CoachLayoutResolver {
             measuredHeight.isFinite, measuredHeight > 0
         else { return CGSize(width: 1, height: 1) }
 
-        let width = min(design.width, max(1, available.width - panelTrailingInset * 2))
+        let width = panelWidth(design: design, available: available)
         let ceiling = max(1, available.height - panelTopInset - panelBottomInset)
-        let height = max(min(design.height, ceiling), min(measuredHeight, ceiling))
-        return CGSize(width: width.rounded(.up), height: height.rounded(.up))
+        // The floor/measured height never exceeds the ceiling, but rounding up
+        // can. Clamp after rounding so a fractional ceiling stays a ceiling.
+        let height = min(
+            max(min(design.height, ceiling), min(measuredHeight, ceiling)).rounded(.up),
+            ceiling
+        )
+        return CGSize(width: width, height: height)
     }
 
     /// Places a sized panel inside the usable area.
@@ -127,7 +151,9 @@ public enum CoachLayoutResolver {
     ///   - layout: The chosen form.
     ///   - size: A size from `panelSize(design:measuredHeight:available:)`.
     ///   - visible: The screen's usable area below the menu bar.
-    /// - Returns: A frame fully inside `visible`; `.zero` when there is no room.
+    /// - Returns: A frame inside `visible`. A size larger than `visible` cannot
+    ///   fit, so the origin is pinned to the visible origin rather than going
+    ///   negative; `.zero` when there is no room at all.
     public static func panelFrame(
         layout: CoachLayout,
         size: CGSize,
@@ -166,6 +192,18 @@ public enum CoachLayoutResolver {
         case .announcement:
             return .zero
         }
-        return CGRect(x: originX, y: originY, width: size.width, height: size.height)
+
+        // The branches above already keep a fitting size inside `visible`. An
+        // oversized one (wider or taller than the screen) cannot be contained,
+        // but its origin must not go negative: pin it to the visible origin.
+        let clampedX = min(
+            max(originX, visible.minX),
+            max(visible.minX, visible.maxX - size.width)
+        )
+        let clampedY = min(
+            max(originY, visible.minY),
+            max(visible.minY, visible.maxY - size.height)
+        )
+        return CGRect(x: clampedX, y: clampedY, width: size.width, height: size.height)
     }
 }

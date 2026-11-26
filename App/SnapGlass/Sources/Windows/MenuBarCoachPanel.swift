@@ -102,9 +102,14 @@ final class MenuBarCoachPanel: NSPanel {
     ) -> CGSize {
         guard layout != .announcement else { return layout.designSize }
         let design = layout.designSize
+        // Measure at the width the panel will actually take. A centered card
+        // shrinks to as little as 248pt on a narrow screen; measuring at the
+        // 320pt design width wraps the text less, so the height came out short
+        // and the bottom row was clipped.
+        let width = CoachLayoutResolver.panelWidth(design: design, available: available)
         return CoachLayoutResolver.panelSize(
             design: design,
-            measuredHeight: measuredHeight(content: content, layout: layout, width: design.width),
+            measuredHeight: measuredHeight(content: content, layout: layout, width: width),
             available: available
         )
     }

@@ -184,6 +184,7 @@ targets:
       - path: App/SnapGlass/Tests
         excludes:
           - BarcodePanel
+          - MenuBarCoach
       - path: App/SnapGlass/Sources/WindowLifecycleState.swift
       - path: App/SnapGlass/Sources/Windows/HistoryFailure.swift
       - path: App/SnapGlass/Sources/AppWindowPresenter.swift
@@ -305,3 +306,10 @@ schemes:
     test:
       targets:
         - BarcodePanelTests
+  MenuBarCoachPanelTests:
+    build:
+      targets:
+        MenuBarCoachPanelTests: test
+    test:
+      targets:
+        - MenuBarCoachPanelTests

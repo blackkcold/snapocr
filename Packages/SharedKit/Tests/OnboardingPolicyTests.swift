@@ -232,14 +232,34 @@ struct CoachLayoutResolverTests {
 
     @Test func panelSizeShrinksTheCardToANarrowVisibleFrame() {
         // A 300pt-wide usable area resolves to `.centeredCard`, whose design width
-        // is 320: without clamping it used to start 10pt off the left edge.
+        // is 320. Only the trailing inset is reserved, so the card may be 288pt:
+        // subtracting the margin twice gave away 12pt it could use.
         let size = CoachLayoutResolver.panelSize(
             design: CoachLayout.centeredCard.designSize,
             measuredHeight: 96,
             available: CGSize(width: 300, height: 100)
         )
-        #expect(size.width == 276)
+        #expect(size.width == 288)
         #expect(size.height == 80)
+    }
+
+    @Test func panelWidthReservesOnlyTheTrailingInset() {
+        // 260 - 12 = 248. `cardMinimumWidth` already includes the margin.
+        let width = CoachLayoutResolver.panelWidth(
+            design: CoachLayout.centeredCard.designSize,
+            available: CGSize(width: 260, height: 200)
+        )
+        #expect(width == 248)
+    }
+
+    @Test func panelSizeClampsRoundingToAFractionalCeiling() {
+        // 140.5 - 8 - 12 = 120.5; rounding the height up must not cross it.
+        let size = CoachLayoutResolver.panelSize(
+            design: CoachLayout.centeredCard.designSize,
+            measuredHeight: 200,
+            available: CGSize(width: 400, height: 140.5)
+        )
+        #expect(size.height <= 120.5)
     }
 
     @Test func panelSizeGrowsForTheTutorialRow() {
@@ -301,6 +321,20 @@ struct CoachLayoutResolverTests {
         )
         #expect(frame.minX == 12)
         #expect(frame.minY >= visible.minY)
+    }
+
+    @Test func panelFramePinsAnOversizedSizeToTheVisibleOrigin() {
+        // The card cannot fit a 300×100 area, but its origin must still not go
+        // negative; this used to return x = -20 / y = -28.
+        let visible = CGRect(x: -1920, y: 0, width: 300, height: 100)
+        let frame = CoachLayoutResolver.panelFrame(
+            layout: .centeredCard,
+            size: CGSize(width: 320, height: 120),
+            visible: visible
+        )
+        #expect(frame.minX == visible.minX)
+        #expect(frame.minY == visible.minY)
+        #expect(frame.size == CGSize(width: 320, height: 120))
     }
 
     @Test func announcementHasNoFrame() {

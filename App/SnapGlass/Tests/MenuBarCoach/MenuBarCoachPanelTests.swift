@@ -26,13 +26,17 @@ struct MenuBarCoachPanelTests {
 
     @Test func orderingFrontDoesNotStretchThePanel() {
         // The regression itself: with the default `sizingOptions`, ordering the
-        // panel front stretched it from 288×96 to 288×888 in the same call.
+        // panel front stretched it from 288×96 to 288×888 — but only on the
+        // next run-loop turn. Asserting right after `orderFrontRegardless()`
+        // never sees the stretch, and the test passed even with the fix
+        // removed. Let the run loop spin once before reading the frame.
         let design = CoachLayout.full.designSize
         let panel = MenuBarCoachPanel(content: .location, layout: .full)
         panel.setFrame(CGRect(origin: CGPoint(x: 40, y: 40), size: design), display: false)
         panel.orderFrontRegardless()
         defer { panel.orderOut(nil) }
 
+        RunLoop.current.run(until: Date().addingTimeInterval(0.35))
         #expect(panel.frame.size == design)
     }
 
@@ -53,7 +57,9 @@ struct MenuBarCoachPanelTests {
         // row, and a fixed height used to clip it.
         #expect(location.height == CoachLayout.full.designSize.height)
         #expect(tutorial.height > location.height)
-        #expect(tutorial.height <= available.height)
+        // Hard-coded rather than bounded by `available.height`: 888 also
+        // satisfies a bound of 957, so the old assertion missed the stretch.
+        #expect(tutorial.height <= 130)
     }
 
     @Test func sizeNeverExceedsASmallScreen() {
@@ -65,11 +71,10 @@ struct MenuBarCoachPanelTests {
             content: .tutorial(shortcut: "⌘⇧1"),
             available: available
         )
-        let ceiling =
-            available.height - CoachLayoutResolver.panelTopInset
-            - CoachLayoutResolver.panelBottomInset
-
-        #expect(size.width <= available.width)
-        #expect(size.height <= ceiling)
+        // Hard-coded: 715 - panelTopInset(8) - panelBottomInset(12) = 695.
+        // Recomputing the ceiling from the same constants passes even if one of
+        // them is wrong, which is how the original assertion became vacuous.
+        #expect(size.width == 288)
+        #expect(size.height <= 695)
     }
 }
