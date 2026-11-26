@@ -27,19 +27,14 @@ struct PermissionGuideView: View {
     }
 
     var body: some View {
-        Group {
-            if permissionState.needsGuide {
-                permissionCard
-            } else {
-                Text("Permission granted")
-                    .onAppear {
-                        closeGuide()
-                    }
+        // The card renders every state itself, including `.requesting` and
+        // `.granted`. A separate "granted" branch here used to replace the card
+        // and close the window on the next SwiftUI update, so the window vanished
+        // right after it opened.
+        permissionCard
+            .onAppear {
+                checkPermission()
             }
-        }
-        .onAppear {
-            checkPermission()
-        }
     }
 
     // MARK: - Permission Check
@@ -67,9 +62,6 @@ struct PermissionGuideView: View {
             await MainActor.run {
                 permissionState = granted ? .granted : .denied
                 isChecking = false
-                if granted {
-                    closeGuide()
-                }
             }
         }
     }
@@ -105,7 +97,7 @@ struct PermissionGuideView: View {
             case .denied:
                 deniedView
             case .granted:
-                grantedView
+                grantedSection
             }
 
             Spacer()
@@ -195,6 +187,27 @@ struct PermissionGuideView: View {
     }
 
     /// 权限已授权提示
+    ///
+    /// 已授权也必须留下一个可见窗口和明确的关闭入口：过去这里在
+    /// `onAppear` 里直接关窗，用户只看到 Dock 图标闪一下。
+    private var grantedSection: some View {
+        VStack(spacing: 16) {
+            grantedView
+            Button(
+                action: {
+                    closeGuide()
+                },
+                label: {
+                    Text("Done")
+                        .frame(maxWidth: .infinity)
+                }
+            )
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .frame(maxWidth: 260)
+        }
+    }
+
     private var grantedView: some View {
         Label("Permission granted. You can now use screen capture.", systemImage: "checkmark.circle.fill")
             .foregroundColor(.green)
