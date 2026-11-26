@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-26
+
+> 首启体验：双击之后不再是「什么都没发生」。
+
+### Added
+- 四页欢迎引导窗：说明图标在菜单栏、当场可录快捷键、截图之后会发生什么、录屏与所需权限。支持页码跳转、`←`/`→` 切页、`Return` 前进、`Esc` 关闭，红叉关闭不写完成标记并在下次启动从原页继续。
+- Dock 三档（有窗口时 / 始终 / 从不），首启复选框与「设置 → 通用 → 程序坞」两处可改，改动立即生效，无需重启。
+- 菜单栏 coach 面板：引导窗关闭后指出图标位置；按可用空间四级降级（完整浮层 → 单行条 → 屏幕中央卡片 → 无障碍播报），屏幕放不下时不再静默消失。
+- 快捷键冲突检测三来源：App 内重复、macOS 保留组合、Carbon 实际注册探测。冲突时在引导页显示徽章与可操作说明，而不是让用户「设上了却按了没反应」。
+- 菜单 tips 三条按序各出现一次（12 小时间隔），全部走完后保留常驻「重新显示欢迎引导」行，菜单结构不随进度变化。
+- 权限授予后的三步教程：菜单栏提示按快捷键 → 编辑器底部横幅（不是会自动消失的 toast）→ 截图架顶部拖拽提示。
+- 「Where is SnapGlass?」与「Screen Recording Permission…」两个菜单入口；后者是首启不自动弹权限窗之后的手动授权路径。
+
+### Changed
+- 再次从 Finder 或 Spotlight 启动时按状态给出结果（恢复录制控制条 / 未完成的引导 / 已有窗口 / 位置提示 / 偏好设置），不再静默返回。
+- 首启不再自动打开权限窗，避免与引导窗同屏闪现两个窗口；老用户保持原有自动提示。
+- 应用重新激活时重新评估引导状态：在系统设置里授予屏幕录制后返回，教程才会真正开始（macOS 不为此发通知）。
+- Dock 图标策略统一经窗口协调器注入，App 内不再有第二处调用 `setActivationPolicy`。
+
+### Fixed
+- 引导页提示文案里的 `%@` 不再以字面形式显示，改为填入当前快捷键。
+- 菜单栏 tips 与「重新显示欢迎引导」原本指向同一个动作，现在分别对应「说明图标在哪」与「重看引导」。
+
 ## [1.8.0] - 2026-11-26
 
 > 统一历史资料库：截图、音频、视频、颜色与未完成录制终于在同一处收拢。
@@ -668,7 +691,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除 GUI App 的 Automation 窗口、`snapglass://` URL Scheme、App Intents 产品依赖和 CLI 构建目标
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
-[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/blackkcold/snapocr/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/blackkcold/snapocr/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/blackkcold/snapocr/compare/v1.7.0...v1.7.2
 [1.7.0]: https://github.com/blackkcold/snapocr/compare/v1.6.1...v1.7.0
