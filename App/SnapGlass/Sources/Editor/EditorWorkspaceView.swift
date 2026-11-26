@@ -6,6 +6,8 @@ import SwiftUI
 /// 多标签时只有当前标签参与脏检查，其余标签会被静默丢弃。
 struct EditorWorkspaceView: View {
     @ObservedObject var workspace: EditorWorkspace
+    /// In-place tutorial hint published by onboarding progress.
+    @StateObject private var tutorialHints = TutorialHints.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +24,14 @@ struct EditorWorkspaceView: View {
             } else {
                 emptyState
             }
+            // T2: the banner sits at the bottom of the workspace, above nothing, so it
+            // never covers the canvas the user is working on. A toast would vanish in
+            // three seconds; this stays until handled.
+            if tutorialHints.activeHint == .editor {
+                EditorTutorialBanner {
+                    tutorialHints.completeEditorHint()
+                }
+            }
         }
         .frame(minWidth: 800, minHeight: 600)
         .background(
@@ -35,6 +45,7 @@ struct EditorWorkspaceView: View {
             workspace.closeWindowAction = {
                 AppWindowPresenter.window(id: "editor")?.close()
             }
+            tutorialHints.refresh()
         }
         .sheet(isPresented: closeSheetBinding) {
             closeConfirmation

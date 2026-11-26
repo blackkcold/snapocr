@@ -170,6 +170,8 @@ struct GeneralPreferencesView: View {
     @State private var launchError: String?
     @AppStorage(PreferenceKeys.appLanguage)
     private var appLanguage = PreferenceDefaults.appLanguage
+    @AppStorage(PreferenceKeys.dockIconMode)
+    private var dockIconMode = PreferenceDefaults.dockIconMode
 
     var body: some View {
         ScrollView {
@@ -177,6 +179,8 @@ struct GeneralPreferencesView: View {
                 languageCard
 
                 startupCard
+
+                dockCard
             }
         }
         .task {
@@ -213,6 +217,42 @@ struct GeneralPreferencesView: View {
                     .foregroundStyle(.red)
             }
         }
+    }
+
+    private var dockCard: some View {
+        PreferencesCard {
+            PreferencesCardHeader(systemImage: "dock.rectangle", title: "Dock")
+
+            Picker("Show the Dock icon", selection: dockIconModeBinding) {
+                Text("While windows are open").tag(DockIconMode.whileWindowsOpen.rawValue)
+                Text("Always").tag(DockIconMode.always.rawValue)
+                Text("Never").tag(DockIconMode.never.rawValue)
+            }
+            .pickerStyle(.menu)
+
+            PreferencesCardCaption(
+                text: "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running."
+            )
+
+            PreferencesCardCaption(
+                text: "\"While windows are open\" keeps the Dock clean until a window appears."
+            )
+        }
+    }
+
+    /// Applies the Dock choice immediately instead of on the next launch.
+    ///
+    /// The coordinator is the only object allowed to touch the activation policy, and
+    /// it reads the mode through its provider, so writing the value and asking it to
+    /// re-decide is the whole update — no second code path, no restart prompt.
+    private var dockIconModeBinding: Binding<String> {
+        Binding(
+            get: { dockIconMode },
+            set: { newValue in
+                dockIconMode = newValue
+                WindowPresentationCoordinator.shared.refreshDockIconPolicy()
+            }
+        )
     }
 
     private var launchAtLoginBinding: Binding<Bool> {

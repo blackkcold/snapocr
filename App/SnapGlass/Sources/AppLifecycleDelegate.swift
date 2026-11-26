@@ -1,4 +1,5 @@
 import AppKit
+import SharedKit
 
 @MainActor
 final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
@@ -10,6 +11,8 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
 
     weak var viewModel: CaptureViewModel?
     weak var updater: UpdaterManager?
+    /// Onboarding state, used by reopen routing to decide what to surface.
+    var onboarding: OnboardingRuntime?
     private var recordingQuitFlow = RecordingQuitFlow()
     private var isSavingEditorForQuit = false
 
@@ -29,21 +32,74 @@ final class SnapGlassApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Re-opens the recording controls when the app is launched again from Finder or Spotlight.
+    /// Re-evaluates onboarding whenever the app comes back to the front.
+    ///
+    /// The tutorial's first step waits for screen-recording permission, and macOS
+    /// posts no notification when the user flips that switch in System Settings. The
+    /// user leaves, grants it, and returns — this is the only moment the app can
+    /// notice. Evaluating is idempotent, so the extra calls cost nothing.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard !AgentMode.isActive, let onboarding else { return }
+        Task { @MainActor in
+            await onboarding.applicationDidBecomeActive()
+        }
+    }
+
+    /// Re-opens something when the app is launched again from Finder or Spotlight.
     ///
     /// This is a menu-bar-only app (`LSUIElement`), so a second launch activates the
-    /// running copy instead of opening a window. Without this, a hidden or dismissed
-    /// recording panel would be unreachable while capture is still running.
+    /// running copy instead of opening a window. Returning `false` here is what made
+    /// a double-click look like nothing happened: the app was already running, no
+    /// window opened, and the only on-screen change was an 18pt icon the user had no
+    /// reason to look for.
+    ///
+    /// Every branch below surfaces something. Nothing is silent except the agent
+    /// channel, which owns its own lifecycle.
     func applicationShouldHandleReopen(
         _ sender: NSApplication,
         hasVisibleWindows flag: Bool
     ) -> Bool {
         if AgentMode.isActive { return false }
-        guard let viewModel, viewModel.restoreRecordingControlOnReopen() else {
-            return false
+
+        // 1. A recording is running and its controls were dismissed: bring them back.
+        //    This is the one case where the user has work in flight.
+        if let viewModel, viewModel.restoreRecordingControlOnReopen() {
+            NSApp.activate(ignoringOtherApps: true)
+            return true
         }
+
         NSApp.activate(ignoringOtherApps: true)
+
+        // 2. Onboarding never finished: the user still needs to be told where the app
+        //    lives, so reopen the guide rather than a settings tab.
+        if let onboarding, onboarding.isFirstRun {
+            onboarding.showGuideOnUserRequest()
+            return true
+        }
+
+        // 3. A window is already visible: bring it forward and stop. Opening settings
+        //    on top of the user's editor would be an unrequested window.
+        if flag || NSApp.windows.contains(where: { $0.isVisible && !($0 is NSPanel) }) {
+            NSApp.keyWindow?.makeKeyAndOrderFront(nil)
+            return true
+        }
+
+        // 4. No window and the user chose to hide the Dock icon: nothing on screen
+        //    explains where the app is, so show the guide's location page.
+        if let onboarding, Self.dockIconModeIsHidden() {
+            onboarding.showGuideOnUserRequest()
+            return true
+        }
+
+        // 5. Default: open Settings, which is the window a menu-bar app normally has.
+        viewModel?.openWindow?("preferences")
         return true
+    }
+
+    /// Whether the user picked the Dock icon mode that hides the app entirely.
+    private static func dockIconModeIsHidden() -> Bool {
+        let raw = UserDefaults.standard.string(forKey: PreferenceKeys.dockIconMode) ?? ""
+        return DockIconMode(rawValue: raw) == .never
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

@@ -8,7 +8,16 @@ final class WindowPresentationCoordinator {
         let activationController = SystemApplicationActivationController()
         return WindowPresentationCoordinator(
             activationController: activationController,
-            focuser: SystemWindowFocuser(activation: activationController)
+            focuser: SystemWindowFocuser(activation: activationController),
+            // The user's Dock choice has to reach the real coordinator. Leaving the
+            // default static provider here would pin the app to `.whileWindowsOpen`
+            // forever and make the setting a no-op.
+            dockIconPolicy: PreferencesDockIconPolicyProvider {
+                // First run is unfinished while the completion marker is absent. Read
+                // defaults directly: this provider is built before the onboarding
+                // objects exist, and the store writes exactly this key.
+                UserDefaults.standard.double(forKey: PreferenceKeys.onboardingWelcomeCompletedAt) == 0
+            }
         )
     }()
 
@@ -35,6 +44,7 @@ final class WindowPresentationCoordinator {
     private let reevaluateRetryBudget: Duration
     private let focuser: WindowFocusing
     private let notificationCenter: NotificationCenter
+    private let dockIconPolicy: DockIconPolicyProviding
     #if DEBUG
         private let logger = Logger(category: "window-lifecycle", logLevel: .debug)
     #else
@@ -57,13 +67,15 @@ final class WindowPresentationCoordinator {
         notificationCenter: NotificationCenter = .default,
         focuser: WindowFocusing? = nil,
         reevaluateRetryInterval: Duration = .milliseconds(100),
-        reevaluateRetryBudget: Duration = .seconds(1)
+        reevaluateRetryBudget: Duration = .seconds(1),
+        dockIconPolicy: DockIconPolicyProviding = StaticDockIconPolicyProvider()
     ) {
         self.activationController = activationController
         self.presentationTimeout = presentationTimeout
         self.notificationCenter = notificationCenter
         self.reevaluateRetryInterval = reevaluateRetryInterval
         self.reevaluateRetryBudget = reevaluateRetryBudget
+        self.dockIconPolicy = dockIconPolicy
         self.focuser = focuser ?? SystemWindowFocuser(activation: activationController)
         installApplicationObservers()
     }
@@ -156,6 +168,21 @@ final class WindowPresentationCoordinator {
         }
     }
 
+    /// Re-applies the Dock icon policy after the user changed it.
+    ///
+    /// The mode is read live from the provider, so a change needs only a re-run of
+    /// the existing two decisions rather than a third code path: with a window open
+    /// the question is "promote or refuse" (`.never` refuses inside
+    /// `ensureRegularPolicy`), and with no window the question is "demote".
+    func refreshDockIconPolicy() {
+        if activationController.hasVisibleUserFacingWindow {
+            _ = ensureRegularPolicy()
+        } else {
+            reevaluateActivationPolicy()
+        }
+        logger.info("policy.refresh mode=\(dockIconPolicy.mode.rawValue)")
+    }
+
     func registeredWindow(id: String) -> NSWindow? {
         guard let reference = windows[id], let window = reference.value else {
             removeStaleWindow(id: id)
@@ -165,6 +192,13 @@ final class WindowPresentationCoordinator {
     }
 
     private func ensureRegularPolicy() -> Bool {
+        // `.never` means the user wants no Dock icon. Bailing out here is the
+        // expected outcome, not a failure: reporting it as one fills support
+        // logs with false errors.
+        if dockIconPolicy.mode == .never, !dockIconPolicy.firstRunOverride {
+            logger.info("policy.regular.skipped reason=disabled")
+            return false
+        }
         if activationController.activationPolicy == .regular {
             return true
         }
@@ -408,6 +442,11 @@ final class WindowPresentationCoordinator {
     }
 
     private func reevaluateActivationPolicy() {
+        // `.always` keeps the Dock icon and app menu permanently; never demote.
+        if dockIconPolicy.mode == .always {
+            logger.debug("policy.accessory.skipped reason=always")
+            return
+        }
         guard lifecycleState.shouldUseAccessoryPolicy else {
             logger.debug("policy.accessory.defer \(lifecycleSummary)")
             return
