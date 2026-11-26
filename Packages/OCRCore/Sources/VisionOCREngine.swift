@@ -64,39 +64,17 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         try Task.checkCancellation()
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        // 1. 创建并配置文本识别请求
-        let request = VNRecognizeTextRequest()
-        request.recognitionLanguages = languages
-        request.recognitionLevel = options.preserveLayout ? .accurate : .fast
-        request.usesLanguageCorrection = !options.preserveLayout
-
-        // 布局模式下检测更小尺寸的文本
-        if options.preserveLayout {
-            request.minimumTextHeight = 0.01
-        }
-
-        // 2. 执行识别
-        let handler = VNImageRequestHandler(cgImage: image, options: [:])
-        do {
-            try handler.perform([request])
-        } catch {
-            throw OCRError.recognitionFailed(
-                reason: "Vision 框架识别失败: \(error.localizedDescription)"
-            )
-        }
+        // 1–3. 在专用队列上执行 Vision 请求并提取文本行。
+        //
+        // `VNImageRequestHandler.perform` 是同步阻塞调用。直接放在 async 上下文里
+        // 会占住 Swift 并发的协作线程；低核机器上同时打开多个编辑器就能把线程池
+        // 耗尽，其余异步任务永远拿不到线程（CI 的 app-tests 正是这样挂住的）。
+        let lines = try await Self.recognizeLines(
+            image: image,
+            languages: languages,
+            options: options
+        )
         try Task.checkCancellation()
-
-        guard let observations = request.results else {
-            throw OCRError.recognitionFailed(reason: "Vision 未返回识别结果")
-        }
-
-        // 3. 提取文本行，过滤过低置信度 (< 0.1) 的观察
-        let lines = Self.mapObservations(observations)
-        guard !lines.isEmpty else {
-            throw OCRError.recognitionFailed(
-                reason: "未识别到任何有效文本（所有候选置信度均低于 0.1）"
-            )
-        }
 
         // 4. 计算整体平均置信度
         let totalConfidence = lines.reduce(Float(0)) { $0 + $1.confidence }
@@ -124,6 +102,72 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
             ))
 
         return result
+    }
+
+    // MARK: - 线程隔离
+
+    /// Vision 请求的执行队列。
+    ///
+    /// 用并发队列而非串行队列：超大图会切 tile 并发识别，串行队列会把 tile
+    /// 重新排成一条队，抵消 `TiledOCRProcessor` 的并发收益。
+    private static let recognitionQueue = DispatchQueue(
+        label: "app.snapglass.ocr.vision",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+
+    /// 在 `recognitionQueue` 上执行 Vision 请求，返回已过滤的文本行。
+    ///
+    /// 阻塞的 `perform` 留在这个队列上，协作线程池只负责等待，不会被一次 OCR
+    /// 长期占用。
+    private static func recognizeLines(
+        image: CGImage,
+        languages: [String],
+        options: OCROptions
+    ) async throws -> [OCRLine] {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[OCRLine], Error>) in
+            recognitionQueue.async {
+                let request = VNRecognizeTextRequest()
+                request.recognitionLanguages = languages
+                request.recognitionLevel = options.preserveLayout ? .accurate : .fast
+                request.usesLanguageCorrection = !options.preserveLayout
+
+                // 布局模式下检测更小尺寸的文本
+                if options.preserveLayout {
+                    request.minimumTextHeight = 0.01
+                }
+
+                let handler = VNImageRequestHandler(cgImage: image, options: [:])
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(
+                        throwing: OCRError.recognitionFailed(
+                            reason: "Vision 框架识别失败: \(error.localizedDescription)"
+                        )
+                    )
+                    return
+                }
+
+                guard let observations = request.results else {
+                    continuation.resume(
+                        throwing: OCRError.recognitionFailed(reason: "Vision 未返回识别结果")
+                    )
+                    return
+                }
+
+                let lines = Self.mapObservations(observations)
+                guard !lines.isEmpty else {
+                    continuation.resume(
+                        throwing: OCRError.recognitionFailed(
+                            reason: "未识别到任何有效文本（所有候选置信度均低于 0.1）"
+                        )
+                    )
+                    return
+                }
+                continuation.resume(returning: lines)
+            }
+        }
     }
 
     // MARK: - 支持的语言
