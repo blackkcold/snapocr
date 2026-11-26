@@ -83,10 +83,43 @@ struct OnboardingPolicyTests {
         state.welcomeCompletedAt = nil
         var context = OnboardingContext(now: Date(timeIntervalSince1970: 10_000))
         context.welcomeJustDismissed = true
-        // Step 2 wins first: onboarding is still unfinished.
-        #expect(OnboardingPolicy.action(for: state, context: context) == .showGuide(.firstRun, resumeAt: .location))
 
+        // The guide the user just closed must not reopen in the same session;
+        // the coach follows instead. Reopening it was a visible loop.
+        #expect(OnboardingPolicy.action(for: state, context: context) == .showMenuBarCoach)
+
+        // Once the coach was shown, the rest of the launch stays quiet: the
+        // unfinished guide resumes next launch, not as a tutorial now.
+        state.menubarCoachShown = true
+        #expect(OnboardingPolicy.action(for: state, context: context) == .none)
+
+        // A completed guide follows the same dismissal rule.
         state.welcomeCompletedAt = Date(timeIntervalSince1970: 500)
+        state.menubarCoachShown = false
+        #expect(OnboardingPolicy.action(for: state, context: context) == .showMenuBarCoach)
+    }
+
+    @Test func dismissedGuideResumesOnTheNextLaunch() {
+        // The dismissal flag is process-scoped. A fresh context without it shows
+        // the unfinished guide again, which is what the close button promises.
+        var state = OnboardingState()
+        state.contentVersion = OnboardingPolicy.currentContentVersion
+        var context = OnboardingContext(now: Date(timeIntervalSince1970: 10_000))
+        context.welcomeJustDismissed = true
+        #expect(OnboardingPolicy.action(for: state, context: context) == .showMenuBarCoach)
+
+        context.welcomeJustDismissed = false
+        #expect(OnboardingPolicy.action(for: state, context: context) == .showGuide(.firstRun, resumeAt: .location))
+    }
+
+    @Test func dismissedContentUpdateGuideDoesNotReopen() {
+        // The same loop existed after a content-version bump: step 3 re-showed
+        // the guide the user had just closed.
+        var state = completed()
+        state.contentVersion = OnboardingPolicy.currentContentVersion - 1
+        state.menubarCoachShown = false
+        var context = OnboardingContext(now: Date(timeIntervalSince1970: 10_000))
+        context.welcomeJustDismissed = true
         #expect(OnboardingPolicy.action(for: state, context: context) == .showMenuBarCoach)
     }
 

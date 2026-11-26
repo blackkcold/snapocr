@@ -265,9 +265,12 @@ private struct AppLifecycleBridge: View {
                     }
                 }
                 router.openWindow = viewModel.openWindow
-                // The guide window opens through the same router so it goes through
-                // the presentation coordinator and promotes the app to `.regular`.
-                onboarding.presenter.openWindow = viewModel.openWindow
+                // `WelcomeWindowPresenter` wraps this opener in
+                // `AppWindowPresenter.present` itself, so hand it the raw scene
+                // action. Passing `viewModel.openWindow` here nests a second
+                // presentation under the same id; the inner one is dropped as
+                // in-flight and the guide window never opens.
+                onboarding.presenter.openWindow = { id in openWindow(id: id) }
                 guard !didInitialize else { return }
                 didInitialize = true
                 updater.start()
