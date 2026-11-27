@@ -248,7 +248,7 @@
 "Screen Recording" = "录屏";
 "Screen Recording permission allows screenshots, OCR, and screen recording." = "“屏幕录制”权限可用于截图、OCR 和录制屏幕。";
 "Screen Capture Access Unavailable" = "屏幕捕获功能暂不可用";
-"Screen capture access is currently unavailable. Check System Settings or try again later." = "当前无法使用屏幕捕获功能。请检查系统设置，或稍后重试。";
+"Screen capture access is unavailable. Allow SnapGlass to record the screen in System Settings, then quit and reopen SnapGlass." = "当前无法使用屏幕捕获。请在系统设置中允许 SnapGlass 录制屏幕，然后退出并重新打开 SnapGlass。";
 "Open System Settings" = "打开系统设置";
 "Remind Later" = "稍后再说";
 "Requesting permission..." = "正在请求权限…";

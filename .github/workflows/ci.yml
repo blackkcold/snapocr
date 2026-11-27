@@ -119,15 +119,14 @@ jobs:
         timeout-minutes: 8
         run: bash scripts/test-library-cli.sh
 
-  # Kept out of the required path, exactly as before: it was already
-  # `continue-on-error` inside `unit-test`, so it never gated a merge — it only
-  # made every PR wait ~15 minutes for a signal that could not block anything.
-  # 本地全绿（32 tests / 7.7s），但无头 runner 上偶发在 EditorHistoryTests 挂起。
+  # Gating: the hang that kept this job out of the required path (Vision on the
+  # cooperative thread pool) was fixed in #49 and it has run in 3–4 minutes
+  # since. The 15-minute timeout turns a stuck runner into a failed check
+  # instead of a PR that waits forever, so the job can require a re-run.
   app-tests:
     name: app-tests
     if: github.event_name == 'pull_request'
     runs-on: macos-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen && xcodegen generate
