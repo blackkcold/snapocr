@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- 权限窗在「屏幕录制访问不可用」状态下不刷新，也没有说明 macOS 15+ 需要重启才能生效：授权后回到 App 仍显示 Access Unavailable。现在 App 重新激活时会重查；系统若仍返回未授权，卡片会明确提示在系统设置中允许后退出并重新打开 SnapGlass。
 - 首启引导窗与「重新显示欢迎引导」都不出现，只在 Dock 闪一下：引导路由被 `AppWindowPresenter` 包了两层，内层被 in-flight 去重吃掉。现在只包一层，窗口正常打开。
 - 权限窗打开后立刻自关：已授权与授权中都会让视图切换身份并触发 `onAppear` 关闭。现在窗口保持打开，授权中显示等待，已授权显示 Done；只有按钮会关闭它。
 - 未完成的引导窗按红叉或 `Esc` 关闭后立刻重开：关闭触发的状态评估里，「未完成」优先于「本次已关闭」。现在本次进程内关闭的引导不再重开，按设计在下次启动从原页继续；关闭后仍会显示菜单栏提示。

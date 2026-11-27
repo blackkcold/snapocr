@@ -1,3 +1,4 @@
+import AppKit
 import SharedKit
 import SwiftUI
 
@@ -33,6 +34,15 @@ struct PermissionGuideView: View {
         // right after it opened.
         permissionCard
             .onAppear {
+                checkPermission()
+            }
+            // macOS posts no notification when the user flips the switch in
+            // System Settings, so returning to the app is the only moment the
+            // card can notice. `.denied` is the usual first state on macOS 15+
+            // and its "Open System Settings" button only opens Settings: without
+            // this the card kept saying "Access Unavailable" after the switch
+            // was turned on, and the Done state never appeared.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 checkPermission()
             }
     }
@@ -155,10 +165,15 @@ struct PermissionGuideView: View {
             Label("Screen Capture Access Unavailable", systemImage: "xmark.circle.fill")
                 .foregroundColor(.red)
 
-            Text("Screen capture access is currently unavailable. Check System Settings or try again later.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            Text(
+                LocalizedStringKey(
+                    "Screen capture access is unavailable. Allow SnapGlass to record the screen "
+                        + "in System Settings, then quit and reopen SnapGlass."
+                )
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
 
             Button(
                 action: {
