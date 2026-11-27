@@ -253,6 +253,9 @@ final class WindowPresentationCoordinator {
     }
 
     private func handleApplicationWillClose(token: ObjectIdentifier) {
+        #if DEBUG
+            handledApplicationNotificationCount += 1
+        #endif
         guard let id = knownWindowsByToken[token]?.id else {
             logger.debug("window.close.unknown")
             scheduleReevaluate()
@@ -264,6 +267,9 @@ final class WindowPresentationCoordinator {
     /// 成为 key 是一次幂等的重新登记机会：复用同一 `NSWindow` 重新打开时，
     /// SwiftUI 不保证再次调用 `register()`，靠这里恢复当前映射并补回逐窗口观察。
     private func handleApplicationDidBecomeKey(window: NSWindow, token: ObjectIdentifier) {
+        #if DEBUG
+            handledApplicationNotificationCount += 1
+        #endif
         guard let reference = knownWindowsByToken[token] else { return }
         observeWindow(window, token: token)
         if windows[reference.id]?.token != token {
@@ -351,6 +357,9 @@ final class WindowPresentationCoordinator {
                 waited < self.reevaluateRetryBudget
             {
                 try? await Task.sleep(for: self.reevaluateRetryInterval)
+                #if DEBUG
+                    self.reevaluateWaitCount += 1
+                #endif
                 if Task.isCancelled {
                     self.reevaluateTask = nil
                     return
@@ -484,6 +493,35 @@ final class WindowPresentationCoordinator {
                 known: knownWindowsByToken.count,
                 observed: observedWindows.count
             )
+        }
+
+        /// 测试用：仍在等待呈现完成的窗口数。
+        ///
+        /// 呈现超时是异步任务，测试要断言「超时已经发生过」只能观察这个数量归零，
+        /// 而不是睡一个「应该够久」的时长——后者在满载机器上会把未完成当成已完成。
+        var pendingPresentationCount: Int {
+            lifecycleState.pendingPresentations.count
+        }
+
+        /// 测试用：有界重算任务已经等待了多少轮。
+        ///
+        /// 「关闭瞬间窗口仍可见」的分支只有在重算真的进入等待循环后才有意义；
+        /// 测试据此等待循环启动，而不是睡一个「大概够」的时长。
+        private(set) var reevaluateWaitCount = 0
+
+        /// 测试用：已经处理完的应用级通知数（窗口关闭与成为 key 各算一次）。
+        ///
+        /// 通知处理是异步任务，「这条通知已经生效」只能等这个计数，而不是睡一个
+        /// 「应该够久」的时长。断言「什么都没有发生」前先用它确认处理已经跑过，
+        /// 否则等待时长一短就会把未处理当成未发生。
+        private(set) var handledApplicationNotificationCount = 0
+
+        /// 测试用：是否还有排队中的异步工作（有界重算或呈现超时）。
+        ///
+        /// 「只降级一次」这类断言必须等到没有后续工作才能成立：只看第一次降级
+        /// 到达就下结论，任何迟到的第二次都会被漏掉。
+        var hasPendingWork: Bool {
+            reevaluateTask != nil || !timeoutTasks.isEmpty
         }
     #endif
 
