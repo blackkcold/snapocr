@@ -189,8 +189,8 @@ struct VisionFallbackTests {
 
     /// `.fast` 兜底失败时保持「没有文字」的语义，让分块路径把这一块当空白跳过。
     ///
-    /// 复核实测过：这里重抛 `.fast` 的错误会让 `OCRPipeline.isNoTextError` 认不出
-    /// 空白块，一块坏图就会让整张 5K 截图失败。
+    /// 复核实测过：这里重抛 `.fast` 的错误会让分块路径认不出空白块，一块坏图就会
+    /// 让整张 5K 截图失败。判据是错误结构（``OCRError/isNoText``），不是文案。
     @Test func keepsNoTextSemanticsWhenTheFastRetryFails() async throws {
         let calls = RecognitionCalls()
         let engine = VisionOCREngine { _, _, _, level in
@@ -209,11 +209,11 @@ struct VisionFallbackTests {
             )
             Issue.record("expected the empty result to throw")
         } catch let error as OCRError {
-            guard case .recognitionFailed(let reason) = error else {
+            #expect(error.isNoText)
+            guard case .noTextFound = error else {
                 Issue.record("unexpected OCR error case: \(error)")
                 return
             }
-            #expect(reason.contains("未识别到任何有效文本"))
         }
 
         let levels = await calls.levels

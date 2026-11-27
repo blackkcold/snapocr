@@ -42,7 +42,7 @@ extension EditorViewModel {
                 guard !Task.isCancelled, generation == ocrGeneration else { return }
                 ocrLines = []
                 isOCRRunning = false
-                showToast(message: AppLocalization.string("OCR failed: %@", error.localizedDescription), type: .error)
+                showToast(message: OCRErrorPresentation.message(for: error), type: .error)
             }
         }
     }

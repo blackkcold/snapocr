@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SharedKit
 import Vision
 
 // MARK: - Apple Vision OCR 引擎
@@ -30,7 +31,9 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
     typealias PlatformImageType = CGImage
 
     /// 执行一次 Vision 文本请求。测试可注入假实现，验证回退编排。
-    typealias LineRecognizer = (CGImage, [String], OCROptions, OCRRecognitionLevel) async throws -> [OCRLine]
+    ///
+    /// 标记 `@Sendable`：请求会被交给调度器在独立任务上执行，闭包必须能跨隔离域传递。
+    typealias LineRecognizer = @Sendable (CGImage, [String], OCROptions, OCRRecognitionLevel) async throws -> [OCRLine]
 
     // MARK: - 协议属性
 
@@ -53,13 +56,62 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
     private var _logHandler: ((OCRLogEntry) -> Void)?
     private let logHandlerLock = NSLock()
 
+    #if DEBUG
+        private let logger = Logger(category: "ocr-vision", logLevel: .debug)
+    #else
+        private let logger = Logger(category: "ocr-vision")
+    #endif
+
     // MARK: - 初始化
 
     /// 单次 Vision 请求的执行器；测试可注入假实现，验证回退编排。
     private let lineRecognizer: LineRecognizer
 
-    init(lineRecognizer: @escaping LineRecognizer = VisionOCREngine.performVisionRequest) {
+    /// 限制同时阻塞的 Vision 线程数并给单次请求加超时。
+    private let scheduler: VisionRequestScheduler
+
+    /// - Parameters:
+    ///   - scheduler: 限制并发与超时的调度器；测试可传独立实例，避免占住进程级共享槽位。
+    ///   - lineRecognizer: 底层单次请求；默认是真正调用 Vision 的阻塞实现。
+    init(
+        scheduler: VisionRequestScheduler = .shared,
+        lineRecognizer: @escaping LineRecognizer = VisionOCREngine.performVisionRequest
+    ) {
+        self.scheduler = scheduler
         self.lineRecognizer = lineRecognizer
+    }
+
+    /// 发出一次请求：所有路径（含注入的假实现）都经过调度器。
+    ///
+    /// 超时与并发上限必须在这里生效，而不是在 `OCRPipeline` 之上：分块路径用
+    /// `withThrowingTaskGroup` 等每一块，单块永不返回就会让整组永远不返回，
+    /// 上层根本收不到任何结果，也就无从判断该超时。
+    private func recognizeRequest(
+        image: CGImage,
+        languages: [String],
+        options: OCROptions,
+        level: OCRRecognitionLevel
+    ) async throws -> [OCRLine] {
+        let recognizer = lineRecognizer
+        do {
+            return try await scheduler.run {
+                try await recognizer(image, languages, options, level)
+            }
+        } catch let error as OCRError {
+            switch error {
+            case .visionRequestTimedOut(let timeout):
+                logger.warning(
+                    "Vision 请求超时 | 级别: \(level.rawValue) "
+                        + "| 尺寸: \(image.width)x\(image.height) "
+                        + "| 上限: \(Int(timeout.components.seconds))s"
+                )
+            case .engineUnresponsive:
+                logger.error("Vision 引擎无响应，拒绝新请求")
+            default:
+                break
+            }
+            throw error
+        }
     }
 
     // MARK: - 识别
@@ -138,7 +190,14 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         options: OCROptions
     ) async throws -> [OCRLine] {
         let primaryLevel = options.recognitionLevel
-        let primary = try await lineRecognizer(image, languages, options, primaryLevel)
+        // 主请求的失败（超时、引擎无响应、Vision 报错）一律向上抛：这些都是
+        // 「结果未知」，不能当成空白，否则调用方会以为图里没有文字。
+        let primary = try await recognizeRequest(
+            image: image,
+            languages: languages,
+            options: options,
+            level: primaryLevel
+        )
 
         guard primaryLevel == .accurate else {
             return try Self.validated(primary)
@@ -162,13 +221,19 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
 
         try Task.checkCancellation()
         do {
-            let fallback = try await lineRecognizer(image, languages, options, .fast)
+            let fallback = try await recognizeRequest(
+                image: image,
+                languages: languages,
+                options: options,
+                level: .fast
+            )
             if VisionRecognitionPolicy.prefersFastResult(accurate: resolved, fast: fallback) {
                 return try Self.validated(fallback)
             }
         } catch {
-            // 安全网本身失败时保留「没有文字」的语义：分块路径据此跳过空白块，
-            // 一块坏图不该让整张截图失败。`validated` 会抛出可识别的空白错误。
+            // 安全网本身失败时保留已经拿到的结果：`.accurate` 为空就按「没有文字」
+            // 处理（`validated` 抛 `.noTextFound`），已有文字就返回它。一条坏图
+            // 不该让整张截图失败。
         }
         return try Self.validated(resolved)
     }
@@ -200,7 +265,12 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
 
         try Task.checkCancellation()
         do {
-            let retry = try await lineRecognizer(scaled, languages, options, .accurate)
+            let retry = try await recognizeRequest(
+                image: scaled,
+                languages: languages,
+                options: options,
+                level: .accurate
+            )
             if VisionRecognitionPolicy.prefersSmallerScaleResult(primary: primary, retry: retry) {
                 return retry
             }
@@ -281,11 +351,13 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
     }
 
     /// 把空结果统一成可识别的「没有文字」错误，供分块路径当作空白块处理。
+    ///
+    /// 抛 ``OCRError/noTextFound`` 而不是带文案的 ``OCRError/recognitionFailed(reason:)``：
+    /// 调用方据此判断这一块是否为空，靠的是错误结构而不是文案，超时之类的真实
+    /// 失败不会被误当成空白。
     private static func validated(_ lines: [OCRLine]) throws -> [OCRLine] {
         guard !lines.isEmpty else {
-            throw OCRError.recognitionFailed(
-                reason: "未识别到任何有效文本（所有候选置信度均低于 0.1）"
-            )
+            throw OCRError.noTextFound
         }
         return lines
     }

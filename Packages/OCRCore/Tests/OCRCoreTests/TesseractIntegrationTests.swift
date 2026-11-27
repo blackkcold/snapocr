@@ -41,9 +41,15 @@ struct TesseractIntegrationTests {
             let result = try await OCRPipeline().recognize(image, options: options)
             #expect(result.engineType == .vision)
         } catch let error as OCRError {
-            guard case .recognitionFailed = error else {
+            // 回退确实发生了：Tesseract 缺语言包被接住后，Vision 接手这张纯白图，
+            // 而它确实没有文字。空白由 `.noTextFound` 表达（不是 `recognitionFailed`）。
+            // 这里要断言的是「Tesseract 的错误没有逃逸」，所以两者都算通过；
+            // 任何别的错误（超时、引擎无响应、语言不支持）仍然必须让本用例变红。
+            switch error {
+            case .noTextFound, .recognitionFailed:
+                break
+            default:
                 Issue.record("Tesseract error escaped instead of falling back to Vision: \(error)")
-                return
             }
         }
     }

@@ -145,6 +145,9 @@ targets:
       - path: App/SnapGlass/EditorTests
       - path: App/SnapGlass/Sources/AppLanguage.swift
       - path: App/SnapGlass/Sources/AppLocalization.swift
+      # `OCRErrorPresentation` turns an OCRError into a toast sentence; the tests pin
+      # that a failure is never reported with the engine's Chinese-only description.
+      - path: App/SnapGlass/Sources/OCRErrorPresentation.swift
       - path: App/SnapGlass/Sources/Recording/RecordingStorage.swift
       - path: App/SnapGlass/Sources/Recording/RecordingWindowExclusionRegistry.swift
       - path: App/SnapGlass/Sources/ClipboardWriter.swift
