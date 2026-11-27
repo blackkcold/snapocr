@@ -27,6 +27,38 @@ struct OCRSettingsTests {
         #expect(options.recognitionLevel == .accurate)
     }
 
+    /// 关键回归：本机用户域的真实形态 `(en, zh-Hans, zh-Hant)` + `auto` 必须迁移成中文优先。
+    ///
+    /// 偏好设置只有开关没有重排，用户关掉日语/韩语后存的就是这个三元素数组。
+    /// 只按「与旧默认全等」判定的迁移到不了这批人身上，`en-US` 会继续排在首位。
+    @Test func shorterStoredEnglishFirstOrderIsMigratedToChineseFirst() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(["en", "zh-Hans", "zh-Hant"], forKey: PreferenceKeys.ocrEnabledLanguages)
+        defaults.set("auto", forKey: PreferenceKeys.ocrLanguagePriority)
+
+        let options = OCRSettings.current(defaults: defaults)
+
+        #expect(options.languages.first == "zh-Hans")
+        #expect(options.languages == ["zh-Hans", "en-US", "zh-Hant"])
+        #expect(options.recognitionLevel == .accurate)
+    }
+
+    /// 本机的完整组合（三元素 + `zh` 优先级）也必须以中文开头，且不引入已关闭的语言。
+    @Test func realStoredDomainShapeWithChinesePriorityKeepsChineseFirst() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(["en", "zh-Hans", "zh-Hant"], forKey: PreferenceKeys.ocrEnabledLanguages)
+        defaults.set("zh", forKey: PreferenceKeys.ocrLanguagePriority)
+
+        let options = OCRSettings.current(defaults: defaults)
+
+        #expect(options.languages.first == "zh-Hans")
+        #expect(options.languages == ["zh-Hans", "en-US", "zh-Hant"])
+    }
+
     /// 用户自己排过的顺序必须原样到达 Vision。
     @Test func userChosenOrderReachesTheEngine() throws {
         let (defaults, suiteName) = try makeDefaults()
