@@ -477,7 +477,6 @@
 "Frame %lld captured" = "Frame %lld captured";
 "Saved to %@" = "Saved to %@";
 "Capture failed: %@" = "Capture failed: %@";
-"OCR failed: %@" = "OCR failed: %@";
 "History save failed: %@" = "History save failed: %@";
 "Scroll frame failed: %@" = "Scroll frame failed: %@";
 "The window size changed; finish to keep what has been captured" = "The window size changed; finish to keep what has been captured";
@@ -1228,3 +1227,6 @@
 "Text recognition timed out. Try again with a smaller area." = "Text recognition timed out. Try again with a smaller area.";
 "Text recognition stopped responding. Restart SnapGlass and try again." = "Text recognition stopped responding. Restart SnapGlass and try again.";
 "The selected text recognition engine is unavailable." = "The selected text recognition engine is unavailable.";
+"The language pack for text recognition is not installed. Download it in Settings." = "The language pack for text recognition is not installed. Download it in Settings.";
+"The image is too large to recognize. Try a smaller area." = "The image is too large to recognize. Try a smaller area.";
+"Text recognition failed. Try again." = "Text recognition failed. Try again.";

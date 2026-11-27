@@ -18,6 +18,12 @@ final class PinnedWindowManager: NSObject, NSWindowDelegate {
     private var ocrPipeline: OCRPipeline?
     private var toastHandler: ((String, ToastType) -> Void)?
 
+    /// Diagnostics for pin OCR failures.
+    ///
+    /// The toast only says what the user can do; the engine's own description goes here,
+    /// so a bug report can still reach the detail without showing Chinese in an English UI.
+    private let logger = Logger(category: "pins")
+
     private override init() {
         super.init()
     }
@@ -124,9 +130,13 @@ final class PinnedWindowManager: NSObject, NSWindowDelegate {
                 NSPasteboard.general.setString(result.text, forType: .string)
                 self?.presentToast(AppLocalization.string("Text copied to clipboard"), type: .success)
             } catch {
+                let kind = OCRErrorPresentation.kind(of: error)
+                if kind != .noText {
+                    self?.logger.error("Pin OCR failed: \(OCRErrorPresentation.diagnostic(for: error))")
+                }
                 self?.presentToast(
                     OCRErrorPresentation.message(for: error),
-                    type: .error
+                    type: kind == .noText ? .info : .error
                 )
             }
         }

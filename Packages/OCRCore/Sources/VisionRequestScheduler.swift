@@ -15,15 +15,14 @@ import Foundation
 /// - A request that outlives `requestTimeout` is reported to its caller instead of
 ///   hanging the UI forever.
 ///
-/// A timed-out request cannot be aborted, so its thread is already lost. The slot is
-/// therefore spent rather than returned to the pool: pretending it came back would let
-/// the real thread count climb past the ceiling the next time the same image is asked
-/// for. Once every slot has been spent the engine counts as unresponsive and later
-/// calls fail immediately instead of queueing behind threads that will never return.
-///
-/// Nothing here can reclaim a leaked thread — Vision offers no way to abort a `perform`.
-/// The honest consequence is that recovering from a fully leaked engine needs a restart,
-/// which is what ``OCRError/engineUnresponsive`` tells the user.
+/// A timed-out request cannot be aborted, so its thread stays busy. That is why the
+/// slot is accounted by the thread rather than by the caller: the slot is released when
+/// the work actually returns, not when the deadline fires. A request that comes back
+/// after its deadline therefore gives its capacity back, and only threads that never
+/// return stay counted. When every slot is held by a thread past its deadline the engine
+/// counts as unresponsive and later calls fail immediately instead of queueing behind
+/// threads that may never return; if those threads do come back, the pool recovers on
+/// its own instead of demanding a restart.
 actor VisionRequestScheduler {
     /// How many Vision requests may hold a blocked thread at once.
     ///
@@ -44,11 +43,11 @@ actor VisionRequestScheduler {
     /// is stuck.
     ///
     /// Must stay comfortably above ``defaultRequestTimeout``. Every granted request is
-    /// bounded by that timeout, so a healthy pool drains a waiter within roughly one
-    /// timeout: a shorter budget would report "engine unresponsive, restart" during
-    /// ordinary concurrent use and send the user to restart a working app. Twice the
-    /// request timeout means at least two full generations of work failed to admit the
-    /// waiter, which is contention no queue drains from.
+    /// bounded by that timeout, so a healthy pool frees a slot within roughly one
+    /// timeout of granting it: a shorter budget would report "engine unresponsive,
+    /// restart" during ordinary concurrent use and send the user to restart a working
+    /// app. This is a backstop for a pool that stopped making progress, not a
+    /// performance gate.
     static let defaultCapacityTimeout: Duration = .seconds(60)
 
     /// The scheduler shared by every engine in the process.
@@ -61,10 +60,16 @@ actor VisionRequestScheduler {
     private let requestTimeout: Duration
     private let capacityTimeout: Duration
 
-    /// Slots whose request has not finished yet.
+    /// Threads held by a request right now, whether or not they are past their deadline.
+    ///
+    /// This is the number the ceiling applies to. Overdue threads are still counted:
+    /// Vision cannot abort them, so the machine really is still working.
     private var granted = 0
-    /// Slots whose request timed out and whose thread never came back.
-    private var leaked = 0
+    /// Of `granted`, the requests that outlived `requestTimeout` and have not returned.
+    ///
+    /// A request leaves this count when its thread comes back, so a slow-but-finished
+    /// recognition never permanently costs capacity.
+    private var overdue = 0
     private var unresponsive = false
     private var waiters: [Waiter] = []
 
@@ -87,15 +92,13 @@ actor VisionRequestScheduler {
     struct Snapshot: Sendable, Equatable {
         /// Maximum threads the pool may occupy.
         let capacity: Int
-        /// Requests still running under their own caller.
+        /// Threads held by a request right now, on time or overdue.
         let granted: Int
-        /// Requests that timed out and never released their thread.
-        let leaked: Int
-        /// Blocked threads right now: `granted + leaked`.
-        let liveThreads: Int
+        /// Of `granted`, the requests past their deadline that have not returned.
+        let overdue: Int
         /// Highest number of slots held at the same time since launch.
         let peakGranted: Int
-        /// Whether every slot is spent and new requests fail immediately.
+        /// Whether every held thread is past its deadline, so new requests fail fast.
         let unresponsive: Bool
     }
 
@@ -104,8 +107,7 @@ actor VisionRequestScheduler {
         Snapshot(
             capacity: capacity,
             granted: granted,
-            leaked: leaked,
-            liveThreads: granted + leaked,
+            overdue: overdue,
             peakGranted: peakGranted,
             unresponsive: unresponsive
         )
@@ -120,8 +122,9 @@ actor VisionRequestScheduler {
     ///
     /// The operation is abandoned rather than cancelled on timeout, because Vision
     /// cannot stop a `perform`: cancelling would only change what the caller sees, not
-    /// what the machine is doing. Slot accounting follows the thread rather than the
-    /// caller, so a cancelled call never frees capacity that is still busy.
+    /// what the machine is doing. The slot follows the thread, not the caller, so a
+    /// cancelled call never frees capacity that is still busy, and a timed-out call does
+    /// not permanently spend capacity its thread later gives back.
     ///
     /// - Parameter operation: The blocking work; one slot is held for its whole duration.
     /// - Returns: The lines the operation produced.
@@ -145,8 +148,12 @@ actor VisionRequestScheduler {
                 let timeout = Task { [requestTimeout] in
                     try? await Task.sleep(for: requestTimeout)
                     guard !Task.isCancelled else { return }
-                    guard lease.abandon() else { return }
-                    self.noteLeak()
+                    // The deadline only speaks for a thread that has not come back. If
+                    // the work returned first, its result stands and no slot is overdue:
+                    // deciding both questions under one lock is what keeps a request
+                    // that returned on the boundary from being booked as a lost thread.
+                    guard lease.claimTimeout() == .stillRunning else { return }
+                    self.noteOverdue()
                     lease.fail(OCRError.visionRequestTimedOut(timeout: requestTimeout))
                 }
 
@@ -157,14 +164,10 @@ actor VisionRequestScheduler {
                     defer { timeout.cancel() }
                     do {
                         let lines = try await operation()
-                        if lease.finish() {
-                            await self?.release()
-                        }
+                        await self?.release(lease.finish())
                         lease.succeed(lines)
                     } catch {
-                        if lease.finish() {
-                            await self?.release()
-                        }
+                        await self?.release(lease.finish())
                         lease.fail(error)
                     }
                 }
@@ -179,9 +182,7 @@ actor VisionRequestScheduler {
     private func acquire() async throws {
         try Task.checkCancellation()
         guard !unresponsive else { throw OCRError.engineUnresponsive }
-        // A leaked request still occupies a real thread, so the ceiling applies to
-        // threads, not to bookkeeping: live threads are `granted + leaked`.
-        if granted + leaked < capacity {
+        if granted < capacity {
             granted += 1
             peakGranted = max(peakGranted, granted)
             return
@@ -207,11 +208,21 @@ actor VisionRequestScheduler {
         }
     }
 
-    /// Returns a slot whose work finished.
+    /// Returns a slot whose thread has come back.
     ///
     /// A waiting caller takes the slot directly, so the count does not dip and come
     /// back between them.
-    private func release() {
+    ///
+    /// - Parameter completion: Whether the work returned on time, or after its deadline.
+    private func release(_ completion: Completion) {
+        if completion == .clearOverdue {
+            overdue = max(0, overdue - 1)
+            // A thread that came back means the pool is not exhausted any more. Holding
+            // the verdict would keep demanding a restart for an engine that recovered.
+            if unresponsive, overdue < capacity {
+                unresponsive = false
+            }
+        }
         guard !waiters.isEmpty else {
             granted = max(0, granted - 1)
             return
@@ -220,10 +231,10 @@ actor VisionRequestScheduler {
         waiter.continuation.resume()
     }
 
-    private func noteLeak() {
-        granted = max(0, granted - 1)
-        leaked += 1
-        guard leaked >= capacity, !unresponsive else { return }
+    /// Records that one held thread has passed its deadline without returning.
+    private func noteOverdue() {
+        overdue += 1
+        guard overdue >= capacity, !unresponsive else { return }
         unresponsive = true
         let stuck = waiters
         waiters.removeAll()
@@ -244,19 +255,37 @@ actor VisionRequestScheduler {
         let continuation: CheckedContinuation<Void, any Error>
     }
 
+    /// How a returned thread has to be accounted for.
+    private enum Completion: Sendable, Equatable {
+        /// The work returned within its deadline; release the slot normally.
+        case release
+        /// The work returned after its deadline; release the slot and clear the
+        /// overdue mark the deadline recorded.
+        case clearOverdue
+    }
+
+    /// What the deadline found when it arrived.
+    private enum TimeoutClaim: Sendable, Equatable {
+        /// The work had not returned: its thread is held and is now overdue.
+        case stillRunning
+        /// The work had already returned: its result stands and nothing is owed.
+        case alreadyReturned
+    }
+
     /// Exactly-once bookkeeping for one granted slot.
     ///
-    /// Two independent questions have to be answered once each: does the caller still
-    /// need its result, and does the slot still need to be accounted for. They are not
-    /// the same question — a cancelled caller still holds a busy thread — so they are
-    /// tracked separately instead of sharing one "done" flag.
+    /// Two independent questions have to be answered exactly once, and they are not the
+    /// same question: does the caller still need its result, and did the thread come
+    /// back on time. A cancelled caller still holds a busy thread; a timed-out caller
+    /// still gets its thread back eventually. They are tracked separately instead of
+    /// sharing one "done" flag.
     private final class Lease: @unchecked Sendable {
         private let lock = NSLock()
         private var continuation: CheckedContinuation<[OCRLine], any Error>?
         private var pending: Result<[OCRLine], any Error>?
         private var callerServed = false
-        private var settled = false
-        private var finished = false
+        private var returned = false
+        private var timedOut = false
 
         /// Hands over the continuation, delivering an outcome that arrived first.
         func install(_ continuation: CheckedContinuation<[OCRLine], any Error>) {
@@ -276,26 +305,27 @@ actor VisionRequestScheduler {
 
         func fail(_ error: any Error) { deliver(.failure(error)) }
 
-        /// Marks the work as returned; true when the slot still has to be released.
-        func finish() -> Bool {
+        /// Marks the thread as returned, and says how to account for the slot.
+        ///
+        /// Called exactly once by the work, whether it succeeded or failed.
+        func finish() -> Completion {
             lock.lock()
             defer { lock.unlock() }
-            finished = true
-            guard !settled else { return false }
-            settled = true
-            return true
+            returned = true
+            return timedOut ? .clearOverdue : .release
         }
 
-        /// Marks the request as timed out; true when its slot must count as leaked.
+        /// Claims the request for its deadline.
         ///
-        /// Returns false when the work already finished, because the slot was then
-        /// released normally and no thread was lost.
-        func abandon() -> Bool {
+        /// - Returns: ``TimeoutClaim/stillRunning`` when the thread is still held and the
+        ///   deadline now owns the outcome; ``TimeoutClaim/alreadyReturned`` when the work
+        ///   came back first, in which case the deadline must do nothing at all.
+        func claimTimeout() -> TimeoutClaim {
             lock.lock()
             defer { lock.unlock() }
-            guard !finished, !settled else { return false }
-            settled = true
-            return true
+            guard !returned else { return .alreadyReturned }
+            timedOut = true
+            return .stillRunning
         }
 
         private func deliver(_ result: Result<[OCRLine], any Error>) {

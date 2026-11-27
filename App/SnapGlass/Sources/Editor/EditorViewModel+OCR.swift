@@ -42,7 +42,17 @@ extension EditorViewModel {
                 guard !Task.isCancelled, generation == ocrGeneration else { return }
                 ocrLines = []
                 isOCRRunning = false
-                showToast(message: OCRErrorPresentation.message(for: error), type: .error)
+                // "No text here" is an ordinary outcome of scanning a picture, not a
+                // failure: the capture path already reports the same result as `.info`,
+                // so a red toast here would contradict it.
+                let kind = OCRErrorPresentation.kind(of: error)
+                if kind != .noText {
+                    logger.error("Editor OCR failed: \(OCRErrorPresentation.diagnostic(for: error))")
+                }
+                showToast(
+                    message: OCRErrorPresentation.message(for: error),
+                    type: kind == .noText ? .info : .error
+                )
             }
         }
     }

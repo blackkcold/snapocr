@@ -5,11 +5,13 @@ import OCRCore
 ///
 /// `OCRError`'s own `errorDescription` is developer-facing and Chinese-only, and every
 /// toast used to embed it. On an English, Japanese or Korean interface that reported a
-/// timeout in Chinese, in the middle of a screenshot flow — and it also meant the toast
+/// failure in Chinese, in the middle of a screenshot flow — and it also meant the toast
 /// could not say what to do about it.
 ///
 /// The failure kind therefore picks the sentence, and the interface language picks the
-/// translation. Only an unrecognised failure falls back to its own description.
+/// translation. There is deliberately no "show whatever the error says" branch: the
+/// engine's descriptions stay out of the interface entirely, and the diagnostic detail
+/// goes to the log instead, where a developer can still read it.
 enum OCRErrorPresentation {
     /// What the user is told, independent of language.
     enum Kind: Equatable {
@@ -21,16 +23,29 @@ enum OCRErrorPresentation {
         case engineUnresponsive
         /// The selected engine cannot run on this machine.
         case engineUnavailable
-        /// Anything else: shown with its own description.
-        case other
+        /// The selected engine has no data for one of the requested languages.
+        ///
+        /// Carries no payload: ``OCRError/languageNotSupported(_:)`` holds a developer
+        /// sentence naming the pack path, which belongs in the log, not on screen.
+        case languageNotInstalled
+        /// The image is too large to process safely.
+        case imageTooLarge(width: Int, height: Int)
+        /// A recognition attempt failed for an unknown reason.
+        case recognitionFailed
+        /// A failure that is not an `OCRError` at all.
+        case unknown
     }
 
     /// Classifies a failure for presentation.
     ///
+    /// Every case of ``OCRError`` maps to its own kind. A catch-all arm would let a new
+    /// error case silently reuse another one's sentence, which is how the original
+    /// "everything looks like a generic failure" behaviour crept in.
+    ///
     /// - Parameter error: The failure a capture or editor OCR pass produced.
-    /// - Returns: The kind that decides the sentence; `nil` when it is not an ``OCRError``.
-    static func kind(of error: Error) -> Kind? {
-        guard let ocrError = error as? OCRError else { return nil }
+    /// - Returns: The kind that decides the sentence.
+    static func kind(of error: Error) -> Kind {
+        guard let ocrError = error as? OCRError else { return .unknown }
         switch ocrError {
         case .noTextFound:
             return .noText
@@ -40,8 +55,12 @@ enum OCRErrorPresentation {
             return .engineUnresponsive
         case .engineUnavailable:
             return .engineUnavailable
-        case .recognitionFailed, .confidenceTooLow, .languageNotSupported, .imageTooLarge:
-            return .other
+        case .languageNotSupported:
+            return .languageNotInstalled
+        case .imageTooLarge(let width, let height):
+            return .imageTooLarge(width: width, height: height)
+        case .recognitionFailed, .confidenceTooLow:
+            return .recognitionFailed
         }
     }
 
@@ -65,10 +84,25 @@ enum OCRErrorPresentation {
             return localize("Text recognition stopped responding. Restart SnapGlass and try again.")
         case .engineUnavailable:
             return localize("The selected text recognition engine is unavailable.")
-        case .other, .none:
-            // 和 `AppLocalization.string(_:_:)` 一样走格式串，让译文可以调整占位符位置。
-            return String(format: localize("OCR failed: %@"), error.localizedDescription)
+        case .languageNotInstalled:
+            return localize("The language pack for text recognition is not installed. Download it in Settings.")
+        case .imageTooLarge:
+            return localize("The image is too large to recognize. Try a smaller area.")
+        case .recognitionFailed, .unknown:
+            return localize("Text recognition failed. Try again.")
         }
+    }
+
+    /// The diagnostic detail to log alongside a failure.
+    ///
+    /// The interface sentence says what the user can do; this says what actually
+    /// happened, in the engine's own words. Keeping them apart is what lets the sentence
+    /// be localized without losing the detail a bug report needs.
+    ///
+    /// - Parameter error: The failure to report.
+    /// - Returns: The engine's own description, or the kind when there is none.
+    static func diagnostic(for error: Error) -> String {
+        error.localizedDescription
     }
 
     /// The message to show in the app's own language.

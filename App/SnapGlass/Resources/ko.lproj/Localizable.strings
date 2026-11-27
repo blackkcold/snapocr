@@ -477,7 +477,6 @@
 "Frame %lld captured" = "%lld번째 프레임을 캡처했습니다";
 "Saved to %@" = "%@에 저장했습니다";
 "Capture failed: %@" = "캡처 실패: %@";
-"OCR failed: %@" = "텍스트 인식 실패: %@";
 "History save failed: %@" = "기록 저장 실패: %@";
 "Scroll frame failed: %@" = "스크롤 프레임 캡처 실패: %@";
 "The window size changed; finish to keep what has been captured" = "창 크기가 변경되었습니다. 종료하면 캡처된 부분이 유지됩니다";
@@ -1228,3 +1227,6 @@
 "Text recognition timed out. Try again with a smaller area." = "텍스트 인식 시간이 초과되었습니다. 영역을 줄여 다시 시도하세요.";
 "Text recognition stopped responding. Restart SnapGlass and try again." = "텍스트 인식 엔진이 응답하지 않습니다. SnapGlass를 재시작한 후 다시 시도하세요.";
 "The selected text recognition engine is unavailable." = "선택한 텍스트 인식 엔진을 사용할 수 없습니다.";
+"The language pack for text recognition is not installed. Download it in Settings." = "텍스트 인식 언어 팩이 설치되어 있지 않습니다. 설정에서 다운로드하세요.";
+"The image is too large to recognize. Try a smaller area." = "이미지가 너무 커서 인식할 수 없습니다. 영역을 줄여 다시 시도하세요.";
+"Text recognition failed. Try again." = "텍스트 인식에 실패했습니다. 다시 시도하세요.";

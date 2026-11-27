@@ -477,7 +477,6 @@
 "Frame %lld captured" = "已截取第 %lld 帧";
 "Saved to %@" = "已保存至 %@";
 "Capture failed: %@" = "截图失败：%@";
-"OCR failed: %@" = "文字识别失败：%@";
 "History save failed: %@" = "历史记录保存失败：%@";
 "Scroll frame failed: %@" = "滚动帧截取失败：%@";
 "The window size changed; finish to keep what has been captured" = "窗口尺寸发生变化，结束拼接即可保留已采集的部分";
@@ -1228,3 +1227,6 @@
 "Text recognition timed out. Try again with a smaller area." = "文字识别超时。请缩小选区后重试。";
 "Text recognition stopped responding. Restart SnapGlass and try again." = "文字识别引擎已无响应。请重新启动 SnapGlass 后重试。";
 "The selected text recognition engine is unavailable." = "所选的文字识别引擎不可用。";
+"The language pack for text recognition is not installed. Download it in Settings." = "文字识别所需的语言包尚未安装。请在设置中下载。";
+"The image is too large to recognize. Try a smaller area." = "图片过大，无法识别。请缩小选区后重试。";
+"Text recognition failed. Try again." = "文字识别失败，请重试。";

@@ -47,14 +47,11 @@ public final class OCRPipeline: Sendable {
     private let options: OCROptions
     private let logger: Logger
 
-    /// 分块 OCR 的并发 tile 数上限。
-    ///
-    /// 限制同时识别的 tile 数量，平衡多核吞吐与内存占用，
-    /// 避免超大图一次性解码过多 tile 导致内存峰值飙升。
     /// 并发 tile 上限。
     ///
-    /// `internal` 而非 `private`：`VisionRequestScheduler` 的默认容量必须高于它，
-    /// 否则一次单图请求会排在整组 tile 之后。这条关系由测试锁住。
+    /// 限制同时识别的 tile 数量，平衡多核吞吐与内存占用，避免一次性解码过多 tile
+    /// 导致内存峰值飙升。`internal` 而非 `private`：`VisionRequestScheduler` 的默认
+    /// 容量必须高于它，否则一次单图请求会排在整组 tile 之后。这条关系由测试锁住。
     static let maxConcurrentTiles = 3
 
     // MARK: - 初始化

@@ -477,7 +477,6 @@
 "Frame %lld captured" = "%lld フレーム目を撮影しました";
 "Saved to %@" = "%@ に保存しました";
 "Capture failed: %@" = "撮影に失敗しました：%@";
-"OCR failed: %@" = "文字認識に失敗しました：%@";
 "History save failed: %@" = "履歴の保存に失敗しました：%@";
 "Scroll frame failed: %@" = "スクロールフレームの撮影に失敗しました：%@";
 "The window size changed; finish to keep what has been captured" = "ウィンドウサイズが変わったため、終了すると取得済みの部分を保持します";
@@ -1228,3 +1227,6 @@
 "Text recognition timed out. Try again with a smaller area." = "テキスト認識がタイムアウトしました。範囲を小さくして再試行してください。";
 "Text recognition stopped responding. Restart SnapGlass and try again." = "テキスト認識エンジンが応答していません。SnapGlass を再起動して再試行してください。";
 "The selected text recognition engine is unavailable." = "選択したテキスト認識エンジンは使用できません。";
+"The language pack for text recognition is not installed. Download it in Settings." = "テキスト認識の言語パックがインストールされていません。設定からダウンロードしてください。";
+"The image is too large to recognize. Try a smaller area." = "画像が大きすぎて認識できません。範囲を小さくして再試行してください。";
+"Text recognition failed. Try again." = "テキスト認識に失敗しました。再試行してください。";

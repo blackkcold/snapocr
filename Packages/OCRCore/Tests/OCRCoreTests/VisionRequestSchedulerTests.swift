@@ -11,7 +11,7 @@ import Testing
 struct VisionRequestSchedulerTests {
     // MARK: - 超时
 
-    /// 永不返回的请求必须在超时后把控制权交还调用方，并如实记账为「线程没回来」。
+    /// 永不返回的请求必须在超时后把控制权交还调用方，并如实记账为「线程仍被占着」。
     @Test func requestThatNeverReturnsIsReportedAsATimeout() async throws {
         let scheduler = VisionRequestScheduler(
             capacity: 2,
@@ -42,23 +42,27 @@ struct VisionRequestSchedulerTests {
         #expect(elapsed >= .milliseconds(60))
         #expect(elapsed < .seconds(3))
 
+        // 超时只是「调用方不等了」，那条线程还在跑，所以槽位仍然占着。
         let snapshot = await scheduler.snapshot
-        #expect(snapshot.leaked == 1)
-        #expect(snapshot.granted == 0)
+        #expect(snapshot.granted == 1)
+        #expect(snapshot.overdue == 1)
+        #expect(!snapshot.unresponsive)
 
-        // 让被放弃的请求真的返回：它已经结算过，不能再释放一次槽位。
+        // 让被放弃的请求真的返回：它把槽位还回来，overdue 也清掉。
+        // 这条断言就是「槽位随线程、不随超时」的核心：慢过一次不该永久损失容量。
         await gate.open()
-        try? await Task.sleep(for: .milliseconds(50))
+        let recovered = await waitFor { await scheduler.snapshot.granted == 0 }
+        #expect(recovered)
         let afterReturn = await scheduler.snapshot
-        #expect(afterReturn.granted == 0)
-        #expect(afterReturn.leaked == 1)
+        #expect(afterReturn.overdue == 0)
+        #expect(!afterReturn.unresponsive)
     }
 
-    /// 超时占走的槽位不回池，但剩余容量仍可用。
+    /// 超时的槽位在归还之前仍算占用，但剩余容量照常可用。
     ///
-    /// Vision 无法中止 `perform`，那条线程确实还在跑；把槽位还回去只会让下一次请求
-    /// 再开一条线程，上限就形同虚设。
-    @Test func aTimedOutSlotIsSpentButTheRestStillWorks() async throws {
+    /// Vision 无法中止 `perform`，那条线程确实还在跑，所以不能提前把槽位放回去。
+    /// 但线程一旦返回，容量必须回来 —— 否则一次慢请求就会永久削减上限。
+    @Test func anOverdueSlotStillHoldsCapacityUntilTheThreadReturns() async throws {
         let scheduler = VisionRequestScheduler(
             capacity: 2,
             requestTimeout: .milliseconds(60),
@@ -77,23 +81,28 @@ struct VisionRequestSchedulerTests {
         }
 
         let afterTimeout = await scheduler.snapshot
-        #expect(afterTimeout.leaked == 1)
-        #expect(afterTimeout.liveThreads == 1)
+        #expect(afterTimeout.granted == 1)
+        #expect(afterTimeout.overdue == 1)
 
         // 还剩一个槽位：常规请求照常完成。
         let lines = try await scheduler.run { [Self.line("ok")] }
         #expect(lines.map(\.text) == ["ok"])
 
         let settled = await scheduler.snapshot
-        #expect(settled.granted == 0)
-        #expect(settled.leaked == 1)
-        #expect(settled.liveThreads == 1)
+        #expect(settled.granted == 1)
+        #expect(settled.overdue == 1)
 
         await stuck.open()
+        let drained = await waitFor { await scheduler.snapshot.granted == 0 }
+        #expect(drained)
+        let afterReturn = await scheduler.snapshot
+        #expect(afterReturn.overdue == 0)
     }
 
     /// 所有槽位都被超时占死后，新请求立刻失败，而不是排队等一个不可能来的结果。
-    @Test func anExhaustedPoolFailsFastInsteadOfQueueing() async throws {
+    ///
+    /// 这些线程若之后返回，池子必须自己恢复：拒绝一个健康 App 的新请求，比慢更糟。
+    @Test func anExhaustedPoolFailsFastAndRecoversWhenThreadsReturn() async throws {
         let scheduler = VisionRequestScheduler(
             capacity: 1,
             requestTimeout: .milliseconds(50),
@@ -111,6 +120,9 @@ struct VisionRequestSchedulerTests {
             // 预期
         }
 
+        let exhausted = await scheduler.snapshot
+        #expect(exhausted.unresponsive)
+
         let clock = ContinuousClock()
         let started = clock.now
         do {
@@ -122,7 +134,12 @@ struct VisionRequestSchedulerTests {
         // 立即失败：不能等到容量超时。
         #expect(started.duration(to: clock.now) < .seconds(2))
 
+        // 唯一那条线程返回后，池子恢复，不需要用户重启 App。
         await stuck.open()
+        let recovered = await waitFor { !(await scheduler.snapshot.unresponsive) }
+        #expect(recovered)
+        let lines = try await scheduler.run { [Self.line("usable again")] }
+        #expect(lines.map(\.text) == ["usable again"])
     }
 
     // MARK: - 并发上限
@@ -155,7 +172,7 @@ struct VisionRequestSchedulerTests {
         let held = await scheduler.snapshot
         #expect(held.peakGranted == 2)
         #expect(held.granted == 2)
-        #expect(held.liveThreads == 2)
+        #expect(held.overdue == 0)
         let startedOperations = await gate.startedCount
         #expect(startedOperations == 2)
 
@@ -201,7 +218,7 @@ struct VisionRequestSchedulerTests {
 
         let afterCancel = await scheduler.snapshot
         #expect(afterCancel.granted == 1)
-        #expect(afterCancel.leaked == 0)
+        #expect(afterCancel.overdue == 0)
 
         await gate.open()
         let drained = await waitFor { await scheduler.snapshot.granted == 0 }
@@ -276,8 +293,8 @@ struct VisionRequestSchedulerTests {
         _ = try await holder.value
     }
 
-    /// 终止后可以恢复：泄漏没到容量上限时，池子继续接受请求。
-    @Test func aSingleLeakDoesNotShutThePoolDown() async throws {
+    /// 单条超时线程不该让池子自认已瘫痪：容量还有余量就继续接受请求。
+    @Test func aSingleOverdueThreadDoesNotShutThePoolDown() async throws {
         let scheduler = VisionRequestScheduler(
             capacity: 3,
             requestTimeout: .milliseconds(50),
@@ -297,13 +314,16 @@ struct VisionRequestSchedulerTests {
 
         let snapshot = await scheduler.snapshot
         #expect(!snapshot.unresponsive)
-        #expect(snapshot.liveThreads == 1)
+        #expect(snapshot.granted == 1)
+        #expect(snapshot.overdue == 1)
         #expect(snapshot.capacity == 3)
 
         let lines = try await scheduler.run { [Self.line("still usable")] }
         #expect(lines.map(\.text) == ["still usable"])
 
         await stuck.open()
+        let drained = await waitFor { await scheduler.snapshot.granted == 0 }
+        #expect(drained)
     }
 
     // MARK: - 辅助

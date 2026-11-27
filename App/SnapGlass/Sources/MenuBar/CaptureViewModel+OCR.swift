@@ -30,9 +30,24 @@ extension CaptureViewModel {
             }
             return result
         } catch {
-            showToast(message: OCRErrorPresentation.message(for: error), type: .error)
+            presentOCRFailure(error)
             return nil
         }
+    }
+
+    /// Reports an OCR failure at the level it deserves.
+    ///
+    /// "No text in this image" is a normal outcome, not an error: the same result is
+    /// shown as `.info` on the success path above, so classifying it as a failure would
+    /// show a red toast for a picture that simply had no words in it. Everything else is
+    /// a real failure, and its diagnostic detail goes to the log rather than the toast.
+    private func presentOCRFailure(_ error: Error) {
+        if OCRErrorPresentation.kind(of: error) == .noText {
+            showToast(message: OCRErrorPresentation.message(for: error), type: .info)
+            return
+        }
+        logger.error("OCR failed: \(OCRErrorPresentation.diagnostic(for: error))")
+        showToast(message: OCRErrorPresentation.message(for: error), type: .error)
     }
 
     /// Offers one action for the most useful thing in the recognized text, so a
