@@ -301,10 +301,7 @@ struct OCRPreferencesView: View {
             }
         }
         .onAppear {
-            enabledLanguages =
-                UserDefaults.standard.stringArray(
-                    forKey: PreferenceKeys.ocrEnabledLanguages
-                ) ?? PreferenceDefaults.ocrEnabledLanguages
+            enabledLanguages = OCRLanguagePreferences.enabledLanguages()
         }
     }
 
@@ -357,7 +354,7 @@ struct OCRPreferencesView: View {
                 } else {
                     enabledLanguages.removeAll { $0 == code }
                 }
-                UserDefaults.standard.set(enabledLanguages, forKey: PreferenceKeys.ocrEnabledLanguages)
+                OCRLanguagePreferences.setEnabledLanguages(enabledLanguages)
             }
         )
     }

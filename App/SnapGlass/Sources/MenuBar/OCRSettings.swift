@@ -9,16 +9,15 @@ import SharedKit
 enum OCRSettings {
     /// Reads the user's language priority, enabled languages, engine and
     /// confidence threshold.
-    static func current() -> OCROptions {
-        let defaults = UserDefaults.standard
-
+    ///
+    /// - Parameter defaults: Defaults store to read; tests pass their own suite.
+    /// - Returns: The OCR options those preferences describe.
+    static func current(defaults: UserDefaults = .standard) -> OCROptions {
         let languagePreference =
             defaults.string(forKey: PreferenceKeys.ocrLanguagePriority)
             ?? PreferenceDefaults.ocrLanguagePriority
 
-        let enabledLanguages =
-            defaults.stringArray(forKey: PreferenceKeys.ocrEnabledLanguages)
-            ?? PreferenceDefaults.ocrEnabledLanguages
+        let enabledLanguages = OCRLanguagePreferences.enabledLanguages(in: defaults)
 
         // The priority language is hoisted to the front; remaining enabled
         // languages follow in their stored order, deduplicated and filtered.

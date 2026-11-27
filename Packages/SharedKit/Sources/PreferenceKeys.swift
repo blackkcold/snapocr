@@ -124,6 +124,8 @@ public enum PreferenceKeys {
     public static let ocrLanguagePriority = "ocr_languagePriority"
     /// Languages OCR may use, in priority order, as compact language codes.
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"
+    /// One-time marker proving the legacy English-first language order was migrated.
+    public static let ocrLanguageOrderMigrated = "ocr_languageOrderMigrated"
     /// Minimum OCR confidence from 0 to 1 before recognized text is accepted.
     public static let ocrConfidenceThreshold = "ocr_confidenceThreshold"
     /// OCR engine identifier; `vision` is the default and `tesseract` the alternative.
@@ -256,8 +258,13 @@ public enum PreferenceDefaults {
 
     /// Choose the OCR priority language automatically by default.
     public static let ocrLanguagePriority = "auto"
-    /// Enable English, Simplified and Traditional Chinese, Japanese and Korean by default.
-    public static let ocrEnabledLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko"]
+    /// Enable Simplified Chinese first, then English, Traditional Chinese,
+    /// Japanese and Korean by default.
+    ///
+    /// The first enabled language selects the Vision model under `.accurate`;
+    /// putting English first made Chinese screenshots resolve to the Latin
+    /// model. Chinese is the primary audience, so it leads by default.
+    public static let ocrEnabledLanguages = ["zh-Hans", "en", "zh-Hant", "ja", "ko"]
     /// Accept OCR text at 80% confidence or higher by default.
     public static let ocrConfidenceThreshold = 0.8
     /// Use the Vision framework for OCR by default.
