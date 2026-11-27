@@ -124,11 +124,14 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         attributes: .concurrent
     )
 
-    /// 先跑脚本要求的级别，再按策略决定是否需要 `.fast` 安全网。
+    /// 先跑脚本要求的级别，再按策略补齐丢掉的文本行。
     ///
-    /// Vision 的 `.accurate` 在「特定内容 × 大画布」组合下会静默返回 0 条，
-    /// 这时用 `.fast` 确认一次，避免把「模型没输出」当成「图上没有文字」。
-    /// `.fast` 只在找回严格更多文字时才替换 `.accurate`，绝不按置信度筛字。
+    /// Vision 的 `.accurate` 在「特定内容 × 大画布」组合下会静默丢掉大部分文本行，
+    /// 既可能返回 0 条，也可能只返回其中一小部分。丢行的成因是单次请求要覆盖的
+    /// 区域太大，所以先用更小的画布把同一引擎重跑一次（`rescueLostLines`），
+    /// 结果为空时再用 `.fast` 确认一次。两次补齐都只在同一个引擎内比较文字量；
+    /// `.fast` 对中文只会返回乱码，所以跨引擎只按「是否为空」判定，绝不按字符数
+    /// 替换，也绝不按置信度筛字。
     private func resolvedLines(
         image: CGImage,
         languages: [String],
@@ -137,27 +140,105 @@ final class VisionOCREngine: OCRProtocol, @unchecked Sendable {
         let primaryLevel = options.recognitionLevel
         let primary = try await lineRecognizer(image, languages, options, primaryLevel)
 
+        guard primaryLevel == .accurate else {
+            return try Self.validated(primary)
+        }
+
+        let resolved = try await rescueLostLines(
+            primary: primary,
+            image: image,
+            languages: languages,
+            options: options
+        )
+
         guard
-            primaryLevel == .accurate,
             VisionRecognitionPolicy.shouldRetryWithFast(
-                lineCount: primary.count,
+                lineCount: resolved.count,
                 imagePixelCount: image.width * image.height
             )
         else {
-            return try Self.validated(primary)
+            return try Self.validated(resolved)
         }
 
         try Task.checkCancellation()
         do {
             let fallback = try await lineRecognizer(image, languages, options, .fast)
-            if VisionRecognitionPolicy.prefersFastResult(accurate: primary, fast: fallback) {
+            if VisionRecognitionPolicy.prefersFastResult(accurate: resolved, fast: fallback) {
                 return try Self.validated(fallback)
             }
         } catch {
-            // 安全网本身失败时，不能把已经可用的 `.accurate` 结果一起丢掉。
-            if primary.isEmpty { throw error }
+            // 安全网本身失败时保留「没有文字」的语义：分块路径据此跳过空白块，
+            // 一块坏图不该让整张截图失败。`validated` 会抛出可识别的空白错误。
         }
-        return try Self.validated(primary)
+        return try Self.validated(resolved)
+    }
+
+    /// 大画布整幅丢行时，用更小的画布把同一引擎重跑一次。
+    ///
+    /// 触发条件与取舍见 `VisionRecognitionPolicy.shouldRetryAtSmallerScale`。
+    /// 补齐是尽力而为：缩图失败或第二次请求报错都保持全幅结果，绝不因为一次
+    /// 附加请求丢掉已经可用的识别结果。
+    ///
+    /// 重跑沿用同一引擎、同一语言列表、同一识别级别，返回的 `boundingBox` 仍是
+    /// 归一化坐标，对原图依旧成立（精度按缩放比例下降），调用方无需换算。
+    private func rescueLostLines(
+        primary: [OCRLine],
+        image: CGImage,
+        languages: [String],
+        options: OCROptions
+    ) async throws -> [OCRLine] {
+        guard
+            VisionRecognitionPolicy.shouldRetryAtSmallerScale(
+                characterCount: VisionRecognitionPolicy.nonWhitespaceCharacterCount(primary),
+                imageWidth: image.width,
+                imageHeight: image.height
+            ),
+            let scaled = Self.scaled(image, longestSide: VisionRecognitionPolicy.retryLongestSide)
+        else {
+            return primary
+        }
+
+        try Task.checkCancellation()
+        do {
+            let retry = try await lineRecognizer(scaled, languages, options, .accurate)
+            if VisionRecognitionPolicy.prefersSmallerScaleResult(primary: primary, retry: retry) {
+                return retry
+            }
+        } catch {
+            // 见上：附加请求失败不改变已经可用的结果。
+        }
+        return primary
+    }
+
+    /// 把整幅图按长边缩到 `longestSide`，供「大画布丢行」的第二次请求使用。
+    ///
+    /// `MemoryGuard.downsample` 走 `CGImageSource`，只对能编码成图片源的输入有效；
+    /// 截图在内存里是裸 `CGImage`，那条路径会返回 `nil`。这里直接用位图上下文
+    /// 重绘，并用 `.high` 插值，避免缩小时把小字糊成一片。
+    ///
+    /// - Parameters:
+    ///   - image: 原始图像。
+    ///   - longestSide: 目标长边像素数；不比当前更小时返回 `nil`。
+    /// - Returns: 缩小后的图像，创建上下文失败时返回 `nil`。
+    private static func scaled(_ image: CGImage, longestSide: CGFloat) -> CGImage? {
+        let scale = longestSide / CGFloat(max(image.width, image.height))
+        guard scale < 1 else { return nil }
+        let width = max(1, Int((CGFloat(image.width) * scale).rounded()))
+        let height = max(1, Int((CGFloat(image.height) * scale).rounded()))
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
     }
 
     /// 在 `recognitionQueue` 上执行一次 Vision 请求，返回已过滤的文本行。

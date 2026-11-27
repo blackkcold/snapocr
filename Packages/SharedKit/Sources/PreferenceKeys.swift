@@ -124,6 +124,8 @@ public enum PreferenceKeys {
     public static let ocrLanguagePriority = "ocr_languagePriority"
     /// Languages OCR may use, in priority order, as compact language codes.
     public static let ocrEnabledLanguages = "ocr_enabledLanguages"
+    /// One-time marker proving the legacy English-first language order was migrated.
+    public static let ocrLanguageOrderMigrated = "ocr_languageOrderMigrated"
     /// Minimum OCR confidence from 0 to 1 before recognized text is accepted.
     public static let ocrConfidenceThreshold = "ocr_confidenceThreshold"
     /// OCR engine identifier; `vision` is the default and `tesseract` the alternative.
