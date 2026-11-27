@@ -25,24 +25,29 @@ final class MenuBarCoachPanel: NSPanel {
     private var onDismiss: (() -> Void)?
     /// What the panel says. The text decides how tall the panel has to be.
     private let content: MenuBarCoachContent
+    /// The language chosen in Settings, injected into the hosting view.
+    private let locale: Locale
 
     /// Creates a coach panel.
     ///
     /// - Parameters:
     ///   - content: What the panel says.
     ///   - layout: The form chosen for the available space.
+    ///   - locale: The language chosen in Settings.
     ///   - onTryIt: Invoked by the tutorial variant's button.
     ///   - onOpenControlCenter: Invoked by the card variant's button.
     ///   - onDismiss: Invoked once the panel is gone, whatever the reason.
     init(
         content: MenuBarCoachContent,
         layout: CoachLayout,
+        locale: Locale = AppLocalization.locale(),
         onTryIt: (() -> Void)? = nil,
         onOpenControlCenter: (() -> Void)? = nil,
         onDismiss: (() -> Void)? = nil
     ) {
         let size = layout.designSize
         self.content = content
+        self.locale = locale
         super.init(
             contentRect: CGRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -71,7 +76,8 @@ final class MenuBarCoachPanel: NSPanel {
             layout: layout,
             onTryIt: onTryIt,
             onOpenControlCenter: onOpenControlCenter,
-            onDismiss: { [weak self] in self?.dismiss() }
+            onDismiss: { [weak self] in self?.dismiss() },
+            locale: locale
         )
         let hosting = NSHostingView(rootView: view)
         hosting.focusRingType = .none
@@ -94,11 +100,13 @@ final class MenuBarCoachPanel: NSPanel {
     ///   - layout: The chosen form.
     ///   - content: What the panel says; the rendered text sets the height.
     ///   - available: The screen's usable area below the menu bar.
+    ///   - locale: The language the text is measured in.
     /// - Returns: A size that fits `available`.
     static func size(
         for layout: CoachLayout,
         content: MenuBarCoachContent,
-        available: CGSize
+        available: CGSize,
+        locale: Locale = AppLocalization.locale()
     ) -> CGSize {
         guard layout != .announcement else { return layout.designSize }
         let design = layout.designSize
@@ -109,7 +117,12 @@ final class MenuBarCoachPanel: NSPanel {
         let width = CoachLayoutResolver.panelWidth(design: design, available: available)
         return CoachLayoutResolver.panelSize(
             design: design,
-            measuredHeight: measuredHeight(content: content, layout: layout, width: width),
+            measuredHeight: measuredHeight(
+                content: content,
+                layout: layout,
+                width: width,
+                locale: locale
+            ),
             available: available
         )
     }
@@ -124,14 +137,16 @@ final class MenuBarCoachPanel: NSPanel {
     private static func measuredHeight(
         content: MenuBarCoachContent,
         layout: CoachLayout,
-        width: CGFloat
+        width: CGFloat,
+        locale: Locale
     ) -> CGFloat {
         let probe = MenuBarCoachView(
             content: content,
             layout: layout,
             onTryIt: nil,
             onOpenControlCenter: nil,
-            onDismiss: {}
+            onDismiss: {},
+            locale: locale
         )
         .frame(width: width)
         .fixedSize(horizontal: false, vertical: true)
@@ -148,7 +163,12 @@ final class MenuBarCoachPanel: NSPanel {
             visibleFrame: screen.visibleFrame,
             screenFrame: screen.frame
         )
-        let size = Self.size(for: layout, content: content, available: visible.size)
+        let size = Self.size(
+            for: layout,
+            content: content,
+            available: visible.size,
+            locale: locale
+        )
         setFrame(
             CoachLayoutResolver.panelFrame(layout: layout, size: size, visible: visible),
             display: false
@@ -179,6 +199,20 @@ final class MenuBarCoachPanel: NSPanel {
     }
 }
 
+/// Picks the display that hosts the coach.
+///
+/// A menu-bar app usually has no key window, so `NSScreen.main` falls back to
+/// the display that owns the menu bar. On a multi-display desk the pointer is
+/// the only reliable signal for the display the user just interacted with —
+/// they clicked the status item, the guide's Done button, or the permission
+/// window there.
+enum CoachScreenSelector {
+    /// The index of the first frame containing `point`.
+    static func index(containing point: CGPoint, in frames: [CGRect]) -> Int? {
+        frames.firstIndex { $0.contains(point) }
+    }
+}
+
 /// The coach's content, in whichever form the layout allows.
 struct MenuBarCoachView: View {
     /// What the panel says.
@@ -191,6 +225,28 @@ struct MenuBarCoachView: View {
     let onOpenControlCenter: (() -> Void)?
     /// Invoked by the card variant's close button.
     let onDismiss: () -> Void
+    /// The language chosen in Settings.
+    ///
+    /// The panel is an AppKit window, so it sits outside the SwiftUI scene that
+    /// injects `\.locale`; without this the coach follows the system language
+    /// instead of the app language, and its measured height is wrong too.
+    let locale: Locale
+
+    init(
+        content: MenuBarCoachContent,
+        layout: CoachLayout,
+        onTryIt: (() -> Void)?,
+        onOpenControlCenter: (() -> Void)?,
+        onDismiss: @escaping () -> Void,
+        locale: Locale = AppLocalization.locale()
+    ) {
+        self.content = content
+        self.layout = layout
+        self.onTryIt = onTryIt
+        self.onOpenControlCenter = onOpenControlCenter
+        self.onDismiss = onDismiss
+        self.locale = locale
+    }
 
     var body: some View {
         Group {
@@ -205,6 +261,7 @@ struct MenuBarCoachView: View {
                 EmptyView()
             }
         }
+        .environment(\.locale, locale)
     }
 
     /// L0: icon, message, and the triangle pointing at the menu bar.
