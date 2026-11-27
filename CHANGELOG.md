@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-11-27
+
+> 文字识别不再无限转圈，失败提示也终于说出了用户能看懂的话。
+
 ### Fixed
 - 文字识别有时永远转圈：底层 Vision 请求既没有超时也没有并发上限，一次卡住的识别会把线程一直占住，界面既等不到结果也得不到失败。现在文字识别有了进程级的上限（同时 4 个请求）与单次请求超时（30 秒）：超时会把失败如实报给用户，而不是一直等下去。占用额度按「真正在跑的线程」计算，所以一次只是慢、最终返回的识别会把额度交还，不会永久削掉并发能力；只有确实不再返回的线程才会被计为占用，全部占满时才提示重新启动 SnapGlass，而这些线程一旦返回，识别会自行恢复，不需要重启。超时不会被当成「这张图没有文字」，所以不会静默少识别一部分内容。
 - 文字识别失败时的提示语在英文、日文、韩文界面里显示中文：错误描述原本是面向开发者的中文，被直接拼进提示，既没有本地化也说不清该怎么办。现在每一种失败（没有文字、超时、引擎无响应、引擎不可用、语言包缺失、图片过大、其他）都有各自的四语言文案，开发者细节只写入日志；「这张图里没有文字」按信息提示而不是报错，与识别成功但内容为空时的表现一致。
@@ -717,6 +721,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 移除临时构建产物目录 `output/`，统一收敛到 `release/`
 
 [Unreleased]: https://github.com/blackkcold/snapocr/compare/v1.9.1...HEAD
+[1.9.2]: https://github.com/blackkcold/snapocr/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/blackkcold/snapocr/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/blackkcold/snapocr/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/blackkcold/snapocr/compare/v1.7.2...v1.8.0
