@@ -111,6 +111,69 @@ actor SettlementSleepGate {
     }
 }
 
+/// A sleep the test releases explicitly, per duration, so a lease is asserted
+/// without racing a wall-clock timer.
+///
+/// Every duration starts shut: no deadline, promotion watchdog, or liveness lease
+/// can expire on its own. The test opens exactly one duration to make that
+/// deadline fire. A liveness assertion therefore holds no matter how loaded the
+/// machine is, which a real `Task.sleep` cannot promise: a 200 ms lease renewed
+/// every 50 ms has only a 4× margin, and a busy main actor can miss it.
+actor SettlementLeaseGate {
+    private var openDurations: Set<Duration> = []
+    private var waiters: [(duration: Duration, continuation: CheckedContinuation<Void, Never>)] = []
+    private var sleepCounts: [Duration: Int] = [:]
+
+    /// Sleeps until the test opens this duration, or forever for the rest.
+    func sleep(_ duration: Duration) async {
+        sleepCounts[duration, default: 0] += 1
+        if openDurations.contains(duration) { return }
+        await withCheckedContinuation { continuation in
+            waiters.append((duration, continuation))
+        }
+    }
+
+    /// Releases every sleep waiting on this duration.
+    func open(_ duration: Duration) {
+        openDurations.insert(duration)
+        var parked: [(duration: Duration, continuation: CheckedContinuation<Void, Never>)] = []
+        for waiter in waiters {
+            if waiter.duration == duration {
+                waiter.continuation.resume()
+            } else {
+                parked.append(waiter)
+            }
+        }
+        waiters = parked
+    }
+
+    /// Releases whatever is still parked, so a test leaves no continuation behind.
+    func openAll() {
+        for waiter in waiters { waiter.continuation.resume() }
+        waiters.removeAll()
+    }
+
+    /// How many sleeps this duration was asked for, including ones still parked.
+    func sleepCount(_ duration: Duration) -> Int { sleepCounts[duration] ?? 0 }
+
+    /// Waits until this duration was slept on at least `minimum` times.
+    ///
+    /// A beat re-arms the lease by starting a new sleep, so this is how a test
+    /// proves the lease was actually renewed instead of inferring it from timing.
+    func waitForSleepCount(
+        _ duration: Duration,
+        atLeast minimum: Int,
+        timeout: Duration = .seconds(5)
+    ) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while sleepCount(duration) < minimum {
+            guard ContinuousClock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return true
+    }
+}
+
 /// A stop the test releases explicitly, to keep one stop in flight while a second
 /// caller and the deadline arrive.
 actor SettlementStopGate {
@@ -394,9 +457,16 @@ struct RecordingSettlementSupervisorTests {
     /// After the promotion, the screen monitoring loop renews a liveness lease.
     /// If the main actor stops renewing it, the supervisor must stop and save the
     /// recording instead of capturing forever behind a frozen interface.
+    ///
+    /// The lease is asserted through the injected sleep, not by racing a wall-clock
+    /// timer: a 200 ms lease renewed every 50 ms leaves only a 4× margin, which a
+    /// loaded CI runner can miss. Each beat re-arms the lease by starting a fresh
+    /// sleep, so "the beat renewed it" is exactly "another sleep was requested".
     @Test("Screen liveness stops when the main actor stops heartbeating")
     func screenLivenessStopsWhenHeartbeatsStop() async {
-        let harness = SettlementSupervisorHarness(sleep: { try await Task.sleep(for: $0) })
+        let lease = Duration.milliseconds(200)
+        let gate = SettlementLeaseGate()
+        let harness = SettlementSupervisorHarness(sleep: { await gate.sleep($0) })
         defer { harness.stop() }
         let counter = SettlementStopCounter()
         let sessionID = UUID()
@@ -406,7 +476,7 @@ struct RecordingSettlementSupervisorTests {
             kind: .screen,
             deadline: .seconds(60),
             promotionDeadline: .milliseconds(400),
-            livenessDeadline: .milliseconds(200),
+            livenessDeadline: lease,
             readiness: .poll { .ready },
             stop: {
                 await counter.record()
@@ -424,29 +494,41 @@ struct RecordingSettlementSupervisorTests {
         #expect(started)
         await harness.supervisor.acknowledgePresentation(generation: generation)
 
-        // Ten beats at 50 ms keep the 200 ms lease alive.
-        for _ in 0..<10 {
+        // Ten beats, each of which must re-arm the lease: one sleep for the lease
+        // itself, then one more per beat.
+        for beat in 0..<10 {
             await harness.supervisor.heartbeat(generation: generation)
-            try? await Task.sleep(for: .milliseconds(50))
+            let armed = await gate.waitForSleepCount(lease, atLeast: beat + 2)
+            #expect(armed, "beat \(beat) did not re-arm the liveness lease")
+            if !armed { break }
         }
+
+        // A renewed lease never expires, so nothing may settle while beats continue.
         let settledWhileHealthy = await harness.log.settledCount
         #expect(settledWhileHealthy == 0)
 
         // Stop beating: the lease expires and the single stop runs.
+        await gate.open(lease)
         let settled = await harness.log.waitForSettled()
         #expect(settled)
         let reasons = await harness.log.settledReasons
         #expect(reasons == [.promotionStalled])
         let calls = await counter.calls
         #expect(calls == 1)
+        await gate.openAll()
     }
 
     /// Audio recordings use the same lease as screen recordings, renewed by the
     /// progress consumer. A frozen main actor stops the beats and the session is
     /// stopped and saved from the supervisor.
+    ///
+    /// Renewal is proven the same way as the screen case, through the injected
+    /// sleep count, so the assertion cannot flake on a busy runner.
     @Test("Audio liveness stops when the progress consumer stops heartbeating")
     func audioLivenessStopsWhenHeartbeatsStop() async {
-        let harness = SettlementSupervisorHarness(sleep: { try await Task.sleep(for: $0) })
+        let lease = Duration.milliseconds(200)
+        let gate = SettlementLeaseGate()
+        let harness = SettlementSupervisorHarness(sleep: { await gate.sleep($0) })
         defer { harness.stop() }
         let counter = SettlementStopCounter()
         let sessionID = UUID()
@@ -457,7 +539,7 @@ struct RecordingSettlementSupervisorTests {
             kind: .audio,
             deadline: .seconds(60),
             promotionDeadline: .milliseconds(400),
-            livenessDeadline: .milliseconds(200),
+            livenessDeadline: lease,
             readiness: .audioProgress(stream),
             stop: {
                 await counter.record()
@@ -470,20 +552,23 @@ struct RecordingSettlementSupervisorTests {
         #expect(started)
         await harness.supervisor.acknowledgePresentation(generation: generation)
 
-        // Progress beats at 50 ms keep the 200 ms lease alive.
-        for _ in 0..<10 {
+        for beat in 0..<10 {
             await harness.supervisor.heartbeat(generation: generation)
-            try? await Task.sleep(for: .milliseconds(50))
+            let armed = await gate.waitForSleepCount(lease, atLeast: beat + 2)
+            #expect(armed, "beat \(beat) did not re-arm the liveness lease")
         }
+
         let settledWhileHealthy = await harness.log.settledCount
         #expect(settledWhileHealthy == 0)
 
+        await gate.open(lease)
         let settled = await harness.log.waitForSettled()
         #expect(settled)
         let reasons = await harness.log.settledReasons
         #expect(reasons == [.promotionStalled])
         let calls = await counter.calls
         #expect(calls == 1)
+        await gate.openAll()
     }
 
     /// The watchdog is identity-bound: an acknowledgement for another session must
