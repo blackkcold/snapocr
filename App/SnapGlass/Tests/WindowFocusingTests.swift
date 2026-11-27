@@ -44,8 +44,9 @@ struct WindowFocusingTests {
 
         activation.isActive = true
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(50))
+        let fronted = await waitForFocusCondition { recorder.calls.count == 1 }
 
+        #expect(fronted)
         #expect(recorder.calls.map(\.regardless) == [false])
         #expect(recorder.calls.map(\.window) == [ObjectIdentifier(window)])
     }
@@ -65,8 +66,11 @@ struct WindowFocusingTests {
         focuser.focus(window)
         #expect(recorder.calls.isEmpty)
 
-        try await Task.sleep(for: .milliseconds(120))
+        // The fallback fires from the activation timeout, so wait for it to fire
+        // rather than for a duration that is assumed to be long enough.
+        let fronted = await waitForFocusCondition { recorder.calls.count == 1 }
 
+        #expect(fronted)
         #expect(recorder.calls.map(\.regardless) == [true])
         #expect(recorder.calls.map(\.window) == [ObjectIdentifier(window)])
     }
@@ -90,9 +94,10 @@ struct WindowFocusingTests {
 
         activation.isActive = true
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(50))
+        let fronted = await waitForFocusCondition { recorder.calls.count == 2 }
 
         // 两个窗口都按请求顺序前置；最后请求的窗口最后成 key。
+        #expect(fronted)
         #expect(recorder.calls.map(\.window) == [ObjectIdentifier(first), ObjectIdentifier(second)])
         #expect(recorder.calls.map(\.regardless) == [false, false])
         #expect(activation.requestActivationCount == 2)
@@ -116,8 +121,9 @@ struct WindowFocusingTests {
 
         activation.isActive = true
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(50))
+        let fronted = await waitForFocusCondition { recorder.calls.count == 1 }
 
+        #expect(fronted)
         #expect(recorder.calls.map(\.window) == [ObjectIdentifier(window)])
         #expect(recorder.calls.map(\.regardless) == [false])
         #expect(activation.requestActivationCount == 2)
@@ -139,9 +145,13 @@ struct WindowFocusingTests {
         focuser.focus(window)
         activation.isActive = true
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(30))
+        let firstFront = await waitForFocusCondition { recorder.calls.count == 1 }
+        #expect(firstFront)
+        // 第一次解析把 waiter 与观察者一起清掉；等它真的清完，再发第二条。
+        let cleanedUp = await waitForFocusCondition { !focuser.isObservingActivation }
+        #expect(cleanedUp)
+
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(30))
 
         #expect(recorder.calls.count == 1)
     }
@@ -162,14 +172,17 @@ struct WindowFocusingTests {
         window.orderFront(nil)
 
         focuser.focus(window)
-        try await Task.sleep(for: .milliseconds(120))
+        // 等超时兜底真的触发，而不是睡一段「应该够」的时长。
+        let fellBack = await waitForFocusCondition { recorder.calls.count == 1 }
+        #expect(fellBack)
         #expect(recorder.calls.map(\.regardless) == [true])
 
         activation.isActive = true
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(50))
+        let repaired = await waitForFocusCondition { recorder.calls.count == 2 }
 
         // 超时兜底只保可见；迟到激活时无 key 窗口 → 补一次正常前置（成 key）。
+        #expect(repaired)
         #expect(recorder.calls.map(\.regardless) == [true, false])
         #expect(recorder.calls.map(\.window) == [ObjectIdentifier(window), ObjectIdentifier(window)])
     }
@@ -190,13 +203,18 @@ struct WindowFocusingTests {
         window.orderFront(nil)
 
         focuser.focus(window)
-        try await Task.sleep(for: .milliseconds(120))
+        let fellBack = await waitForFocusCondition { recorder.calls.count == 1 }
+        #expect(fellBack)
         #expect(recorder.calls.map(\.regardless) == [true])
 
         activation.hasKeyWindow = true
         activation.isActive = true
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(50))
+        // The window already has the key slot, so the late activation must not front it
+        // again. Waiting for the observer to be gone proves the notification was
+        // processed and the waiter consumed, instead of assuming a duration was enough.
+        let handled = await waitForFocusCondition { !focuser.isObservingActivation }
+        #expect(handled)
 
         #expect(recorder.calls.map(\.regardless) == [true])
     }
@@ -217,15 +235,48 @@ struct WindowFocusingTests {
         window.orderFront(nil)
 
         focuser.focus(window)
-        try await Task.sleep(for: .milliseconds(200))
+        // This used to sleep 200ms over a 30ms + 60ms chain — a 2.22x margin that a
+        // loaded runner can miss. Wait for the chain to actually finish instead: the
+        // waiter is gone and the observer is removed only when both timers have fired.
+        let expired = await waitForFocusCondition { !focuser.isObservingActivation }
+        #expect(expired)
+        #expect(focuser.waiterCount == 0)
         #expect(recorder.calls.map(\.regardless) == [true])
 
         activation.isActive = true
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+        // Nothing is listening any more, so there is no processed state to wait for: the
+        // point of the assertion is that no repair happens. Give the posted notification
+        // a chance to be handled before concluding it did nothing.
         try await Task.sleep(for: .milliseconds(50))
 
         #expect(recorder.calls.map(\.regardless) == [true])
     }
+}
+
+/// Polls a fact the focuser owns instead of sleeping a duration assumed to be long enough.
+///
+/// The old tests waited 30–200 ms and then asserted; the margins against the timers they
+/// exercised were 2.22x–10x, and `app-tests` is a required check, so a loaded runner could
+/// turn a slow timer into a red build. Every condition below is a value the production type
+/// already tracks (or, in `#if DEBUG`, exposes for exactly this), so the wait ends as soon as
+/// the fact is true and fails only when it never becomes true.
+///
+/// - Parameters:
+///   - timeout: How long the condition may take before it counts as never true.
+///   - condition: The fact to observe; read on the main actor.
+/// - Returns: Whether the condition became true within the timeout.
+@MainActor
+private func waitForFocusCondition(
+    timeout: Duration = .seconds(5),
+    _ condition: () -> Bool
+) async -> Bool {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while !condition() {
+        guard ContinuousClock.now < deadline else { return false }
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return true
 }
 
 @MainActor
