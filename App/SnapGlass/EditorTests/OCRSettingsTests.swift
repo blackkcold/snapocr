@@ -84,6 +84,27 @@ struct OCRSettingsTests {
         #expect(options.languages == ["ja-JP", "zh-Hans", "en-US"])
     }
 
+    /// 显式选了「English First」时，迁移不得覆盖这个选择。
+    ///
+    /// 迁移只在首元素是 `en` 且没有标记时把中文提前，`OCRSettings` 随后仍把优先级
+    /// 语言提到最前。两者叠加时用户的选择必须赢：否则一个刚被迁移、又显式选过
+    /// English First 的用户，会看到中文排在英文前面，等于这个设置没生效。
+    @Test func explicitEnglishFirstSurvivesTheMigration() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(["en", "zh-Hans", "zh-Hant"], forKey: PreferenceKeys.ocrEnabledLanguages)
+        defaults.set("en", forKey: PreferenceKeys.ocrLanguagePriority)
+
+        let options = OCRSettings.current(defaults: defaults)
+
+        #expect(options.languages.first == "en-US")
+        #expect(options.languages == ["en-US", "zh-Hans", "zh-Hant"])
+        // 迁移标记已写，后续读取不会再把顺序改回去。
+        #expect(defaults.bool(forKey: PreferenceKeys.ocrLanguageOrderMigrated))
+        #expect(OCRSettings.current(defaults: defaults).languages == ["en-US", "zh-Hans", "zh-Hant"])
+    }
+
     private func makeDefaults() throws -> (UserDefaults, String) {
         let suiteName = "OCRSettingsTests-\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
