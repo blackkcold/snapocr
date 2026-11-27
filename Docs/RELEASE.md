@@ -168,19 +168,26 @@ plutil -extract SGBuildTimestamp raw release/exp-v1.4.3-*/SnapGlass.app/Contents
 
 ### 方式一：云端 CI 构建（推荐）
 
-1. 更新版本号（`version.txt` + `project.yml` + `CHANGELOG.md`）
-2. 提交变更：`git commit -m "release: vX.Y.Z — 简要描述"`
-3. 打 tag：`git tag -a vX.Y.Z -m "vX.Y.Z — 简要描述"`
-4. 推送：`git push origin main && git push origin vX.Y.Z`
-5. GitHub Actions `release.yml` 自动触发：
+`main` 只接受 PR，且以 squash 合并。因此 **tag 必须打在合并后的 main 上，不能打在发版分支上**：squash 会丢弃分支上的提交，打在分支上的 tag 会指向一个不在 main 历史里的提交，而 `release.yml` 是在 tag 推送时触发的。
+
+1. 在分支上更新版本号：`./scripts/bump-version.sh X.Y.Z`（同时自增 `build.txt`、在 `CHANGELOG.md` 的 `## [Unreleased]` 下插入新段）
+2. 把 `CHANGELOG.md` 里新段落的占位 `-` 换成真实条目，提交变更
+3. 推送分支并开 PR，等 CI 全绿后 **squash 合并**
+4. 切回 main 并更新：`git checkout main && git pull --ff-only origin main`
+5. 在合并后的提交上打 annotated tag 并推送：
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z — 简要描述"
+   git push origin vX.Y.Z
+   ```
+6. GitHub Actions `release.yml` 自动触发：
    - 导入签名证书与 EdDSA 私钥，构建并签名 Release
    - 校验签名身份、构建号递增、`CFBundleVersion`
    - 生成 `.dmg` + `.sha256`
    - 下载上一版 DMG 作为差分基准，生成相对上一版的差分包（`.delta`）
    - 生成签名 `appcast.xml`（含 `<sparkle:deltas>`），并用 App 内置公钥验证 DMG 的 EdDSA 签名
    - 创建 GitHub Release 并上传产物（含差分包）
-6. CI 同时生成并上传固定名称的 `SnapGlass-update.json`，供 1.4.x 客户端过渡使用
-7. 更新仓库 Social Preview 并校验（见下节）
+7. CI 同时生成并上传固定名称的 `SnapGlass-update.json`，供 1.4.x 客户端过渡使用
+8. 更新仓库 Social Preview 并校验（见下节）
 
 ### 方式二：本地构建 + 手动上传
 

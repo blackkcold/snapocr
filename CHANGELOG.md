@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- 发版脚本会在发版分支上直接打 tag：`bump-version.sh` 原本自己执行 `git tag vX.Y.Z`，而 `main` 只接受 PR 且以 squash 合并，分支上的提交会被丢弃 —— 这个 tag 因此指向一个不在 main 历史里的提交，推上去的也不是 main 的祖先。现在脚本只负责改版本号并提交，tag 由发版流程在合并后的提交上创建（见 `Docs/RELEASE.md`）。
+- `bump-version.sh` 的 CHANGELOG 插入静默失效且失败会留下半改的工作区：插入锚点写的是 `## [0.1.0]`，而 `CHANGELOG.md` 里没有这一行，`sed` 匹配不到就什么都不做、也不报错；而版本号文件在插入之前就被改写了，一旦插入失败退出，工作区已经处于「版本号改了、CHANGELOG 没改」的半途状态。现在改为在 `## [Unreleased]` 下插入，缺锚点或 `project.yml` 缺 `MARKETING_VERSION` 时**先**报错退出，不写任何文件。
+
 ## [1.9.3] - 2026-11-27
 
 > 菜单栏提示不再跑到别人的屏幕上；构建也终于可以复现。
