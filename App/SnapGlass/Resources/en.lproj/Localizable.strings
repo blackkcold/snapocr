@@ -1225,3 +1225,6 @@
 "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running." = "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running.";
 "The Dock icon can follow windows, stay, or never appear." = "The Dock icon can follow windows, stay, or never appear.";
 "your shortcut" = "your shortcut";
+"Text recognition timed out. Try again with a smaller area." = "Text recognition timed out. Try again with a smaller area.";
+"Text recognition stopped responding. Restart SnapGlass and try again." = "Text recognition stopped responding. Restart SnapGlass and try again.";
+"The selected text recognition engine is unavailable." = "The selected text recognition engine is unavailable.";

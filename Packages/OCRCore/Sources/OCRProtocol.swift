@@ -90,6 +90,46 @@ public enum OCRError: Error, Sendable {
     case languageNotSupported(String)
     /// 图片尺寸过大无法处理
     case imageTooLarge(width: Int, height: Int)
+    /// 图片里确实没有可识别的文字。
+    ///
+    /// 与 ``recognitionFailed(reason:)`` 分开，是因为调用方对它的处理完全不同：
+    /// 分块路径会把这种情况当作「这一块是空白」跳过，而不是让整张图失败。
+    /// 此前这个判断靠在失败文案里找中文短语，于是超时、引擎崩溃这类真正的失败
+    /// 只要文案沾上同一句话就会被当成空白吞掉，用户只会看到少了几行字。
+    case noTextFound
+    /// 单次 Vision 请求超时。
+    ///
+    /// `perform` 已经超过 ``VisionRequestScheduler/defaultRequestTimeout`` 仍未返回。
+    /// 这不是「没有文字」：结果未知，未识别到的部分不能当成空白。
+    case visionRequestTimedOut(timeout: Duration)
+    /// OCR 引擎已失去响应，无法再接受新请求。
+    ///
+    /// 所有槽位都被超时的请求占死（Vision 无法中止 `perform`），需要重新启动
+    /// 应用才能恢复。这个错误让用户看到明确原因，而不是等到一个永远不来的结果。
+    case engineUnresponsive
+}
+
+extension OCRError {
+    /// 这次失败是否表示「图中没有文字」。
+    ///
+    /// 只有 ``noTextFound`` 为真。超时、引擎崩溃、语言不支持都不算：把它们当成
+    /// 空白会让分块路径静默跳过一整块内容。
+    ///
+    /// 历史上这里用失败文案匹配中文短语，任何复用了同一句话的错误都会被误判；
+    /// 现在判据是错误本身的结构。
+    public var isNoText: Bool {
+        if case .noTextFound = self { return true }
+        return false
+    }
+
+    /// 是否属于下游可以立刻放弃、不必重试的引擎状态。
+    ///
+    /// ``engineUnresponsive`` 表示线程池已经耗尽，继续发请求只会排队到期；
+    /// 调用方应当直接把失败报给用户。
+    public var isEngineUnresponsive: Bool {
+        if case .engineUnresponsive = self { return true }
+        return false
+    }
 }
 
 // MARK: - OCRError 便利实现
@@ -109,6 +149,15 @@ extension OCRError: LocalizedError {
             return "语言不受支持: \(language)"
         case .imageTooLarge(let width, let height):
             return "图片尺寸过大 (\(width)x\(height))，无法安全分块处理"
+        case .noTextFound:
+            return "未识别到文字"
+        case .visionRequestTimedOut(let timeout):
+            let seconds =
+                Double(timeout.components.seconds)
+                + Double(timeout.components.attoseconds) / 1e18
+            return "文字识别超时（超过 \(Int(seconds.rounded())) 秒未返回）"
+        case .engineUnresponsive:
+            return "文字识别引擎已无响应，请重新启动 SnapGlass 后重试"
         }
     }
 }

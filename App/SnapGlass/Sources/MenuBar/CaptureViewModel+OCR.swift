@@ -30,7 +30,7 @@ extension CaptureViewModel {
             }
             return result
         } catch {
-            showToast(message: AppLocalization.string("OCR failed: %@", error.localizedDescription), type: .error)
+            showToast(message: OCRErrorPresentation.message(for: error), type: .error)
             return nil
         }
     }

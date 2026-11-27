@@ -1225,3 +1225,6 @@
 "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running." = "SnapGlass는 메뉴 막대 앱입니다. Dock 아이콘이 실행 중임을 가장 잘 보여줍니다.";
 "The Dock icon can follow windows, stay, or never appear." = "Dock 아이콘은 창에 맞춰 표시하거나, 항상 표시하거나, 표시하지 않을 수 있습니다.";
 "your shortcut" = "설정한 단축키";
+"Text recognition timed out. Try again with a smaller area." = "텍스트 인식 시간이 초과되었습니다. 영역을 줄여 다시 시도하세요.";
+"Text recognition stopped responding. Restart SnapGlass and try again." = "텍스트 인식 엔진이 응답하지 않습니다. SnapGlass를 재시작한 후 다시 시도하세요.";
+"The selected text recognition engine is unavailable." = "선택한 텍스트 인식 엔진을 사용할 수 없습니다.";

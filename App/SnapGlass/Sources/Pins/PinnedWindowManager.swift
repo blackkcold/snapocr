@@ -125,7 +125,7 @@ final class PinnedWindowManager: NSObject, NSWindowDelegate {
                 self?.presentToast(AppLocalization.string("Text copied to clipboard"), type: .success)
             } catch {
                 self?.presentToast(
-                    AppLocalization.string("OCR failed: %@", error.localizedDescription),
+                    OCRErrorPresentation.message(for: error),
                     type: .error
                 )
             }

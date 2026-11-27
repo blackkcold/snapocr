@@ -1225,3 +1225,6 @@
 "SnapGlass is a menu bar app. The Dock icon is the clearest sign it is running." = "SnapGlass 是菜单栏应用，程序坞图标是它正在运行最直观的迹象。";
 "The Dock icon can follow windows, stay, or never appear." = "程序坞图标可以跟随窗口、始终显示，或从不出现。";
 "your shortcut" = "你设置的快捷键";
+"Text recognition timed out. Try again with a smaller area." = "文字识别超时。请缩小选区后重试。";
+"Text recognition stopped responding. Restart SnapGlass and try again." = "文字识别引擎已无响应。请重新启动 SnapGlass 后重试。";
+"The selected text recognition engine is unavailable." = "所选的文字识别引擎不可用。";

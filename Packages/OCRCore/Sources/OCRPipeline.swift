@@ -51,7 +51,11 @@ public final class OCRPipeline: Sendable {
     ///
     /// 限制同时识别的 tile 数量，平衡多核吞吐与内存占用，
     /// 避免超大图一次性解码过多 tile 导致内存峰值飙升。
-    private static let maxConcurrentTiles = 3
+    /// 并发 tile 上限。
+    ///
+    /// `internal` 而非 `private`：`VisionRequestScheduler` 的默认容量必须高于它，
+    /// 否则一次单图请求会排在整组 tile 之后。这条关系由测试锁住。
+    static let maxConcurrentTiles = 3
 
     // MARK: - 初始化
 
@@ -225,7 +229,7 @@ public final class OCRPipeline: Sendable {
         try Task.checkCancellation()
         let mergedLines = TiledOCRProcessor.merge(mappedLines)
         guard !mergedLines.isEmpty, let resultEngine else {
-            throw OCRError.recognitionFailed(reason: "未识别到任何有效文本")
+            throw OCRError.noTextFound
         }
 
         let confidence =
@@ -256,6 +260,12 @@ public final class OCRPipeline: Sendable {
     }
 
     /// 使用限并发 `TaskGroup` 并行识别各 tile。
+    ///
+    /// 单块识别失败按「失败是否值得继续」分两类：
+    /// - ``OCRError/isNoText`` 的块是空白，跳过即可；
+    /// - 引擎无响应时其余块也不会成功，立刻放弃整组，避免排队等一个不可能来的结果。
+    /// 其余错误（超时、Vision 报错）继续向上抛：它们表示这一块的文本未知，
+    /// 静默跳过会让用户拿到残缺结果却以为识别完整。
     private func recognizeTiles(
         _ tileImages: [(tile: OCRTile, image: CGImage?)],
         options: OCROptions
@@ -281,7 +291,7 @@ public final class OCRPipeline: Sendable {
                     do {
                         let tileResult = try await self.performRecognition(image: tileImage, options: options)
                         return (taskIndex, tileResult)
-                    } catch let error as OCRError where self.isNoTextError(error) {
+                    } catch let error as OCRError where error.isNoText {
                         return (taskIndex, nil)
                     }
                 }
@@ -291,11 +301,6 @@ public final class OCRPipeline: Sendable {
             }
         }
         return results
-    }
-
-    private func isNoTextError(_ error: OCRError) -> Bool {
-        guard case .recognitionFailed(let reason) = error else { return false }
-        return reason.contains("未识别到任何有效文本")
     }
 
     // MARK: - 置信度评估
