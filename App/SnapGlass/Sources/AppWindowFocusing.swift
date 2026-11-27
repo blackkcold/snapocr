@@ -64,6 +64,25 @@ final class SystemWindowFocuser: WindowFocusing {
     /// front last, so it ends up key.
     private var waiters: [Waiter] = []
 
+    #if DEBUG
+        /// 测试用：仍在等待激活或宽限期的窗口数。
+        ///
+        /// 宽限期到期是一个异步任务，测试要断言「宽限期已经过去」只能观察这个数量归零，
+        /// 而不是睡一个「应该够久」的时长——后者在满载机器上会把未完成当成已完成。
+        var waiterCount: Int {
+            waiters.count
+        }
+
+        /// 测试用：是否仍在监听 `didBecomeActive`。
+        ///
+        /// 「宽限期过后不再响应急迟到的激活」只有在观察者真的被移除后才成立。测试据此
+        /// 断言移除本身，而不是发一条通知、睡一段时长、再看有没有反应——后者既证明不了
+        /// 通知被处理过，也只能产生假通过。
+        var isObservingActivation: Bool {
+            activationObserver != nil
+        }
+    #endif
+
     init(
         activation: ApplicationActivationControlling,
         notificationCenter: NotificationCenter = .default,

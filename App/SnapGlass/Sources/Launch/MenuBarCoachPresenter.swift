@@ -129,16 +129,29 @@ final class MenuBarCoachPresenter {
     /// The pointer is the only reliable signal for a menu-bar app: it usually
     /// has no key window, so `NSScreen.main` can point at the menu-bar display
     /// while the user works on another one.
+    ///
+    /// Returns `nil` only when there are no displays at all. A pointer that
+    /// belongs to no display (a seam between displays of different heights, or a
+    /// half-open `maxX`/`maxY` edge) resolves to the nearest one instead of
+    /// `NSScreen.main`, so the coach follows the pointer rather than jumping to
+    /// whichever display owns the menu bar.
     static func presentationScreen(
         mouseLocation: CGPoint = NSEvent.mouseLocation,
         screens: [NSScreen] = NSScreen.screens,
         main: NSScreen? = NSScreen.main
     ) -> NSScreen? {
         let frames = screens.map(\.frame)
-        if let index = CoachScreenSelector.index(containing: mouseLocation, in: frames) {
-            return screens[index]
-        }
-        return main ?? screens.first
+        // The decision itself lives in `CoachScreenSelector.presentationIndex`, which a
+        // test target compiles; this only maps its index back to a screen.
+        let mainIndex = main.flatMap { main in screens.firstIndex { $0 === main } }
+        guard
+            let index = CoachScreenSelector.presentationIndex(
+                for: mouseLocation,
+                in: frames,
+                mainIndex: mainIndex
+            )
+        else { return main }
+        return screens[index]
     }
 
     /// Chooses the coach form for a screen.

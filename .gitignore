@@ -5,8 +5,19 @@
 *.xccheckout
 DerivedData/
 build/
-*.xcodeproj
+# Xcode project bundles: the generated project is not tracked, but the SPM lock
+# file inside it must be — without it CI re-resolves dependencies on every run and
+# a floating `from:` requirement silently resolves to whatever is remote that day.
+# `*.xcodeproj` alone would ignore the whole directory, and git never descends into
+# an ignored directory, so the `!` rule below it could never take effect.
+*.xcodeproj/*
+!*.xcodeproj/project.xcworkspace/
+*.xcodeproj/project.xcworkspace/*
 !*.xcodeproj/project.xcworkspace/xcshareddata/
+*.xcodeproj/project.xcworkspace/xcshareddata/*
+!*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/*
+!*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # SPM
 .build/

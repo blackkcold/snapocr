@@ -84,8 +84,115 @@ struct MenuBarCoachPanelTests {
             CGRect(x: 1440, y: 0, width: 1920, height: 1080),
         ]
 
-        #expect(CoachScreenSelector.index(containing: CGPoint(x: 200, y: 500), in: frames) == 0)
-        #expect(CoachScreenSelector.index(containing: CGPoint(x: 2000, y: 500), in: frames) == 1)
-        #expect(CoachScreenSelector.index(containing: CGPoint(x: 5000, y: 500), in: frames) == nil)
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 200, y: 500), in: frames) == 0)
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 2000, y: 500), in: frames) == 1)
+        // A pointer off the desk is not "no answer": the nearest display wins, so the
+        // coach follows the pointer instead of jumping to the menu-bar display.
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 5000, y: 500), in: frames) == 1)
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 0, y: 0), in: []) == nil)
+    }
+
+    @Test func picksTheNearestScreenAcrossASeatBetweenDifferentHeights() {
+        // Displays of different heights leave a band that belongs to neither frame.
+        // The old `CGRect.contains` lookup had no answer there and fell back to
+        // `NSScreen.main`, which is how the coach ended up on the wrong display.
+        let frames = [
+            CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            CGRect(x: 1920, y: 124, width: 1470, height: 956),
+        ]
+
+        // 80pt right of the first display, 24pt above the second: the second wins.
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 2000, y: 100), in: frames) == 1)
+        // 40pt right of the first, 84pt above the second: the first wins.
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 1960, y: 40), in: frames) == 0)
+    }
+
+    @Test func picksAScreenForTheHalfOpenEdgeThatContainsRejects() {
+        // `CGRect.contains` is half-open: `maxX` and `maxY` belong to no frame. With a
+        // pointer resting exactly there, the old lookup returned `nil` and the coach
+        // jumped to `NSScreen.main` even though the pointer was on a display.
+        //
+        // These frames are the desk this was reported on: a 1920x1080 display beside a
+        // shorter one that hangs 64pt below it. The point below is on the first
+        // display, at its right edge and above the second display's top.
+        let frames = [
+            CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            CGRect(x: 1920, y: -64, width: 1470, height: 956),
+        ]
+
+        // `CGRect.contains` says false for both.
+        #expect(!frames[0].contains(CGPoint(x: 1920, y: 1000)))
+        #expect(!frames[1].contains(CGPoint(x: 1920, y: 1000)))
+        // The nearest lookup still resolves it, and to the display it is on.
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 1920, y: 1000), in: frames) == 0)
+    }
+
+    @Test func picksAScreenWhenDisplaysSitAtNegativeOrigins() {
+        // A display to the left of the primary has a negative origin; nothing in the
+        // lookup may assume the desk starts at zero.
+        let frames = [
+            CGRect(x: -1920, y: 0, width: 1920, height: 1080),
+            CGRect(x: 0, y: 0, width: 1920, height: 1080),
+        ]
+
+        #expect(CoachScreenSelector.index(for: CGPoint(x: -500, y: 500), in: frames) == 0)
+        #expect(CoachScreenSelector.index(for: CGPoint(x: 500, y: 500), in: frames) == 1)
+        #expect(CoachScreenSelector.index(for: CGPoint(x: -2500, y: 540), in: frames) == 0)
+    }
+
+    @Test func presentationIndexUsesTheNearerScreenInsteadOfTheMainOne() {
+        // The regression this locks: a pointer in the seam belongs to no frame, and the
+        // presenter used to fall back to `NSScreen.main` — presenting the coach on the
+        // display that owns the menu bar rather than the one the user is on. The old
+        // fallback was invisible to tests because it lived in a file no test target
+        // compiled; the decision is now here.
+        let frames = [
+            CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            CGRect(x: 1920, y: 124, width: 1470, height: 956),
+        ]
+
+        // Main display is index 0, as it usually is. The seam point is nearer display 1,
+        // so the answer must be 1 — the fallback would have produced 0.
+        #expect(
+            CoachScreenSelector.presentationIndex(
+                for: CGPoint(x: 2000, y: 100),
+                in: frames,
+                mainIndex: 0
+            ) == 1)
+        // The other side of the seam still resolves to the main display.
+        #expect(
+            CoachScreenSelector.presentationIndex(
+                for: CGPoint(x: 1960, y: 40),
+                in: frames,
+                mainIndex: 0
+            ) == 0)
+    }
+
+    @Test func presentationIndexFallsBackToTheMainDisplayWithoutADesk() {
+        // No displays: the presenter must not invent an index, so it can still return
+        // `nil` and skip presenting rather than present on a screen that is not there.
+        #expect(
+            CoachScreenSelector.presentationIndex(
+                for: .zero,
+                in: [],
+                mainIndex: nil
+            ) == nil)
+    }
+
+    @Test func presentationIndexFallsBackToTheFirstScreenWhenMainIsUnknown() {
+        // `NSScreen.main` is nil when no window has focus. The presenter still needs a
+        // screen, so it uses the first one — same answer the old `main ?? screens.first`
+        // produced, now covered.
+        let frames = [
+            CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            CGRect(x: 1920, y: 0, width: 1920, height: 1080),
+        ]
+
+        #expect(
+            CoachScreenSelector.presentationIndex(
+                for: CGPoint(x: 100, y: 100),
+                in: frames,
+                mainIndex: nil
+            ) == 0)
     }
 }
