@@ -206,10 +206,46 @@ final class MenuBarCoachPanel: NSPanel {
 /// the only reliable signal for the display the user just interacted with —
 /// they clicked the status item, the guide's Done button, or the permission
 /// window there.
+///
+/// The lookup is nearest-display rather than `CGRect.contains`, and that is a
+/// strict improvement rather than a preference: a point inside a frame has a
+/// distance of zero, so the containing display always wins, which is exactly
+/// what `contains` decided. The two only differ where `contains` had no answer
+/// — a point that belongs to no display — and there the fallback used to be
+/// `NSScreen.main`, i.e. the coach could appear on a display the user was not
+/// looking at. `CGRect.contains` is half-open, so even a pointer resting on a
+/// display could land in that branch at exactly `maxX`/`maxY`.
 enum CoachScreenSelector {
-    /// The index of the first frame containing `point`.
-    static func index(containing point: CGPoint, in frames: [CGRect]) -> Int? {
-        frames.firstIndex { $0.contains(point) }
+    /// The index of the display nearest to `point`, or `nil` when there are none.
+    static func index(for point: CGPoint, in frames: [CGRect]) -> Int? {
+        ScreenshotShelfDisplayFollowPolicy.nearestDisplayIndex(
+            for: point,
+            displayFrames: frames
+        )
+    }
+
+    /// The display that should host the coach.
+    ///
+    /// Lives here, next to the lookup it builds on, so the decision is compiled into a
+    /// test target: it used to sit in `MenuBarCoachPresenter`, which no test target
+    /// builds, so "the coach falls back to the main display" had no gate at all and a
+    /// regression there would have shipped silently.
+    ///
+    /// - Parameters:
+    ///   - point: Pointer position, in the same space as `frames`.
+    ///   - frames: Display frames, in the order the caller maps an index back to a display.
+    ///   - mainIndex: Index of the main display among `frames`, when it is known.
+    /// - Returns: The index to present on, or `nil` when there are no displays.
+    static func presentationIndex(
+        for point: CGPoint,
+        in frames: [CGRect],
+        mainIndex: Int?
+    ) -> Int? {
+        guard !frames.isEmpty else { return nil }
+        if let index = index(for: point, in: frames) {
+            return index
+        }
+        return mainIndex ?? 0
     }
 }
 
